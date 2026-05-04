@@ -1,0 +1,238 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light mode */
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --primary: #0ea5e9;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --ring: #0ea5e9;
+  
+  /* Toast */
+  --toast-bg: #ffffff;
+  --toast-text: #0a0a0a;
+  --toast-border: #e5e5e5;
+}
+
+.dark {
+  /* Dark mode - Inspired by Linear's dark theme */
+  --background: #0a0a0f;
+  --foreground: #fafafa;
+  --card: #111118;
+  --card-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
+  --primary: #38bdf8;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1c1c24;
+  --secondary-foreground: #fafafa;
+  --muted: #1c1c24;
+  --muted-foreground: #a1a1aa;
+  --accent: #1c1c24;
+  --accent-foreground: #fafafa;
+  --destructive: #dc2626;
+  --destructive-foreground: #fafafa;
+  --ring: #38bdf8;
+  
+  /* Toast */
+  --toast-bg: #1c1c24;
+  --toast-text: #fafafa;
+  --toast-border: #27272a;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+  opacity: 0.7;
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Custom animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s infinite;
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--muted-foreground) 50%,
+    var(--muted) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Kanban column styling */
+.kanban-column {
+  @apply rounded-xl p-4 min-h-[500px];
+  background-color: hsl(var(--secondary) / 0.5);
+}
+
+.kanban-card {
+  @apply bg-card rounded-lg p-4 shadow-sm border border-border transition-all cursor-pointer;
+}
+.kanban-card:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  @apply shadow-md;
+}
+
+/* Status badges */
+.status-badge {
+  @apply px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-backlog { @apply text-gray-400; background-color: rgb(107 114 128 / 0.2); }
+.status-todo { @apply text-blue-400; background-color: rgb(59 130 246 / 0.2); }
+.status-in_progress { @apply text-amber-400; background-color: rgb(245 158 11 / 0.2); }
+.status-blocked { @apply text-red-400; background-color: rgb(239 68 68 / 0.2); }
+.status-in_review { @apply text-purple-400; background-color: rgb(168 85 247 / 0.2); }
+.status-done { @apply text-green-400; background-color: rgb(34 197 94 / 0.2); }
+.status-cancelled { @apply text-gray-500; background-color: rgb(107 114 128 / 0.2); }
+
+/* Priority indicators */
+.priority-urgent { @apply text-red-500; }
+.priority-high { @apply text-amber-500; }
+.priority-medium { @apply text-blue-500; }
+.priority-low { @apply text-gray-500; }
+
+/* Glass effect for modals */
+.glass {
+  @apply backdrop-blur-xl;
+  background-color: hsl(var(--card) / 0.8);
+}
+
+/* Prose / Rich text styles */
+.prose {
+  @apply text-foreground;
+  line-height: 1.7;
+}
+
+.prose h1 {
+  @apply text-2xl font-bold mb-4 mt-6;
+}
+
+.prose h2 {
+  @apply text-xl font-semibold mb-3 mt-5;
+}
+
+.prose h3 {
+  @apply text-lg font-semibold mb-2 mt-4;
+}
+
+.prose p {
+  @apply mb-3;
+}
+
+.prose ul {
+  @apply list-disc pl-6 mb-3;
+}
+
+.prose ol {
+  @apply list-decimal pl-6 mb-3;
+}
+
+.prose li {
+  @apply mb-1;
+}
+
+.prose blockquote {
+  @apply border-l-4 pl-4 italic my-4;
+  border-color: hsl(var(--primary) / 0.5);
+  color: hsl(var(--muted-foreground));
+}
+
+.prose code {
+  @apply bg-secondary px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.prose pre {
+  @apply bg-secondary p-4 rounded-lg overflow-x-auto my-4;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0;
+}
+
+.prose a {
+  @apply text-primary underline hover:no-underline;
+}
+
+.prose img {
+  @apply max-w-full rounded-lg my-4;
+}
+
+.prose hr {
+  @apply border-border my-6;
+}
+
+.prose strong {
+  @apply font-semibold;
+}
+
+.prose em {
+  @apply italic;
+}
+
+.prose s {
+  @apply line-through;
+}
+
+/* TipTap specific styles */
+.ProseMirror {
+  @apply focus:outline-none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-muted-foreground pointer-events-none float-left h-0;
+  content: attr(data-placeholder);
+}
+
