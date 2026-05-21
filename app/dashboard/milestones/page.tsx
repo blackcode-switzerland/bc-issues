@@ -151,7 +151,7 @@ export default function MilestonesPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -349,7 +349,7 @@ function MilestoneModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -385,7 +385,7 @@ function MilestoneModal({
                   value={projectId}
                   onChange={(e) => setProjectId(parseInt(e.target.value))}
                   disabled={!!milestone}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
                   required
                 >
                   {projects.map((p) => (
@@ -403,7 +403,7 @@ function MilestoneModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Milestone name"
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   autoFocus
                   required
                 />
@@ -416,7 +416,7 @@ function MilestoneModal({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="What's this milestone about?"
                   rows={3}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
 
@@ -426,7 +426,7 @@ function MilestoneModal({
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>
@@ -820,7 +820,7 @@ function TimelineView({ milestones, zoomLevel }: { milestones: Milestone[]; zoom
   return (
     <div className="flex border border-border rounded-lg overflow-hidden">
       {/* Fixed left panel - milestone labels */}
-      <div className="flex-shrink-0 border-r border-border bg-card" style={{ width: labelWidth }}>
+      <div className="shrink-0 border-r border-border bg-card" style={{ width: labelWidth }}>
         {/* Header spacer */}
         <div className="h-[72px] border-b border-border bg-secondary/50" />
 
@@ -845,7 +845,7 @@ function TimelineView({ milestones, zoomLevel }: { milestones: Milestone[]; zoom
                     {milestone.project_name}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all ${
@@ -969,7 +969,7 @@ function TimelineView({ milestones, zoomLevel }: { milestones: Milestone[]; zoom
                     style={{ left: position + columnWidth / 2 }}
                   >
                     <div
-                      className={`w-4 h-4 rotate-45 shadow-sm transition-all group-hover:scale-125 ${
+                      className={`w-4 h-4 rotate-45 shadow-xs transition-all group-hover:scale-125 ${
                         progress === 100 ? 'bg-green-500' : progress >= 50 ? 'bg-primary' : 'bg-amber-500'
                       }`}
                     />

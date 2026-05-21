@@ -370,7 +370,7 @@ function NewProjectModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
 
       {/* Modal */}
@@ -383,7 +383,7 @@ function NewProjectModal({
         <div className="bg-card rounded-2xl border border-border shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
           {/* Banner preview area */}
           <div
-            className="h-24 relative flex-shrink-0"
+            className="h-24 relative shrink-0"
             style={{
               background: bannerPreview
                 ? `url(${bannerPreview}) center/cover`
@@ -457,7 +457,7 @@ function NewProjectModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="My Awesome Project"
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   autoFocus
                 />
               </div>
@@ -472,7 +472,7 @@ function NewProjectModal({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="What's this project about?"
                   rows={3}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
 
@@ -485,7 +485,7 @@ function NewProjectModal({
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     {PRIORITY_OPTIONS.map((p) => (
                       <option key={p.id} value={p.id}>

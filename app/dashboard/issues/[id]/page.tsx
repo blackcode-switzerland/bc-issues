@@ -384,7 +384,7 @@ export default function IssueDetailPage() {
   return (
     <div>
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -418,7 +418,7 @@ export default function IssueDetailPage() {
                           }
                           setIsEditingTitle(false)
                         }}
-                        className="px-3 py-1 bg-background border border-input rounded-lg text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-ring min-w-[300px]"
+                        className="px-3 py-1 bg-background border border-input rounded-lg text-2xl font-bold focus:outline-hidden focus:ring-2 focus:ring-ring min-w-[300px]"
                         autoFocus
                       />
                     </div>
@@ -551,7 +551,7 @@ export default function IssueDetailPage() {
                         className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg group"
                       >
                         {isImage ? (
-                          <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
+                          <div className="w-10 h-10 rounded overflow-hidden shrink-0">
                             <img
                               src={attachment.file_url}
                               alt={attachment.filename}
@@ -559,7 +559,7 @@ export default function IssueDetailPage() {
                             />
                           </div>
                         ) : (
-                          <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center flex-shrink-0">
+                          <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center shrink-0">
                             <FileIcon size={20} className="text-primary" />
                           </div>
                         )}
@@ -627,10 +627,10 @@ export default function IssueDetailPage() {
                             alt={item.user_name || 'User'}
                             width={32}
                             height={32}
-                            className="rounded-full flex-shrink-0"
+                            className="rounded-full shrink-0"
                           />
                         ) : (
-                          <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
+                          <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium shrink-0">
                             {item.user_name?.charAt(0) || 'U'}
                           </div>
                         )}
@@ -700,7 +700,7 @@ export default function IssueDetailPage() {
               <select
                 value={issue.status}
                 onChange={(e) => updateIssue.mutate({ status: e.target.value })}
-                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
+                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
               >
                 {STATUSES.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -718,7 +718,7 @@ export default function IssueDetailPage() {
               <select
                 value={issue.priority}
                 onChange={(e) => updateIssue.mutate({ priority: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
+                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
               >
                 <option value={1}>Urgent</option>
                 <option value={2}>High</option>
@@ -735,7 +735,7 @@ export default function IssueDetailPage() {
               <select
                 value={issue.assignee_id || ''}
                 onChange={(e) => updateIssue.mutate({ assignee_id: e.target.value ? parseInt(e.target.value) : null } as any)}
-                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
+                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
               >
                 <option value="">Unassigned</option>
                 {members.map((m: any) => (
@@ -756,7 +756,7 @@ export default function IssueDetailPage() {
                 type="date"
                 value={issue.start_date ? issue.start_date.split('T')[0] : ''}
                 onChange={(e) => updateIssue.mutate({ start_date: e.target.value || null } as any)}
-                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
+                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
               />
             </div>
 
@@ -770,7 +770,7 @@ export default function IssueDetailPage() {
                 type="date"
                 value={issue.due_date ? issue.due_date.split('T')[0] : ''}
                 onChange={(e) => updateIssue.mutate({ due_date: e.target.value || null } as any)}
-                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
+                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
               />
             </div>
 
@@ -782,7 +782,7 @@ export default function IssueDetailPage() {
               <select
                 value={issue.milestone_id || ''}
                 onChange={(e) => updateIssue.mutate({ milestone_id: e.target.value ? parseInt(e.target.value) : null } as any)}
-                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
+                className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring cursor-pointer hover:border-primary transition-colors"
               >
                 <option value="">No milestone</option>
                 {milestones.map((m: any) => (

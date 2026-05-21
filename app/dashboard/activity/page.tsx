@@ -98,7 +98,7 @@ export default function ActivityPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div>
             <h1 className="text-2xl font-bold">Activity</h1>
@@ -152,10 +152,10 @@ export default function ActivityPage() {
                           alt={activity.user_name || 'User'}
                           width={32}
                           height={32}
-                          className="rounded-full flex-shrink-0"
+                          className="rounded-full shrink-0"
                         />
                       ) : (
-                        <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center shrink-0">
                           <User size={16} className="text-primary" />
                         </div>
                       )}
@@ -170,7 +170,7 @@ export default function ActivityPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Icon size={14} className="text-muted-foreground flex-shrink-0" />
+                          <Icon size={14} className="text-muted-foreground shrink-0" />
                           <span className="text-sm text-foreground">{message}</span>
                         </div>
                       </div>

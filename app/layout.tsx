@@ -1,13 +1,11 @@
 import type { Metadata } from 'next'
-import { GeistSans } from 'geist/font/sans'
-import { GeistMono } from 'geist/font/mono'
 import { Providers } from './providers'
 import { Toaster } from 'sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'blackcode issues - AI-Native Issue Tracking',
-  description: 'Trinity Architecture: Prompt → Tools → Software',
+  title: 'Blackcode Issues — AI-Native Issue Tracking',
+  description: 'Issue tracking for humans and the agents working alongside them. Three surfaces (web, CLI, HTTP), one data model.',
   icons: {
     icon: '/logo.png',
   },
@@ -20,10 +18,24 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
+      <head>
+        {/*
+          Google Sans is served by Google's CSS API but is not listed in the
+          public Google Fonts directory, so next/font/google can't fetch it.
+          Linking the CSS API directly is the practical option; preconnect
+          hints keep the latency cost minimal.
+        */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap"
+        />
+      </head>
+      <body className="font-sans antialiased">
         <Providers>
           {children}
-          <Toaster 
+          <Toaster
             position="bottom-right"
             toastOptions={{
               style: {
@@ -38,4 +50,3 @@ export default function RootLayout({
     </html>
   )
 }
-

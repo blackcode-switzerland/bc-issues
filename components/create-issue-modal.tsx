@@ -224,7 +224,7 @@ export function CreateIssueModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
 
       {/* Modal */}
@@ -306,7 +306,7 @@ export function CreateIssueModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Issue title"
-              className="w-full text-xl font-semibold bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground/50"
+              className="w-full text-xl font-semibold bg-transparent border-none focus:outline-hidden focus:ring-0 placeholder:text-muted-foreground/50"
               autoFocus
             />
 

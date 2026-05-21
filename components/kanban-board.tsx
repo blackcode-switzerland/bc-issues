@@ -356,7 +356,7 @@ export function KanbanBoard({
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -425,7 +425,7 @@ export function KanbanBoard({
                   placeholder="Search issues..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-64 pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                 />
               </div>
 
@@ -590,7 +590,7 @@ export function KanbanBoard({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMembersPanel(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
             />
 
             {/* Panel */}
@@ -601,7 +601,7 @@ export function KanbanBoard({
               className="fixed right-0 top-0 h-full w-full max-w-md bg-card border-l border-border shadow-2xl z-50 overflow-y-auto"
             >
               {/* Header */}
-              <div className="sticky top-0 bg-card/80 backdrop-blur border-b border-border px-6 py-4">
+              <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Team Members</h2>
                   <button
@@ -720,7 +720,7 @@ function Column({
   }
 
   return (
-    <div className="flex-shrink-0 w-80">
+    <div className="shrink-0 w-80">
       {/* Column header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -774,7 +774,7 @@ function Column({
                           onCancelNewIssue()
                         }
                       }}
-                      className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                     />
 
                     {showExpanded && (
@@ -788,7 +788,7 @@ function Column({
                           placeholder="Description (optional)..."
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
-                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                           rows={3}
                         />
 
@@ -796,7 +796,7 @@ function Column({
                           <select
                             value={priority}
                             onChange={(e) => setPriority(parseInt(e.target.value))}
-                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                           >
                             <option value={1}>Urgent</option>
                             <option value={2}>High</option>
@@ -809,7 +809,7 @@ function Column({
                             onChange={(e) =>
                               setAssigneeId(e.target.value ? parseInt(e.target.value) : undefined)
                             }
-                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                           >
                             <option value="">Unassigned</option>
                             {members.map((m: any) => (
@@ -825,7 +825,7 @@ function Column({
                           onChange={(e) =>
                             setMilestoneId(e.target.value ? parseInt(e.target.value) : undefined)
                           }
-                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                         >
                           <option value="">No milestone</option>
                           {milestones.map((m: any) => (
@@ -1128,7 +1128,7 @@ function IssueDetailModal({
         className="fixed inset-4 md:inset-8 lg:inset-12 bg-card rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col"
       >
         {/* Minimal Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-border/50">
+        <div className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-border/50">
           <div className="flex items-center gap-3">
             <span className="text-xs font-mono text-muted-foreground">#{issue.id}</span>
             {saveStatus === 'saving' && (
@@ -1163,7 +1163,7 @@ function IssueDetailModal({
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Issue title..."
-              className="w-full text-2xl md:text-3xl font-bold bg-transparent border-none focus:outline-none placeholder:text-muted-foreground/40 mb-6"
+              className="w-full text-2xl md:text-3xl font-bold bg-transparent border-none focus:outline-hidden placeholder:text-muted-foreground/40 mb-6"
             />
 
             {/* Properties Row - Compact, inline */}
@@ -1171,7 +1171,7 @@ function IssueDetailModal({
               <select
                 value={status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring"
               >
                 {STATUSES.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
@@ -1181,7 +1181,7 @@ function IssueDetailModal({
               <select
                 value={priority}
                 onChange={(e) => handlePriorityChange(parseInt(e.target.value))}
-                className={`bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring ${priorityConfig?.color || ''}`}
+                className={`bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring ${priorityConfig?.color || ''}`}
               >
                 <option value={1}>Urgent</option>
                 <option value={2}>High</option>
@@ -1192,7 +1192,7 @@ function IssueDetailModal({
               <select
                 value={assigneeId || ''}
                 onChange={(e) => handleAssigneeChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring"
               >
                 <option value="">Unassigned</option>
                 {members.map((m: any) => (

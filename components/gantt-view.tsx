@@ -379,7 +379,7 @@ export function GanttView({
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
@@ -452,7 +452,7 @@ export function GanttView({
                 placeholder="Search issues..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -462,7 +462,7 @@ export function GanttView({
               id="gantt-group-by"
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-              className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
               <option value="none">No Grouping</option>
               <option value="milestone">Group by Milestone</option>
@@ -474,7 +474,7 @@ export function GanttView({
             <select
               value={colorBy}
               onChange={(e) => setColorBy(e.target.value as ColorBy)}
-              className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
               <option value="priority">Color by Priority</option>
               <option value="status">Color by Status</option>
@@ -567,7 +567,7 @@ export function GanttView({
         ) : (
           <div className="flex h-full">
             {/* Fixed left panel - issue labels */}
-            <div className="flex-shrink-0 border-r border-border bg-card" style={{ width: labelWidth }}>
+            <div className="shrink-0 border-r border-border bg-card" style={{ width: labelWidth }}>
               {/* Header spacer for month + date headers */}
               <div className="h-[72px] border-b border-border bg-secondary/50" />
 
@@ -599,10 +599,10 @@ export function GanttView({
                           }
                         }}
                         aria-label={`Issue #${issue.id}: ${issue.title}`}
-                        className="flex items-center gap-2 px-4 border-b border-border hover:bg-secondary/50 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                        className="flex items-center gap-2 px-4 border-b border-border hover:bg-secondary/50 cursor-pointer transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-inset"
                         style={{ height: rowHeight }}
                       >
-                        <span className="text-xs font-mono text-muted-foreground flex-shrink-0">
+                        <span className="text-xs font-mono text-muted-foreground shrink-0">
                           #{issue.id}
                         </span>
                         <span className="text-sm truncate flex-1" title={issue.title}>
@@ -615,12 +615,12 @@ export function GanttView({
                             alt={issue.assignee_name || 'Assignee'}
                             width={20}
                             height={20}
-                            className="rounded-full flex-shrink-0"
+                            className="rounded-full shrink-0"
                             title={issue.assignee_name}
                           />
                         ) : issue.assignee_name ? (
                           <div
-                            className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium flex-shrink-0"
+                            className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
                             title={issue.assignee_name}
                           >
                             {issue.assignee_name.charAt(0)}
@@ -647,7 +647,7 @@ export function GanttView({
                         className="flex items-center gap-2 px-4 border-b border-border hover:bg-secondary/50 cursor-pointer transition-colors opacity-60"
                         style={{ height: rowHeight }}
                       >
-                        <span className="text-xs font-mono text-muted-foreground flex-shrink-0">
+                        <span className="text-xs font-mono text-muted-foreground shrink-0">
                           #{issue.id}
                         </span>
                         <span className="text-sm truncate flex-1" title={issue.title}>
@@ -749,7 +749,7 @@ export function GanttView({
                                 animate={{ scaleX: 1, opacity: 1 }}
                                 transition={{ duration: 0.3 }}
                                 onClick={() => handleIssueClick(issue.id)}
-                                className={`absolute top-1.5 h-7 rounded-md cursor-pointer hover:ring-2 hover:ring-primary/50 hover:brightness-110 transition-all shadow-sm ${barColor}`}
+                                className={`absolute top-1.5 h-7 rounded-md cursor-pointer hover:ring-2 hover:ring-primary/50 hover:brightness-110 transition-all shadow-xs ${barColor}`}
                                 style={{
                                   left: barStyle.left,
                                   width: barStyle.width,
@@ -758,7 +758,7 @@ export function GanttView({
                                 title={`${issue.title}${issue.start_date ? `\nStart: ${format(parseISO(issue.start_date), 'MMM d, yyyy')}` : ''}${issue.due_date ? `\nDue: ${format(parseISO(issue.due_date), 'MMM d, yyyy')}` : ''}`}
                               >
                                 <div className="px-2 h-full flex items-center">
-                                  <span className="text-[10px] text-white font-medium truncate drop-shadow-sm">
+                                  <span className="text-[10px] text-white font-medium truncate drop-shadow-xs">
                                     {barStyle.width > 60 ? issue.title : ''}
                                   </span>
                                 </div>
@@ -830,7 +830,7 @@ export function GanttView({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMembersPanel(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
             />
 
             {/* Panel */}
@@ -841,7 +841,7 @@ export function GanttView({
               className="fixed right-0 top-0 h-full w-full max-w-md bg-card border-l border-border shadow-2xl z-50 overflow-y-auto"
             >
               {/* Header */}
-              <div className="sticky top-0 bg-card/80 backdrop-blur border-b border-border px-6 py-4">
+              <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Team Members</h2>
                   <button

@@ -310,7 +310,7 @@ export function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class: `prose prose-sm dark:prose-invert max-w-none focus:outline-none p-4`,
+        class: `prose prose-sm dark:prose-invert max-w-none focus:outline-hidden p-4`,
         style: `min-height: ${minHeight}`,
       },
       // Handle paste events for images

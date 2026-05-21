@@ -126,7 +126,7 @@ export function TimelineView({
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
@@ -185,7 +185,7 @@ export function TimelineView({
                 placeholder="Search issues..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -193,7 +193,7 @@ export function TimelineView({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'created_at' | 'updated_at')}
-              className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
               <option value="created_at">Sort by Created</option>
               <option value="updated_at">Sort by Updated</option>
@@ -227,7 +227,7 @@ export function TimelineView({
           ) : (
             <div className="relative">
               {/* Center timeline line */}
-              <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/50 via-border to-border" />
+              <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-0.5 bg-linear-to-b from-primary/50 via-border to-border" />
 
               <div className="space-y-12">
                 {dayGroups.map((group, groupIndex) => {
@@ -315,18 +315,18 @@ export function TimelineView({
                                         alt={issue.assignee_name || 'Assignee'}
                                         width={28}
                                         height={28}
-                                        className="rounded-full ring-2 ring-background flex-shrink-0"
+                                        className="rounded-full ring-2 ring-background shrink-0"
                                         title={issue.assignee_name}
                                       />
                                     ) : issue.assignee_name ? (
                                       <div 
-                                        className="w-7 h-7 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0"
+                                        className="w-7 h-7 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium shrink-0"
                                         title={issue.assignee_name}
                                       >
                                         {issue.assignee_name.charAt(0)}
                                       </div>
                                     ) : (
-                                      <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center flex-shrink-0">
+                                      <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center shrink-0">
                                         <User2 size={14} className="text-muted-foreground" />
                                       </div>
                                     )}
@@ -392,7 +392,7 @@ export function TimelineView({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMembersPanel(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
             />
 
             {/* Panel */}
@@ -403,7 +403,7 @@ export function TimelineView({
               className="fixed right-0 top-0 h-full w-full max-w-md bg-card border-l border-border shadow-2xl z-50 overflow-y-auto"
             >
               {/* Header */}
-              <div className="sticky top-0 bg-card/80 backdrop-blur border-b border-border px-6 py-4">
+              <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Team Members</h2>
                   <button

@@ -380,7 +380,7 @@ export default function MilestoneDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
@@ -395,7 +395,7 @@ export default function MilestoneDetailPage() {
                   <input
                     value={editedName}
                     onChange={(e) => setEditedName(e.target.value)}
-                    className="px-3 py-1 bg-background border border-input rounded-lg text-xl font-bold focus:outline-none focus:ring-2 focus:ring-ring w-full max-w-md"
+                    className="px-3 py-1 bg-background border border-input rounded-lg text-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-ring w-full max-w-md"
                     autoFocus
                   />
                 ) : (
@@ -485,7 +485,7 @@ export default function MilestoneDetailPage() {
                   type="date"
                   value={editedDueDate}
                   onChange={(e) => setEditedDueDate(e.target.value)}
-                  className="w-full px-2 py-1 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-2 py-1 bg-background border border-input rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                 />
               ) : milestone.due_date ? (
                 <p className="font-medium">
@@ -524,7 +524,7 @@ export default function MilestoneDetailPage() {
                   value={editedDescription}
                   onChange={(e) => setEditedDescription(e.target.value)}
                   placeholder="Add a description..."
-                  className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                   rows={2}
                 />
               ) : (
@@ -583,7 +583,7 @@ export default function MilestoneDetailPage() {
                 placeholder="Search issues..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -721,7 +721,7 @@ export default function MilestoneDetailPage() {
               setShowAddIssues(false)
               setAddIssueSearch('')
             }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -759,7 +759,7 @@ export default function MilestoneDetailPage() {
                     placeholder="Search issues..."
                     value={addIssueSearch}
                     onChange={(e) => setAddIssueSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                     autoFocus
                   />
                 </div>
@@ -913,7 +913,7 @@ function KanbanView({
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="flex gap-6 overflow-x-auto pb-6">
         {STATUSES.map((status) => (
-          <div key={status.id} className="flex-shrink-0 w-80">
+          <div key={status.id} className="shrink-0 w-80">
             {/* Column header */}
             <div className="flex items-center gap-2 mb-4">
               <div className={`w-2 h-2 rounded-full ${colorClasses[status.color]}`} />
@@ -1180,7 +1180,7 @@ function GanttViewEmbedded({ issues, milestone }: { issues: Issue[]; milestone: 
   return (
     <div className="flex border border-border rounded-lg overflow-hidden">
       {/* Fixed left panel */}
-      <div className="flex-shrink-0 border-r border-border bg-card" style={{ width: labelWidth }}>
+      <div className="shrink-0 border-r border-border bg-card" style={{ width: labelWidth }}>
         <div className="h-[72px] border-b border-border bg-secondary/50" />
         <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
           {issuesWithDates.map((issue) => (
@@ -1190,7 +1190,7 @@ function GanttViewEmbedded({ issues, milestone }: { issues: Issue[]; milestone: 
               className="flex items-center gap-2 px-4 border-b border-border hover:bg-secondary/50 cursor-pointer transition-colors"
               style={{ height: rowHeight }}
             >
-              <span className="text-xs font-mono text-muted-foreground flex-shrink-0">
+              <span className="text-xs font-mono text-muted-foreground shrink-0">
                 #{issue.id}
               </span>
               <span className="text-sm truncate flex-1" title={issue.title}>
@@ -1212,7 +1212,7 @@ function GanttViewEmbedded({ issues, milestone }: { issues: Issue[]; milestone: 
                   className="flex items-center gap-2 px-4 border-b border-border hover:bg-secondary/50 cursor-pointer transition-colors opacity-60"
                   style={{ height: rowHeight }}
                 >
-                  <span className="text-xs font-mono text-muted-foreground flex-shrink-0">
+                  <span className="text-xs font-mono text-muted-foreground shrink-0">
                     #{issue.id}
                   </span>
                   <span className="text-sm truncate flex-1" title={issue.title}>
@@ -1292,7 +1292,7 @@ function GanttViewEmbedded({ issues, milestone }: { issues: Issue[]; milestone: 
                       animate={{ scaleX: 1, opacity: 1 }}
                       transition={{ duration: 0.3 }}
                       onClick={() => router.push(`/dashboard/issues/${issue.id}`)}
-                      className={`absolute top-1.5 h-7 rounded-md cursor-pointer hover:ring-2 hover:ring-primary/50 hover:brightness-110 transition-all shadow-sm ${barColor}`}
+                      className={`absolute top-1.5 h-7 rounded-md cursor-pointer hover:ring-2 hover:ring-primary/50 hover:brightness-110 transition-all shadow-xs ${barColor}`}
                       style={{
                         left: barStyle.left,
                         width: barStyle.width,
@@ -1301,7 +1301,7 @@ function GanttViewEmbedded({ issues, milestone }: { issues: Issue[]; milestone: 
                       title={`${issue.title}${issue.start_date ? `\nStart: ${format(new Date(issue.start_date), 'MMM d, yyyy')}` : ''}${issue.due_date ? `\nDue: ${format(new Date(issue.due_date), 'MMM d, yyyy')}` : ''}`}
                     >
                       <div className="px-2 h-full flex items-center">
-                        <span className="text-[10px] text-white font-medium truncate drop-shadow-sm">
+                        <span className="text-[10px] text-white font-medium truncate drop-shadow-xs">
                           {barStyle.width > 60 ? issue.title : ''}
                         </span>
                       </div>

@@ -1,238 +1,309 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Class-based dark mode (next-themes flips a `dark` class on <html>). */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens (shadcn v4 convention).
+ *
+ *  - `:root` / `.dark`  define the *values* (OKLCH). To re-theme the app,
+ *    edit values here — that's the only place.
+ *  - `@theme inline`    maps Tailwind utility classes (`bg-primary`, etc.)
+ *    to those variables. You shouldn't normally touch this block.
+ *
+ * Brand primary = #0ea5e9 (sky-500) = #0ea5e9.
+ */
 
 :root {
-  /* Light mode */
-  --background: #fafafa;
-  --foreground: #0a0a0a;
-  --card: #ffffff;
-  --card-foreground: #0a0a0a;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
+  /* Surfaces */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+
+  /* Brand */
   --primary: #0ea5e9;
-  --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #171717;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
-  --accent-foreground: #171717;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
+  --primary-foreground: oklch(0.984 0.003 247.858);
+
+  /* Neutrals */
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+
+  /* Feedback */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+
+  /* Form chrome */
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
   --ring: #0ea5e9;
-  
-  /* Toast */
-  --toast-bg: #ffffff;
-  --toast-text: #0a0a0a;
-  --toast-border: #e5e5e5;
+
+  /* Charts (shadcn v4 defaults — visually distinct, work in light + dark) */
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  /* Sidebar (used by shadcn sidebar primitive when added) */
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-primary: #0ea5e9;
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: #0ea5e9;
+
+  --radius: 0.625rem;
 }
 
 .dark {
-  /* Dark mode - Inspired by Linear's dark theme */
-  --background: #0a0a0f;
-  --foreground: #fafafa;
-  --card: #111118;
-  --card-foreground: #fafafa;
-  --border: #27272a;
-  --input: #27272a;
-  --primary: #38bdf8;
-  --primary-foreground: #0a0a0a;
-  --secondary: #1c1c24;
-  --secondary-foreground: #fafafa;
-  --muted: #1c1c24;
-  --muted-foreground: #a1a1aa;
-  --accent: #1c1c24;
-  --accent-foreground: #fafafa;
-  --destructive: #dc2626;
-  --destructive-foreground: #fafafa;
-  --ring: #38bdf8;
-  
-  /* Toast */
-  --toast-bg: #1c1c24;
-  --toast-text: #fafafa;
-  --toast-border: #27272a;
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+
+  --primary: #0ea5e9;
+  --primary-foreground: oklch(0.984 0.003 247.858);
+
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: #0ea5e9;
+
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: #0ea5e9;
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: #0ea5e9;
 }
 
-* {
-  border-color: var(--border);
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Google Sans", sans-serif;
+  --font-mono: "Google Sans", monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
 }
 
-/* Scrollbar styling */
+/* Toast bridge — sonner reads these via inline style on the <Toaster> */
+:root {
+  --toast-bg: var(--popover);
+  --toast-text: var(--popover-foreground);
+  --toast-border: var(--border);
+}
+
+/* ----- Marketing decorative backgrounds ----- */
+
+/*
+ * 56px-cell line grid faded out at the edges via a radial mask. Used as a
+ * decorative ::after layer on hero, auth brand side, etc. Apply by placing a
+ * div with `.bg-grid` absolutely behind your content.
+ */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 80% at 50% 0%, black 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 80% at 50% 0%, black 30%, transparent 75%);
+}
+
+/* Same grid but masked to fade in/out around the centre — for centred sections. */
+.bg-grid-center {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 80%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 80%);
+}
+
+/*
+ * White grid drawn on a coloured (gradient) surface — used inside the CTA
+ * banner where the background is the brand→indigo gradient.
+ */
+.bg-grid-on-brand {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.10) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.10) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(ellipse at center, black, transparent 70%);
+  mask-image: radial-gradient(ellipse at center, black, transparent 70%);
+}
+
+:root {
+  --grid-line: rgb(15 23 42 / 0.06);
+  /* Brand gradient — primary brand + indigo, used for accent text and the
+     architecture/CTA highlights. */
+  --brand-gradient: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+  /* Subtle hero glow tied to the brand colour. */
+  --hero-glow: radial-gradient(60% 80% at 50% 0%, rgb(14 165 233 / 0.10), transparent 70%);
+}
+
+.dark {
+  --grid-line: rgb(255 255 255 / 0.05);
+  --hero-glow: radial-gradient(60% 80% at 50% 0%, rgb(14 165 233 / 0.18), transparent 70%);
+}
+
+/*
+ * Gradient text accent. Use as `<span class="text-gradient-brand">…</span>`
+ * for the hero / auth headline accent words.
+ */
+.text-gradient-brand {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: var(--muted-foreground);
+  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
   border-radius: 4px;
-  opacity: 0.5;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--foreground);
-  opacity: 0.7;
+  background: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
 }
 
-/* Focus styles */
-*:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
+/* ----- Legacy classes — will be replaced as components migrate to shadcn ----- */
 
-/* Custom animations */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-shimmer {
-  animation: shimmer 1.5s infinite;
-  background: linear-gradient(
-    90deg,
-    var(--muted) 25%,
-    var(--muted-foreground) 50%,
-    var(--muted) 75%
-  );
-  background-size: 200% 100%;
-}
-
-/* Kanban column styling */
+/* Kanban (used in components/kanban-board.tsx, app/dashboard/milestones/[id]/page.tsx) */
 .kanban-column {
   @apply rounded-xl p-4 min-h-[500px];
-  background-color: hsl(var(--secondary) / 0.5);
+  background-color: color-mix(in oklch, var(--secondary) 50%, transparent);
 }
-
 .kanban-card {
-  @apply bg-card rounded-lg p-4 shadow-sm border border-border transition-all cursor-pointer;
+  @apply bg-card rounded-lg p-4 shadow-xs border border-border transition-all cursor-pointer;
 }
 .kanban-card:hover {
-  border-color: hsl(var(--primary) / 0.5);
+  border-color: color-mix(in oklch, var(--primary) 50%, transparent);
   @apply shadow-md;
 }
 
-/* Status badges */
-.status-badge {
-  @apply px-2 py-0.5 rounded-full text-xs font-medium;
-}
-
-.status-backlog { @apply text-gray-400; background-color: rgb(107 114 128 / 0.2); }
-.status-todo { @apply text-blue-400; background-color: rgb(59 130 246 / 0.2); }
+/* Status chips (used dynamically via `status-${state}`) */
+.status-badge      { @apply px-2 py-0.5 rounded-full text-xs font-medium; }
+.status-backlog     { @apply text-gray-400;  background-color: rgb(107 114 128 / 0.2); }
+.status-todo        { @apply text-blue-400;  background-color: rgb(59 130 246 / 0.2); }
 .status-in_progress { @apply text-amber-400; background-color: rgb(245 158 11 / 0.2); }
-.status-blocked { @apply text-red-400; background-color: rgb(239 68 68 / 0.2); }
-.status-in_review { @apply text-purple-400; background-color: rgb(168 85 247 / 0.2); }
-.status-done { @apply text-green-400; background-color: rgb(34 197 94 / 0.2); }
-.status-cancelled { @apply text-gray-500; background-color: rgb(107 114 128 / 0.2); }
+.status-blocked     { @apply text-red-400;   background-color: rgb(239 68 68 / 0.2);  }
+.status-in_review   { @apply text-purple-400;background-color: rgb(168 85 247 / 0.2); }
+.status-done        { @apply text-green-400; background-color: rgb(34 197 94 / 0.2);  }
+.status-cancelled   { @apply text-gray-500;  background-color: rgb(107 114 128 / 0.2);}
 
-/* Priority indicators */
-.priority-urgent { @apply text-red-500; }
-.priority-high { @apply text-amber-500; }
-.priority-medium { @apply text-blue-500; }
-.priority-low { @apply text-gray-500; }
-
-/* Glass effect for modals */
-.glass {
-  @apply backdrop-blur-xl;
-  background-color: hsl(var(--card) / 0.8);
-}
-
-/* Prose / Rich text styles */
-.prose {
-  @apply text-foreground;
-  line-height: 1.7;
-}
-
-.prose h1 {
-  @apply text-2xl font-bold mb-4 mt-6;
-}
-
-.prose h2 {
-  @apply text-xl font-semibold mb-3 mt-5;
-}
-
-.prose h3 {
-  @apply text-lg font-semibold mb-2 mt-4;
-}
-
-.prose p {
-  @apply mb-3;
-}
-
-.prose ul {
-  @apply list-disc pl-6 mb-3;
-}
-
-.prose ol {
-  @apply list-decimal pl-6 mb-3;
-}
-
-.prose li {
-  @apply mb-1;
-}
-
+/* TipTap rich-text output (will be replaced by @tailwindcss/typography later) */
+.prose { @apply text-foreground; line-height: 1.7; }
+.prose h1 { @apply text-2xl font-bold mb-4 mt-6; }
+.prose h2 { @apply text-xl font-semibold mb-3 mt-5; }
+.prose h3 { @apply text-lg font-semibold mb-2 mt-4; }
+.prose p { @apply mb-3; }
+.prose ul { @apply list-disc pl-6 mb-3; }
+.prose ol { @apply list-decimal pl-6 mb-3; }
+.prose li { @apply mb-1; }
 .prose blockquote {
   @apply border-l-4 pl-4 italic my-4;
-  border-color: hsl(var(--primary) / 0.5);
-  color: hsl(var(--muted-foreground));
+  border-color: color-mix(in oklch, var(--primary) 50%, transparent);
+  color: var(--muted-foreground);
 }
+.prose code { @apply bg-secondary px-1.5 py-0.5 rounded text-sm font-mono; }
+.prose pre { @apply bg-secondary p-4 rounded-lg overflow-x-auto my-4; }
+.prose pre code { @apply bg-transparent p-0; }
+.prose a { @apply text-primary underline hover:no-underline; }
+.prose img { @apply max-w-full rounded-lg my-4; }
+.prose hr { @apply border-border my-6; }
+.prose strong { @apply font-semibold; }
+.prose em { @apply italic; }
+.prose s { @apply line-through; }
 
-.prose code {
-  @apply bg-secondary px-1.5 py-0.5 rounded text-sm font-mono;
-}
-
-.prose pre {
-  @apply bg-secondary p-4 rounded-lg overflow-x-auto my-4;
-}
-
-.prose pre code {
-  @apply bg-transparent p-0;
-}
-
-.prose a {
-  @apply text-primary underline hover:no-underline;
-}
-
-.prose img {
-  @apply max-w-full rounded-lg my-4;
-}
-
-.prose hr {
-  @apply border-border my-6;
-}
-
-.prose strong {
-  @apply font-semibold;
-}
-
-.prose em {
-  @apply italic;
-}
-
-.prose s {
-  @apply line-through;
-}
-
-/* TipTap specific styles */
-.ProseMirror {
-  @apply focus:outline-none;
-}
-
+/* TipTap editor — required for placeholder support */
+.ProseMirror { @apply focus:outline-none; }
 .ProseMirror p.is-editor-empty:first-child::before {
   @apply text-muted-foreground pointer-events-none float-left h-0;
   content: attr(data-placeholder);
 }
-

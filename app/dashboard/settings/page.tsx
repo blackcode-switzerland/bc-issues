@@ -48,7 +48,7 @@ export default function SettingsPage() {
 
       <div className="flex gap-8">
         {/* Sidebar Navigation */}
-        <nav className="w-56 flex-shrink-0">
+        <nav className="w-56 shrink-0">
           <ul className="space-y-1">
             {TABS.map((tab) => {
               const Icon = tab.icon
@@ -135,7 +135,7 @@ function ProfileSettings({ user }: { user?: { name?: string | null; email?: stri
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         </div>
 
@@ -331,7 +331,7 @@ function ToggleItem({
         }`}
       >
         <motion.div
-          className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow"
+          className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm"
           animate={{ x: enabled ? 20 : 0 }}
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         />

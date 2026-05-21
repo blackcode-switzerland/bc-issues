@@ -1,4 +1,5 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+gitIgnore
 
 # dependencies
 /node_modules
@@ -35,6 +36,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# locally-uploaded files (used when BLOB_READ_WRITE_TOKEN is unset in dev)
+/public/uploads/
 
 # typescript
 *.tsbuildinfo

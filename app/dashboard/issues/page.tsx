@@ -169,7 +169,7 @@ export default function AllIssuesPage() {
   return (
     <div>
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -203,7 +203,7 @@ export default function AllIssuesPage() {
                 placeholder="Search issues..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -247,7 +247,7 @@ export default function AllIssuesPage() {
                   <select
                     value={statusFilter || ''}
                     onChange={(e) => setStatusFilter(e.target.value || null)}
-                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     <option value="">All</option>
                     {STATUSES.map((s) => (
@@ -265,7 +265,7 @@ export default function AllIssuesPage() {
                     onChange={(e) =>
                       setPriorityFilter(e.target.value ? parseInt(e.target.value) : null)
                     }
-                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     <option value="">All</option>
                     <option value="1">Urgent</option>
@@ -282,7 +282,7 @@ export default function AllIssuesPage() {
                     onChange={(e) =>
                       setAssigneeFilter(e.target.value ? parseInt(e.target.value) : null)
                     }
-                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     <option value="">All</option>
                     {users.map((u: any) => (
@@ -300,7 +300,7 @@ export default function AllIssuesPage() {
                     onChange={(e) =>
                       setProjectFilter(e.target.value ? parseInt(e.target.value) : null)
                     }
-                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     <option value="">All</option>
                     {projects.map((p: any) => (

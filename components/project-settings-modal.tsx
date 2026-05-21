@@ -231,7 +231,7 @@ export function ProjectSettingsModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
 
       {/* Modal */}
@@ -244,7 +244,7 @@ export function ProjectSettingsModal({
         <div className="bg-card rounded-2xl border border-border shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
           {/* Banner preview area */}
           <div
-            className="h-24 relative flex-shrink-0"
+            className="h-24 relative shrink-0"
             style={{
               background: bannerPreview
                 ? `url(${bannerPreview}) center/cover`
@@ -321,7 +321,7 @@ export function ProjectSettingsModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="My Awesome Project"
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                 />
               </div>
 
@@ -335,7 +335,7 @@ export function ProjectSettingsModal({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="What's this project about?"
                   rows={3}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
 
@@ -348,7 +348,7 @@ export function ProjectSettingsModal({
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     {PRIORITY_OPTIONS.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -415,7 +415,7 @@ export function ProjectSettingsModal({
                 <select
                   value={ownerId || ''}
                   onChange={(e) => setOwnerId(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                 >
                   <option value="">No owner</option>
                   {members.map((m: any) => (
@@ -437,7 +437,7 @@ export function ProjectSettingsModal({
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   />
                 </div>
 
@@ -450,7 +450,7 @@ export function ProjectSettingsModal({
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
@@ -471,7 +471,7 @@ export function ProjectSettingsModal({
                 ) : (
                   <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-3">
                     <div className="flex items-start gap-2">
-                      <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+                      <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-red-500">
                           This action cannot be undone
@@ -490,7 +490,7 @@ export function ProjectSettingsModal({
                         value={deleteConfirmText}
                         onChange={(e) => setDeleteConfirmText(e.target.value)}
                         placeholder={project.name}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                       />
                     </div>
                     <div className="flex gap-2">

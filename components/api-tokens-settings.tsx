@@ -167,7 +167,7 @@ export function ApiTokensSettings() {
               }}
               placeholder="e.g. macbook-cli"
               maxLength={100}
-              className="w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+              className="w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring text-sm"
             />
             <div className="mt-3 flex gap-2">
               <button
