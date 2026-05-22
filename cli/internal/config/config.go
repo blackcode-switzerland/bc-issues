@@ -9,10 +9,13 @@ import (
 )
 
 type Config struct {
-	Server string `json:"server"`
-	Token  string `json:"token"`
-	UserID int    `json:"user_id,omitempty"`
-	Email  string `json:"email,omitempty"`
+	Server              string `json:"server"`
+	Token               string `json:"token"`
+	UserID              int    `json:"user_id,omitempty"`
+	Email               string `json:"email,omitempty"`
+	ActiveWorkspaceID   int    `json:"active_workspace_id,omitempty"`
+	ActiveWorkspaceSlug string `json:"active_workspace_slug,omitempty"`
+	ActiveWorkspaceKey  string `json:"active_workspace_key,omitempty"`
 }
 
 func dir() (string, error) {
