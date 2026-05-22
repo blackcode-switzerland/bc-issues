@@ -8,6 +8,8 @@ import { CircleDot, Clock, MessageSquare, Paperclip, Plus, Users } from 'lucide-
 import { useActiveWorkspace } from './use-active-workspace'
 import { FilterBar, MultiSelect, SearchInput, ViewToggle, type ViewMode } from './filter-bar'
 import { LabelChip } from './labels-pill'
+import { IssuesKanban } from './issues-kanban'
+import { IssuesTimeline } from './issues-timeline'
 
 interface IssueRow {
   id: number
@@ -25,6 +27,9 @@ interface IssueRow {
   project_name: string | null
   comment_count: number
   attachment_count: number
+  start_date: string | null
+  due_date: string | null
+  created_at: string
   updated_at: string
 }
 
@@ -185,7 +190,7 @@ export function IssuesListing() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <ViewToggle value={view} onChange={setView} available={['list']} />
+          <ViewToggle value={view} onChange={setView} />
           <Link
             href="/dashboard/issues/new"
             className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
@@ -247,7 +252,11 @@ export function IssuesListing() {
 
       {view === 'list' ? (
         <IssueListView issues={filtered} workspaceKey={ws?.key ?? ''} loading={issuesQuery.isLoading} />
-      ) : null}
+      ) : view === 'kanban' ? (
+        <IssuesKanban issues={filtered} workspaceKey={ws?.key ?? ''} />
+      ) : (
+        <IssuesTimeline issues={filtered} workspaceKey={ws?.key ?? ''} />
+      )}
     </div>
   )
 }
