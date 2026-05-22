@@ -263,7 +263,6 @@ export async function listIssueLabels(issueId: number): Promise<Label[]> {
     .select({
       id: labels.id,
       workspace_id: labels.workspace_id,
-      project_id: labels.project_id,
       name: labels.name,
       color: labels.color,
       description: labels.description,

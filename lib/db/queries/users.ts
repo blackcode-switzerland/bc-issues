@@ -10,7 +10,6 @@ export async function getUsers() {
       name: users.name,
       email: users.email,
       avatar_url: users.avatar_url,
-      role: users.role,
     })
     .from(users)
     .orderBy(users.name)

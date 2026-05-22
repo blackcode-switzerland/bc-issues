@@ -6,7 +6,6 @@ export interface User {
   email: string
   name?: string
   avatar_url?: string
-  role: string
   last_login?: string
   created_at: string
   updated_at: string

@@ -25,7 +25,6 @@ export const users = pgTable('users', {
   tagline: varchar('tagline', { length: 140 }),
   avatar_url: text('avatar_url'),
   password_hash: varchar('password_hash', { length: 255 }),
-  role: varchar('role', { length: 50 }).default('member').notNull(),
   // active_workspace_id is a soft FK — we don't enforce it via Drizzle's
   // .references() to avoid a circular declaration with workspaces. The
   // application layer keeps it in sync (set on workspace switch / create,
@@ -260,10 +259,6 @@ export const labels = pgTable(
   {
     id: serial('id').primaryKey(),
     workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    // Phase 9: project_id is now optional. Labels are workspace-scoped going
-    // forward; project_id is kept for one release to avoid losing data in case
-    // some old caller still reads it. Phase 13 drops the column entirely.
-    project_id: integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
     name: varchar('name', { length: 50 }).notNull(),
     color: varchar('color', { length: 7 }).default('#6b7280'),
     description: text('description'),
@@ -271,7 +266,7 @@ export const labels = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
   },
   (t) => ({
-    projectIdx: index('idx_labels_project').on(t.project_id),
+    wsIdx: index('idx_labels_workspace').on(t.workspace_id),
   })
 )
 

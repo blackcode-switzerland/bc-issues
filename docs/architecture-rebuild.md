@@ -834,6 +834,40 @@ A reasonable build order: issues list → kanban → timeline → milestones (sa
 
 **Acceptance:** all existing CLI workflows succeed against the new API. New commands work. Old `/api/projects/[id]` shim is finally removed.
 
+### Cleanup status (as of last build)
+
+**Done so far** (migration `0012_drop_role_and_label_project`):
+- `users.role` column dropped — replaced by `workspace_members.role`
+- `labels.project_id` column dropped — labels are fully workspace-scoped
+- `/api/admin/promote` and `/api/migrate` routes removed
+- `/api/seed` route removed (used hard-coded `user.role='admin'` check; the
+  legacy seed is no longer wired to the current schema and was a maintenance
+  burden — re-add a workspace-aware version if you want a demo dataset back)
+- NextAuth callbacks stop populating `token.role` and `session.user.role`
+
+**Still legacy** — these survive because each has a live caller; pulling them
+would break a feature. Each one's blocker is recorded so the next cleanup
+pass can pick up where this one left off:
+
+- `transaction_log` table — drives `bk undo` via `undoLastOperations()` in
+  `lib/db/queries/transaction.ts`. Replacing it means rewriting `undo` to
+  read from `events` (apply the inverse using `events.diff`). Plus the legacy
+  comment route still inserts into it for one or two paths.
+- `project_members` table — backs the `/api/projects/[id]/members` legacy
+  shim. CLI's `bk project members|add-member|remove-member` calls that
+  shim. To drop the table, convert the shim to use `workspace_members` (which
+  is what the new front-end and `bk member list` already use) and update the
+  CLI commands' help text to reflect that membership is now workspace-level.
+- `comments.issue_id` — still read by two queries: the `comment_count`
+  subquery in `issues.ts` and the activity query in `activity.ts`. Replace
+  both with `(parent_type='issue' AND parent_id = i.id)` before dropping.
+- Legacy API shims (`/api/projects`, `/api/issues`, `/api/milestones`,
+  `/api/analytics`, `/api/users/me`, `/api/issues/[id]/comments`,
+  `/api/issues/[id]/attachments`) — kept because the CLI's existing
+  `bk project|issue|milestone|...` commands still call them. Could be
+  removed once the CLI is migrated to call `/api/workspaces/[ws]/...`
+  directly. Today the shims just resolve active workspace and forward.
+
 ### Phase 13 — Polish, cleanup, performance pass (1-2 sessions)
 
 **Goal:** make it feel professional.

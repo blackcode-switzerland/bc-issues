@@ -75,7 +75,6 @@ export const authOptions: NextAuthOptions = {
         const dbUser = await getUserByEmail(user.email)
         if (dbUser) {
           token.id = dbUser.id
-          token.role = dbUser.role
         }
         if (account.provider === 'google' && account.access_token) {
           token.accessToken = account.access_token
@@ -86,7 +85,6 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         if (typeof token.id === 'number') session.user.id = token.id
-        if (typeof token.role === 'string') session.user.role = token.role
       }
       return session
     },

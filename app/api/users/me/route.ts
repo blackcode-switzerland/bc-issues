@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     email: user.email,
     name: user.name,
     avatar_url: user.avatar_url,
-    role: user.role,
     via,
   })
 }
