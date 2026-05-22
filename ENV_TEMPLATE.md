@@ -15,7 +15,11 @@ NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
 
 # Database (Local Development)
-POSTGRES_URL=postgres://postgres:postgres@localhost:5433/postgres
+DATABASE_URL=postgres://blackcode:blackcode_dev@localhost:5434/blackcode_issues
+
+# Dev-only conveniences. Set to "true" to unlock /api/seed, /api/migrate, /api/admin/*
+# Must be unset or "false" in production.
+DEV_MODE=true
 ```
 
 ## Production (Vercel)

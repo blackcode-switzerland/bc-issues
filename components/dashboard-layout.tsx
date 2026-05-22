@@ -14,8 +14,13 @@ import {
   Target,
   BarChart3,
   Clock,
+  Inbox,
+  Users,
+  Tag,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { WorkspaceSwitcher } from './workspace-switcher'
+import { InboxBadge } from './inbox-badge'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -45,41 +50,70 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </Link>
         </div>
 
+        {/* Workspace switcher */}
+        <div className="p-3 border-b border-border">
+          <WorkspaceSwitcher />
+        </div>
+
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-1">
+          <Link href="/dashboard/inbox" className="block">
+            <NavItem
+              icon={<Inbox size={18} />}
+              label="Inbox"
+              active={pathname === '/dashboard/inbox'}
+              trailing={<InboxBadge />}
+            />
+          </Link>
+          <div className="h-2" />
           <Link href="/dashboard" className="block">
-            <NavItem 
-              icon={<LayoutGrid size={18} />} 
-              label="Projects" 
-              active={pathname === '/dashboard'} 
+            <NavItem
+              icon={<LayoutGrid size={18} />}
+              label="Projects"
+              active={pathname === '/dashboard'}
             />
           </Link>
           <Link href="/dashboard/issues" className="block">
-            <NavItem 
-              icon={<List size={18} />} 
-              label="All Issues" 
-              active={pathname === '/dashboard/issues' || pathname?.startsWith('/dashboard/issues/')} 
+            <NavItem
+              icon={<List size={18} />}
+              label="Issues"
+              active={pathname === '/dashboard/issues' || pathname?.startsWith('/dashboard/issues/')}
             />
           </Link>
           <Link href="/dashboard/milestones" className="block">
-            <NavItem 
-              icon={<Target size={18} />} 
-              label="Milestones" 
-              active={pathname === '/dashboard/milestones' || pathname?.startsWith('/dashboard/milestones/')} 
+            <NavItem
+              icon={<Target size={18} />}
+              label="Milestones"
+              active={pathname === '/dashboard/milestones' || pathname?.startsWith('/dashboard/milestones/')}
             />
           </Link>
-          <Link href="/dashboard/analytics" className="block">
-            <NavItem 
-              icon={<BarChart3 size={18} />} 
-              label="Analytics" 
-              active={pathname === '/dashboard/analytics'} 
+          <Link href="/dashboard/labels" className="block">
+            <NavItem
+              icon={<Tag size={18} />}
+              label="Labels"
+              active={pathname === '/dashboard/labels'}
+            />
+          </Link>
+          <div className="h-2" />
+          <Link href="/dashboard/members" className="block">
+            <NavItem
+              icon={<Users size={18} />}
+              label="Members"
+              active={pathname?.startsWith('/dashboard/members') ?? false}
             />
           </Link>
           <Link href="/dashboard/activity" className="block">
-            <NavItem 
-              icon={<Clock size={18} />} 
-              label="Activity" 
-              active={pathname === '/dashboard/activity'} 
+            <NavItem
+              icon={<Clock size={18} />}
+              label="Activity"
+              active={pathname === '/dashboard/activity'}
+            />
+          </Link>
+          <Link href="/dashboard/analytics" className="block">
+            <NavItem
+              icon={<BarChart3 size={18} />}
+              label="Analytics"
+              active={pathname === '/dashboard/analytics'}
             />
           </Link>
         </nav>
@@ -141,10 +175,12 @@ function NavItem({
   icon,
   label,
   active = false,
+  trailing,
 }: {
   icon: React.ReactNode
   label: string
   active?: boolean
+  trailing?: React.ReactNode
 }) {
   return (
     <div
@@ -155,7 +191,8 @@ function NavItem({
       }`}
     >
       {icon}
-      <span className="font-medium">{label}</span>
+      <span className="font-medium flex-1">{label}</span>
+      {trailing}
     </div>
   )
 }

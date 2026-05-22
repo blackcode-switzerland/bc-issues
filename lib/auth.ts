@@ -3,6 +3,7 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { getUserByEmail, touchLastLogin, upsertUserFromOAuth } from './db/queries/users'
 import { verifyPassword } from './auth/password'
+import { materializePendingInvitationsForUser } from './db/queries/invitations'
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -50,12 +51,19 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === 'google') {
         if (!user.email) return false
         try {
-          await upsertUserFromOAuth({
+          const result = await upsertUserFromOAuth({
             google_id: account.providerAccountId,
             email: user.email,
             name: user.name,
             avatar_url: user.image,
           })
+          if (result.was_new) {
+            try {
+              await materializePendingInvitationsForUser(result.user.id, result.user.email)
+            } catch (mErr) {
+              console.error('materialize pending invitations failed:', mErr)
+            }
+          }
         } catch (error) {
           console.error('Failed to upsert user:', error)
         }

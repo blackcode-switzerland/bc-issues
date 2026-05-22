@@ -15,6 +15,76 @@
       "when": 1777883841365,
       "tag": "0001_add_password_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779458270175,
+      "tag": "0002_error_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779458961203,
+      "tag": "0003_workspaces_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779458961204,
+      "tag": "0004_workspaces_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779459889987,
+      "tag": "0005_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779460247319,
+      "tag": "0006_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779460921829,
+      "tag": "0007_milestone_standalone",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779461170705,
+      "tag": "0008_issue_standalone_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779461925048,
+      "tag": "0009_label_standalone",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779461991592,
+      "tag": "0010_label_created_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779462111802,
+      "tag": "0011_comments_polymorphic",
+      "breakpoints": true
     }
   ]
 }

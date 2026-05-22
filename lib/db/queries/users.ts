@@ -31,7 +31,12 @@ export async function upsertUserFromOAuth(data: {
   email: string
   name?: string | null
   avatar_url?: string | null
-}): Promise<void> {
+}): Promise<{ user: User; was_new: boolean }> {
+  // Inspect first to know whether this is a fresh signup, so the caller can
+  // materialize pending invitations and other first-login side effects.
+  const existing = await getUserByEmail(data.email)
+  const was_new = !existing
+
   await db
     .insert(users)
     .values({
@@ -49,6 +54,10 @@ export async function upsertUserFromOAuth(data: {
         last_login: new Date(),
       },
     })
+
+  const final = await getUserByEmail(data.email)
+  if (!final) throw new Error('upsert returned no user')
+  return { user: final, was_new }
 }
 
 export async function createUserWithPassword(data: {
@@ -70,4 +79,24 @@ export async function createUserWithPassword(data: {
 
 export async function touchLastLogin(id: number): Promise<void> {
   await db.update(users).set({ last_login: new Date() }).where(eq(users.id, id))
+}
+
+export interface UpdateUserProfileInput {
+  name?: string | null
+  tagline?: string | null
+  avatar_url?: string | null
+}
+
+export async function updateUserProfile(
+  id: number,
+  patch: UpdateUserProfileInput
+): Promise<User | null> {
+  const updates: Record<string, unknown> = {}
+  if (patch.name !== undefined) updates.name = patch.name
+  if (patch.tagline !== undefined) updates.tagline = patch.tagline
+  if (patch.avatar_url !== undefined) updates.avatar_url = patch.avatar_url
+  if (Object.keys(updates).length === 0) return getUserById(id)
+  updates.updated_at = new Date()
+  const [row] = await db.update(users).set(updates).where(eq(users.id, id)).returning()
+  return row ?? null
 }

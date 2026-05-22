@@ -1,108 +1,67 @@
+// Legacy /api/milestones/[id] — looks up the milestone, verifies workspace
+// membership via the milestone's workspace_id, and delegates to the new
+// workspace-aware queries.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
-import { updateMilestone, deleteMilestone, getMilestoneWithDetails, getIssuesByMilestone } from '@/lib/db'
+import { apiHandler, Errors } from '@/lib/api'
+import {
+  deleteMilestone,
+  getMilestone,
+  getMilestoneWithDetails,
+  updateMilestone,
+} from '@/lib/db/queries/milestones'
+import { getIssuesByMilestone } from '@/lib/db/queries/issues'
+import { getMembership } from '@/lib/db/queries/workspaces'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { id: idStr } = await params
-    const id = parseInt(idStr)
-    if (isNaN(id)) {
-      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
-    }
-
-    const searchParams = request.nextUrl.searchParams
-    const includeIssues = searchParams.get('includeIssues') === 'true'
-
-    const milestone = await getMilestoneWithDetails(id)
-    if (!milestone) {
-      return NextResponse.json({ error: 'Milestone not found' }, { status: 404 })
-    }
-
-    if (includeIssues) {
-      const issues = await getIssuesByMilestone(id)
-      return NextResponse.json({ ...milestone, issues })
-    }
-
-    return NextResponse.json(milestone)
-  } catch (error) {
-    console.error('Failed to fetch milestone:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch milestone' },
-      { status: 500 }
-    )
-  }
+interface Params {
+  params: Promise<{ id: string }>
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { id: idStr } = await params
-    const id = parseInt(idStr)
-    if (isNaN(id)) {
-      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
-    }
-
-    const body = await request.json()
-    const { name, description, due_date } = body
-
-    const milestone = await updateMilestone(id, {
-      name,
-      description,
-      due_date,
-    })
-
-    if (!milestone) {
-      return NextResponse.json({ error: 'Milestone not found' }, { status: 404 })
-    }
-
-    return NextResponse.json(milestone)
-  } catch (error) {
-    console.error('Failed to update milestone:', error)
-    return NextResponse.json(
-      { error: 'Failed to update milestone' },
-      { status: 500 }
-    )
-  }
+async function loadAndCheck(idStr: string, userId: number) {
+  const id = parseInt(idStr)
+  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
+  const m = await getMilestone(id)
+  if (!m || !m.workspace_id) throw Errors.notFound('milestone')
+  const membership = await getMembership(m.workspace_id, userId)
+  if (!membership) throw Errors.notFound('milestone')
+  return { id, workspaceId: m.workspace_id }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
+  const user = await resolveUser(req)
+  if (!user) throw Errors.unauthorized()
+  const { id: idStr } = await params
+  const { id } = await loadAndCheck(idStr, user.id)
 
-    const { id: idStr } = await params
-    const id = parseInt(idStr)
-    if (isNaN(id)) {
-      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
-    }
-
-    await deleteMilestone(id)
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Failed to delete milestone:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete milestone' },
-      { status: 500 }
-    )
+  const includeIssues = req.nextUrl.searchParams.get('includeIssues') === 'true'
+  const details = await getMilestoneWithDetails(id)
+  if (!details) throw Errors.notFound('milestone')
+  if (includeIssues) {
+    const issues = await getIssuesByMilestone(id)
+    return NextResponse.json({ ...details, issues })
   }
-}
+  return NextResponse.json(details)
+})
+
+export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => {
+  const user = await resolveUser(req)
+  if (!user) throw Errors.unauthorized()
+  const { id: idStr } = await params
+  const { id, workspaceId } = await loadAndCheck(idStr, user.id)
+
+  const body = await req.json()
+  const updated = await updateMilestone(workspaceId, id, body, user.id)
+  if (!updated) throw Errors.notFound('milestone')
+  return NextResponse.json(updated)
+})
+
+export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) => {
+  const user = await resolveUser(req)
+  if (!user) throw Errors.unauthorized()
+  const { id: idStr } = await params
+  const { id, workspaceId } = await loadAndCheck(idStr, user.id)
+
+  await deleteMilestone(workspaceId, id, user.id)
+  return NextResponse.json({ success: true })
+})
