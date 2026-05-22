@@ -4,10 +4,58 @@
 // (NOT NULL for now) and mirrored on issue-parent comments so the old code
 // path doesn't break.
 
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { comments, issues, milestones, projects, users, type Comment } from '../schema'
+import {
+  comments,
+  issues,
+  milestones,
+  projects,
+  users,
+  workspaceMembers,
+  type Comment,
+} from '../schema'
 import { recordEvent } from './events'
+
+const MENTION_RE = /@([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g
+
+// Resolve @email mentions in comment content to workspace member user_ids.
+// Returns the list of user_ids that:
+//   (a) are referenced by @<email> in the content,
+//   (b) are members of the given workspace, and
+//   (c) are not the comment author (no self-mentions).
+async function resolveMentions(
+  tx: Tx,
+  workspaceId: number,
+  content: string,
+  authorUserId: number
+): Promise<number[]> {
+  const emails = new Set<string>()
+  for (const match of content.matchAll(MENTION_RE)) {
+    emails.add(match[1].toLowerCase())
+  }
+  if (emails.size === 0) return []
+
+  const rows = await tx
+    .select({ user_id: workspaceMembers.user_id })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(users.id, workspaceMembers.user_id))
+    .where(
+      and(
+        eq(workspaceMembers.workspace_id, workspaceId),
+        sql`lower(${users.email}) IN (${sql.join(
+          Array.from(emails).map((e) => sql`${e}`),
+          sql`, `
+        )})`,
+        sql`${users.deleted_at} IS NULL`
+      )
+    )
+  const ids = new Set(rows.map((r) => r.user_id))
+  ids.delete(authorUserId)
+  return Array.from(ids)
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export type CommentParentType = 'issue' | 'milestone' | 'project'
 
@@ -86,6 +134,13 @@ export interface CreateCommentInput {
 
 export async function createComment(input: CreateCommentInput): Promise<Comment> {
   return await db.transaction(async (tx) => {
+    const mentionedUserIds = await resolveMentions(
+      tx,
+      input.workspaceId,
+      input.content,
+      input.userId
+    )
+
     const [row] = await tx
       .insert(comments)
       .values({
@@ -94,14 +149,10 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
         parent_id: input.parentId,
         // Legacy column — mirrored only for 'issue' parents so existing
         // queries that join on issue_id keep working until Phase 13 drops it.
-        // For non-issue parents, the column has a NOT NULL constraint from
-        // the original schema, so we point it at parent_id (which always
-        // satisfies the FK because issues exist for issue parents; for
-        // milestone/project parents it would violate FK). Need to relax
-        // issue_id constraint first — see migration in this phase.
         issue_id: input.parentType === 'issue' ? input.parentId : null,
         user_id: input.userId,
         content: input.content,
+        mentions: mentionedUserIds.length > 0 ? mentionedUserIds : null,
       })
       .returning()
     if (!row) throw new Error('comment insert returned nothing')
@@ -120,7 +171,8 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
     })
 
     // Surface a 'commented' event on the parent entity so issue activity and
-    // watcher fan-out work cleanly.
+    // watcher fan-out work cleanly. Mention recipients are passed in meta so
+    // fanOutCommented can skip them (they'll get a dedicated 'mention' row).
     await recordEvent(tx, {
       workspaceId: input.workspaceId,
       actorUserId: input.userId,
@@ -130,8 +182,27 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
       meta: {
         comment_id: row.id,
         excerpt: input.content.slice(0, 120),
+        mentioned_user_ids: mentionedUserIds,
       },
     })
+
+    // One 'mentioned' event per mentioned user — fanOutEvent will turn each
+    // into a typed inbox row.
+    for (const uid of mentionedUserIds) {
+      await recordEvent(tx, {
+        workspaceId: input.workspaceId,
+        actorUserId: input.userId,
+        entityType: input.parentType,
+        entityId: input.parentId,
+        action: 'mentioned',
+        meta: {
+          mentioned_user_id: uid,
+          comment_id: row.id,
+          excerpt: input.content.slice(0, 120),
+        },
+      })
+    }
+
     return row
   })
 }

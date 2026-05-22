@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { users } from '../schema'
 import type { User } from '../schema'
@@ -85,6 +85,60 @@ export interface UpdateUserProfileInput {
   name?: string | null
   tagline?: string | null
   avatar_url?: string | null
+}
+
+// Soft-deletes the user: marks deleted_at, clears auth, revokes tokens.
+// Returns the workspaces that *would* be hard-deleted (sole-owner with no
+// other members) and the workspaces that block deletion (owner with members).
+// If `confirm` is false, this is a dry run.
+export interface DeleteAccountReport {
+  blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
+  will_hard_delete: Array<{ workspace_id: number; name: string }>
+}
+
+export async function deleteAccountReport(userId: number): Promise<DeleteAccountReport> {
+  const rows = await db.execute<{
+    workspace_id: number
+    name: string
+    member_count: number
+  }>(sql`
+    SELECT w.id AS workspace_id, w.name, COUNT(wm.id)::int AS member_count
+    FROM workspaces w
+    LEFT JOIN workspace_members wm ON wm.workspace_id = w.id
+    WHERE w.owner_id = ${userId}
+    GROUP BY w.id, w.name
+  `)
+  const blocked: DeleteAccountReport['blocked_by'] = []
+  const willHardDelete: DeleteAccountReport['will_hard_delete'] = []
+  for (const r of rows.rows) {
+    if (r.member_count > 1) blocked.push(r)
+    else willHardDelete.push({ workspace_id: r.workspace_id, name: r.name })
+  }
+  return { blocked_by: blocked, will_hard_delete: willHardDelete }
+}
+
+export async function softDeleteUser(userId: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    // Hard-delete sole-owner workspaces (the cascade will sweep their content).
+    await tx.execute(sql`
+      DELETE FROM workspaces w
+      WHERE w.owner_id = ${userId}
+        AND (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id = w.id) <= 1
+    `)
+    // Revoke tokens.
+    await tx.execute(sql`DELETE FROM api_tokens WHERE user_id = ${userId}`)
+    // Wipe inbox.
+    await tx.execute(sql`DELETE FROM inbox_messages WHERE user_id = ${userId}`)
+    // Soft delete the user row.
+    await tx.execute(sql`
+      UPDATE users SET
+        deleted_at = now(),
+        password_hash = NULL,
+        google_id = NULL,
+        active_workspace_id = NULL
+      WHERE id = ${userId}
+    `)
+  })
 }
 
 export async function updateUserProfile(

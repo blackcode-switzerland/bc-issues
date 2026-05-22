@@ -39,6 +39,8 @@ export async function fanOutEvent(tx: Tx, event: Event): Promise<void> {
       return fanOutStatusChanged(tx, event)
     case 'commented':
       return fanOutCommented(tx, event)
+    case 'mentioned':
+      return fanOutMentioned(tx, event)
     default:
       return
   }
@@ -342,10 +344,17 @@ async function fanOutCommented(tx: Tx, event: Event): Promise<void> {
     .where(eq(issues.id, event.entity_id))
     .limit(1)
 
+  const meta = event.meta as
+    | { comment_id?: number; excerpt?: string; mentioned_user_ids?: number[] }
+    | null
+
   const recipients = new Set<number>()
   for (const w of watchers) recipients.add(w.user_id)
   if (issueRow[0]?.reporter_id) recipients.add(issueRow[0].reporter_id)
   if (event.actor_user_id) recipients.delete(event.actor_user_id)
+  // Mentioned users get a dedicated 'mention' inbox row from fanOutMentioned —
+  // skip them here to avoid noise.
+  for (const uid of meta?.mentioned_user_ids ?? []) recipients.delete(uid)
 
   if (recipients.size === 0) return
 
@@ -354,8 +363,6 @@ async function fanOutCommented(tx: Tx, event: Event): Promise<void> {
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
-
-  const meta = event.meta as { comment_id?: number; excerpt?: string } | null
 
   for (const uid of recipients) {
     await createInboxMessage(tx, {
@@ -378,6 +385,53 @@ async function fanOutCommented(tx: Tx, event: Event): Promise<void> {
       },
     })
   }
+}
+
+async function fanOutMentioned(tx: Tx, event: Event): Promise<void> {
+  const meta = event.meta as
+    | { mentioned_user_id?: number; comment_id?: number; excerpt?: string }
+    | null
+  if (!meta?.mentioned_user_id) return
+
+  const ws = await tx
+    .select({ name: workspaces.name, key: workspaces.key })
+    .from(workspaces)
+    .where(eq(workspaces.id, event.workspace_id))
+    .limit(1)
+
+  let issueSeq: number | null = null
+  let issueTitle: string | null = null
+  if (event.entity_type === 'issue') {
+    const issueRow = await tx
+      .select({ seq: issues.seq, title: issues.title })
+      .from(issues)
+      .where(eq(issues.id, event.entity_id))
+      .limit(1)
+    issueSeq = issueRow[0]?.seq ?? null
+    issueTitle = issueRow[0]?.title ?? null
+  }
+
+  await createInboxMessage(tx, {
+    userId: meta.mentioned_user_id,
+    eventId: event.id,
+    workspaceId: event.workspace_id,
+    type: 'mention',
+    entityType: event.entity_type,
+    entityId: event.entity_id,
+    actorUserId: event.actor_user_id,
+    payload: {
+      workspace_id: event.workspace_id,
+      workspace_key: ws[0]?.key ?? '',
+      workspace_name: ws[0]?.name ?? '',
+      issue_id: event.entity_type === 'issue' ? event.entity_id : null,
+      issue_seq: issueSeq,
+      issue_title: issueTitle,
+      parent_type: event.entity_type,
+      parent_id: event.entity_id,
+      comment_id: meta.comment_id ?? null,
+      excerpt: meta.excerpt ?? '',
+    },
+  })
 }
 
 // keep these imported to avoid TS pruning warnings; reserved for future

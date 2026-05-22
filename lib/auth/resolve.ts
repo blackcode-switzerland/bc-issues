@@ -20,7 +20,9 @@ export async function resolveAuth(req: Request): Promise<AuthSource | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.email) return null
   const user = await getUserByEmail(session.user.email)
-  return user ? { user, via: 'session' } : null
+  // Block soft-deleted users — their session is no longer valid.
+  if (!user || user.deleted_at) return null
+  return { user, via: 'session' }
 }
 
 export async function resolveUser(req: Request): Promise<User | null> {

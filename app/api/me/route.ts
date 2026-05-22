@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
 import { apiHandler, Errors } from '@/lib/api'
-import { getUserById, updateUserProfile } from '@/lib/db/queries/users'
+import {
+  deleteAccountReport,
+  getUserById,
+  softDeleteUser,
+  updateUserProfile,
+} from '@/lib/db/queries/users'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const user = await resolveUser(request)
@@ -67,4 +72,25 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     avatar_url: updated.avatar_url,
     active_workspace_id: updated.active_workspace_id,
   })
+})
+
+export const DELETE = apiHandler(async (request: NextRequest) => {
+  const user = await resolveUser(request)
+  if (!user) throw Errors.unauthorized()
+
+  // Dry-run: report what would happen.
+  const url = new URL(request.url)
+  const report = await deleteAccountReport(user.id)
+  if (url.searchParams.get('dry_run') === 'true') {
+    return NextResponse.json(report)
+  }
+  if (report.blocked_by.length > 0) {
+    throw Errors.conflict(
+      'owner_with_members',
+      'You must transfer ownership of these workspaces before deleting your account',
+      report.blocked_by
+    )
+  }
+  await softDeleteUser(user.id)
+  return NextResponse.json({ deleted: true, hard_deleted_workspaces: report.will_hard_delete })
 })
