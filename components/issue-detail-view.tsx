@@ -115,8 +115,14 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   const [descDraft, setDescDraft] = useState('')
   const [newComment, setNewComment] = useState('')
 
+  // Guard: an unparseable id (e.g. /dashboard/issues/new before that page
+  // existed) used to spam the API with /api/issues/NaN. Bail out cleanly.
+  const validId = Number.isFinite(issueId) && issueId > 0
+
   const issue = useQuery({
     queryKey: ['issue', issueId],
+    enabled: validId,
+    retry: false,
     queryFn: async (): Promise<IssueDetail> => {
       const res = await fetch(`/api/issues/${issueId}`)
       if (!res.ok) throw new Error('failed')
@@ -126,6 +132,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const comments = useQuery({
     queryKey: ['issue-comments', issueId],
+    enabled: validId,
+    retry: false,
     queryFn: async (): Promise<Comment[]> => {
       const res = await fetch(`/api/issues/${issueId}/comments`)
       if (!res.ok) return []
@@ -135,7 +143,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const labels = useQuery({
     queryKey: ['issue-labels', issueId, ws?.slug],
-    enabled: !!ws,
+    enabled: !!ws && validId,
+    retry: false,
     queryFn: async (): Promise<Label[]> => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/labels`)
       if (!res.ok) return []
