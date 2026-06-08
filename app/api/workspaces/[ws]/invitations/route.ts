@@ -4,12 +4,24 @@ import {
   createInvitation,
   listWorkspaceInvitations,
 } from '@/lib/db/queries/invitations'
+import { sendInvitationEmail } from '@/lib/email/send'
 
 interface Params {
   params: Promise<{ ws: string }>
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const INVITE_TTL_DAYS = 14
+
+function baseUrl(req: NextRequest): string {
+  const fromEnv = process.env.NEXTAUTH_URL
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
+  try {
+    return new URL(req.url).origin
+  } catch {
+    return ''
+  }
+}
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
@@ -41,11 +53,26 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       workspaceId: ctx.workspace.id,
       email,
       invitedBy: ctx.user.id,
+      ttlDays: INVITE_TTL_DAYS,
     })
+
+    // Send the invitation email AFTER the invite is committed. Best-effort —
+    // a bounced email never invalidates the invitation, which is also
+    // available in-app (inbox) and via the copyable accept link.
+    const acceptUrl = `${baseUrl(req)}/invitations/${result.invitation.token}`
+    const emailResult = await sendInvitationEmail(email, {
+      workspaceName: ctx.workspace.name,
+      inviterName: ctx.user.name ?? ctx.user.email,
+      acceptUrl,
+      inviteeHasAccount: result.invitee_has_account,
+      expiresInDays: INVITE_TTL_DAYS,
+    })
+
     return NextResponse.json(
       {
         invitation: result.invitation,
         invitee_has_account: result.invitee_has_account,
+        email_sent: emailResult.sent,
       },
       { status: 201 }
     )

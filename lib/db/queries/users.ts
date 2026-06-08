@@ -3,6 +3,9 @@ import { db } from '../client'
 import { users } from '../schema'
 import type { User } from '../schema'
 
+// DEPRECATED: returns every user on the platform. Do not expose to end users —
+// it leaks the global directory. Use getVisibleUsers(callerId) instead. Kept
+// only for internal/admin tooling that genuinely needs the full list.
 export async function getUsers() {
   return db
     .select({
@@ -13,6 +16,25 @@ export async function getUsers() {
     })
     .from(users)
     .orderBy(users.name)
+}
+
+// Privacy guard: the directory a given user is allowed to see. Returns only
+// non-deleted users who share at least one workspace with the caller (which
+// includes the caller themselves). This is the professional model — you can
+// only discover people you already collaborate with. Inviting brand-new people
+// is done blind, by email.
+export async function getVisibleUsers(callerId: number) {
+  const result = await db.execute(sql`
+    SELECT DISTINCT u.id, u.name, u.email, u.avatar_url
+    FROM users u
+    INNER JOIN workspace_members wm_target ON wm_target.user_id = u.id
+    INNER JOIN workspace_members wm_self
+      ON wm_self.workspace_id = wm_target.workspace_id
+    WHERE wm_self.user_id = ${callerId}
+      AND u.deleted_at IS NULL
+    ORDER BY u.name NULLS LAST
+  `)
+  return result.rows
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {

@@ -17,7 +17,14 @@ NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
 # Database (Local Development)
 DATABASE_URL=postgres://blackcode:blackcode_dev@localhost:5434/blackcode_issues
 
-# Dev-only conveniences. Set to "true" to unlock /api/seed, /api/migrate, /api/admin/*
+# Email (Resend) — transactional email. Currently only workspace invitation
+# emails are sent. If unset, the app still works; invitations fall back to the
+# in-app inbox + copyable accept link. RESEND_FROM_EMAIL must be on a domain
+# you've verified in Resend.
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=invites@yourdomain.com
+
+# Dev-only conveniences. Reserved flag (most dev-only routes have been removed).
 # Must be unset or "false" in production.
 DEV_MODE=true
 ```

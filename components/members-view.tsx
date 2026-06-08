@@ -87,11 +87,19 @@ export function MembersView() {
       return res.json()
     },
     onSuccess: (r) => {
-      toast.success(
-        r.invitee_has_account
-          ? 'Invitation sent — appears in their inbox'
-          : 'Invitation created — share the link below'
-      )
+      if (r.email_sent) {
+        toast.success(
+          r.invitee_has_account
+            ? 'Invitation emailed — also in their inbox'
+            : 'Invitation email sent'
+        )
+      } else {
+        toast.success(
+          r.invitee_has_account
+            ? 'Invitation sent — appears in their inbox'
+            : 'Invitation created — share the link below'
+        )
+      }
       setInviteEmail('')
       queryClient.invalidateQueries({ queryKey: ['workspace-invitations'] })
     },
