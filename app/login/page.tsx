@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { PasswordResetFlow } from '@/components/password-reset-flow'
 
 type Mode = 'signin' | 'signup'
 type FieldName = 'name' | 'email' | 'password' | 'confirmPassword'
@@ -57,6 +58,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [name, setName] = useState('')
+  const [showReset, setShowReset] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
 
@@ -402,6 +404,16 @@ export default function LoginPage() {
                     />
                   </Field>
 
+                  <div className="-mt-1 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setShowReset(true)}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+
                   <SubmitButton submitting={submitting}>Sign in</SubmitButton>
                 </form>
 
@@ -613,6 +625,32 @@ export default function LoginPage() {
           </div>
         </aside>
       </div>
+
+      {showReset ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowReset(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-lg font-semibold">Reset your password</h2>
+            <p className="mb-4 text-xs text-muted-foreground">
+              We&apos;ll email you a one-time code to verify it&apos;s you.
+            </p>
+            <PasswordResetFlow
+              authenticated={false}
+              presetEmail={email}
+              onCancel={() => setShowReset(false)}
+              onDone={() => {
+                setShowReset(false)
+                toast.success('Password reset — sign in with your new password')
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
     </MarketingLayout>
   )
 }

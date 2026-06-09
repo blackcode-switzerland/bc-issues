@@ -19,6 +19,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { useQuery } from '@tanstack/react-query'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { InboxBadge } from './inbox-badge'
 
@@ -31,6 +32,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const user = session?.user
+
+  // Pull the live profile so the avatar/name reflect edits immediately (the
+  // session JWT is only refreshed on re-login). Shares the ['me'] cache with
+  // the profile settings page, so an upload there updates the sidebar too.
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const res = await fetch('/api/me')
+      if (!res.ok) return null
+      return res.json() as Promise<{
+        name: string | null
+        email: string
+        avatar_url: string | null
+      }>
+    },
+  })
+
+  const displayName = me?.name ?? user?.name ?? ''
+  const displayEmail = me?.email ?? user?.email ?? ''
+  const avatarUrl = me?.avatar_url ?? user?.image ?? null
+  const initials = (displayName.trim()[0] ?? displayEmail[0] ?? '?').toUpperCase()
 
   return (
     <div className="min-h-screen bg-background">
@@ -121,20 +143,23 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* User */}
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3 mb-4">
-            {user?.image && (
-              <Image
-                src={user.image}
-                alt={user.name || 'User'}
-                width={32}
-                height={32}
-                className="rounded-full"
-              />
-            )}
+            <div className="size-9 shrink-0 overflow-hidden rounded-full border border-border bg-primary/10">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt={displayName || 'You'}
+                  className="size-full object-cover"
+                />
+              ) : (
+                <span className="flex size-full items-center justify-center text-sm font-medium text-primary">
+                  {initials}
+                </span>
+              )}
+            </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {user?.email}
-              </p>
+              <p className="font-medium truncate">{displayName}</p>
+              <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

@@ -10,6 +10,15 @@ import { FilterBar, MultiSelect, SearchInput, ViewToggle, type ViewMode } from '
 import { LabelChip } from './labels-pill'
 import { IssuesKanban } from './issues-kanban'
 import { IssuesTimeline } from './issues-timeline'
+import { IssueCreateModal } from '../issue-create-modal'
+import {
+  ISSUE_PRIORITIES,
+  ISSUE_STATUSES,
+  issuePriorityColor,
+  issuePriorityLabel,
+  issueStatusColor,
+  issueStatusLabel,
+} from '@/lib/work-items'
 
 interface IssueRow {
   id: number
@@ -55,45 +64,13 @@ interface LabelRow {
   color: string
 }
 
-const STATUSES = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'todo', label: 'To do' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'in_review', label: 'In review' },
-  { value: 'done', label: 'Done' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
-const STATUS_COLORS: Record<string, string> = {
-  backlog: 'text-zinc-500 bg-zinc-500/10',
-  todo: 'text-zinc-300 bg-zinc-500/10',
-  in_progress: 'text-blue-400 bg-blue-500/10',
-  blocked: 'text-red-400 bg-red-500/10',
-  in_review: 'text-purple-400 bg-purple-500/10',
-  done: 'text-emerald-400 bg-emerald-500/10',
-  cancelled: 'text-zinc-500 bg-zinc-500/10 line-through',
-}
-
-const PRIORITIES = [
-  { value: 1, label: 'Urgent', color: 'text-red-400' },
-  { value: 2, label: 'High', color: 'text-amber-400' },
-  { value: 3, label: 'Medium', color: 'text-blue-400' },
-  { value: 4, label: 'Low', color: 'text-zinc-400' },
-  { value: 5, label: 'None', color: 'text-zinc-500' },
-]
-
-function priorityLabel(p: number) {
-  return PRIORITIES.find((x) => x.value === p)?.label ?? '—'
-}
-
-function priorityColor(p: number) {
-  return PRIORITIES.find((x) => x.value === p)?.color ?? 'text-muted-foreground'
-}
+const STATUSES = ISSUE_STATUSES.map((s) => ({ value: s.value, label: s.label }))
+const PRIORITIES = ISSUE_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))
 
 export function IssuesListing() {
   const { data: ws } = useActiveWorkspace()
   const [view, setView] = useState<ViewMode>('list')
+  const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<Array<string | number>>([])
   const [priority, setPriority] = useState<Array<string | number>>([])
@@ -191,15 +168,17 @@ export function IssuesListing() {
         </div>
         <div className="flex items-center gap-2">
           <ViewToggle value={view} onChange={setView} />
-          <Link
-            href="/dashboard/issues/new"
+          <button
+            onClick={() => setShowCreate(true)}
             className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus size={14} />
             New issue
-          </Link>
+          </button>
         </div>
       </header>
+
+      <IssueCreateModal open={showCreate} onClose={() => setShowCreate(false)} />
 
       <div className="mb-4 flex flex-col gap-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Search issues…" />
@@ -293,11 +272,14 @@ function IssueListView({
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground w-20 shrink-0">
               {i.seq != null ? `${workspaceKey}-${i.seq}` : `#${i.id}`}
             </span>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${STATUS_COLORS[i.status] ?? ''}`}>
-              {i.status.replace('_', ' ')}
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
+              style={{ color: issueStatusColor(i.status), backgroundColor: issueStatusColor(i.status) + '1f' }}
+            >
+              {issueStatusLabel(i.status)}
             </span>
-            <span className={`text-[10px] font-medium ${priorityColor(i.priority)}`}>
-              {priorityLabel(i.priority)}
+            <span className="text-[10px] font-medium" style={{ color: issuePriorityColor(i.priority) }}>
+              {issuePriorityLabel(i.priority)}
             </span>
             <span className="flex-1 truncate text-sm">{i.title}</span>
             {i.project_name ? (

@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { signOut } from 'next-auth/react'
 import { toast } from 'sonner'
-import { AlertTriangle, Trash2 } from 'lucide-react'
+import { AlertTriangle, KeyRound, Trash2 } from 'lucide-react'
+import { PasswordResetFlow } from './password-reset-flow'
 
 interface DeleteReport {
   blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
@@ -14,6 +15,16 @@ interface DeleteReport {
 export function AccountSettingsView() {
   const [confirming, setConfirming] = useState(false)
   const [phrase, setPhrase] = useState('')
+  const [changingPw, setChangingPw] = useState(false)
+
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: async (): Promise<{ email: string }> => {
+      const res = await fetch('/api/me')
+      if (!res.ok) throw new Error('failed')
+      return res.json()
+    },
+  })
 
   const report = useQuery({
     queryKey: ['delete-account-report'],
@@ -42,7 +53,40 @@ export function AccountSettingsView() {
   })
 
   return (
-    <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
+    <div className="space-y-6">
+      <section className="rounded-lg border border-border bg-card/30 p-5">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-medium">
+          <KeyRound size={14} />
+          Password
+        </h2>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Change your password using a one-time code sent to your email. You can use this to set a
+          password for the first time too (for example if you signed up with Google).
+        </p>
+        {changingPw ? (
+          <PasswordResetFlow
+            authenticated
+            presetEmail={me.data?.email}
+            onCancel={() => setChangingPw(false)}
+            onDone={() => {
+              setChangingPw(false)
+              // The password change invalidated this session — sign out and
+              // send the user back to log in with their new password.
+              toast.success('Password changed — please sign in again')
+              signOut({ callbackUrl: '/login' })
+            }}
+          />
+        ) : (
+          <button
+            onClick={() => setChangingPw(true)}
+            className="rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+          >
+            Change password
+          </button>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
       <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-destructive">
         <AlertTriangle size={14} />
         Delete account
@@ -140,6 +184,7 @@ export function AccountSettingsView() {
           ) : null}
         </div>
       )}
-    </section>
+      </section>
+    </div>
   )
 }

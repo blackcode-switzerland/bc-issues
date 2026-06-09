@@ -31,6 +31,10 @@ export const users = pgTable('users', {
   // cleared on workspace delete).
   active_workspace_id: integer('active_workspace_id'),
   deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  // Bumped whenever the password is set/reset. Existing browser sessions carry
+  // a snapshot of this value; if it no longer matches, the session is treated
+  // as invalid — i.e. a password reset signs you out everywhere.
+  password_changed_at: timestamp('password_changed_at', { withTimezone: true }),
   last_login: timestamp('last_login', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -129,6 +133,8 @@ export const projects = pgTable('projects', {
   priority: varchar('priority', { length: 10 }).default('P2'),
   visibility: varchar('visibility', { length: 20 }).default('team'),
   color: varchar('color', { length: 10 }).default('#3B82F6'),
+  // Named icon key (lucide icon name, e.g. "Rocket"). Rendered with `color`.
+  icon: varchar('icon', { length: 40 }),
   icon_url: text('icon_url'),
   banner_url: text('banner_url'),
   start_date: date('start_date'),
@@ -285,6 +291,23 @@ export const issueLabels = pgTable(
   })
 )
 
+// Project ↔ label association. Reuses the workspace-scoped labels table.
+export const projectLabels = pgTable(
+  'project_labels',
+  {
+    project_id: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    label_id: integer('label_id')
+      .notNull()
+      .references(() => labels.id, { onDelete: 'cascade' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.project_id, t.label_id] }),
+    labelIdx: index('idx_project_labels_label').on(t.label_id),
+  })
+)
+
 export const projectMembers = pgTable(
   'project_members',
   {
@@ -343,6 +366,27 @@ export const apiTokens = pgTable(
     userIdx: index('idx_api_tokens_user').on(t.user_id),
     prefixIdx: index('idx_api_tokens_prefix').on(t.token_prefix),
     hashUniq: uniqueIndex('uq_api_tokens_hash').on(t.token_hash),
+  })
+)
+
+// password_reset_otps — short-lived one-time codes emailed to a user to verify
+// email ownership before setting a new password. Used by both the logged-out
+// "forgot password" flow (by email) and the in-app settings flow (session
+// email). We store only a hash of the code, cap attempts, and expire fast.
+export const passwordResetOtps = pgTable(
+  'password_reset_otps',
+  {
+    id: serial('id').primaryKey(),
+    email: varchar('email', { length: 255 }).notNull(),
+    user_id: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    otp_hash: varchar('otp_hash', { length: 128 }).notNull(),
+    expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumed_at: timestamp('consumed_at', { withTimezone: true }),
+    attempts: integer('attempts').default(0).notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    emailCreatedIdx: index('idx_password_reset_email_created').on(t.email, t.created_at),
   })
 )
 
@@ -481,6 +525,8 @@ export type ProjectMember = typeof projectMembers.$inferSelect
 export type TransactionLogEntry = typeof transactionLog.$inferSelect
 export type ApiToken = typeof apiTokens.$inferSelect
 export type NewApiToken = typeof apiTokens.$inferInsert
+export type PasswordResetOtp = typeof passwordResetOtps.$inferSelect
+export type NewPasswordResetOtp = typeof passwordResetOtps.$inferInsert
 export type ErrorEvent = typeof errorEvents.$inferSelect
 export type NewErrorEvent = typeof errorEvents.$inferInsert
 export type Workspace = typeof workspaces.$inferSelect

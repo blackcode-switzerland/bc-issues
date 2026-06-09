@@ -2,11 +2,15 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Folder, Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { useActiveWorkspace } from './use-active-workspace'
-import { FilterBar, MultiSelect, SearchInput } from './filter-bar'
+import { FilterBar, MultiSelect, SearchInput, ViewToggle, type ViewMode } from './filter-bar'
+import { ProjectCreateModal } from '../project-create-modal'
+import { ProjectIcon } from '../project-icon'
+import { ProjectsKanban } from './projects-kanban'
+import { ProjectsTimeline } from './projects-timeline'
+import { PROJECT_STATUSES } from '@/lib/work-items'
 
 interface ProjectRow {
   id: number
@@ -15,24 +19,24 @@ interface ProjectRow {
   description: string | null
   status: string
   color: string | null
+  icon: string | null
+  priority: string | null
+  start_date: string | null
+  end_date: string | null
+  created_at: string
   issue_count: number
   open_issues: number
   updated_at: string
 }
 
-const STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'archived', label: 'Archived' },
-  { value: 'completed', label: 'Completed' },
-]
+const STATUSES = PROJECT_STATUSES.map((s) => ({ value: s.value, label: s.label }))
 
 export function ProjectsListing() {
-  const queryClient = useQueryClient()
   const { data: ws } = useActiveWorkspace()
+  const [view, setView] = useState<ViewMode>('list')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<Array<string | number>>([])
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
 
   const projects = useQuery({
     queryKey: ['ws-projects-listing', ws?.slug, { search, status }],
@@ -54,29 +58,6 @@ export function ProjectsListing() {
     return data
   }, [projects.data, status])
 
-  const create = useMutation({
-    mutationFn: async (name: string) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'failed')
-      }
-      return res.json()
-    },
-    onSuccess: () => {
-      toast.success('Project created')
-      setNewName('')
-      setCreating(false)
-      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
   return (
     <div className="p-6">
       <header className="mb-4 flex items-center justify-between">
@@ -87,50 +68,19 @@ export function ProjectsListing() {
             {ws ? ` in ${ws.name}` : ''}
           </p>
         </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus size={14} />
-          New project
-        </button>
+        <div className="flex items-center gap-2">
+          <ViewToggle value={view} onChange={setView} />
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus size={14} />
+            New project
+          </button>
+        </div>
       </header>
 
-      {creating ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (newName.trim()) create.mutate(newName.trim())
-          }}
-          className="mb-4 flex gap-2 rounded-lg border border-border bg-card/30 p-3"
-        >
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Project name"
-            maxLength={100}
-            className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-          />
-          <button
-            type="submit"
-            disabled={create.isPending}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
-            Create
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setCreating(false)
-              setNewName('')
-            }}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary"
-          >
-            Cancel
-          </button>
-        </form>
-      ) : null}
+      <ProjectCreateModal open={showCreate} onClose={() => setShowCreate(false)} />
 
       <div className="mb-4 flex flex-col gap-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
@@ -146,6 +96,10 @@ export function ProjectsListing() {
           <Folder size={32} className="mb-3 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No projects yet.</p>
         </div>
+      ) : view === 'kanban' ? (
+        <ProjectsKanban projects={filtered} wsSlug={ws?.slug ?? ''} />
+      ) : view === 'timeline' ? (
+        <ProjectsTimeline projects={filtered} />
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map((p) => {
@@ -161,10 +115,7 @@ export function ProjectsListing() {
                   className="block rounded-lg border border-border bg-card/30 p-4 transition-colors hover:bg-card/60"
                 >
                   <div className="mb-2 flex items-center gap-2">
-                    <span
-                      className="inline-block size-3 rounded-sm"
-                      style={{ backgroundColor: p.color ?? '#3B82F6' }}
-                    />
+                    <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={28} />
                     <h3 className="flex-1 truncate text-sm font-semibold">{p.name}</h3>
                     <span className="rounded px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
                       {p.status}

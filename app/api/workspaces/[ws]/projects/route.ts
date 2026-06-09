@@ -57,15 +57,26 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (!name) throw Errors.badRequest('invalid_name', 'name is required')
   if (name.length > 100) throw Errors.badRequest('name_too_long', 'name max 100 chars')
 
+  const memberIds = Array.isArray(body.member_ids)
+    ? body.member_ids.filter((n: unknown): n is number => typeof n === 'number')
+    : undefined
+  const labelIds = Array.isArray(body.label_ids)
+    ? body.label_ids.filter((n: unknown): n is number => typeof n === 'number')
+    : undefined
+
   const project = await createProject({
     workspaceId: ctx.workspace.id,
     name,
     description: typeof body.description === 'string' ? body.description : null,
     color: typeof body.color === 'string' ? body.color : undefined,
+    icon: typeof body.icon === 'string' ? body.icon : null,
+    priority: typeof body.priority === 'string' ? body.priority : undefined,
     lead_user_id: typeof body.lead_user_id === 'number' ? body.lead_user_id : ctx.user.id,
     start_date: typeof body.start_date === 'string' ? body.start_date : null,
     end_date: typeof body.end_date === 'string' ? body.end_date : null,
     status: typeof body.status === 'string' ? body.status : undefined,
+    member_ids: memberIds,
+    label_ids: labelIds,
     actorUserId: ctx.user.id,
   })
   return NextResponse.json(project, { status: 201 })

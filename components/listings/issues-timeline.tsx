@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { addDays, differenceInDays, format, max as maxDate, min as minDate, startOfDay } from 'date-fns'
+import { issueStatusColor } from '@/lib/work-items'
 
 interface IssueRow {
   id: number
@@ -14,16 +15,6 @@ interface IssueRow {
   created_at: string
   updated_at: string
   assignee_name: string | null
-}
-
-const STATUS_COLOR: Record<string, string> = {
-  backlog: '#71717a',
-  todo: '#a1a1aa',
-  in_progress: '#3b82f6',
-  blocked: '#ef4444',
-  in_review: '#a855f7',
-  done: '#22c55e',
-  cancelled: '#71717a',
 }
 
 const ROW_HEIGHT = 36
@@ -100,7 +91,7 @@ export function IssuesTimeline({
             const r = ranges[idx]
             const left = differenceInDays(r.start, earliest) * DAY_WIDTH
             const width = Math.max((differenceInDays(r.end, r.start) + 1) * DAY_WIDTH - 4, 4)
-            const color = STATUS_COLOR[issue.status] ?? '#71717a'
+            const color = issueStatusColor(issue.status)
             return (
               <div
                 key={issue.id}

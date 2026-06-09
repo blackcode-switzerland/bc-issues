@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { LabelChip } from './listings/labels-pill'
+import { ISSUE_PRIORITIES, ISSUE_STATUSES } from '@/lib/work-items'
 
 interface IssueDetail {
   id: number
@@ -88,23 +89,8 @@ interface ActivityEvent {
   occurred_at: string
 }
 
-const STATUSES = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'todo', label: 'To do' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'in_review', label: 'In review' },
-  { value: 'done', label: 'Done' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
-const PRIORITIES = [
-  { value: 1, label: 'Urgent', color: 'text-red-400' },
-  { value: 2, label: 'High', color: 'text-amber-400' },
-  { value: 3, label: 'Medium', color: 'text-blue-400' },
-  { value: 4, label: 'Low', color: 'text-zinc-400' },
-  { value: 5, label: 'None', color: 'text-zinc-500' },
-]
+const STATUSES = ISSUE_STATUSES.map((s) => ({ value: s.value, label: s.label }))
+const PRIORITIES = ISSUE_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))
 
 export function IssueDetailView({ issueId }: { issueId: number }) {
   const queryClient = useQueryClient()

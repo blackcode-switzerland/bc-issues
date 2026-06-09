@@ -4,6 +4,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { getUserByEmail, touchLastLogin, upsertUserFromOAuth } from './db/queries/users'
 import { verifyPassword } from './auth/password'
 import { materializePendingInvitationsForUser } from './db/queries/invitations'
+import { ensureDefaultWorkspace } from './db/queries/workspaces'
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -59,6 +60,11 @@ export const authOptions: NextAuthOptions = {
           })
           if (result.was_new) {
             try {
+              await ensureDefaultWorkspace(result.user.id, result.user.name, result.user.email)
+            } catch (wErr) {
+              console.error('ensureDefaultWorkspace failed:', wErr)
+            }
+            try {
               await materializePendingInvitationsForUser(result.user.id, result.user.email)
             } catch (mErr) {
               console.error('materialize pending invitations failed:', mErr)
@@ -75,6 +81,9 @@ export const authOptions: NextAuthOptions = {
         const dbUser = await getUserByEmail(user.email)
         if (dbUser) {
           token.id = dbUser.id
+          token.pwStamp = dbUser.password_changed_at
+            ? dbUser.password_changed_at.getTime()
+            : 0
         }
         if (account.provider === 'google' && account.access_token) {
           token.accessToken = account.access_token
@@ -85,6 +94,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         if (typeof token.id === 'number') session.user.id = token.id
+        if (typeof token.pwStamp === 'number') session.user.pwStamp = token.pwStamp
       }
       return session
     },

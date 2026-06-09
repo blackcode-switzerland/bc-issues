@@ -11,23 +11,16 @@
 // This lets the activity feed and inbox surface meaningful events without
 // dredging through diff jsonb.
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { issues, type Issue } from '../schema'
+import { issueLabels, issues, labels, type Issue } from '../schema'
 import { recordEvent } from './events'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
+import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
 
-const TERMINAL_STATUSES = new Set(['done', 'cancelled'])
-const VALID_STATUSES = new Set([
-  'backlog',
-  'todo',
-  'in_progress',
-  'blocked',
-  'in_review',
-  'done',
-  'cancelled',
-])
+const TERMINAL_STATUSES = new Set(ISSUE_TERMINAL_STATUSES)
+const VALID_STATUSES = new Set(ISSUE_STATUS_VALUES)
 
 export interface IssueListRow extends Issue {
   assignee_name?: string | null
@@ -157,6 +150,7 @@ export interface CreateIssueInput {
   startDate?: string | null
   dueDate?: string | null
   estimatedHours?: number | null
+  labelIds?: number[]
   reporterId: number
   actorUserId: number
 }
@@ -203,6 +197,20 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
     await addWatcher(tx, row.id, input.reporterId, 'reporter')
     if (input.assigneeId && input.assigneeId !== input.reporterId) {
       await addWatcher(tx, row.id, input.assigneeId, 'assigned')
+    }
+
+    // Attach labels chosen at creation (validated against the workspace).
+    if (input.labelIds && input.labelIds.length > 0) {
+      const valid = await tx
+        .select({ id: labels.id })
+        .from(labels)
+        .where(and(eq(labels.workspace_id, input.workspaceId), inArray(labels.id, input.labelIds)))
+      if (valid.length > 0) {
+        await tx
+          .insert(issueLabels)
+          .values(valid.map((l) => ({ issue_id: row.id, label_id: l.id })))
+          .onConflictDoNothing()
+      }
     }
 
     await recordEvent(tx, {
@@ -548,9 +556,8 @@ export async function getKanbanView(projectId: number) {
     backlog: [],
     todo: [],
     in_progress: [],
-    blocked: [],
-    in_review: [],
     done: [],
+    cancelled: [],
   }
   for (const r of rows as Array<{ status: string }>) {
     if (kanban[r.status]) kanban[r.status].push(r)

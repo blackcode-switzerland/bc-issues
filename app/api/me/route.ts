@@ -21,6 +21,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     avatar_url: fresh.avatar_url,
     active_workspace_id: fresh.active_workspace_id,
     created_at: fresh.created_at,
+    // Google-connected accounts get their avatar from Google and can't change
+    // it here — it re-syncs on each Google sign-in.
+    connected_google: !!fresh.google_id,
+    avatar_editable: !fresh.google_id,
   })
 })
 
@@ -56,6 +60,11 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     patch.tagline = trimmed
   }
   if ('avatar_url' in body) {
+    // Google-connected accounts can't change their avatar — it's synced from
+    // Google. Silently ignore the field rather than erroring.
+    if (user.google_id) {
+      throw Errors.forbidden('Your photo is synced from Google and cannot be changed here')
+    }
     if (body.avatar_url !== null && typeof body.avatar_url !== 'string') {
       throw Errors.badRequest('invalid_avatar_url', 'avatar_url must be a string or null')
     }

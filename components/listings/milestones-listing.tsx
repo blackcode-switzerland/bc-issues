@@ -3,11 +3,11 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { format, isPast, isToday } from 'date-fns'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, Target } from 'lucide-react'
-import { toast } from 'sonner'
 import { useActiveWorkspace } from './use-active-workspace'
 import { FilterBar, MultiSelect, SearchInput } from './filter-bar'
+import { MilestoneCreateModal } from '../milestone-create-modal'
 
 interface MilestoneRow {
   id: number
@@ -34,14 +34,11 @@ const STATUSES = [
 ]
 
 export function MilestonesListing() {
-  const queryClient = useQueryClient()
   const { data: ws } = useActiveWorkspace()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<Array<string | number>>([])
   const [projectIds, setProjectIds] = useState<Array<string | number>>([])
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newProjectId, setNewProjectId] = useState<string>('')
+  const [showCreate, setShowCreate] = useState(false)
 
   const projects = useQuery({
     queryKey: ['ws-projects', ws?.slug],
@@ -83,28 +80,6 @@ export function MilestonesListing() {
     return data
   }, [milestones.data, status, projectIds])
 
-  const create = useMutation({
-    mutationFn: async (input: { name: string; project_id: number | null }) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'failed')
-      }
-    },
-    onSuccess: () => {
-      toast.success('Milestone created')
-      setCreating(false)
-      setNewName('')
-      setNewProjectId('')
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
   const projectOptions = [
     { value: 'null', label: 'No project (standalone)' },
     ...(projects.data ?? []).map((p) => ({ value: p.id, label: p.name })),
@@ -121,7 +96,7 @@ export function MilestonesListing() {
           </p>
         </div>
         <button
-          onClick={() => setCreating(true)}
+          onClick={() => setShowCreate(true)}
           className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus size={14} />
@@ -129,58 +104,7 @@ export function MilestonesListing() {
         </button>
       </header>
 
-      {creating ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!newName.trim()) return
-            create.mutate({
-              name: newName.trim(),
-              project_id: newProjectId ? parseInt(newProjectId) : null,
-            })
-          }}
-          className="mb-4 flex flex-wrap gap-2 rounded-lg border border-border bg-card/30 p-3"
-        >
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Milestone name"
-            maxLength={120}
-            className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-          />
-          <select
-            value={newProjectId}
-            onChange={(e) => setNewProjectId(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-          >
-            <option value="">No project (standalone)</option>
-            {projects.data?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={create.isPending}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
-            Create
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setCreating(false)
-              setNewName('')
-              setNewProjectId('')
-            }}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary"
-          >
-            Cancel
-          </button>
-        </form>
-      ) : null}
+      <MilestoneCreateModal open={showCreate} onClose={() => setShowCreate(false)} />
 
       <div className="mb-4 flex flex-col gap-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Search milestones…" />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createUserWithPassword, getUserByEmail } from '@/lib/db/queries/users'
 import { hashPassword, validateEmail, validatePassword } from '@/lib/auth/password'
 import { materializePendingInvitationsForUser } from '@/lib/db/queries/invitations'
+import { ensureDefaultWorkspace } from '@/lib/db/queries/workspaces'
 
 export async function POST(request: NextRequest) {
   let body: { email?: string; password?: string; name?: string } = {}
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
     const user = await createUserWithPassword({ email, password_hash, name })
     if (!user) {
       return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+    }
+    // Give the new user a workspace so they can immediately create projects
+    // and issues. Best-effort: the dashboard onboarding screen is the fallback.
+    try {
+      await ensureDefaultWorkspace(user.id, user.name, user.email)
+    } catch (wErr) {
+      console.error('ensureDefaultWorkspace failed:', wErr)
     }
     // Materialize any pending invitations to this email into the user's inbox.
     // Best-effort: don't fail signup if this errors.

@@ -125,7 +125,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   }>(sql`
     SELECT
       COUNT(*)::int AS total_issues,
-      COUNT(*) FILTER (WHERE i.status IN ('backlog','todo','in_review','blocked'))::int AS open,
+      COUNT(*) FILTER (WHERE i.status IN ('backlog','todo'))::int AS open,
       COUNT(*) FILTER (WHERE i.status = 'in_progress')::int AS in_progress,
       COUNT(*) FILTER (WHERE i.status = 'done')::int AS done,
       COUNT(*) FILTER (WHERE i.status = 'cancelled')::int AS cancelled,

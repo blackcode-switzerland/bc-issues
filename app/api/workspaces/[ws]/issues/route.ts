@@ -86,6 +86,10 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     assigneeId = body.assignee_id
   }
 
+  const labelIds = Array.isArray(body.label_ids)
+    ? body.label_ids.filter((n: unknown): n is number => typeof n === 'number')
+    : undefined
+
   try {
     const issue = await createIssue({
       workspaceId: ctx.workspace.id,
@@ -99,6 +103,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       startDate: typeof body.start_date === 'string' ? body.start_date : null,
       dueDate: typeof body.due_date === 'string' ? body.due_date : null,
       estimatedHours: typeof body.estimated_hours === 'number' ? body.estimated_hours : null,
+      labelIds,
       reporterId: ctx.user.id,
       actorUserId: ctx.user.id,
     })

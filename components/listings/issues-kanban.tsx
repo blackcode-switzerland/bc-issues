@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ISSUE_STATUSES, issuePriorityColor, issuePriorityLabel } from '@/lib/work-items'
 
 interface IssueRow {
   id: number
@@ -16,29 +17,7 @@ interface IssueRow {
   assignee_name: string | null
 }
 
-const COLUMNS = [
-  { status: 'backlog', label: 'Backlog' },
-  { status: 'todo', label: 'To do' },
-  { status: 'in_progress', label: 'In progress' },
-  { status: 'in_review', label: 'In review' },
-  { status: 'done', label: 'Done' },
-] as const
-
-const STATUS_BG: Record<string, string> = {
-  backlog: 'bg-zinc-500/5',
-  todo: 'bg-zinc-500/5',
-  in_progress: 'bg-blue-500/5',
-  in_review: 'bg-purple-500/5',
-  done: 'bg-emerald-500/5',
-}
-
-const PRIORITY_COLOR: Record<number, string> = {
-  1: 'text-red-400',
-  2: 'text-amber-400',
-  3: 'text-blue-400',
-  4: 'text-zinc-400',
-  5: 'text-zinc-500',
-}
+const COLUMNS = ISSUE_STATUSES.map((s) => ({ status: s.value, label: s.label, color: s.color }))
 
 export function IssuesKanban({
   issues,
@@ -106,8 +85,9 @@ export function IssuesKanban({
           const items = board[col.status] ?? []
           return (
             <div key={col.status} className="flex w-64 shrink-0 flex-col">
-              <header className="mb-2 flex items-center justify-between px-1">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <header className="mb-2 flex items-center gap-2 px-1">
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: col.color }} />
+                <span className="flex-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   {col.label}
                 </span>
                 <span className="rounded-full bg-secondary px-1.5 text-[10px] tabular-nums text-muted-foreground">
@@ -120,7 +100,7 @@ export function IssuesKanban({
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={`flex min-h-[200px] flex-col gap-2 rounded-lg border border-border p-2 transition-colors ${
-                      snapshot.isDraggingOver ? 'bg-primary/5' : STATUS_BG[col.status] ?? ''
+                      snapshot.isDraggingOver ? 'bg-primary/5' : ''
                     }`}
                   >
                     {items.map((issue, idx) => (
@@ -140,8 +120,11 @@ export function IssuesKanban({
                               <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                                 {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
                               </span>
-                              <span className={`text-[10px] font-medium ${PRIORITY_COLOR[issue.priority] ?? ''}`}>
-                                {priorityLabel(issue.priority)}
+                              <span
+                                className="text-[10px] font-medium"
+                                style={{ color: issuePriorityColor(issue.priority) }}
+                              >
+                                {issuePriorityLabel(issue.priority)}
                               </span>
                             </div>
                             <p className="line-clamp-2 text-sm">{issue.title}</p>
@@ -181,6 +164,3 @@ function groupByStatus(issues: IssueRow[]): Record<string, IssueRow[]> {
   return board
 }
 
-function priorityLabel(p: number): string {
-  return { 1: 'Urgent', 2: 'High', 3: 'Medium', 4: 'Low', 5: 'None' }[p] ?? '—'
-}

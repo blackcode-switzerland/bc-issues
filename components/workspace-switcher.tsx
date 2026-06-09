@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, Check, ChevronsUpDown, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { WorkspaceCreateModal } from './workspace-create-modal'
 
 interface WorkspaceItem {
   id: number
   name: string
   slug: string
   key: string
+  logo_url: string | null
   member_role: 'owner' | 'member'
 }
 
@@ -27,12 +29,29 @@ async function fetchMe(): Promise<{ active_workspace_id: number | null }> {
   return res.json()
 }
 
+function WsAvatar({ ws, size }: { ws: WorkspaceItem; size: number }) {
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-primary/10 text-primary"
+      style={{ width: size, height: size }}
+    >
+      {ws.logo_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={ws.logo_url} alt="" className="size-full object-cover" />
+      ) : (
+        <span style={{ fontSize: Math.round(size * 0.42), fontWeight: 600 }}>
+          {(ws.name.trim()[0] ?? 'W').toUpperCase()}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function WorkspaceSwitcher() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   const { data: workspaces } = useQuery({ queryKey: ['me-workspaces'], queryFn: fetchWorkspaces })
@@ -41,10 +60,7 @@ export function WorkspaceSwitcher() {
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) {
-        setOpen(false)
-        setCreating(false)
-      }
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -69,34 +85,6 @@ export function WorkspaceSwitcher() {
     router.refresh()
   }
 
-  async function createWorkspace(e: React.FormEvent) {
-    e.preventDefault()
-    const name = newName.trim()
-    if (!name) return
-    const res = await fetch('/api/workspaces', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}))
-      toast.error(j.error ?? 'Failed to create workspace')
-      return
-    }
-    const created = await res.json()
-    setNewName('')
-    setCreating(false)
-    setOpen(false)
-    await fetch('/api/me/active-workspace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace_id: created.id }),
-    })
-    await queryClient.invalidateQueries()
-    router.refresh()
-    toast.success(`Created "${created.name}"`)
-  }
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -104,9 +92,13 @@ export function WorkspaceSwitcher() {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-2 rounded-lg border border-border bg-card/30 px-3 py-2 text-left transition-colors hover:bg-secondary"
       >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Building2 size={16} />
-        </div>
+        {active ? (
+          <WsAvatar ws={active} size={32} />
+        ) : (
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Building2 size={16} />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{active?.name ?? 'No workspace'}</p>
           <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -128,9 +120,7 @@ export function WorkspaceSwitcher() {
                       onClick={() => switchTo(w.id)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary"
                     >
-                      <div className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/10 text-[10px] font-medium text-primary">
-                        {w.key.slice(0, 2)}
-                      </div>
+                      <WsAvatar ws={w} size={24} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{w.name}</p>
                         <p className="truncate text-[10px] text-muted-foreground">
@@ -146,44 +136,21 @@ export function WorkspaceSwitcher() {
           ) : null}
 
           <div className="border-t border-border">
-            {creating ? (
-              <form onSubmit={createWorkspace} className="p-2">
-                <input
-                  autoFocus
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Workspace name"
-                  maxLength={80}
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                  >
-                    Create
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCreating(false)}
-                    className="rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button
-                onClick={() => setCreating(true)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary"
-              >
-                <Plus size={14} />
-                Create workspace
-              </button>
-            )}
+            <button
+              onClick={() => {
+                setOpen(false)
+                setShowCreate(true)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary"
+            >
+              <Plus size={14} />
+              Create workspace
+            </button>
           </div>
         </div>
       ) : null}
+
+      <WorkspaceCreateModal open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   )
 }

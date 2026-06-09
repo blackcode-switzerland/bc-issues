@@ -189,9 +189,18 @@ export function MembersView() {
           <ul className="divide-y divide-border rounded-lg border border-border bg-card/30">
             {members.map((m) => (
               <li key={m.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  {m.name?.[0]?.toUpperCase() ?? m.email[0].toUpperCase()}
-                </div>
+                {m.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.avatar_url}
+                    alt={m.name ?? m.email}
+                    className="size-9 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    {m.name?.[0]?.toUpperCase() ?? m.email[0].toUpperCase()}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">
                     {m.name ?? m.email}

@@ -7,6 +7,9 @@ import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { ArrowLeft, Edit3, Send, Trash2 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
+import { ProjectIcon } from './project-icon'
+import { IconPicker } from './icon-picker'
+import { PROJECT_STATUSES } from '@/lib/work-items'
 
 interface ProjectDetail {
   id: number
@@ -15,6 +18,7 @@ interface ProjectDetail {
   description: string | null
   status: string
   color: string | null
+  icon: string | null
   owner_id: number | null
   start_date: string | null
   end_date: string | null
@@ -46,24 +50,7 @@ interface Comment {
   author_email: string | null
 }
 
-const STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'archived', label: 'Archived' },
-  { value: 'completed', label: 'Completed' },
-]
-
-const COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#14b8a6',
-  '#3b82f6',
-  '#6366f1',
-  '#a855f7',
-  '#ec4899',
-  '#6b7280',
-]
+const STATUSES = PROJECT_STATUSES.map((s) => ({ value: s.value, label: s.label }))
 
 export function ProjectDetailView({ projectId }: { projectId: number }) {
   const queryClient = useQueryClient()
@@ -204,10 +191,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
         </Link>
 
         <div className="mb-2 flex items-center gap-3">
-          <span
-            className="size-4 rounded-sm"
-            style={{ backgroundColor: data.color ?? '#3B82F6' }}
-          />
+          <ProjectIcon icon={data.icon} color={data.color} name={data.name} size={32} />
           {editingName ? (
             <div className="flex flex-1 gap-2">
               <input
@@ -421,17 +405,13 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
             ))}
           </select>
         </SidebarField>
-        <SidebarField label="Color">
-          <div className="flex flex-wrap gap-1">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => patch.mutate({ color: c })}
-                className={`size-5 rounded ${data.color === c ? 'ring-2 ring-offset-1 ring-offset-card' : ''}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
+        <SidebarField label="Icon & color">
+          <IconPicker
+            icon={data.icon}
+            color={data.color ?? '#3b82f6'}
+            name={data.name}
+            onChange={(v) => patch.mutate({ icon: v.icon, color: v.color })}
+          />
         </SidebarField>
         <SidebarField label="Start date">
           <input

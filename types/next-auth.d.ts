@@ -8,7 +8,9 @@ declare module 'next-auth' {
       name?: string | null
       email?: string | null
       image?: string | null
-      role?: string
+      // Snapshot of users.password_changed_at at sign-in time. Used to
+      // invalidate sessions when the password is reset.
+      pwStamp?: number
     } & DefaultSession['user']
   }
 
@@ -21,5 +23,6 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id?: string | number
     accessToken?: string
+    pwStamp?: number
   }
 }

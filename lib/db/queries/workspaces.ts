@@ -142,6 +142,34 @@ export async function createWorkspace(input: CreateWorkspaceInput): Promise<Work
   })
 }
 
+// Guarantees the "every user has a workspace" invariant. Called on account
+// creation (credentials signup + fresh Google sign-in). Idempotent: if the
+// user already belongs to a workspace it does nothing except ensure an active
+// workspace is selected.
+export async function ensureDefaultWorkspace(
+  userId: number,
+  displayName: string | null | undefined,
+  email: string
+): Promise<void> {
+  const existing = await listMyWorkspaces(userId)
+  if (existing.length > 0) {
+    // They have a workspace (e.g. joined one via invitation). Make sure one is
+    // marked active so the dashboard isn't stuck on an empty selection.
+    const rows = await db
+      .select({ active: users.active_workspace_id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    if (!rows[0]?.active) {
+      await setActiveWorkspace(userId, existing[0].id)
+    }
+    return
+  }
+  const base = displayName?.trim() || email.split('@')[0] || 'My'
+  const ws = await createWorkspace({ name: `${base}'s Workspace`, ownerId: userId })
+  await setActiveWorkspace(userId, ws.id)
+}
+
 export interface UpdateWorkspaceInput {
   name?: string
   slug?: string

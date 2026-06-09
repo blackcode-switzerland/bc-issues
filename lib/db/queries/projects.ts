@@ -1,9 +1,8 @@
 // Project queries — workspace-scoped.
 //
 // Permission model: anyone who is a workspace_member sees every project in
-// that workspace. We do NOT use the legacy project_members table; that table
-// is kept temporarily for rollback and will be dropped in the final cleanup
-// phase.
+// that workspace. project_members is now used as the project's *member list*
+// (people working on it), not for access control — see project-relations.ts.
 //
 // Every mutation records an event in the same transaction.
 
@@ -11,6 +10,7 @@ import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { projects, type Project } from '../schema'
 import { recordEvent } from './events'
+import { setProjectLabels, setProjectMembers } from './project-relations'
 
 export interface ProjectListItem extends Project {
   issue_count: number
@@ -101,10 +101,13 @@ export interface CreateProjectInput {
   description?: string | null
   color?: string
   icon?: string | null
+  priority?: string
   lead_user_id?: number | null
   start_date?: string | null
   end_date?: string | null
   status?: string
+  member_ids?: number[]
+  label_ids?: number[]
   actorUserId: number
 }
 
@@ -117,13 +120,22 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
         name: input.name,
         description: input.description ?? null,
         color: input.color ?? '#3B82F6',
+        icon: input.icon ?? null,
+        priority: input.priority ?? 'P2',
         owner_id: input.lead_user_id ?? input.actorUserId,
-        status: input.status ?? 'active',
+        status: input.status ?? 'backlog',
         start_date: input.start_date ?? null,
         end_date: input.end_date ?? null,
       })
       .returning()
     if (!row) throw new Error('project insert returned nothing')
+
+    if (input.member_ids && input.member_ids.length > 0) {
+      await setProjectMembers(tx, row.id, input.member_ids)
+    }
+    if (input.label_ids && input.label_ids.length > 0) {
+      await setProjectLabels(tx, row.id, input.workspaceId, input.label_ids)
+    }
 
     await recordEvent(tx, {
       workspaceId: input.workspaceId,
@@ -146,6 +158,7 @@ export interface UpdateProjectInput {
   status?: string
   color?: string
   icon?: string | null
+  priority?: string
   lead_user_id?: number | null
   start_date?: string | null
   end_date?: string | null
@@ -156,6 +169,8 @@ const PROJECT_DIFF_KEYS = [
   'description',
   'status',
   'color',
+  'icon',
+  'priority',
   'start_date',
   'end_date',
 ] as const
@@ -180,6 +195,8 @@ export async function updateProject(
     if (patch.description !== undefined) updates.description = patch.description
     if (patch.status !== undefined) updates.status = patch.status
     if (patch.color !== undefined) updates.color = patch.color
+    if (patch.icon !== undefined) updates.icon = patch.icon
+    if (patch.priority !== undefined) updates.priority = patch.priority
     if (patch.lead_user_id !== undefined) updates.owner_id = patch.lead_user_id
     if (patch.start_date !== undefined) updates.start_date = patch.start_date
     if (patch.end_date !== undefined) updates.end_date = patch.end_date
