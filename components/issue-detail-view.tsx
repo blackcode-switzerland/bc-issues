@@ -1,26 +1,22 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
-import {
-  ArrowLeft,
-  Calendar,
-  Check,
-  Edit3,
-  Eye,
-  EyeOff,
-  Plus,
-  Send,
-  Tag,
-  Trash2,
-  User,
-  X,
-} from 'lucide-react'
+import { Bell, BellOff, ChevronRight, Plus, Trash2, X } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { LabelChip } from './listings/labels-pill'
+import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
+import { MemberAvatar } from '@/components/ui/member-avatar'
+import { PropertySelect } from '@/components/ui/property-select'
+import { DatePicker } from '@/components/ui/date-picker'
+import {
+  StatusIcon,
+  PriorityIcon,
+  issuePriorityKey,
+} from '@/components/ui/work-item-icons'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES } from '@/lib/work-items'
 
 interface IssueDetail {
@@ -67,6 +63,7 @@ interface Member {
   user_id: number
   email: string
   name: string | null
+  avatar_url?: string | null
 }
 
 interface Project {
@@ -89,17 +86,16 @@ interface ActivityEvent {
   occurred_at: string
 }
 
-const STATUSES = ISSUE_STATUSES.map((s) => ({ value: s.value, label: s.label }))
-const PRIORITIES = ISSUE_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))
-
 export function IssueDetailView({ issueId }: { issueId: number }) {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const [editingDescription, setEditingDescription] = useState(false)
-  const [descDraft, setDescDraft] = useState('')
-  const [newComment, setNewComment] = useState('')
+
+  const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  const [composerKey, setComposerKey] = useState(0)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [watching, setWatching] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   // Guard: an unparseable id (e.g. /dashboard/issues/new before that page
   // existed) used to spam the API with /api/issues/NaN. Bail out cleanly.
@@ -198,6 +194,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
   })
 
+  // Quiet patch used by autosave + property pickers (the UI itself is the
+  // feedback); errors always toast.
   const patchIssue = useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
       const res = await fetch(`/api/issues/${issueId}`, {
@@ -217,7 +215,38 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
     },
     onError: (e: Error) => toast.error(e.message),
+    onSettled: () => setSaving(false),
   })
+
+  /* --------- description autosave (debounced + on blur) ---------- */
+  const descRef = useRef<string | null>(null) // latest html in the editor
+  const savedDescRef = useRef<string | null>(null) // last persisted html
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushDescription = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
+    if (descRef.current !== null && descRef.current !== savedDescRef.current) {
+      savedDescRef.current = descRef.current
+      setSaving(true)
+      patchIssue.mutate({ description: descRef.current })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const onDescriptionChange = useCallback(
+    (html: string) => {
+      descRef.current = html
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(flushDescription, 1200)
+    },
+    [flushDescription]
+  )
+
+  // Flush pending edits when leaving the page.
+  useEffect(() => () => flushDescription(), [flushDescription])
 
   const createComment = useMutation({
     mutationFn: async (content: string) => {
@@ -229,7 +258,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      setNewComment('')
+      setCommentDraft('')
+      setComposerKey((k) => k + 1) // reset the editor
       queryClient.invalidateQueries({ queryKey: ['issue-comments', issueId] })
       queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
     },
@@ -249,6 +279,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['issue-labels', issueId] })
       queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
     },
+    onError: () => toast.error('Could not update labels'),
   })
 
   const detachLabel = useMutation({
@@ -263,6 +294,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['issue-labels', issueId] })
       queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
     },
+    onError: () => toast.error('Could not update labels'),
   })
 
   const watch = useMutation({
@@ -272,7 +304,12 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       })
       if (!res.ok) throw new Error('failed')
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] }),
+    onSuccess: (_d, start) => {
+      setWatching(start)
+      toast.success(start ? 'Subscribed to issue' : 'Unsubscribed')
+      queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
+    },
+    onError: () => toast.error('Could not update subscription'),
   })
 
   const deleteIssue = useMutation({
@@ -284,18 +321,19 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       toast.success('Issue deleted')
       window.location.href = '/dashboard/issues'
     },
+    onError: () => toast.error('Could not delete issue'),
   })
 
-  useEffect(() => {
-    if (issue.data && !editingTitle) setTitleDraft(issue.data.title)
-  }, [issue.data, editingTitle])
-
-  useEffect(() => {
-    if (issue.data && !editingDescription) setDescDraft(issue.data.description ?? '')
-  }, [issue.data, editingDescription])
+  /* ------------------------------ render ------------------------------- */
 
   if (issue.isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-10">
+        <div className="h-8 w-2/3 animate-pulse rounded bg-secondary/50" />
+        <div className="h-4 w-full animate-pulse rounded bg-secondary/40" />
+        <div className="h-4 w-5/6 animate-pulse rounded bg-secondary/40" />
+      </div>
+    )
   }
   if (!issue.data) {
     return (
@@ -312,388 +350,344 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   const issueIdLabel = data.seq != null && ws ? `${ws.key}-${data.seq}` : `#${data.id}`
   const issueLabelIds = new Set((labels.data ?? []).map((l) => l.id))
   const availableLabels = (wsLabels.data ?? []).filter((l) => !issueLabelIds.has(l.id))
+  const mentionItems: MentionItem[] = (members.data ?? []).map((m) => ({
+    id: m.user_id,
+    label: m.name ?? m.email,
+    avatarUrl: m.avatar_url,
+  }))
+
+  function commitTitle() {
+    const next = titleDraft?.trim()
+    if (next && next !== data.title) {
+      setSaving(true)
+      patchIssue.mutate({ title: next })
+    }
+    setTitleDraft(null)
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_280px]">
-      <main>
+    <div className="flex min-h-screen flex-col">
+      {/* Breadcrumb header */}
+      <header className="sticky top-0 z-20 flex h-11 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[13px] backdrop-blur">
         <Link
           href="/dashboard/issues"
-          className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           prefetch={false}
+          className="text-muted-foreground transition-colors hover:text-foreground"
         >
-          <ArrowLeft size={12} />
-          Back to issues
+          Issues
         </Link>
-
-        <div className="mb-2 flex items-center gap-2">
-          <span className="rounded bg-secondary px-2 py-0.5 font-mono text-xs text-muted-foreground">
-            {issueIdLabel}
-          </span>
-          <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-            opened {formatDistanceToNow(new Date(data.created_at), { addSuffix: true })}
-          </span>
+        <ChevronRight size={13} className="text-muted-foreground/50" />
+        <span className="font-mono text-xs text-muted-foreground">{issueIdLabel}</span>
+        <span className="max-w-[28ch] truncate font-medium">{data.title}</span>
+        <span className="ml-2 text-[11px] text-muted-foreground/70 transition-opacity">
+          {saving ? 'Saving…' : ''}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => watch.mutate(!watching)}
+            title={watching ? 'Unsubscribe' : 'Subscribe'}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            {watching ? <BellOff size={15} /> : <Bell size={15} />}
+          </button>
+          <button
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Delete ${issueIdLabel}?`,
+                  description: 'This cannot be undone.',
+                  destructive: true,
+                  confirmLabel: 'Delete',
+                }))
+              )
+                return
+              deleteIssue.mutate()
+            }}
+            title="Delete issue"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 size={15} />
+          </button>
         </div>
+      </header>
 
-        {editingTitle ? (
-          <div className="mb-4 flex gap-2">
-            <input
-              autoFocus
-              value={titleDraft}
+      <div className="flex flex-1 flex-col xl:flex-row">
+        {/* Document */}
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
+            {/* Title — always editable, saves on blur/Enter */}
+            <textarea
+              rows={1}
+              value={titleDraft ?? data.title}
               onChange={(e) => setTitleDraft(e.target.value)}
-              maxLength={200}
-              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-lg font-semibold outline-none focus:ring-1 focus:ring-primary"
-            />
-            <button
-              onClick={() => {
-                if (titleDraft.trim()) {
-                  patchIssue.mutate({ title: titleDraft.trim() }, { onSuccess: () => setEditingTitle(false) })
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  ;(e.target as HTMLTextAreaElement).blur()
                 }
               }}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditingTitle(false)}
-              className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <h1
-            onDoubleClick={() => setEditingTitle(true)}
-            className="mb-4 cursor-text text-2xl font-semibold leading-tight"
-            title="Double-click to edit"
-          >
-            {data.title}
-          </h1>
-        )}
-
-        <section className="mb-6 rounded-lg border border-border bg-card/30 p-4">
-          <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-            <span>Description</span>
-            {!editingDescription ? (
-              <button
-                onClick={() => setEditingDescription(true)}
-                className="inline-flex items-center gap-1 hover:text-foreground"
-              >
-                <Edit3 size={11} />
-                Edit
-              </button>
-            ) : null}
-          </div>
-          {editingDescription ? (
-            <>
-              <textarea
-                value={descDraft}
-                onChange={(e) => setDescDraft(e.target.value)}
-                rows={6}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-              />
-              <div className="mt-2 flex gap-2">
-                <button
-                  onClick={() =>
-                    patchIssue.mutate(
-                      { description: descDraft },
-                      { onSuccess: () => setEditingDescription(false) }
-                    )
-                  }
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingDescription(false)
-                    setDescDraft(data.description ?? '')
-                  }}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground"
-                >
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : data.description ? (
-            <pre className="whitespace-pre-wrap break-words font-sans text-sm">{data.description}</pre>
-          ) : (
-            <p className="text-sm italic text-muted-foreground">No description.</p>
-          )}
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-sm font-medium">
-            Comments <span className="text-muted-foreground">({comments.data?.length ?? 0})</span>
-          </h2>
-          {comments.data?.length ? (
-            <ul className="mb-4 space-y-3">
-              {comments.data.map((c) => (
-                <li key={c.id} className="rounded-lg border border-border bg-card/30 p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <div className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-                      {(c.author_name ?? c.author_email ?? '?')[0].toUpperCase()}
-                    </div>
-                    <span className="text-xs font-medium">{c.author_name ?? c.author_email}</span>
-                    <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-                      {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                      {c.edited_at ? ' · edited' : ''}
-                    </span>
-                  </div>
-                  <pre className="whitespace-pre-wrap break-words font-sans text-sm">{c.content}</pre>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mb-4 text-sm italic text-muted-foreground">No comments yet.</p>
-          )}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (newComment.trim()) createComment.mutate(newComment.trim())
-            }}
-            className="rounded-lg border border-border bg-card/30 p-3"
-          >
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Write a comment…"
-              rows={3}
-              className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+              maxLength={200}
+              placeholder="Issue title"
+              className="mb-3 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
+              ref={(el) => {
+                if (el) {
+                  el.style.height = 'auto'
+                  el.style.height = `${el.scrollHeight}px`
+                }
+              }}
             />
-            <div className="mt-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={!newComment.trim() || createComment.isPending}
-                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                <Send size={12} />
-                Comment
-              </button>
-            </div>
-          </form>
-        </section>
-      </main>
 
-      <aside className="space-y-4">
-        <Picker
-          label="Status"
-          value={data.status}
-          options={STATUSES}
-          onChange={(v) => patchIssue.mutate({ status: v })}
-        />
-        <Picker
-          label="Priority"
-          value={String(data.priority)}
-          options={PRIORITIES.map((p) => ({ value: String(p.value), label: p.label }))}
-          onChange={(v) => patchIssue.mutate({ priority: parseInt(v) })}
-        />
-        <Picker
-          label="Assignee"
-          value={data.assignee_id ? String(data.assignee_id) : ''}
-          options={[
-            { value: '', label: 'Unassigned' },
-            ...(members.data ?? []).map((m) => ({
-              value: String(m.user_id),
-              label: m.name ?? m.email,
-            })),
-          ]}
-          onChange={(v) => patchIssue.mutate({ assignee_id: v ? parseInt(v) : null })}
-        />
-        <Picker
-          label="Project"
-          value={data.project_id ? String(data.project_id) : ''}
-          options={[
-            { value: '', label: 'No project' },
-            ...(projects.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
-          ]}
-          onChange={(v) => patchIssue.mutate({ project_id: v ? parseInt(v) : null })}
-        />
-        <Picker
-          label="Milestone"
-          value={data.milestone_id ? String(data.milestone_id) : ''}
-          options={[
-            { value: '', label: 'No milestone' },
-            ...(milestones.data ?? []).map((m) => ({ value: String(m.id), label: m.name })),
-          ]}
-          onChange={(v) => patchIssue.mutate({ milestone_id: v ? parseInt(v) : null })}
-        />
+            {/* Description — seamless TipTap, editable by default */}
+            <RichTextEditor
+              key={`desc-${data.id}`}
+              content={data.description ?? ''}
+              onChange={onDescriptionChange}
+              onBlur={flushDescription}
+              placeholder="Add description… type @ to mention someone"
+              variant="seamless"
+              mentionItems={mentionItems}
+              minHeight="120px"
+              onImageUpload={async (file) => {
+                const fd = new FormData()
+                fd.append('file', file)
+                const res = await fetch('/api/upload', { method: 'POST', body: fd })
+                if (!res.ok) throw new Error('upload failed')
+                const j = await res.json()
+                return j.url
+              }}
+            />
 
-        <Section title="Labels">
-          {labels.data?.length ? (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {labels.data.map((l) => (
-                <button
+            {/* Activity + comments */}
+            <section className="mt-12">
+              <div className="mb-4 flex items-center gap-3">
+                <h2 className="text-sm font-medium">Activity</h2>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              {/* compact event feed */}
+              {events.data?.length ? (
+                <ul className="mb-6 space-y-2.5">
+                  {events.data.slice(0, 10).map((e) => (
+                    <li key={e.id} className="flex items-center gap-2.5 text-xs text-muted-foreground">
+                      <span className="size-1.5 shrink-0 rounded-full bg-border" />
+                      <span className="font-medium text-foreground/80">
+                        {e.actor_name ?? e.actor_email ?? 'system'}
+                      </span>
+                      <span className="truncate">{e.action.replaceAll('_', ' ')}</span>
+                      <span className="ml-auto shrink-0 text-[11px]" suppressHydrationWarning>
+                        {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {comments.data?.length ? (
+                <ul className="mb-6 space-y-4">
+                  {comments.data.map((c) => (
+                    <li key={c.id} className="rounded-lg border border-border bg-card/40 p-3.5">
+                      <div className="mb-2 flex items-center gap-2">
+                        <MemberAvatar name={c.author_name} email={c.author_email} size={20} />
+                        <span className="text-[13px] font-medium">
+                          {c.author_name ?? c.author_email}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
+                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                          {c.edited_at ? ' · edited' : ''}
+                        </span>
+                      </div>
+                      {c.content.includes('<') ? (
+                        <RichTextDisplay content={c.content} />
+                      ) : (
+                        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
+                          {c.content}
+                        </pre>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {/* Composer */}
+              <div className="rounded-lg border border-border bg-card/40 transition-colors focus-within:border-ring/60">
+                <RichTextEditor
+                  key={`composer-${composerKey}`}
+                  content=""
+                  onChange={setCommentDraft}
+                  placeholder="Leave a comment… type @ to mention"
+                  variant="bordered"
+                  hideToolbar
+                  mentionItems={mentionItems}
+                  minHeight="64px"
+                />
+                <div className="flex justify-end border-t border-border px-2.5 py-2">
+                  <button
+                    onClick={() => {
+                      const text = commentDraft.replace(/<[^>]*>/g, '').trim()
+                      if (text) createComment.mutate(commentDraft)
+                    }}
+                    disabled={
+                      createComment.isPending ||
+                      !commentDraft.replace(/<[^>]*>/g, '').trim()
+                    }
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    Comment
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        {/* Properties sidebar */}
+        <aside className="w-full shrink-0 border-t border-border xl:w-72 xl:border-l xl:border-t-0">
+          <div className="sticky top-11 px-4 py-5">
+            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Properties</p>
+
+            <PropertySelect
+              value={data.status}
+              searchPlaceholder="Change status…"
+              options={ISSUE_STATUSES.map((s) => ({
+                value: s.value,
+                label: s.label,
+                icon: <StatusIcon status={s.value} />,
+              }))}
+              onChange={(v) => patchIssue.mutate({ status: v })}
+            />
+            <PropertySelect
+              value={String(data.priority)}
+              searchPlaceholder="Change priority…"
+              options={ISSUE_PRIORITIES.map((p) => ({
+                value: String(p.value),
+                label: p.label,
+                icon: <PriorityIcon priority={issuePriorityKey(p.value)} />,
+              }))}
+              onChange={(v) => patchIssue.mutate({ priority: parseInt(v) })}
+            />
+            <PropertySelect
+              value={data.assignee_id ? String(data.assignee_id) : ''}
+              placeholder="Assignee"
+              searchPlaceholder="Assign to…"
+              options={[
+                { value: '', label: 'Unassigned' },
+                ...(members.data ?? []).map((m) => ({
+                  value: String(m.user_id),
+                  label: m.name ?? m.email,
+                  icon: (
+                    <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={16} />
+                  ),
+                })),
+              ]}
+              onChange={(v) => patchIssue.mutate({ assignee_id: v ? parseInt(v) : null })}
+            />
+
+            <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Labels</p>
+            <div className="flex flex-wrap items-center gap-1.5 px-2">
+              {(labels.data ?? []).map((l) => (
+                <span
                   key={l.id}
-                  onClick={() => detachLabel.mutate(l.id)}
-                  title="Remove label"
-                  className="group"
+                  className="group inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]"
                 >
-                  <LabelChip label={l} />
-                </button>
+                  <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
+                  {l.name}
+                  <button
+                    onClick={() => detachLabel.mutate(l.id)}
+                    className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                    title="Remove label"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
               ))}
+              {availableLabels.length > 0 ? (
+                <PropertySelect
+                  value=""
+                  placeholder="Add label"
+                  searchPlaceholder="Add label…"
+                  buttonClassName="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  options={availableLabels.map((l) => ({
+                    value: String(l.id),
+                    label: l.name,
+                    icon: (
+                      <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
+                    ),
+                  }))}
+                  onChange={(v) => {
+                    if (v) attachLabel.mutate(parseInt(v))
+                  }}
+                />
+              ) : null}
+              {!labels.data?.length && availableLabels.length === 0 ? (
+                <span className="text-[11px] text-muted-foreground">No labels</span>
+              ) : null}
             </div>
-          ) : (
-            <p className="mb-2 text-xs text-muted-foreground">No labels.</p>
-          )}
-          {availableLabels.length > 0 ? (
-            <LabelAdder labels={availableLabels} onAdd={(id) => attachLabel.mutate(id)} />
-          ) : null}
-        </Section>
 
-        <Section title="Dates">
-          <ul className="space-y-1.5 text-xs">
-            <li className="flex justify-between text-muted-foreground">
-              <span>Created</span>
-              <span suppressHydrationWarning>{format(new Date(data.created_at), 'MMM d, yyyy')}</span>
-            </li>
-            {data.due_date ? (
-              <li className="flex justify-between text-muted-foreground">
-                <span>Due</span>
-                <span>{format(new Date(data.due_date), 'MMM d, yyyy')}</span>
-              </li>
-            ) : null}
-            {data.completed_at ? (
-              <li className="flex justify-between text-muted-foreground">
-                <span>Completed</span>
+            <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Project</p>
+            <PropertySelect
+              value={data.project_id ? String(data.project_id) : ''}
+              placeholder="Add to project"
+              searchPlaceholder="Move to project…"
+              options={[
+                { value: '', label: 'No project' },
+                ...(projects.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
+              ]}
+              onChange={(v) => patchIssue.mutate({ project_id: v ? parseInt(v) : null })}
+            />
+            <PropertySelect
+              value={data.milestone_id ? String(data.milestone_id) : ''}
+              placeholder="Add to milestone"
+              searchPlaceholder="Set milestone…"
+              options={[
+                { value: '', label: 'No milestone' },
+                ...(milestones.data ?? []).map((m) => ({ value: String(m.id), label: m.name })),
+              ]}
+              onChange={(v) => patchIssue.mutate({ milestone_id: v ? parseInt(v) : null })}
+            />
+
+            <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Due date</p>
+            <DatePicker
+              variant="inline"
+              value={data.due_date ?? null}
+              onChange={(v) => patchIssue.mutate({ due_date: v })}
+              placeholder="Set due date"
+            />
+
+            <div className="my-4 h-px bg-border" />
+            <ul className="space-y-1.5 px-2 text-[11px] text-muted-foreground">
+              <li className="flex justify-between">
+                <span>Created</span>
                 <span suppressHydrationWarning>
-                  {format(new Date(data.completed_at), 'MMM d, yyyy')}
+                  {format(new Date(data.created_at), 'MMM d, yyyy')}
                 </span>
               </li>
-            ) : null}
-          </ul>
-        </Section>
-
-        <button
-          onClick={() => watch.mutate(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-xs text-muted-foreground hover:bg-secondary"
-        >
-          <Eye size={12} />
-          Watch
-        </button>
-
-        <button
-          onClick={() => {
-            if (confirm(`Delete ${issueIdLabel}? This cannot be undone.`)) {
-              deleteIssue.mutate()
-            }
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 size={12} />
-          Delete issue
-        </button>
-
-        {events.data?.length ? (
-          <Section title="Activity">
-            <ul className="space-y-1.5 text-[11px] text-muted-foreground">
-              {events.data.slice(0, 12).map((e) => (
-                <li key={e.id} className="flex flex-col">
-                  <span className="text-foreground">{e.actor_name ?? e.actor_email ?? 'system'}</span>
+              <li className="flex justify-between">
+                <span>Updated</span>
+                <span suppressHydrationWarning>
+                  {formatDistanceToNow(new Date(data.updated_at), { addSuffix: true })}
+                </span>
+              </li>
+              {data.completed_at ? (
+                <li className="flex justify-between">
+                  <span>Completed</span>
                   <span suppressHydrationWarning>
-                    {e.action} — {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}
+                    {format(new Date(data.completed_at), 'MMM d, yyyy')}
                   </span>
                 </li>
-              ))}
+              ) : null}
             </ul>
-          </Section>
-        ) : null}
-      </aside>
+          </div>
+        </aside>
+      </div>
 
-      {/* unused icons reserved */}
+      {/* reserved icons */}
       <span className="hidden">
-        <User /> <Tag /> <Plus /> <X /> <Calendar /> <Check /> <EyeOff />
+        <Plus />
       </span>
-    </div>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-lg border border-border bg-card/30 p-3">
-      <h3 className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function Picker({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: Array<{ value: string; label: string }>
-  onChange: (v: string) => void
-}) {
-  return (
-    <Section title={label}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-      >
-        {options.map((o) => (
-          <option key={o.value || 'none'} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </Section>
-  )
-}
-
-function LabelAdder({
-  labels,
-  onAdd,
-}: {
-  labels: Label[]
-  onAdd: (id: number) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [])
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary"
-      >
-        <Plus size={10} />
-        Add label
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
-          <ul className="max-h-48 overflow-y-auto py-1">
-            {labels.map((l) => (
-              <li key={l.id}>
-                <button
-                  onClick={() => {
-                    onAdd(l.id)
-                    setOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-secondary"
-                >
-                  <span
-                    className="inline-block size-2 rounded-full"
-                    style={{ backgroundColor: l.color }}
-                  />
-                  {l.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </div>
   )
 }

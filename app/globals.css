@@ -12,98 +12,101 @@
  *  - `@theme inline`    maps Tailwind utility classes (`bg-primary`, etc.)
  *    to those variables. You shouldn't normally touch this block.
  *
- * Brand primary = #0ea5e9 (sky-500) = #0ea5e9.
+ * Brand primary = #007bd3 (Linear muted indigo). Surfaces are pure neutral
+ * (chroma 0) — a monochrome black/white system in the Linear spirit; the only
+ * chromatic tokens are --primary (indigo) and --destructive (red). Status
+ * colours live in lib/work-items.ts, not here.
  */
 
 :root {
   /* Surfaces */
   --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.205 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card-foreground: oklch(0.205 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
+  --popover-foreground: oklch(0.205 0 0);
 
   /* Brand */
-  --primary: #0ea5e9;
-  --primary-foreground: oklch(0.984 0.003 247.858);
+  --primary: #007bd3;
+  --primary-foreground: oklch(0.985 0 0);
 
   /* Neutrals */
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.245 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.535 0 0);
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.245 0 0);
 
   /* Feedback */
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --destructive-foreground: oklch(0.985 0 0);
 
   /* Form chrome */
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: #0ea5e9;
+  --border: oklch(0.916 0 0);
+  --input: oklch(0.916 0 0);
+  --ring: #007bd3;
 
-  /* Charts (shadcn v4 defaults — visually distinct, work in light + dark) */
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  /* Charts — brand indigo lead, then neutral-friendly distinct hues */
+  --chart-1: #007bd3;
+  --chart-2: oklch(0.62 0.13 200);
+  --chart-3: oklch(0.7 0.15 145);
+  --chart-4: oklch(0.78 0.16 70);
+  --chart-5: oklch(0.62 0.2 25);
 
-  /* Sidebar (used by shadcn sidebar primitive when added) */
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: #0ea5e9;
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: #0ea5e9;
+  /* Sidebar */
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.205 0 0);
+  --sidebar-primary: #007bd3;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.952 0 0);
+  --sidebar-accent-foreground: oklch(0.245 0 0);
+  --sidebar-border: oklch(0.916 0 0);
+  --sidebar-ring: #007bd3;
 
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
+  --background: oklch(0.165 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.97 0 0);
 
-  --primary: #0ea5e9;
-  --primary-foreground: oklch(0.984 0.003 247.858);
+  --primary: #007bd3;
+  --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.255 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.255 0 0);
+  --muted-foreground: oklch(0.682 0 0);
+  --accent: oklch(0.255 0 0);
+  --accent-foreground: oklch(0.97 0 0);
 
   --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --destructive-foreground: oklch(0.985 0 0);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #0ea5e9;
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: #007bd3;
 
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --chart-1: #7079e0;
+  --chart-2: oklch(0.7 0.13 200);
+  --chart-3: oklch(0.74 0.15 145);
+  --chart-4: oklch(0.82 0.16 70);
+  --chart-5: oklch(0.68 0.2 25);
 
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: #0ea5e9;
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #0ea5e9;
+  --sidebar: oklch(0.145 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: #007bd3;
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.235 0 0);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: #007bd3;
 }
 
 @theme inline {
@@ -146,7 +149,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: "Google Sans", sans-serif;
-  --font-mono: "Google Sans", monospace;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
 
 @layer base {
@@ -211,25 +214,27 @@
 }
 
 :root {
-  --grid-line: rgb(15 23 42 / 0.06);
-  /* Brand gradient — primary brand + indigo, used for accent text and the
-     architecture/CTA highlights. */
-  --brand-gradient: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
-  /* Subtle hero glow tied to the brand colour. */
-  --hero-glow: radial-gradient(60% 80% at 50% 0%, rgb(14 165 233 / 0.10), transparent 70%);
+  --grid-line: rgb(0 0 0 / 0.05);
+  /* CTA banner surface — a sleek near-black neutral gradient (Linear-style). */
+  --brand-gradient: linear-gradient(135deg, oklch(0.28 0 0) 0%, oklch(0.13 0 0) 100%);
+  /* Subtle hero glow — neutral, barely-there. */
+  --hero-glow: radial-gradient(60% 80% at 50% 0%, rgb(0 0 0 / 0.04), transparent 70%);
+  /* Headline accent gradient — foreground fading to muted (monochrome). */
+  --text-accent-gradient: linear-gradient(135deg, oklch(0.205 0 0) 0%, oklch(0.55 0 0) 100%);
 }
 
 .dark {
-  --grid-line: rgb(255 255 255 / 0.05);
-  --hero-glow: radial-gradient(60% 80% at 50% 0%, rgb(14 165 233 / 0.18), transparent 70%);
+  --grid-line: rgb(255 255 255 / 0.045);
+  --hero-glow: radial-gradient(60% 80% at 50% 0%, rgb(255 255 255 / 0.05), transparent 70%);
+  --text-accent-gradient: linear-gradient(135deg, oklch(0.99 0 0) 0%, oklch(0.6 0 0) 100%);
 }
 
 /*
  * Gradient text accent. Use as `<span class="text-gradient-brand">…</span>`
- * for the hero / auth headline accent words.
+ * for the hero / auth headline accent words. Monochrome: bright → muted.
  */
 .text-gradient-brand {
-  background: var(--brand-gradient);
+  background: var(--text-accent-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -270,7 +275,7 @@
 /* Status chips (used dynamically via `status-${state}`) */
 .status-badge      { @apply px-2 py-0.5 rounded-full text-xs font-medium; }
 .status-backlog     { @apply text-gray-400;  background-color: rgb(107 114 128 / 0.2); }
-.status-todo        { @apply text-blue-400;  background-color: rgb(59 130 246 / 0.2); }
+.status-todo        { @apply text-zinc-400; background-color: rgb(161 161 170 / 0.18); }
 .status-in_progress { @apply text-amber-400; background-color: rgb(245 158 11 / 0.2); }
 .status-blocked     { @apply text-red-400;   background-color: rgb(239 68 68 / 0.2);  }
 .status-in_review   { @apply text-purple-400;background-color: rgb(168 85 247 / 0.2); }
@@ -306,4 +311,24 @@
 .ProseMirror p.is-editor-empty:first-child::before {
   @apply text-muted-foreground pointer-events-none float-left h-0;
   content: attr(data-placeholder);
+}
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--primary);
+  border-radius: 0.5rem;
+}
+
+/* @mention chips inside rich text */
+.mention {
+  color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  border-radius: 4px;
+  padding: 0.08em 0.3em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* tippy containers (mention dropdown / tiptap menus) inherit theme colors */
+.tippy-box {
+  background: transparent;
+  border: none;
 }

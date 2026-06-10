@@ -143,6 +143,34 @@ export const projects = pgTable('projects', {
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+// Project status updates ("health" posts). Each project accumulates a feed of
+// updates; the latest one is the project's current health. status is one of
+// on_track / at_risk / off_track; body is rich-text HTML.
+export const projectUpdates = pgTable(
+  'project_updates',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    project_id: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 20 }).notNull(),
+    body: text('body'),
+    author_id: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    projectIdx: index('idx_project_updates_project').on(t.project_id, t.created_at),
+    statusCheck: check(
+      'project_updates_status_check',
+      sql`${t.status} IN ('on_track', 'at_risk', 'off_track')`
+    ),
+  })
+)
+
 export const milestones = pgTable(
   'milestones',
   {
@@ -519,6 +547,8 @@ export type Milestone = typeof milestones.$inferSelect
 export type Issue = typeof issues.$inferSelect
 export type NewIssue = typeof issues.$inferInsert
 export type Comment = typeof comments.$inferSelect
+export type ProjectUpdate = typeof projectUpdates.$inferSelect
+export type NewProjectUpdate = typeof projectUpdates.$inferInsert
 export type Attachment = typeof attachments.$inferSelect
 export type Label = typeof labels.$inferSelect
 export type ProjectMember = typeof projectMembers.$inferSelect

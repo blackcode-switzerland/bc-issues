@@ -6,7 +6,8 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-p
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ProjectIcon } from '../project-icon'
-import { PROJECT_STATUSES, projectPriorityLabel } from '@/lib/work-items'
+import { PriorityIcon, StatusIcon, projectPriorityKey } from '@/components/ui/work-item-icons'
+import { PROJECT_STATUSES } from '@/lib/work-items'
 
 interface ProjectRow {
   id: number
@@ -80,7 +81,7 @@ export function ProjectsKanban({
           return (
             <div key={col.status} className="flex w-72 shrink-0 flex-col">
               <header className="mb-2 flex items-center gap-2 px-1">
-                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: col.color }} />
+                <StatusIcon status={col.status} size={14} className="shrink-0" />
                 <span className="flex-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   {col.label}
                 </span>
@@ -115,16 +116,16 @@ export function ProjectsKanban({
                               }`}
                             >
                               <div className="mb-1.5 flex items-center gap-2">
-                                <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={22} />
-                                <span className="flex-1 truncate text-sm font-medium">{p.name}</span>
+                                <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={18} />
+                                <span className="flex-1 truncate text-[13px] font-medium">{p.name}</span>
                               </div>
-                              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                                <span>{projectPriorityLabel(p.priority)}</span>
-                                <span>
+                              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <PriorityIcon priority={projectPriorityKey(p.priority)} />
+                                <span className="ml-auto tabular-nums">
                                   {done}/{total} · {pct}%
                                 </span>
                               </div>
-                              <div className="mt-1 h-1 overflow-hidden rounded-full bg-secondary">
+                              <div className="mt-1.5 h-0.5 overflow-hidden rounded-full bg-secondary">
                                 <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
                               </div>
                             </Link>

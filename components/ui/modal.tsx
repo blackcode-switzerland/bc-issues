@@ -43,11 +43,11 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-10"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-10 backdrop-blur-sm duration-150 animate-in fade-in"
       onClick={dismissible ? onClose : undefined}
     >
       <div
-        className={`w-full ${widthClass} rounded-2xl border border-border bg-card shadow-xl`}
+        className={`w-full ${widthClass} rounded-xl border border-border bg-popover shadow-2xl shadow-black/20 duration-150 animate-in fade-in zoom-in-95`}
         onClick={(e) => e.stopPropagation()}
       >
         {title ? (

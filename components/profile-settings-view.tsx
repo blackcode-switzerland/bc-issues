@@ -57,7 +57,9 @@ export function ProfileSettingsView() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me'] })
+      toast.success('Profile updated')
     },
+    onError: () => toast.error('Could not update profile'),
   })
 
   const setAvatar = useMutation({
@@ -195,15 +197,7 @@ export function ProfileSettingsView() {
           />
         </Field>
         <button
-          onClick={() =>
-            save.mutate(
-              { name: name || null, tagline: tagline || null },
-              {
-                onSuccess: () => toast.success('Profile updated'),
-                onError: (e: Error) => toast.error(e.message),
-              }
-            )
-          }
+          onClick={() => save.mutate({ name: name || null, tagline: tagline || null })}
           disabled={save.isPending}
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >

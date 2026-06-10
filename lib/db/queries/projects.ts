@@ -15,6 +15,11 @@ import { setProjectLabels, setProjectMembers } from './project-relations'
 export interface ProjectListItem extends Project {
   issue_count: number
   open_issues: number
+  lead_name: string | null
+  lead_email: string | null
+  lead_avatar: string | null
+  health: string | null
+  health_at: string | null
 }
 
 export async function listProjectsInWorkspace(
@@ -25,9 +30,22 @@ export async function listProjectsInWorkspace(
     SELECT
       p.*,
       COUNT(i.id)::int AS issue_count,
-      COUNT(i.id) FILTER (WHERE i.status NOT IN ('done', 'cancelled'))::int AS open_issues
+      COUNT(i.id) FILTER (WHERE i.status NOT IN ('done', 'cancelled'))::int AS open_issues,
+      lead.name AS lead_name,
+      lead.email AS lead_email,
+      lead.avatar_url AS lead_avatar,
+      upd.status AS health,
+      upd.created_at AS health_at
     FROM projects p
     LEFT JOIN issues i ON i.project_id = p.id
+    LEFT JOIN users lead ON lead.id = p.owner_id
+    LEFT JOIN LATERAL (
+      SELECT status, created_at
+      FROM project_updates pu
+      WHERE pu.project_id = p.id
+      ORDER BY pu.created_at DESC, pu.id DESC
+      LIMIT 1
+    ) upd ON true
     WHERE p.workspace_id = ${workspaceId}
       ${options.status ? sql`AND p.status = ${options.status}` : sql``}
       ${
@@ -35,7 +53,7 @@ export async function listProjectsInWorkspace(
           ? sql`AND (p.name ILIKE ${'%' + options.search + '%'} OR p.description ILIKE ${'%' + options.search + '%'})`
           : sql``
       }
-    GROUP BY p.id
+    GROUP BY p.id, lead.name, lead.email, lead.avatar_url, upd.status, upd.created_at
     ORDER BY p.updated_at DESC
   `)
   return result.rows as unknown as ProjectListItem[]

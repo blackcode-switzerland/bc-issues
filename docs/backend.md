@@ -1,524 +1,459 @@
 # Backend
 
-End-to-end reference for the blackcode-issues API: every route, the full database schema, the auth model, and the helper layer underneath.
-
----
+How the server side of Blackcode Issues fits together: the API conventions, the
+two authentication paths, the workspace-scoped data model, the event spine that
+powers activity/inbox/analytics, and how to extend it. **Source of truth is the
+code** — `lib/db/schema.ts` for the schema and `app/api/**` for routes; this doc
+describes them as they are today.
 
 ## Table of contents
 
-1. [Stack](#stack)
-2. [Architecture at a glance](#architecture-at-a-glance)
-3. [Authentication & authorization](#authentication--authorization)
-4. [Database schema](#database-schema)
-5. [API reference](#api-reference)
-6. [Query layer (`lib/db/queries/`)](#query-layer-libdbqueries)
-7. [Cross-cutting concerns](#cross-cutting-concerns)
-8. [Adding new functionality](#adding-new-functionality)
-9. [Operational notes](#operational-notes)
-
----
+- [Stack](#stack)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Authentication & authorization](#authentication--authorization)
+- [Database schema](#database-schema)
+- [The event spine](#the-event-spine)
+- [API reference](#api-reference)
+- [Query layer](#query-layer)
+- [Cross-cutting concerns](#cross-cutting-concerns)
+- [Adding new functionality](#adding-new-functionality)
+- [Operational notes](#operational-notes)
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 16 (App Router, Route Handlers) |
-| Language | TypeScript (strict) |
-| Database | PostgreSQL 16 (Docker locally, Vercel/Neon Postgres in prod) |
-| ORM | drizzle-orm + drizzle-kit |
-| Driver | `pg` (node-postgres, pool of 10) |
-| Auth (session) | NextAuth v4 — JWT strategy |
-| Auth (programmatic) | API tokens — `bk_live_…`, SHA-256 hashed |
-| Password hashing | bcryptjs (12 rounds) |
-| File storage | Vercel Blob (production) or local `public/uploads/` (development) |
-
-Configuration is read from `.env.local` for development and from the host's environment in production. The only required variables are `DATABASE_URL`, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET`. Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) is optional; the credentials provider works without it. `BLOB_READ_WRITE_TOKEN` enables Vercel Blob; without it, dev falls back to local disk and production returns an error.
-
----
+- **Next.js 16** App Router route handlers (`app/api/**/route.ts`).
+- **PostgreSQL** via **Drizzle ORM** (`drizzle-orm` + `pg` Pool). Client in
+  `lib/db/client.ts`, schema in `lib/db/schema.ts`, migrations in
+  `lib/db/migrations/` managed by `drizzle-kit`.
+- **NextAuth v4** (JWT sessions) for browser auth; custom `bk_live_…` bearer
+  tokens for the API/CLI.
+- **bcryptjs** (cost 12) for passwords, **Resend** for transactional email,
+  **Vercel Blob** (with a local fallback) for uploads.
 
 ## Architecture at a glance
 
+A typical authenticated request:
+
 ```
-Client (browser / CLI / agent)
-        │
-        │ HTTPS — Authorization: Bearer …, or NextAuth session cookie
-        ▼
-┌──────────────────────────────────────────────────┐
-│ Next.js App Router — app/api/**/route.ts         │
-│                                                  │
-│   resolveUser(req)  ← lib/auth/resolve.ts        │
-│       │                                          │
-│       ├─ Bearer token? → verifyToken(...)        │
-│       └─ Session cookie? → getServerSession(...) │
-│                                                  │
-│   Permission checks (project membership, role)   │
-│   Validation / coercion                          │
-│   ↓                                              │
-│   lib/db/queries/* — typed helpers (drizzle)     │
-│   ↓                                              │
-│   pg.Pool → PostgreSQL                           │
-└──────────────────────────────────────────────────┘
+request
+  → middleware.ts            (guards /dashboard/* for the browser only)
+  → apiHandler(...)          (lib/api/handler.ts — wraps the handler)
+      → resolveWorkspace()   (lib/api/workspace-context.ts)
+          → resolveAuth()    (lib/auth/resolve.ts — bearer token OR session)
+          → getWorkspaceForUser()  → { user, workspace, role }
+      → query layer          (lib/db/queries/* — the only place that touches the DB)
+          → recordEvent(tx)  (events spine, in the same transaction)
+              → fanOutEvent(tx)  (materializes inbox rows)
+  → NextResponse.json(...)
 ```
 
-Every API route follows the same skeleton:
+Key principles:
 
-1. `resolveUser(request)` — unifies session and token auth.
-2. Permission check — project membership, role, ownership.
-3. Input validation — JSON body, query params.
-4. Domain operation — call into `lib/db/queries/<resource>`.
-5. Audit (optional) — write to `transaction_log` for undo-able mutations.
-6. Return `NextResponse.json(...)` with the appropriate status.
+- **Routes are thin.** They authenticate, validate input, call a query-layer
+  function, and shape the JSON. Business logic lives in `lib/db/queries/`.
+- **Every domain mutation records an event** in the same transaction (see
+  [event spine](#the-event-spine)). There are deliberately **no DB triggers**.
+- **Everything is workspace-scoped.** Access is decided by workspace
+  membership; there is no global admin role.
 
----
+### `apiHandler` and error model
+
+`apiHandler(fn)` (`lib/api/handler.ts`) wraps a route handler and converts any
+thrown error into a canonical JSON body:
+
+```jsonc
+{ "error": "human message", "code": "machine_code", "suggestion"?: "...", "details"?: {...} }
+```
+
+- Throw an `ApiError` (via the `Errors` factory) for expected client errors.
+- `4xx` ApiErrors are returned as-is and **not** logged.
+- `5xx` and any non-`ApiError` throwable are logged to the `error_events` table
+  (with route, method, status, sanitized context — see
+  [`sanitize.ts`](#error-responses--sanitization)) and surfaced as a generic
+  500.
+
+The `Errors` factory (`lib/api/errors.ts`):
+
+| Call | Status | Code |
+|------|--------|------|
+| `Errors.unauthorized(msg?)` | 401 | `unauthorized` |
+| `Errors.forbidden(msg?)` | 403 | `forbidden` |
+| `Errors.notFound(entity)` | 404 | `${entity}_not_found` |
+| `Errors.badRequest(code, msg, details?)` | 400 | _custom_ |
+| `Errors.conflict(code, msg, details?)` | 409 | _custom_ |
+| `Errors.unprocessable(code, msg, details?)` | 422 | _custom_ |
+| `Errors.tooManyRequests(msg?)` | 429 | `too_many_requests` |
+| `Errors.internal(msg?, details?)` | 500 | `internal_error` |
 
 ## Authentication & authorization
 
 ### Two ways to authenticate
 
-| Method | How it's sent | Best for |
-|---|---|---|
-| **NextAuth session** | HTTP-only session cookie set by `/api/auth/[...nextauth]` | Browser users |
-| **API token** | `Authorization: Bearer bk_live_…` header | CLIs, scripts, agents |
+`resolveAuth(req)` (`lib/auth/resolve.ts`) returns `{ user, via }` or `null`,
+checking in order:
 
-`lib/auth/resolve.ts` resolves both transparently:
+1. **Bearer token** — `Authorization: Bearer bk_live_…`. Verified by
+   `verifyToken()` (`lib/auth/tokens.ts`).
+2. **Session cookie** — a NextAuth JWT, validated by `getValidatedSessionUser()`
+   (`lib/auth/session.ts`).
 
-```ts
-const result = await resolveAuth(req)  // { user, via: 'session' | 'token' } | null
-const user   = await resolveUser(req)  // User | null  (convenience wrapper)
-```
-
-If the `Authorization` header begins with `Bearer `, the token path is taken (and the session is ignored, even if present). Otherwise the session is consulted.
+`resolveUser(req)` is the convenience wrapper that returns just the `User`.
 
 ### NextAuth (`lib/auth.ts`)
 
-- **Strategy**: JWT (stateless). No DB-backed sessions; the JWT contains the user's id and role.
-- **Providers**:
-  - **Google OAuth** — included only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. On `signIn`, the user is upserted via `upsertUserFromOAuth`.
-  - **Credentials** — email + password. Looks up `users.password_hash`, verifies with bcryptjs.
-- **Callbacks**:
-  - `signIn` — for Google, upserts the user record.
-  - `jwt` — on first sign-in, attaches `id` and `role` to the JWT.
-  - `session` — copies `id`/`role` into `session.user` so client code can use them.
-- **Pages**: `signIn` and error → `/login`.
+- **Strategy:** JWT (no server session table).
+- **Providers:**
+  - **Credentials** — email + password. Verifies with `verifyPassword()`
+    (bcrypt) and stamps `last_login`.
+  - **Google** — registered **only if** `GOOGLE_CLIENT_ID` and
+    `GOOGLE_CLIENT_SECRET` are set.
+- **On first sign-in** the `signIn`/`jwt` callbacks upsert the user, ensure a
+  default workspace, and materialize any pending email invitations.
+- The JWT carries `id` and `pwStamp` (a snapshot of `password_changed_at`).
 
-`authOptions` lives in `lib/auth.ts` so multiple call sites (the route handler and `getServerSession`) can import it. **Do not** import it from the API route file; that breaks the build under recent Next.js.
+**Session invalidation on password change:** `getValidatedSessionUser()`
+re-checks that the user still exists, is not soft-deleted, and that the token's
+`pwStamp` still matches `users.password_changed_at`. Resetting a password bumps
+that column, so **every existing browser session is invalidated**. API tokens
+are a separate credential and are unaffected.
 
 ### API tokens (`lib/auth/tokens.ts`)
 
-- Format: `bk_live_<32 base64url bytes>`.
-- Stored as **SHA-256 hex hash** plus an 8-character plaintext **prefix** (so the UI can show "bk_live_abc12345…" without storing the secret).
-- `scopes` is an array, defaulting to `['full']`. Scope-aware checks aren't currently enforced, but the column exists for future per-scope tokens.
-- `expires_at` is optional. Expired tokens fail `verifyToken`.
-- Functions: `mintToken({ user_id, name, scopes?, expires_at? })`, `verifyToken(plaintext)`, `listTokens(user_id)`, `revokeToken(user_id, token_id)`.
+- Plaintext format: `bk_live_` + 32 random bytes (base64url). **Shown once.**
+- Stored as `token_hash` (SHA-256) plus a `token_prefix` for display; verified
+  with a timing-safe comparison; `last_used_at` is updated on use; optional
+  `expires_at` is honored.
+- Sent as `Authorization: Bearer <token>`.
 
-Token minting happens through two paths:
+**CLI authorize flow** (`POST /api/cli/authorize`,
+`app/api/cli/authorize/route.ts`): the browser, already signed in, posts a
+loopback `callback` + `state`; the server mints a token and returns a
+`redirect_url` pointing back at the CLI's local listener with the token. Only
+`http://localhost` / `127.0.0.1` / `[::1]` callbacks are accepted.
 
-1. **Web UI** — `POST /api/tokens` (session-only) returns the plaintext once.
-2. **CLI flow** — `POST /api/cli/authorize` (session-only) mints a token then redirects the browser back to a loopback URL the CLI is listening on, embedding the token in the query string. See [the CLI doc](./cli.md) for the other side of the handshake.
+### Passwords & reset
 
-### Roles
+- `lib/auth/password.ts` — `hashPassword`/`verifyPassword` (bcryptjs, 12
+  rounds), plus length validation (8–200 chars).
+- `lib/db/queries/password-reset.ts` — OTP flow. A short code is emailed (via
+  Resend), stored only as a hash in `password_reset_otps`, capped at 5 attempts,
+  rate-limited per email, and expires fast. Drives both the logged-out
+  "forgot password" flow and the in-app Settings → Account flow.
 
-User-level (`users.role`):
-- `member` (default)
-- `admin` — required by admin-only routes (`/api/analytics`, `/api/seed`).
+### Workspace authorization
 
-Project-level (`project_members.role`):
-- `owner` — can do anything in the project, including delete and transfer.
-- `admin` — can manage members, delete issues.
-- `member` — full read/write on issues, comments, attachments.
-- `viewer` — read-only.
+`resolveWorkspace(req, wsSlugOrId)` (`lib/api/workspace-context.ts`) returns:
 
-Helpers in `lib/db/queries/members.ts`: `isProjectMember`, `getProjectMemberRole`.
+```ts
+{ user: User, workspace: Workspace, role: 'owner' | 'member' }
+```
 
-### Admin bootstrap
+It authenticates the user, then loads the workspace **and the caller's
+membership** in one step. If the workspace doesn't exist *or* the user isn't a
+member it throws `notFound` (404, not 403 — so we don't leak existence).
+`requireOwner(ctx)` throws `forbidden` unless `ctx.role === 'owner'`.
 
-`POST /api/admin/promote` is a one-shot endpoint that promotes user id 1 to `admin`. It exists so a fresh deploy has at least one admin without requiring DB access. After the first admin exists, the endpoint refuses to mint more.
-
----
+> There is **no global admin/role concept.** The `users.role` column was dropped
+> in migration `0012`. All authority is workspace membership + the
+> `workspace_members.role` (`owner` | `member`).
 
 ## Database schema
 
-PostgreSQL 16, defined in `lib/db/schema.ts`. Migrations live in `lib/db/migrations/`. Apply them with `npm run db:migrate`.
+Defined in `lib/db/schema.ts` (Drizzle). Grouped by concern below; see the file
+for exact column types, indexes, and check constraints.
 
-### `users`
+### Identity & access
 
-The user identity table. Populated by Google OAuth, credentials sign-up, or seed data.
+| Table | Purpose / notable columns |
+|-------|---------------------------|
+| `users` | `email` (unique), `password_hash`, `google_id`, `avatar_url`, `tagline`, `active_workspace_id` (soft FK), `password_changed_at`, `deleted_at` (soft delete — email can be reused) |
+| `workspaces` | `name`, `slug` (unique), `key` (unique, 6-char issue prefix), `owner_id`, `logo_url`, `deleted_at` |
+| `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
+| `workspace_counters` | `last_issue_seq` — per-workspace issue sequence allocator |
+| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at` |
+| `api_tokens` | `token_hash` (unique), `token_prefix`, `scopes` (default `['full']`), `expires_at`, `last_used_at` |
+| `password_reset_otps` | `email`, `otp_hash`, `expires_at`, `consumed_at`, `attempts` |
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `serial` PK | |
-| `google_id` | `varchar` unique nullable | OAuth subject id |
-| `email` | `varchar(255)` unique NOT NULL | |
-| `name` | `varchar(255)` nullable | |
-| `avatar_url` | `text` nullable | |
-| `password_hash` | `varchar(255)` nullable | bcrypt; `null` for OAuth-only users |
-| `role` | `varchar(50)` default `'member'` | `'member' \| 'admin'` |
-| `last_login` | `timestamptz` nullable | updated on credentials login |
-| `created_at`, `updated_at` | `timestamptz` | |
+### Work items
 
-### `projects`
+| Table | Purpose / notable columns |
+|-------|---------------------------|
+| `projects` | `workspace_id`, `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `end_date` |
+| `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
+| `milestones` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — milestones can be standalone), `due_date`, `status` |
+| `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`milestone_id`, `title`, `status`, `priority` (int 1–5, checked), `assignee_id`, `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at` |
+| `comments` | **polymorphic**: `parent_type` ∈ `issue`/`milestone`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
+| `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by` |
+| `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
+| `issue_labels` / `project_labels` | join tables (composite PKs) linking workspace labels to issues / projects |
+| `project_members` | the project's "people working on it" list (not access control); `(project_id, user_id)` unique |
+| `issue_watchers` | `(issue_id, user_id)` PK; `reason` ∈ `manual`/`assigned`/`reporter`. Auto-watchers are pruned when their reason no longer applies (unless `manual`) |
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `serial` PK | |
-| `name` | `varchar(100)` NOT NULL | |
-| `description` | `text` nullable | |
-| `status` | `varchar(50)` default `'active'` | |
-| `owner_id` | `int` FK → `users.id` ON DELETE SET NULL | |
-| `priority` | `varchar(10)` default `'P2'` | |
-| `visibility` | `varchar(20)` default `'team'` | |
-| `color`, `icon_url`, `banner_url` | | |
-| `start_date`, `end_date` | `date` nullable | |
-| `created_at`, `updated_at` | `timestamptz` | |
+### System
 
-### `project_members`
+| Table | Purpose |
+|-------|---------|
+| `events` | **append-only spine** (`bigserial`). `entity_type`, `entity_id`, `action`, `diff`, `meta`, `actor_user_id`/`actor_token_id`, `idempotency_key`. Indexed by workspace × (occurred_at / entity / actor / action) |
+| `inbox_messages` | per-user projection of events (`bigserial`). `type`, denormalized `payload` (JSON), `read_at`, `archived_at`. `event_id`/`workspace_id` nullable for synthetic rows |
+| `transaction_log` | legacy undo log: `operation_type`, `table_name`, `record_id`, `old_data`/`new_data`, `rolled_back` |
+| `error_events` | server error log: `level`, `code`, `message`, `stack`, `route`, `method`, `status_code`, sanitized `context` |
 
-Many-to-many between users and projects, with role.
+Status/priority **values** (the labels and colors the UI uses) are canonical in
+`lib/work-items.ts`, not the schema:
 
-| Column | Notes |
-|---|---|
-| `id` | PK |
-| `project_id` FK → `projects.id` ON DELETE CASCADE | |
-| `user_id` FK → `users.id` ON DELETE CASCADE | |
-| `role` | `'owner' \| 'admin' \| 'member' \| 'viewer'` |
-| `joined_at` | |
-| Unique on `(project_id, user_id)` | |
+- Issue status: `backlog`, `todo`, `in_progress`, `done`, `cancelled`.
+- Issue priority: `1` urgent … `4` low, `5` none.
+- Project status: `backlog`, `planned`, `in_progress`, `completed`, `cancelled`;
+  priority `P0`–`P4`.
+- Project update health: `on_track`, `at_risk`, `off_track`.
 
-### `milestones`
+## The event spine
 
-| Column | Notes |
-|---|---|
-| `id` PK | |
-| `project_id` FK → `projects.id` CASCADE | |
-| `name`, `description`, `due_date`, `status` | |
-| Index on `project_id` | |
+`lib/db/queries/events.ts` defines `recordEvent(tx, input)` — called **inside
+the same transaction** as every domain mutation. `EntityType` and `EventAction`
+are TypeScript unions (e.g. `assigned`, `status_changed`, `commented`,
+`mentioned`, `member_added`, `invitation_created`, …).
 
-### `issues`
+Each recorded event is handed to `fanOutEvent(tx, event)`
+(`lib/db/queries/fanout.ts`), which materializes per-user `inbox_messages`
+according to the event type (assignees, watchers, mentioned users, invitees).
+`lib/db/queries/inbox.ts` writes those rows with a short dedup window so rapid
+status flips don't spam the inbox.
 
-The core entity.
+This single spine is read by:
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `serial` PK | |
-| `project_id` | FK → `projects.id` CASCADE | |
-| `milestone_id` | FK → `milestones.id` SET NULL | |
-| `title` | `varchar(200)` NOT NULL | |
-| `description` | `text` | HTML produced by TipTap, sanitized client-side |
-| `status` | `varchar(50)` default `'backlog'` | `'backlog' \| 'todo' \| 'in_progress' \| 'blocked' \| 'in_review' \| 'done' \| 'cancelled'` |
-| `priority` | `int` 1–5, default 3 | 1 = urgent, 5 = none |
-| `assignee_id` | FK → `users.id` SET NULL | |
-| `reporter_id` | FK → `users.id` SET NULL | |
-| `start_date`, `due_date` | `date` nullable | |
-| `estimated_hours` | `decimal(5,1)` nullable | |
-| `created_at`, `updated_at` | | |
-
-Indexes: `project`, `status`, `assignee`, `milestone`, `priority`.
-
-### `comments`
-
-| Column | Notes |
-|---|---|
-| `id` PK | |
-| `issue_id` FK → `issues.id` CASCADE | |
-| `user_id` FK → `users.id` SET NULL | |
-| `content` `text` NOT NULL | HTML allowed |
-| `created_at`, `updated_at` | |
-
-### `attachments`
-
-| Column | Notes |
-|---|---|
-| `id` PK | |
-| `issue_id` FK → `issues.id` CASCADE | |
-| `filename`, `file_url`, `file_size`, `mime_type` | |
-| `uploaded_by` FK → `users.id` SET NULL | |
-
-### `labels` and `issue_labels`
-
-Project-scoped labels with a junction table. The label schema is in place; UI is not wired up yet.
-
-### `transaction_log`
-
-The undo system's substrate. Every undo-able mutation writes one row.
-
-| Column | Notes |
-|---|---|
-| `id` PK | |
-| `user_id` FK → `users.id` SET NULL | who did it |
-| `operation_type` | `'INSERT' \| 'UPDATE' \| 'DELETE'` |
-| `table_name`, `record_id` | what was touched |
-| `old_data`, `new_data` | `jsonb` snapshots |
-| `rolled_back` | `boolean` default false |
-| `created_at` | |
-
-### `api_tokens`
-
-| Column | Notes |
-|---|---|
-| `id` PK | |
-| `user_id` FK → `users.id` CASCADE | |
-| `name` `varchar(100)` | human label |
-| `token_hash` `varchar(128)` | SHA-256 hex, **unique** |
-| `token_prefix` `varchar(16)` | first 8 chars, for UI display |
-| `scopes` `text[]` default `{full}` | |
-| `last_used_at`, `expires_at` | |
-| Indexes: `user`, `prefix`; unique on `token_hash` | |
-
----
+- **Activity feed** (`activity.ts`, `/api/workspaces/{ws}/activity`),
+- **Inbox** (`inbox.ts`, `/api/me/inbox`),
+- **Analytics** (`analytics.ts`).
 
 ## API reference
 
-All paths are rooted at `/api`. All responses are JSON. All routes require authentication unless explicitly marked **public**. Auth is satisfied by either a NextAuth session cookie or `Authorization: Bearer bk_live_…`.
-
 ### Conventions
 
-- **Pagination** — cursor-based on collection endpoints. Pass `?limit=N&cursor=ID` and receive `{ data, next_cursor }`.
-- **Errors** — `{ error: string, suggestion?: string, details?: string }` with appropriate status code.
-- **Mutation** — POST creates (201), PATCH partial-updates (200), DELETE removes (200/204).
-- **Auth failures** — 401 (missing/invalid auth), 403 (auth ok but role insufficient), 404 (resource doesn't exist or user can't see it).
+- All handlers are wrapped in `apiHandler`. Mutations validate input and throw
+  `Errors.badRequest(...)` on bad shapes.
+- Workspace-scoped routes resolve `{ ws }` (slug **or** numeric id) via
+  `resolveWorkspace`.
+- List endpoints that paginate return `{ data, next_cursor }`; simple lists
+  return `{ data }`.
 
-### Auth
+### Workspace-scoped (canonical)
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/register` | **Public**. Body: `{ email, password, name? }`. 201 on success; 409 if email exists. Password 8–200 chars. |
-| (NextAuth handler) | `/api/auth/[...nextauth]` | Sign-in/out and OAuth callbacks. |
+```
+GET    /api/workspaces                          list my workspaces
+POST   /api/workspaces                          create workspace
+GET    /api/workspaces/{ws}                     workspace detail
+PATCH  /api/workspaces/{ws}                     update (owner)
+DELETE /api/workspaces/{ws}                     delete (owner)
+POST   /api/workspaces/{ws}/transfer            transfer ownership (owner)
+POST   /api/workspaces/{ws}/leave               leave workspace
 
-### Tokens
+GET    /api/workspaces/{ws}/members             list members
+DELETE /api/workspaces/{ws}/members/{userId}    remove member (owner)
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/tokens` | **Session only**. List the caller's tokens (id, prefix, name, expires_at, last_used_at, created_at). |
-| POST | `/api/tokens` | **Session only**. Body: `{ name, expires_at? }`. Returns `{ id, plaintext, prefix, ... }` — `plaintext` is shown **once**. |
-| DELETE | `/api/tokens/[id]` | **Session only**. Revoke a token. |
+GET    /api/workspaces/{ws}/invitations         list (owner)
+POST   /api/workspaces/{ws}/invitations         invite by email (owner)
+DELETE /api/workspaces/{ws}/invitations/{id}    revoke (owner)
 
-### CLI flow
+GET    /api/workspaces/{ws}/projects            list projects
+POST   /api/workspaces/{ws}/projects            create project
+GET    /api/workspaces/{ws}/projects/{id}       project detail (+ members, labels)
+PATCH  /api/workspaces/{ws}/projects/{id}       update (also member_ids/label_ids)
+DELETE /api/workspaces/{ws}/projects/{id}       delete
+GET    /api/workspaces/{ws}/projects/{id}/comments   list / POST comment
+GET    /api/workspaces/{ws}/projects/{id}/updates    list status updates
+POST   /api/workspaces/{ws}/projects/{id}/updates    post update (status + body)
+DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}   delete (author)
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/cli/authorize` | **Session required**. Body: `{ callback, state, name? }`. `callback` must be a `127.0.0.1` or `localhost` URL. Mints a token and returns `{ redirect_url, token_id, token_name }`. The browser then redirects to `redirect_url`, which is the CLI's loopback listener. |
+GET    /api/workspaces/{ws}/milestones          list / POST create
+GET    /api/workspaces/{ws}/milestones/{id}     detail / PATCH / DELETE
+GET    /api/workspaces/{ws}/milestones/{id}/comments  list / POST
 
-### Users
+GET    /api/workspaces/{ws}/issues              list (filters) / POST create
+GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH / DELETE
+GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
+GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach
+DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid} detach
+POST   /api/workspaces/{ws}/issues/{id}/watch        watch / DELETE unwatch
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/users` | List all users (id, name, email, avatar_url, role). |
-| GET | `/api/users/me` | Current user + `via: 'session' \| 'token'`. |
+GET    /api/workspaces/{ws}/labels              list / POST create
+PATCH  /api/workspaces/{ws}/labels/{id}         update / DELETE
+DELETE /api/workspaces/{ws}/comments/{id}       edit/delete a comment (author)
 
-### Projects
+GET    /api/workspaces/{ws}/activity            activity feed
+GET    /api/workspaces/{ws}/analytics           analytics (view/target/range)
+```
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/projects` | List the caller's projects. Query: `?limit=1-200` and `?cursor=ID` for pagination. Each item carries `issue_count`, `open_issues`, `member_role`. |
-| POST | `/api/projects` | Create. Body: `{ name, description? }`. 201; creator becomes `owner` in `project_members`. |
-| GET | `/api/projects/[id]` | Detail. 403 if not a member. |
-| PATCH | `/api/projects/[id]` | Update. Owner or project admin only. Body keys: `name, description, status, priority, visibility, color, icon_url, banner_url, start_date, end_date, owner_id`. |
-| DELETE | `/api/projects/[id]` | **Owner only**. Cascades to members, issues, milestones. |
-| GET | `/api/projects/[id]/members` | List. |
-| POST | `/api/projects/[id]/members` | Add by email. Owner/admin only. Body: `{ email, role? }`. |
-| DELETE | `/api/projects/[id]/members` | Remove. Owner/admin only. Body: `{ user_id }`. |
+### Personal, auth & system
 
-### Issues
+```
+GET/POST /api/auth/[...nextauth]                NextAuth
+POST     /api/auth/register                     email/password sign-up
+POST     /api/auth/password-reset/request       request OTP
+POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/issues` | List. Query: `?project_id=N` to filter; `?limit&cursor` for pagination. Carries `comment_count, attachment_count, assignee_name, milestone_name`. |
-| POST | `/api/issues` | Create. Body: `{ project_id, title, description?, status?, priority?, assignee_id?, milestone_id? }`. 201. |
-| GET | `/api/issues/[id]` | Detail. 403 if not a member of the project. |
-| PATCH | `/api/issues/[id]` | Update. Non-viewer members only. Writes to `transaction_log`. Body keys: `title, description, status, priority, assignee_id, milestone_id, start_date, due_date` (any combination). |
-| DELETE | `/api/issues/[id]` | Owner or project admin only. Writes to `transaction_log`. |
-| GET | `/api/issues/[id]/comments` | List. |
-| POST | `/api/issues/[id]/comments` | Add. Body: `{ content }`. |
-| GET | `/api/issues/[id]/attachments` | List with uploader info. |
-| POST | `/api/issues/[id]/attachments` | Attach. Body: `{ filename, file_url, file_size?, mime_type? }`. Non-viewers. |
-| DELETE | `/api/issues/[id]/attachments?attachmentId=N` | Remove. Uploader or project admin. |
-| GET | `/api/issues/[id]/activity` | Merged feed: comments + transaction_log changes, newest first. |
+GET      /api/me                                current user (+ active_workspace_id)
+GET      /api/me/workspaces                      my workspaces
+POST     /api/me/active-workspace                set active workspace
+GET      /api/me/inbox                            list inbox  (?unread, ?limit)
+POST     /api/me/inbox/mark-read                  mark read (ids | all)
+POST     /api/me/inbox/archive                    archive ids
+GET      /api/me/pending-invitations             invitations for my email
+POST     /api/me/password/request-otp            in-app password change (OTP)
+POST     /api/me/password/confirm
 
-### Milestones
+POST     /api/invitations/accept                 accept by token
+POST     /api/invitations/decline                decline by token
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/milestones` | List. Optional `?project_id=N`. Carries `issue_count, completed_issues`. |
-| POST | `/api/milestones` | Body: `{ project_id, name, description?, due_date? }`. |
-| GET | `/api/milestones/[id]` | Detail. `?includeIssues=true` to embed issues. |
-| PATCH | `/api/milestones/[id]` | Update. |
-| DELETE | `/api/milestones/[id]` | |
+GET/POST /api/tokens                             list / mint API tokens
+DELETE   /api/tokens/{id}                         revoke
+POST     /api/cli/authorize                       mint a token for the CLI
 
-### Activity / undo
+POST     /api/upload                              file upload (Blob or local)
+GET/POST /api/undo                                transaction history / rollback
+GET      /api/status                              public health probe
+GET      /api/status/errors , /errors/{id}        error log (owner-gated detail)
+POST     /api/errors/client                       client error beacon
+```
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/activity` | Global feed from `transaction_log`. `?limit&offset`. |
-| GET | `/api/undo` | The caller's last 50 transactions (for "what could I undo?"). |
-| POST | `/api/undo` | Body: `{ count? }` (1–10). Rolls back the caller's last N operations atomically; sets `rolled_back=true`. Returns `{ success, undone_count, operations }`. |
+### Legacy non-workspace shims
 
-### Analytics
+`/api/projects`, `/api/issues`, `/api/milestones`, `/api/users`,
+`/api/activity`, `/api/analytics` (and their `/{id}` children) remain for the
+`bk` CLI, which still uses several of them. They resolve the workspace
+server-side from the caller. New web code should prefer the workspace-scoped
+routes.
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/analytics` | **Admin-only**. Returns `{ issuesByStatus, issuesByProject, topAssignees, issuesOverTime }`. |
+## Query layer
 
-### Admin & seed
+Everything that touches the database lives in `lib/db/queries/`. Routes call
+these; they never write SQL inline.
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/admin/promote` | One-shot. Session must be user id 1 and no admin must exist yet. |
-| POST | `/api/seed` | **Admin-only**. Generates demo projects/milestones/issues/comments. |
-| POST | `/api/migrate` | **Deprecated** (410). Use `npm run db:migrate` from the host. |
-
-### Uploads
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/upload` | Info endpoint: describes max size, allowed types. |
-| POST | `/api/upload` | `multipart/form-data` with field `file`. Returns `{ url, filename, size, contentType }`. Max 10 MB. Allowed: `image/{jpeg,png,gif,webp}`, `application/pdf`, `text/plain`, `application/json`, `text/markdown`. If `BLOB_READ_WRITE_TOKEN` is set, uploads go to Vercel Blob; otherwise (dev only) files land in `public/uploads/` and are served at `/uploads/<file>`. |
-
----
-
-## Query layer (`lib/db/queries/`)
-
-Thin, typed wrappers around drizzle. API routes call these instead of writing SQL inline. Each module exports a small set of named functions:
-
-| File | Exports (purpose) |
-|---|---|
-| `users.ts` | `getUsers`, `getUserById`, `getUserByEmail`, `upsertUserFromOAuth`, `createUserWithPassword`, `touchLastLogin` |
-| `projects.ts` | `getProjects`, `getProjectsPage` (cursor), `getProject`, `createProject` (auto-adds creator as owner), `updateProject`, `deleteProject` |
-| `members.ts` | `getProjectMembers`, `addProjectMember`, `removeProjectMember`, `isProjectMember`, `getProjectMemberRole` |
-| `issues.ts` | `getIssue`, `getIssuesByProject`, `getAllIssuesWithProjects`, `getIssuesPage`, `getIssuesByMilestone`, `getKanbanView`, `createIssue`, `updateIssue`, `deleteIssue` |
-| `comments.ts` | `getComments`, `createComment` |
-| `attachments.ts` | `getAttachments`, `getAttachment`, `createAttachment`, `deleteAttachment` |
-| `milestones.ts` | `getMilestones`, `getAllMilestones`, `getMilestone`, `getMilestoneWithDetails`, `createMilestone`, `updateMilestone`, `deleteMilestone` |
-| `activity.ts` | `getIssueActivity`, `getActivityFeed`, `getTransactionLog`, `logTransaction`, `undoLastOperations` |
-| `analytics.ts` | `getAnalytics` (four sub-queries: status, top projects, top assignees, time series) |
-| `transaction.ts` | low-level transaction-log helpers |
-
-`lib/db.ts` re-exports everything so routes can import from a single path.
-
-`lib/db/client.ts` holds the singleton `pg.Pool` (max 10) and the drizzle wrapper. It caches both on `globalThis` in development so hot reloads don't leak connections.
-
----
+| File | Responsibility |
+|------|----------------|
+| `workspaces.ts` | workspace CRUD, membership, `getWorkspaceForUser`, issue-seq allocation |
+| `members.ts` | project member listing |
+| `invitations.ts` | invite CRUD, token mint, accept/decline, pre-signup materialization |
+| `users.ts` | user CRUD, `getVisibleUsers` (workspace-mates only — privacy guard), OAuth upsert, password sign-up |
+| `projects.ts` | project CRUD; list joins lead + latest update health |
+| `project-relations.ts` | project ↔ member and project ↔ label sets |
+| `project-updates.ts` | status-update feed (on_track/at_risk/off_track) |
+| `milestones.ts` | milestone CRUD (project optional) |
+| `issues.ts` | issue CRUD, seq allocation, field-level events, auto-watchers |
+| `comments.ts` | polymorphic comments + `@email` mention resolution |
+| `labels.ts` | workspace labels; case-insensitive unique names |
+| `attachments.ts` | issue attachments |
+| `watchers.ts` | issue watchers (manual/assigned/reporter) |
+| `events.ts` | the event spine — `recordEvent`, `EntityType`/`EventAction` |
+| `fanout.ts` | event → per-user inbox materialization |
+| `inbox.ts` | inbox writes (dedup window) + listing |
+| `activity.ts` | activity feed reads |
+| `analytics.ts` | workspace/project/milestone/member analytics |
+| `transaction.ts` | transaction log + `undoLastOperations` |
+| `error-events.ts` | error log reads (public list redacts; detail is gated) |
+| `password-reset.ts` | OTP issue/verify/consume |
 
 ## Cross-cutting concerns
 
 ### Middleware (`middleware.ts`)
 
-NextAuth's `withAuth` guards `/dashboard/*`. Unauthenticated requests are redirected to `/login`. API routes do their own auth via `resolveUser`.
+NextAuth `withAuth` guarding `matcher: ['/dashboard/:path*']` — unauthenticated
+browser visits to the dashboard redirect to `/login`. **API routes are not
+guarded here**; each route authenticates itself via `resolveAuth`/
+`resolveWorkspace` (so bearer-token clients work).
 
-> **Note**: Next 16 emits `The "middleware" file convention is deprecated. Please use "proxy" instead.` Not blocking; rename to `proxy.ts` when convenient.
+### Event spine, inbox & activity
+
+See [The event spine](#the-event-spine). Anything user-visible that "happened"
+should `recordEvent` so it shows up in activity and (where appropriate) the
+inbox — don't write to `inbox_messages` directly from a route.
 
 ### Transaction log / undo
 
-Mutations to `issues` (PATCH and DELETE) call `logTransaction({ user_id, operation_type, table_name, record_id, old_data, new_data })`. The `/api/undo` endpoint reads the caller's most recent rows where `rolled_back = false`, applies the reverse, and marks the rows as rolled back so they don't fire again.
+`transaction.ts` + `/api/undo`. `GET` returns recent entries; `POST {count}`
+(clamped 1–10) reverses the caller's last operations (issue updates restore
+`old_data`, inserts are deleted) and marks them `rolled_back`. This log is
+separate from the event spine.
 
-`UPDATE`s restore `old_data` field-by-field. `INSERT`s delete the inserted row. `DELETE`s currently aren't fully reversible for issues (the row's children — comments, attachments — cascade-delete) and the endpoint is intentionally limited to the simple cases.
+### File uploads (`app/api/upload/route.ts`)
 
-### File uploads
+Requires an authenticated user. If `BLOB_READ_WRITE_TOKEN` is set, stores via
+**Vercel Blob**; otherwise writes to `public/uploads/` for local dev. Validates
+size (≤10 MB) and MIME type (common images minus SVG, plus pdf/text/json/md).
+Returns `{ url, filename, size, contentType }`.
 
-`app/api/upload/route.ts` is the central upload endpoint. Two storage backends:
+### Email (`lib/email/`)
 
-| `BLOB_READ_WRITE_TOKEN` set | Where the file lands |
-|---|---|
-| Yes | Vercel Blob, public URL returned (https://...) |
-| No, dev mode | `public/uploads/<timestamp-name>-<random>.<ext>`; URL is `/uploads/...` |
-| No, prod mode | 500 with `error: 'Blob storage not configured'` |
+Resend client, lazily constructed and **only enabled when both `RESEND_API_KEY`
+and `RESEND_FROM_EMAIL` are set** (`emailEnabled()`). Sending is best-effort —
+failures log a warning and never break the triggering action. Two templates are
+sent: **workspace invitations** and **password-reset OTP**; everything else
+stays in the in-app inbox.
 
-This last branch is intentional: silently falling back to the local FS in production would write files to an ephemeral container.
+### Error responses & sanitization
 
-Sanitization: filename is reduced to `[A-Za-z0-9.-]`, prefixed with `Date.now()`, suffixed with random hex. Path is resolved and asserted to remain inside `public/uploads/` as a defense in depth.
-
-### Password hashing
-
-`lib/auth/password.ts`:
-- `hashPassword(plain) → string` — bcryptjs with 12 rounds.
-- `verifyPassword(plain, hash) → boolean`.
-- `validateEmail`, `validatePassword` — simple guards used at registration.
-
-### Error responses
-
-Routes return shapes like:
-
-```json
-{ "error": "Invalid name", "suggestion": "Provide a non-empty `name` field" }
-{ "error": "Unauthorized" }
-{ "error": "Forbidden", "details": "Owner or admin role required" }
-```
-
-The CLI parses these into `client.APIError` and maps to stable exit codes (see [CLI doc](./cli.md)).
-
----
+`lib/api/sanitize.ts` recursively redacts sensitive keys (`password`, `token`,
+`authorization`, `cookie`, `secret`, `api_key`, …), caps depth/length/array
+size, and is applied before any error context is written to `error_events`.
+Combined with `apiHandler`, this means 5xx errors are captured for the
+`/status` page without leaking credentials.
 
 ## Adding new functionality
 
 ### A new API endpoint
 
-1. Decide whether it belongs to an existing resource (`/api/issues/[id]/...`) or a new one.
-2. Create `app/api/<path>/route.ts` exporting `GET`/`POST`/`PATCH`/`DELETE`.
-3. Inside, follow the standard skeleton:
-   ```ts
-   import { resolveUser } from '@/lib/auth/resolve'
-
-   export async function POST(request: NextRequest) {
-     const user = await resolveUser(request)
-     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-     // permission check (membership / role) …
-
-     const body = await request.json().catch(() => ({}))
-     // validate body …
-
-     const result = await someQuery(...)
-     return NextResponse.json(result, { status: 201 })
-   }
-   ```
-4. If the operation is reversible and meaningful, add a `logTransaction(...)` call.
-5. Add or extend a `lib/db/queries/<resource>.ts` helper rather than putting SQL in the route.
+1. Create `app/api/.../route.ts`, export `GET`/`POST`/… wrapped in `apiHandler`.
+2. Call `resolveWorkspace(req, ws)` (or `resolveUser`) to authenticate.
+3. Validate the body; throw `Errors.badRequest(...)` on bad input.
+4. Delegate to a function in `lib/db/queries/` — don't inline SQL.
+5. In that query function, `recordEvent(tx, …)` inside the mutation's
+   transaction if it's user-visible.
 
 ### A new column
 
-1. Edit `lib/db/schema.ts` — add the column with the appropriate drizzle type.
-2. `npm run db:generate` to produce a new migration in `lib/db/migrations/`.
-3. Inspect the generated SQL, edit if needed (e.g. add a default to avoid blocking on existing rows).
-4. `npm run db:migrate` to apply.
-5. Update any query helpers that select the table.
+Edit `lib/db/schema.ts` → `npm run db:generate` → review the SQL in
+`lib/db/migrations/` → `npm run db:migrate`.
 
 ### A new table
 
-Same as a column, plus update relations in `schema.ts` and add a new `lib/db/queries/<table>.ts` file with the basic CRUD helpers.
-
-### A new auth-protected resource
-
-If the resource is owned by a project, use `isProjectMember(user.id, project_id)` and `getProjectMemberRole(...)` for checks. If it's user-scoped (like tokens), constrain by `user_id` in every query.
-
----
+Add the `pgTable` to `schema.ts` (with `workspace_id` if it's tenant data),
+export its `$inferSelect`/`$inferInsert` types, generate + apply the migration,
+then add a `lib/db/queries/<thing>.ts` module. `project_updates` (migration
+`0018`) is a recent, minimal end-to-end example.
 
 ## Operational notes
 
 ### Local development
 
 ```bash
-docker compose up -d     # postgres on :5434
-npm run dev              # next.js on :3000
+docker compose up -d        # Postgres 16 on localhost:5434
+npm install
+npm run db:migrate
+npm run dev                 # http://localhost:3000
 ```
 
-The DB persists in the `bkcli-test_pgdata` Docker volume.
+### Database client (`lib/db/client.ts`)
+
+A `pg` `Pool` (max 10) built from `DATABASE_URL`, wrapped by Drizzle and cached
+on `globalThis` so hot reload doesn't leak connections. The
+`@neondatabase/serverless` driver is a dependency for serverless Postgres
+compatibility, but the default client uses `pg`.
 
 ### Migrations
 
+Managed by `drizzle-kit` (config in `drizzle.config.ts`):
+
 ```bash
-npm run db:generate      # diff schema vs migrations, write new file
-npm run db:migrate       # apply pending migrations
-npm run db:push          # (use with care) push schema without migrations
-npm run db:studio        # drizzle's table browser
+npm run db:generate   # author a migration from schema diffs
+npm run db:migrate    # apply pending migrations
+npm run db:push       # push schema directly (prototyping only)
+npm run db:studio     # browse data
 ```
 
-### Seeding
+Migration files are numbered `0000_…` upward in `lib/db/migrations/`, with
+snapshots under `meta/`. Don't hand-edit applied migrations; add a new one.
 
-`POST /api/seed` (admin only) populates demo data. Convenient for local QA.
+### Bootstrapping
 
-### Bootstrapping an admin
-
-After registering the very first user, hit `POST /api/admin/promote` (from a logged-in browser console: `fetch('/api/admin/promote', { method: 'POST' })`). Subsequent admins can be created by editing `users.role` directly or via a future admin UI.
-
-### Backups
-
-Postgres-level — `pg_dump` against `DATABASE_URL`. Vercel Postgres / Neon both expose this in their dashboards. Local: `docker exec blackcode-postgres pg_dump -U blackcode blackcode_issues > backup.sql`.
+There is no admin bootstrap step. The first user to sign up creates their
+account and a default workspace; workspace owners invite the rest of the team.

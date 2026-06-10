@@ -3,22 +3,16 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
-import { CircleDot, Clock, MessageSquare, Paperclip, Plus, Users } from 'lucide-react'
+import { format } from 'date-fns'
+import { CircleDot, Plus } from 'lucide-react'
 import { useActiveWorkspace } from './use-active-workspace'
 import { FilterBar, MultiSelect, SearchInput, ViewToggle, type ViewMode } from './filter-bar'
-import { LabelChip } from './labels-pill'
 import { IssuesKanban } from './issues-kanban'
 import { IssuesTimeline } from './issues-timeline'
 import { IssueCreateModal } from '../issue-create-modal'
-import {
-  ISSUE_PRIORITIES,
-  ISSUE_STATUSES,
-  issuePriorityColor,
-  issuePriorityLabel,
-  issueStatusColor,
-  issueStatusLabel,
-} from '@/lib/work-items'
+import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
+import { MemberAvatar } from '@/components/ui/member-avatar'
+import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
 
 interface IssueRow {
   id: number
@@ -157,20 +151,17 @@ export function IssuesListing() {
   }, [issuesQuery.data, status, priority, assignees, projects, milestones])
 
   return (
-    <div className="p-6">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Issues</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {filtered.length} {filtered.length === 1 ? 'issue' : 'issues'}
-            {ws ? ` in ${ws.name}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div>
+      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <span className="text-[13px] font-medium">Issues</span>
+        <span className="text-xs text-muted-foreground">
+          {filtered.length} {filtered.length === 1 ? 'issue' : 'issues'}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
           <ViewToggle value={view} onChange={setView} />
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus size={14} />
             New issue
@@ -180,18 +171,26 @@ export function IssuesListing() {
 
       <IssueCreateModal open={showCreate} onClose={() => setShowCreate(false)} />
 
-      <div className="mb-4 flex flex-col gap-2">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Search issues…" />
         <FilterBar>
           <MultiSelect
             label="Status"
-            options={STATUSES}
+            options={STATUSES.map((s) => ({
+              value: s.value,
+              label: s.label,
+              icon: <StatusIcon status={s.value} size={14} />,
+            }))}
             selected={status}
             onChange={setStatus}
           />
           <MultiSelect
             label="Priority"
-            options={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+            options={PRIORITIES.map((p) => ({
+              value: p.value,
+              label: p.label,
+              icon: <PriorityIcon priority={issuePriorityKey(p.value)} size={14} />,
+            }))}
             selected={priority}
             onChange={setPriority}
           />
@@ -232,13 +231,19 @@ export function IssuesListing() {
       {view === 'list' ? (
         <IssueListView issues={filtered} workspaceKey={ws?.key ?? ''} loading={issuesQuery.isLoading} />
       ) : view === 'kanban' ? (
-        <IssuesKanban issues={filtered} workspaceKey={ws?.key ?? ''} />
+        <div className="p-4">
+          <IssuesKanban issues={filtered} workspaceKey={ws?.key ?? ''} />
+        </div>
       ) : (
-        <IssuesTimeline issues={filtered} workspaceKey={ws?.key ?? ''} />
+        <div className="p-4">
+          <IssuesTimeline issues={filtered} workspaceKey={ws?.key ?? ''} />
+        </div>
       )}
     </div>
   )
 }
+
+const STATUS_ORDER = ['in_progress', 'todo', 'backlog', 'done', 'cancelled']
 
 function IssueListView({
   issues,
@@ -250,76 +255,74 @@ function IssueListView({
   loading: boolean
 }) {
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>
+    return (
+      <div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="mx-6 my-2 h-10 animate-pulse rounded bg-secondary/40" />
+        ))}
+      </div>
+    )
   }
   if (issues.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card/30 p-16 text-center">
+      <div className="flex flex-col items-center justify-center p-16 text-center">
         <CircleDot size={32} className="mb-3 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">No issues match your filters.</p>
       </div>
     )
   }
+
+  // Display order: in_progress, todo, backlog, done, cancelled; any unknown
+  // statuses are appended as their own groups at the end.
+  const extraStatuses = [...new Set(issues.map((i) => i.status))].filter(
+    (s) => !STATUS_ORDER.includes(s)
+  )
+  const groups = [...STATUS_ORDER, ...extraStatuses]
+    .map((s) => ({ status: s, items: issues.filter((i) => i.status === s) }))
+    .filter((g) => g.items.length > 0)
+
   return (
-    <ul className="divide-y divide-border rounded-lg border border-border bg-card/30">
-      {issues.map((i) => (
-        <li key={i.id}>
-          <Link
-            href={`/dashboard/issues/${i.id}`}
-            prefetch={false}
-            className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-secondary/50"
-          >
-            <span className="font-mono text-[11px] tabular-nums text-muted-foreground w-20 shrink-0">
-              {i.seq != null ? `${workspaceKey}-${i.seq}` : `#${i.id}`}
-            </span>
-            <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
-              style={{ color: issueStatusColor(i.status), backgroundColor: issueStatusColor(i.status) + '1f' }}
-            >
-              {issueStatusLabel(i.status)}
-            </span>
-            <span className="text-[10px] font-medium" style={{ color: issuePriorityColor(i.priority) }}>
-              {issuePriorityLabel(i.priority)}
-            </span>
-            <span className="flex-1 truncate text-sm">{i.title}</span>
-            {i.project_name ? (
-              <span className="hidden text-[10px] text-muted-foreground sm:inline">{i.project_name}</span>
-            ) : null}
-            {i.milestone_name ? (
-              <span className="hidden text-[10px] text-muted-foreground sm:inline">· {i.milestone_name}</span>
-            ) : null}
-            <span className="hidden items-center gap-2 text-[11px] text-muted-foreground md:flex">
-              {i.comment_count ? (
-                <span className="inline-flex items-center gap-0.5">
-                  <MessageSquare size={11} />
-                  {i.comment_count}
-                </span>
-              ) : null}
-              {i.attachment_count ? (
-                <span className="inline-flex items-center gap-0.5">
-                  <Paperclip size={11} />
-                  {i.attachment_count}
-                </span>
-              ) : null}
-            </span>
-            {i.assignee_name ? (
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-                {i.assignee_name[0].toUpperCase()}
-              </span>
-            ) : (
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
-                <Users size={10} />
-              </span>
-            )}
-            <span className="hidden w-20 shrink-0 text-right text-[11px] text-muted-foreground sm:inline" suppressHydrationWarning>
-              {formatDistanceToNow(new Date(i.updated_at), { addSuffix: true })}
-            </span>
-          </Link>
-        </li>
+    <div>
+      {groups.map((group) => (
+        <section key={group.status}>
+          <div className="flex w-full items-center gap-2 bg-secondary/40 px-6 py-1.5">
+            <StatusIcon status={group.status} size={14} />
+            <span className="text-[13px] font-medium">{issueStatusLabel(group.status)}</span>
+            <span className="text-xs text-muted-foreground">{group.items.length}</span>
+          </div>
+          <ul>
+            {group.items.map((i) => (
+              <li key={i.id}>
+                <Link
+                  href={`/dashboard/issues/${i.id}`}
+                  prefetch={false}
+                  className="flex h-10 items-center gap-3 px-6 transition-colors hover:bg-secondary/40"
+                >
+                  <PriorityIcon priority={issuePriorityKey(i.priority)} size={14} />
+                  <span className="w-16 shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {i.seq != null ? `${workspaceKey}-${i.seq}` : `#${i.id}`}
+                  </span>
+                  <StatusIcon status={i.status} size={14} />
+                  <span className="flex-1 truncate text-[13px]">{i.title}</span>
+                  {i.project_name ? (
+                    <span className="hidden rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
+                      {i.project_name}
+                    </span>
+                  ) : null}
+                  {i.assignee_name || i.assignee_email ? (
+                    <MemberAvatar name={i.assignee_name} email={i.assignee_email} size={18} />
+                  ) : (
+                    <span className="size-[18px] shrink-0 rounded-full border border-dashed border-border" />
+                  )}
+                  <span className="w-12 shrink-0 text-right text-[11px] text-muted-foreground" suppressHydrationWarning>
+                    {format(new Date(i.updated_at), 'MMM d')}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   )
 }
-
-void Clock
-void LabelChip

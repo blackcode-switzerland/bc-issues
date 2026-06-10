@@ -6,8 +6,9 @@ import { format, isPast, isToday } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Target } from 'lucide-react'
 import { useActiveWorkspace } from './use-active-workspace'
-import { FilterBar, MultiSelect, SearchInput } from './filter-bar'
+import { MultiSelect, SearchInput } from './filter-bar'
 import { MilestoneCreateModal } from '../milestone-create-modal'
+import { ProgressRing } from '@/components/ui/work-item-icons'
 
 interface MilestoneRow {
   id: number
@@ -86,18 +87,13 @@ export function MilestonesListing() {
   ]
 
   return (
-    <div className="p-6">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Milestones</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {filtered.length} {filtered.length === 1 ? 'milestone' : 'milestones'}
-            {ws ? ` in ${ws.name}` : ''}
-          </p>
-        </div>
+    <div>
+      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <span className="text-[13px] font-medium">Milestones</span>
+        <span className="text-xs text-muted-foreground">{filtered.length}</span>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          className="ml-auto flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus size={14} />
           New milestone
@@ -106,28 +102,33 @@ export function MilestonesListing() {
 
       <MilestoneCreateModal open={showCreate} onClose={() => setShowCreate(false)} />
 
-      <div className="mb-4 flex flex-col gap-2">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Search milestones…" />
-        <FilterBar>
-          <MultiSelect label="Status" options={STATUSES} selected={status} onChange={setStatus} />
-          <MultiSelect
-            label="Project"
-            options={projectOptions}
-            selected={projectIds}
-            onChange={setProjectIds}
-          />
-        </FilterBar>
+        <MultiSelect label="Status" options={STATUSES} selected={status} onChange={setStatus} />
+        <MultiSelect
+          label="Project"
+          options={projectOptions}
+          selected={projectIds}
+          onChange={setProjectIds}
+        />
       </div>
 
       {milestones.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex h-11 items-center gap-3 px-6">
+              <span className="size-3.5 animate-pulse rounded bg-secondary" />
+              <span className="h-3 w-48 animate-pulse rounded bg-secondary" />
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card/30 p-16 text-center">
-          <Target size={32} className="mb-3 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <Target size={28} className="mb-3 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No milestones match your filters.</p>
         </div>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card/30">
+        <ul>
           {filtered.map((m) => {
             const total = m.issue_count ?? 0
             const done = m.completed_issues ?? 0
@@ -139,35 +140,26 @@ export function MilestonesListing() {
                 <Link
                   href={`/dashboard/milestones/${m.id}`}
                   prefetch={false}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/50"
+                  className="flex h-11 items-center gap-3 px-6 transition-colors hover:bg-secondary/40"
                 >
-                  <Target size={16} className="shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{m.name}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {m.project_name ?? 'Standalone'}
-                      {m.status ? ` · ${m.status}` : ''}
-                      {due ? (
-                        <>
-                          {' · '}
-                          <span className={overdue ? 'text-red-400' : ''}>
-                            due {format(due, 'MMM d, yyyy')}
-                          </span>
-                        </>
-                      ) : null}
-                    </p>
-                  </div>
-                  <div className="hidden w-32 shrink-0 sm:block">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>
-                        {done}/{total}
-                      </span>
-                      <span>{pct}%</span>
-                    </div>
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-secondary">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
+                  <Target size={14} className="shrink-0 text-muted-foreground" />
+                  <span className="truncate text-[13px] font-medium">{m.name}</span>
+                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {m.project_name ?? 'Standalone'}
+                  </span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                    <ProgressRing pct={pct} size={14} />
+                    <span className="text-[11px] tabular-nums text-muted-foreground">
+                      {done}/{total} issues
+                    </span>
+                  </span>
+                  <span
+                    className={`w-20 shrink-0 text-right text-xs ${
+                      overdue ? 'text-red-400' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {due ? format(due, 'MMM d') : '—'}
+                  </span>
                 </Link>
               </li>
             )

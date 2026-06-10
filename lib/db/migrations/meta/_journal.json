@@ -127,6 +127,13 @@
       "when": 1781014977645,
       "tag": "0017_status_alignment",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781078815634,
+      "tag": "0018_modern_blindfold",
+      "breakpoints": true
     }
   ]
 }

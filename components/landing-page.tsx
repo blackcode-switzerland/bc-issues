@@ -158,7 +158,7 @@ function StatusPill({ status, className }: { status: FeatureStatus; className?: 
     soon: {
       label: 'Coming soon',
       className:
-        'bg-indigo-500/10 text-indigo-600 ring-indigo-500/20 dark:text-indigo-300',
+        'bg-primary/10 text-primary ring-primary/20',
     },
   }
   const { label, className: c } = map[status]

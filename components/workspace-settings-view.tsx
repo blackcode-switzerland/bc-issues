@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertTriangle, Crown, Save, Trash2 } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface Workspace {
   id: number
@@ -37,6 +38,7 @@ async function fetchActiveWorkspace(): Promise<Workspace | null> {
 export function WorkspaceSettingsView() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { confirm, prompt } = useConfirm()
   const { data: ws } = useQuery({ queryKey: ['active-workspace'], queryFn: fetchActiveWorkspace })
 
   const [name, setName] = useState('')
@@ -201,12 +203,20 @@ export function WorkspaceSettingsView() {
             The current owner will become a regular member after transfer.
           </p>
           <select
-            onChange={(e) => {
+            onChange={async (e) => {
               const v = parseInt(e.target.value)
-              if (!Number.isNaN(v) && confirm('Transfer ownership? This cannot be undone without the new owner cooperating.')) {
-                transfer.mutate(v)
-              }
               e.currentTarget.value = ''
+              if (Number.isNaN(v)) return
+              if (
+                !(await confirm({
+                  title: 'Transfer ownership?',
+                  description: 'This cannot be undone without the new owner cooperating.',
+                  destructive: true,
+                  confirmLabel: 'Transfer',
+                }))
+              )
+                return
+              transfer.mutate(v)
             }}
             defaultValue=""
             className="rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -234,10 +244,19 @@ export function WorkspaceSettingsView() {
             members, and history. This cannot be undone.
           </p>
           <button
-            onClick={() => {
-              const phrase = prompt(`Type "${ws.name}" to confirm deletion`)
-              if (phrase === ws.name) remove.mutate()
-              else if (phrase !== null) toast.error('Name did not match — cancelled')
+            onClick={async () => {
+              const typed = await prompt({
+                title: 'Delete workspace?',
+                description:
+                  'This permanently deletes the workspace and all its data. This cannot be undone.',
+                inputLabel: `Type "${ws.name}" to confirm`,
+                placeholder: ws.name,
+                requireMatch: ws.name,
+                destructive: true,
+                confirmLabel: 'Delete workspace',
+              })
+              if (typed == null) return
+              if (typed === ws.name) remove.mutate()
             }}
             className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
           >

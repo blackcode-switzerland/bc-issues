@@ -66,19 +66,19 @@ const ACTIONS = [
 ]
 
 const ICONS: Record<string, React.ReactNode> = {
-  created: <Plus size={14} className="text-emerald-400" />,
-  updated: <Pencil size={14} className="text-blue-400" />,
-  deleted: <Trash2 size={14} className="text-red-400" />,
-  assigned: <User size={14} className="text-blue-400" />,
-  unassigned: <User size={14} className="text-zinc-400" />,
-  status_changed: <CheckCircle2 size={14} className="text-purple-400" />,
-  commented: <MessageSquare size={14} className="text-amber-400" />,
-  labeled: <Tag size={14} className="text-pink-400" />,
-  unlabeled: <Tag size={14} className="text-zinc-400" />,
-  member_added: <UserPlus size={14} className="text-emerald-400" />,
-  member_removed: <Users size={14} className="text-red-400" />,
-  invitation_created: <UserPlus size={14} className="text-blue-400" />,
-  invitation_accepted: <UserPlus size={14} className="text-emerald-400" />,
+  created: <Plus size={14} className="text-muted-foreground" />,
+  updated: <Pencil size={14} className="text-muted-foreground" />,
+  deleted: <Trash2 size={14} className="text-muted-foreground" />,
+  assigned: <User size={14} className="text-muted-foreground" />,
+  unassigned: <User size={14} className="text-muted-foreground" />,
+  status_changed: <CheckCircle2 size={14} className="text-muted-foreground" />,
+  commented: <MessageSquare size={14} className="text-muted-foreground" />,
+  labeled: <Tag size={14} className="text-muted-foreground" />,
+  unlabeled: <Tag size={14} className="text-muted-foreground" />,
+  member_added: <UserPlus size={14} className="text-muted-foreground" />,
+  member_removed: <Users size={14} className="text-muted-foreground" />,
+  invitation_created: <UserPlus size={14} className="text-muted-foreground" />,
+  invitation_accepted: <UserPlus size={14} className="text-muted-foreground" />,
 }
 
 export function ActivityView() {
@@ -136,15 +136,13 @@ export function ActivityView() {
   }, [filtered])
 
   return (
-    <div className="p-6">
-      <header className="mb-4">
-        <h1 className="text-2xl font-semibold">Activity</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Everything that happened in {ws?.name ?? '…'}.
-        </p>
+    <div>
+      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <h1 className="text-[13px] font-medium">Activity</h1>
+        <span className="text-xs text-muted-foreground">{ws?.name ?? '…'}</span>
       </header>
 
-      <div className="mb-4 flex flex-col gap-2">
+      <div className="flex flex-col gap-2 border-b border-border px-4 py-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Search in metadata…" />
         <FilterBar>
           <MultiSelect
@@ -167,26 +165,31 @@ export function ActivityView() {
       </div>
 
       {events.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="px-6 py-4 text-sm text-muted-foreground">Loading…</p>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card/30 p-16 text-center">
-          <ActivityIcon size={32} className="mb-3 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
+          <ActivityIcon size={28} className="mb-3 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No activity matches your filters.</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div>
           {grouped.map(([day, rows]) => (
             <section key={day}>
-              <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <h2 className="bg-secondary/30 px-6 py-1.5 text-[11px] text-muted-foreground">
                 {format(new Date(day), 'EEEE, MMMM d')}
               </h2>
-              <ul className="divide-y divide-border rounded-lg border border-border bg-card/30">
+              <ul>
                 {rows.map((e) => (
-                  <li key={e.id} className="flex items-start gap-3 px-4 py-2.5 text-sm">
-                    <span className="mt-0.5 shrink-0">{ICONS[e.action] ?? <Edit3 size={14} />}</span>
+                  <li
+                    key={e.id}
+                    className="flex items-start gap-3 px-6 py-2.5 transition-colors hover:bg-secondary/40"
+                  >
+                    <span className="mt-0.5 shrink-0">{ICONS[e.action] ?? <Edit3 size={14} className="text-muted-foreground" />}</span>
                     <span className="min-w-0 flex-1">
-                      <strong>{e.actor_name ?? e.actor_email ?? 'system'}</strong>{' '}
-                      <span className="text-muted-foreground">{describe(e)}</span>
+                      <span className="text-[13px] font-medium">
+                        {e.actor_name ?? e.actor_email ?? 'system'}
+                      </span>{' '}
+                      <span className="text-xs text-muted-foreground">{describe(e)}</span>
                     </span>
                     <span className="shrink-0 text-[11px] text-muted-foreground" suppressHydrationWarning>
                       {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}

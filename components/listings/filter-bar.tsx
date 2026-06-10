@@ -7,6 +7,7 @@ export interface MultiSelectOption {
   value: string | number
   label: string
   color?: string
+  icon?: React.ReactNode
 }
 
 interface MultiSelectProps {
@@ -65,7 +66,11 @@ export function MultiSelect({ label, options, selected, onChange }: MultiSelectP
                     onClick={() => toggle(opt.value)}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-secondary"
                   >
-                    {opt.color ? (
+                    {opt.icon ? (
+                      <span className="flex size-3.5 shrink-0 items-center justify-center">
+                        {opt.icon}
+                      </span>
+                    ) : opt.color ? (
                       <span
                         className="inline-block size-2.5 rounded-full"
                         style={{ backgroundColor: opt.color }}
@@ -132,13 +137,15 @@ interface ViewToggleProps {
 
 export function ViewToggle({ value, onChange, available = ['list', 'kanban', 'timeline'] }: ViewToggleProps) {
   return (
-    <div className="inline-flex rounded-md border border-border bg-card/30 p-0.5">
+    <div className="inline-flex rounded-md border border-border bg-secondary/50 p-0.5">
       {available.map((m) => (
         <button
           key={m}
           onClick={() => onChange(m)}
           className={`rounded px-2.5 py-1 text-xs capitalize transition-colors ${
-            value === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+            value === m
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           {m}

@@ -150,20 +150,20 @@ Keep the command thin — parse flags, call the client method, print the result 
 
 ```bash
 cd cli
-go build -o bk ./cmd/bk
+make build                                    # or: go build -o bk ./cmd/bk
 ./bk login --server http://localhost:3000     # only if auth shape changed
 ./bk whoami                                   # baseline check
-./bk project ls
-./bk issue ls --project 1
+./bk project list
+./bk issue list --project 1
 ./bk issue create --project 1 --title "smoke"
-./bk issue update 1 --status done
+./bk issue edit 1 --status done
 ./bk activity --limit 5
 ```
 
 If your change touched a specific area, hit that area too:
 
-- Changed uploads? `./bk issue attach 1 ./path/to/file.png`
-- Changed milestones? `./bk milestone ls --project 1`
+- Changed uploads? `./bk issue attach 1 --file ./path/to/file.png`
+- Changed milestones? `./bk milestone list --project 1`
 - Changed undo? `./bk undo`
 
 ---
@@ -176,7 +176,7 @@ If your change touched a specific area, hit that area too:
 
 **CLI impact:** none. The CLI doesn't read `archived_at`, and Go ignores unknown fields. Ship the backend; the CLI keeps working.
 
-If later you want `bk project ls` to display archive status, that's a CLI feature change — add `ArchivedAt *string \`json:"archived_at,omitempty"\`` to `types.Project` and update the table renderer.
+If later you want `bk project list` to display archive status, that's a CLI feature change — add `ArchivedAt *string \`json:"archived_at,omitempty"\`` to `types.Project` and update the table renderer.
 
 ### Example B — request rename
 
@@ -271,20 +271,20 @@ set -euo pipefail
 BK=./cli/bk
 SERVER="${SERVER:-http://localhost:3000}"
 
-(cd cli && go build -o bk ./cmd/bk)
+(cd cli && make build)
 
 $BK whoami
-$BK project ls
-PROJECT_ID=$($BK project ls --json | jq '.[0].id')
+$BK project list
+PROJECT_ID=$($BK project list --json | jq '.[0].id')
 
-$BK issue ls --project "$PROJECT_ID" --limit 5
+$BK issue list --project "$PROJECT_ID" --limit 5
 ISSUE_ID=$($BK issue create --project "$PROJECT_ID" --title "smoke $(date +%s)" --json | jq '.id')
-$BK issue get "$ISSUE_ID"
-$BK issue update "$ISSUE_ID" --status in_progress
-$BK issue comment "$ISSUE_ID" --content "smoke comment"
+$BK issue view "$ISSUE_ID"
+$BK issue edit "$ISSUE_ID" --status in_progress
+$BK issue comment "$ISSUE_ID" --body "smoke comment"
 $BK issue activity "$ISSUE_ID"
 
-$BK milestone ls --project "$PROJECT_ID"
+$BK milestone list --project "$PROJECT_ID"
 $BK activity --limit 5
 $BK undo --count 1     # rolls back the status change above
 

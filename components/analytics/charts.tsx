@@ -46,7 +46,7 @@ interface SeriesPoint {
   value: number
 }
 
-export function Sparkline({ data, color = '#3b82f6' }: { data: SeriesPoint[]; color?: string }) {
+export function Sparkline({ data, color = '#5e6ad2' }: { data: SeriesPoint[]; color?: string }) {
   if (data.length === 0) return null
   const max = data.reduce((m, p) => Math.max(m, p.value), 0) || 1
   const w = 240
@@ -132,12 +132,12 @@ export function VelocityChart({ data }: { data: DualSeriesPoint[] }) {
             </g>
           )
         })}
-        <polyline fill="none" stroke="#3b82f6" strokeWidth="1.5" points={createdPts} />
+        <polyline fill="none" stroke="#5e6ad2" strokeWidth="1.5" points={createdPts} />
         <polyline fill="none" stroke="#22c55e" strokeWidth="1.5" points={completedPts} />
       </svg>
       <div className="mt-2 flex items-center gap-4 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2 rounded-full bg-blue-500" />
+          <span className="inline-block size-2 rounded-full" style={{ backgroundColor: '#5e6ad2' }} />
           Created
         </span>
         <span className="inline-flex items-center gap-1.5">

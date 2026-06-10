@@ -1,7 +1,7 @@
 'use client'
 
 import { signIn, getSession } from 'next-auth/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -42,6 +42,15 @@ const HEADINGS: Record<Mode, { eyebrow: string; heading: string; sub: string }> 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function LoginPage() {
+  // useSearchParams() requires a Suspense boundary for static prerendering.
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}
+
+function LoginPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -559,7 +568,7 @@ export default function LoginPage() {
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                'radial-gradient(60% 50% at 20% 0%, rgb(14 165 233 / 0.20), transparent 70%), radial-gradient(50% 50% at 90% 100%, rgb(99 102 241 / 0.22), transparent 70%)',
+                'radial-gradient(60% 50% at 20% 0%, rgb(94 106 210 / 0.16), transparent 70%), radial-gradient(50% 50% at 90% 100%, rgb(94 106 210 / 0.10), transparent 70%)',
             }}
           />
           <div

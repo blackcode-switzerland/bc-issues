@@ -90,22 +90,19 @@ export function WorkspaceSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg border border-border bg-card/30 px-3 py-2 text-left transition-colors hover:bg-secondary"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
       >
         {active ? (
-          <WsAvatar ws={active} size={32} />
+          <WsAvatar ws={active} size={22} />
         ) : (
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Building2 size={16} />
+          <div className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Building2 size={13} />
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{active?.name ?? 'No workspace'}</p>
-          <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
-            {active ? `${active.key} · ${active.member_role}` : 'Create one to start'}
-          </p>
-        </div>
-        <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+          {active?.name ?? 'No workspace'}
+        </span>
+        <ChevronsUpDown size={13} className="shrink-0 text-muted-foreground" />
       </button>
 
       {open ? (

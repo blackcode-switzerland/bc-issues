@@ -38,10 +38,10 @@ interface AnalyticsPayload {
 const STATUS_COLORS: Record<string, string> = {
   backlog: '#71717a',
   todo: '#a1a1aa',
-  in_progress: '#3b82f6',
+  in_progress: '#f2c94c',
   blocked: '#ef4444',
   in_review: '#a855f7',
-  done: '#22c55e',
+  done: '#5e6ad2',
   cancelled: '#71717a',
 }
 

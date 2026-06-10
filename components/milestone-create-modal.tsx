@@ -4,9 +4,15 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { ChevronRight, Loader2, X } from 'lucide-react'
 import { Modal } from './ui/modal'
 import { useActiveWorkspace } from './listings/use-active-workspace'
+import { PropertySelect } from '@/components/ui/property-select'
+import { DatePicker } from '@/components/ui/date-picker'
+import { RichTextEditor, type MentionItem } from './rich-text-editor'
+
+const CHIP_BUTTON =
+  'inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1 text-xs hover:bg-secondary'
 
 interface Project {
   id: number
@@ -27,6 +33,7 @@ export function MilestoneCreateModal({ open, onClose, defaultProjectId, onCreate
   const { data: ws } = useActiveWorkspace()
 
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState<string>(defaultProjectId ? String(defaultProjectId) : '')
   const [dueDate, setDueDate] = useState('')
 
@@ -41,8 +48,26 @@ export function MilestoneCreateModal({ open, onClose, defaultProjectId, onCreate
     },
   })
 
+  const members = useQuery({
+    queryKey: ['ws-members', ws?.slug],
+    enabled: !!ws,
+    queryFn: async () => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
+      if (!res.ok) return []
+      const j = await res.json()
+      return j.data as Array<{ user_id: number; name: string | null; email: string; avatar_url: string | null }>
+    },
+  })
+
+  const mentionItems: MentionItem[] = (members.data ?? []).map((m) => ({
+    id: m.user_id,
+    label: m.name ?? m.email,
+    avatarUrl: m.avatar_url,
+  }))
+
   function reset() {
     setName('')
+    setDescription('')
     setProjectId(defaultProjectId ? String(defaultProjectId) : '')
     setDueDate('')
   }
@@ -54,6 +79,7 @@ export function MilestoneCreateModal({ open, onClose, defaultProjectId, onCreate
         project_id: projectId ? parseInt(projectId) : null,
       }
       if (dueDate) body.due_date = dueDate
+      if (description.replace(/<[^>]*>/g, '').trim()) body.description = description
       const res = await fetch(`/api/workspaces/${ws!.slug}/milestones`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -78,7 +104,7 @@ export function MilestoneCreateModal({ open, onClose, defaultProjectId, onCreate
   })
 
   return (
-    <Modal open={open} onClose={onClose} title="New milestone">
+    <Modal open={open} onClose={onClose} widthClass="max-w-xl">
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -88,58 +114,82 @@ export function MilestoneCreateModal({ open, onClose, defaultProjectId, onCreate
           }
           create.mutate()
         }}
-        className="space-y-4"
       >
-        <div>
-          <label className="mb-1 block text-xs font-medium">Name</label>
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={120}
-            placeholder="v1.0 Launch"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium">Project</label>
-          <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
-          >
-            <option value="">No project (standalone)</option>
-            {(projects.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium">Target date</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-1">
+        {/* breadcrumb header */}
+        <div className="mb-3 flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            {ws?.name ?? 'Workspace'}
+          </span>
+          <ChevronRight size={12} className="text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">New milestone</span>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+            aria-label="Close"
+            className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-secondary"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={120}
+          placeholder="Milestone name"
+          className="w-full bg-transparent text-lg font-medium outline-none placeholder:text-muted-foreground/60"
+        />
+
+        {/* description */}
+        <div className="mt-3">
+          <RichTextEditor
+            content={description}
+            onChange={setDescription}
+            placeholder="Add description… type @ to mention someone"
+            variant="bordered"
+            minHeight="100px"
+            mentionItems={mentionItems}
+            onImageUpload={async (file) => {
+              const fd = new FormData()
+              fd.append('file', file)
+              const res = await fetch('/api/upload', { method: 'POST', body: fd })
+              if (!res.ok) throw new Error('upload failed')
+              const j = await res.json()
+              return j.url
+            }}
+          />
+        </div>
+
+        {/* property chips */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <PropertySelect
+            value={projectId}
+            onChange={setProjectId}
+            options={[
+              { value: '', label: 'No project (standalone)' },
+              ...(projects.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
+            ]}
+            placeholder="Project"
+            searchPlaceholder="Set project…"
+            buttonClassName={CHIP_BUTTON}
+          />
+          <DatePicker variant="chip" label="Target" align="right" value={dueDate || null} onChange={(v) => setDueDate(v ?? '')} />
+        </div>
+
+        {/* footer */}
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={create.isPending}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {create.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
             Create milestone

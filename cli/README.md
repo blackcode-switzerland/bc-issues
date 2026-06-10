@@ -3,36 +3,57 @@
 Personal-access-token-based CLI for the blackcode-issues API. Designed for
 both humans at a terminal and LLM agents driving the platform end-to-end.
 
+This is the quick-reference. For the full command reference, conventions, and
+internals, see [`../docs/cli.md`](../docs/cli.md).
+
 ## Build
 
 ```sh
 cd cli
-go build -o bk ./cmd/bk
+go build -o bk ./cmd/bk        # or: make build
 ```
 
-The binary lands at `cli/bk`. Drop it on your `$PATH` if you like.
+The binary lands at `cli/bk`. Drop it on your `$PATH` if you like. `make install`
+installs it to `$GOBIN` (default `~/go/bin`); `make all` / `make dist`
+cross-compile into `dist/`.
 
-## First-time setup
+## First-time login
 
 ```sh
 ./bk login --server http://localhost:3000
 ```
 
-`bk login` opens your browser to `/cli/authorize`, captures the minted
-token via a loopback HTTP server, and saves credentials to
-`~/.config/bk/config.json` (mode 0600). Revoke any time from
+`bk login` opens your browser to `/cli/authorize`, captures the minted token via
+a loopback HTTP server, validates it against `/api/users/me`, and saves
+credentials to `~/.config/bk/config.json` (mode 0600). Revoke any time from
 **Settings → API Tokens**.
 
-For headless / CI / agent use, paste a token instead:
+For headless / CI / agent use, paste a token from stdin instead:
 
 ```sh
-echo "$MY_TOKEN" | ./bk login --server $SERVER_URL --token
+echo "$MY_TOKEN" | ./bk login --server "$SERVER_URL" --token
 ```
+
+There are no `BK_SERVER` / `BK_TOKEN` env vars — the server and token live in the
+config file, chosen at login time.
+
+## Active workspace
+
+Projects, issues, milestones, labels, members, and invitations are scoped to a
+workspace. Pick one once:
+
+```sh
+./bk workspace list            # active row marked with *
+./bk workspace use acme        # by slug or numeric id
+```
+
+Workspace-scoped groups (`label`, `member`, `invite`) require an active
+workspace; workspace paths accept the slug or the numeric id.
 
 ## Output formats
 
-Every read command supports a global output flag, so you can pipe into
-`jq`, `yq`, scripts, or feed structured output back into another LLM call.
+Every read command supports a global output flag, so you can pipe into `jq`,
+`yq`, scripts, or feed structured output back into another LLM call.
 
 ```
 -o, --output table|json|yaml|yml   (default: table)
@@ -62,48 +83,56 @@ Stable across releases so scripts/agents can branch on outcome:
 
 ## Confirmations and non-interactive use
 
-Destructive commands (`delete`, `remove-member`, `detach`, `undo`) prompt
-before acting. Skip the prompt with:
+Destructive commands that prompt (`project delete`, `project remove-member`,
+`issue delete`, `issue detach`, `undo`) ask before acting. Skip the prompt with:
 
 - `--yes` / `-y` on the command,
 - the env var `BK_NO_PROMPT=1` (set this for agents/CI), or
 - non-TTY stdin (the prompt is auto-skipped when not running in a terminal).
 
-## Reading text input from stdin or a file
+## Text input from stdin or a file
 
-Long bodies (descriptions, comments) accept three forms so agents can
-pipe markdown without quoting it:
+Long bodies (descriptions, comments) accept three forms so agents can pipe
+markdown without quoting it (the `*-file` form wins if both are given):
 
 - `--description "literal string"` / `--body "literal"`
 - `--description -` / `--body -` (read from stdin)
 - `--description-file FILE` / `--body-file FILE`
 
 ```sh
-echo "## Plan\n- item" | ./bk issue create --project 6 --title "..." --description -
+printf '## Plan\n- item\n' | ./bk issue create --project 6 --title "..." --description -
 ./bk issue comment 42 --body-file ./review.md
 ```
 
 ## Commands
 
-### Auth
+### Auth / session
 ```
-bk login [--server URL]            authorize via browser (or --token)
-bk logout                          remove credentials
-bk whoami                          print authenticated user
-bk version                         print CLI version
+bk login [--server URL] [--token]   authorize via browser (or paste token)
+bk logout                           remove credentials
+bk whoami                           print authenticated user
+bk version                          print CLI version / commit / build date
+```
+
+### Workspaces
+```
+bk workspace list
+bk workspace show [slug|id]            defaults to active
+bk workspace create --name N [--use]   --use sets active (default true)
+bk workspace use <slug|id>             set active workspace
 ```
 
 ### Projects
 ```
 bk project list [--limit N] [--cursor N]
 bk project view <id>
-bk project members <id>            list members
+bk project members <id>
 bk project issues <id> [--status S] [--assignee <id|email|name|me>]
                        [--limit N] [--cursor N]
 bk project milestones <id>
 
 bk project create --name N [--description D | --description-file F]
-bk project edit <id> [--name N] [--description D] [--status S]
+bk project edit <id> [--name N] [--description D | --description-file F] [--status S]
 bk project delete <id> [--yes]                       (owner only)
 
 bk project add-member <id> --email E [--role owner|admin|member|viewer]
@@ -119,9 +148,8 @@ bk issue view <id>
 
 bk issue create --project N --title "..."
                 [--description D | --description-file F]
-                [--priority 1-5] [--status STATUS]
-                [--assignee <id|email|name|me>]
-                [--milestone N]
+                [--priority 1-5] [--status S]
+                [--assignee <id|email|name|me>] [--milestone N]
                 [--start-date YYYY-MM-DD] [--due-date YYYY-MM-DD]
                 [--attach FILE]
 
@@ -132,51 +160,79 @@ bk issue edit <id> [--title T] [--description D | --description-file F]
                    [--start-date <YYYY-MM-DD|none>]
                    [--due-date <YYYY-MM-DD|none>]
 
-bk issue assign <id> <user>        shortcut for edit --assignee
-bk issue unassign <id>             shortcut for edit --assignee none
+bk issue assign <id> <user>        set assignee (id, email, name, or me)
+bk issue unassign <id>             clear assignee
 bk issue delete <id> [--yes]       (project owner/admin)
 
 bk issue comment <id> --body "..." | --body-file F | --body -
-bk issue comments <id>             list comments
+bk issue comments <id>
 bk issue activity <id>             comments + change history
 
 bk issue attach <id> --file F      upload + attach a file
-bk issue attachments <id>          list attachments
-bk issue detach <id> <attachment-id> [--yes]
+bk issue attachments <id>
+bk issue detach <issue-id> <attachment-id> [--yes]
 ```
 
-`--assignee` accepts a numeric user id, an email, a display name, or
-`me` (the current user). Pass `none` (or `null`/`unset`/`clear`) to
-clear it. `--milestone`, `--start-date`, `--due-date` accept the same
-`none` sentinel on `issue edit` and `milestone edit`.
-
-> Note: `POST /api/issues` currently ignores `start_date`/`due_date` —
-> create the issue first, then `bk issue edit --due-date YYYY-MM-DD`.
-
-### Users
-```
-bk user list                       list every user on the server
-bk user view <id|email>            show one user
-```
+Canonical issue statuses: `backlog`, `todo`, `in_progress`, `done`, `cancelled`.
+`--assignee` accepts a numeric id, an email, a display name, or `me`. Pass `none`
+(or `null`/`unset`/`clear`) on `issue edit` to clear `--assignee`, `--milestone`,
+`--start-date`, or `--due-date`; omit the flag to leave it unchanged.
 
 ### Milestones
 ```
 bk milestone list [--project N]
 bk milestone view <id> [--include-issues]
-
-bk milestone create --project N --name N
-                    [--description D | --description-file F]
-                    [--due-date YYYY-MM-DD]
-bk milestone edit <id> [--name N] [--description D]
+bk milestone create --project N --name M
+                    [--description D | --description-file F] [--due-date YYYY-MM-DD]
+bk milestone edit <id> [--name M] [--description D | --description-file F]
                        [--due-date <YYYY-MM-DD|none>]
 bk milestone delete <id> [--yes]
+```
+
+### Labels (workspace-scoped)
+```
+bk label list
+bk label create --name N [--color #rrggbb] [--description D]
+bk label delete <id>
+bk label attach <issue-id> <label-id>
+bk label detach <issue-id> <label-id>
+```
+
+### Members (workspace-scoped)
+```
+bk member list
+bk member remove <user-id>         (owner only)
+bk member leave                    (owner cannot leave)
+```
+
+### Invitations (workspace-scoped)
+```
+bk invite send <email>             prints a share link if the invitee has no account
+bk invite list [--all]             owner only; --all includes accepted/revoked/expired
+bk invite revoke <id>
+bk invite accept <token>
+bk invite decline <token>
+bk invite pending                  invitations pending for your email
+```
+
+### Inbox
+```
+bk inbox list [--unread]           prints an unread count to stderr
+bk inbox read [id ...] | --all     mark messages read
+bk inbox archive <id> [id ...]     archive messages
+```
+
+### Users
+```
+bk user list                       list every user on the server
+bk user view <id|email>            show one user (filtered client-side)
 ```
 
 ### Activity / Analytics / Undo
 ```
 bk activity [--limit N] [--offset N]   global change feed
-bk analytics                            admin-only stats
-bk undo [--count N] [--yes]             roll back your last N writes (max 10)
+bk analytics                            admin-only stats (JSON)
+bk undo [--count N] [--yes]             roll back your last N writes (1-10)
 ```
 
 ## Permissions cheat-sheet
@@ -187,21 +243,22 @@ The CLI inherits whatever the underlying token can do. Roughly:
 |--------|---------------|
 | Read projects/issues you belong to | any project member |
 | Create/edit issues, comment, attach | project member (non-viewer) |
-| Delete issue, delete attachment (if not uploader), edit project | project admin/owner |
-| Delete project, remove other owners | project owner |
-| Manage members | project admin/owner |
+| Delete issue, delete attachment, edit project | project admin/owner |
+| Delete project | project owner |
+| Manage project members | project admin/owner |
+| Remove workspace member, list invitations | workspace owner |
 | `bk analytics` | server admin |
 
-A 403 on any command means the API rejected it for permissions; check
-your role with `bk project members <id>` and `bk whoami`.
+A 403 on any command means the API rejected it for permissions; check your role
+with `bk project members <id>`, `bk member list`, and `bk whoami`.
 
 ## Pagination
 
-`bk issue list --limit N` and `bk project list --limit N` switch to
-envelope mode. In `--json` / `--yaml` output the envelope is
-`{ "data": [...], "next_cursor": <id|null> }`. In table output the next
-cursor is printed to stderr as `next page: --cursor=X`. Without
-`--limit`/`--cursor`, the legacy flat array shape is preserved.
+`bk issue list --limit N` and `bk project list --limit N` switch to envelope
+mode. In `--json` / `--yaml` output the envelope is
+`{ "data": [...], "next_cursor": <id|null> }`. In table output the next cursor is
+printed to stderr as `next page: --cursor=X`. Without `--limit`/`--cursor`, the
+flat array shape is preserved.
 
 ## Environment
 
@@ -211,7 +268,7 @@ cursor is printed to stderr as `next page: --cursor=X`. Without
 
 ## Attachments
 
-`bk issue create --attach FILE` and `bk issue attach <id> --file FILE`
-upload via `POST /api/upload` (Vercel Blob). The server must have
-`BLOB_READ_WRITE_TOKEN` configured. Allowed types: JPEG, PNG, GIF, WebP,
-PDF, plain text, JSON, Markdown.
+`bk issue create --attach FILE` and `bk issue attach <id> --file FILE` upload via
+`POST /api/upload` (Vercel Blob), then attach the result. The server must have
+`BLOB_READ_WRITE_TOKEN` configured. Allowed types: JPEG, PNG, GIF, WebP, PDF,
+plain text, JSON, Markdown.

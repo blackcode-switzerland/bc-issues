@@ -13,8 +13,8 @@ export interface Option {
 export const ISSUE_STATUSES: Option[] = [
   { value: 'backlog', label: 'Backlog', color: '#71717a' },
   { value: 'todo', label: 'Todo', color: '#a1a1aa' },
-  { value: 'in_progress', label: 'In progress', color: '#3b82f6' },
-  { value: 'done', label: 'Done', color: '#22c55e' },
+  { value: 'in_progress', label: 'In progress', color: '#f2c94c' },
+  { value: 'done', label: 'Done', color: '#5e6ad2' },
   { value: 'cancelled', label: 'Cancelled', color: '#71717a' },
 ]
 
@@ -39,7 +39,7 @@ export const ISSUE_PRIORITIES: PriorityOption[] = [
   { value: 5, label: 'No priority', color: '#71717a' },
   { value: 1, label: 'Urgent', color: '#ef4444' },
   { value: 2, label: 'High', color: '#f97316' },
-  { value: 3, label: 'Medium', color: '#3b82f6' },
+  { value: 3, label: 'Medium', color: '#8a8f98' },
   { value: 4, label: 'Low', color: '#a1a1aa' },
 ]
 export function issuePriorityLabel(value: number): string {
@@ -54,8 +54,8 @@ export function issuePriorityColor(value: number): string {
 export const PROJECT_STATUSES: Option[] = [
   { value: 'backlog', label: 'Backlog', color: '#71717a' },
   { value: 'planned', label: 'Planned', color: '#a1a1aa' },
-  { value: 'in_progress', label: 'In progress', color: '#3b82f6' },
-  { value: 'completed', label: 'Completed', color: '#22c55e' },
+  { value: 'in_progress', label: 'In progress', color: '#f2c94c' },
+  { value: 'completed', label: 'Completed', color: '#5e6ad2' },
   { value: 'cancelled', label: 'Cancelled', color: '#71717a' },
 ]
 export const PROJECT_STATUS_VALUES = PROJECT_STATUSES.map((s) => s.value)
@@ -76,4 +76,20 @@ export const PROJECT_PRIORITIES: { value: string; label: string }[] = [
 ]
 export function projectPriorityLabel(value: string | null | undefined): string {
   return PROJECT_PRIORITIES.find((p) => p.value === value)?.label ?? 'No priority'
+}
+
+// ---------- project updates (health) ----------
+// A project's posted status update — its "health". On track / At risk / Off track.
+
+export const PROJECT_UPDATE_STATUSES: Option[] = [
+  { value: 'on_track', label: 'On track', color: '#4cb782' },
+  { value: 'at_risk', label: 'At risk', color: '#f2c94c' },
+  { value: 'off_track', label: 'Off track', color: '#eb5757' },
+]
+export const PROJECT_UPDATE_STATUS_VALUES = PROJECT_UPDATE_STATUSES.map((s) => s.value)
+export function projectUpdateStatusLabel(value: string | null | undefined): string {
+  return PROJECT_UPDATE_STATUSES.find((s) => s.value === value)?.label ?? 'No updates'
+}
+export function projectUpdateStatusColor(value: string | null | undefined): string {
+  return PROJECT_UPDATE_STATUSES.find((s) => s.value === value)?.color ?? '#8a8f98'
 }

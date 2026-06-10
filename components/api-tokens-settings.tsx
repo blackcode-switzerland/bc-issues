@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Copy, Key, Loader2, Plus, Trash2 } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface TokenSummary {
   id: number
@@ -44,6 +45,7 @@ export function ApiTokensSettings() {
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState('')
   const [minted, setMinted] = useState<MintedToken | null>(null)
+  const { confirm } = useConfirm()
 
   async function load() {
     setLoading(true)
@@ -89,7 +91,7 @@ export function ApiTokensSettings() {
   }
 
   async function handleRevoke(id: number) {
-    if (!confirm('Revoke this token? Any client using it will stop working immediately.')) return
+    if (!(await confirm({ title: 'Revoke this token?', description: 'Any client using it will stop working immediately.', destructive: true, confirmLabel: 'Revoke' }))) return
     try {
       const r = await fetch(`/api/tokens/${id}`, { method: 'DELETE' })
       if (!r.ok) throw new Error(await r.text())

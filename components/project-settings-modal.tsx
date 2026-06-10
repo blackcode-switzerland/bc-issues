@@ -17,6 +17,7 @@ import {
   Calendar,
   User,
 } from 'lucide-react'
+import { DatePicker } from '@/components/ui/date-picker'
 
 interface Project {
   id: number
@@ -70,7 +71,7 @@ export function ProjectSettingsModal({
   const [description, setDescription] = useState(project.description || '')
   const [priority, setPriority] = useState(project.priority || 'P2')
   const [visibility, setVisibility] = useState(project.visibility || 'team')
-  const [color, setColor] = useState(project.color || '#3B82F6')
+  const [color, setColor] = useState(project.color || '#5E6AD2')
   const [ownerId, setOwnerId] = useState<number | null>(project.owner_id || null)
   const [startDate, setStartDate] = useState(project.start_date || '')
   const [endDate, setEndDate] = useState(project.end_date || '')
@@ -433,11 +434,12 @@ export function ProjectSettingsModal({
                     <Calendar size={14} className="inline mr-1" />
                     Start Date
                   </label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
+                  <DatePicker
+                    variant="inline"
+                    value={startDate || null}
+                    onChange={(v) => setStartDate(v ?? '')}
+                    placeholder="Set start date"
+                    buttonClassName="flex w-full items-center gap-2 rounded-lg border border-input bg-background px-4 py-2 text-left text-sm hover:bg-secondary/40"
                   />
                 </div>
 
@@ -446,11 +448,12 @@ export function ProjectSettingsModal({
                     <Calendar size={14} className="inline mr-1" />
                     End Date
                   </label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
+                  <DatePicker
+                    variant="inline"
+                    value={endDate || null}
+                    onChange={(v) => setEndDate(v ?? '')}
+                    placeholder="Set end date"
+                    buttonClassName="flex w-full items-center gap-2 rounded-lg border border-input bg-background px-4 py-2 text-left text-sm hover:bg-secondary/40"
                   />
                 </div>
               </div>

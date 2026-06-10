@@ -5,12 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { format, subDays } from 'date-fns'
 import { Download, Calendar } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import {
-  BurndownChart,
-  HorizontalBars,
-  SummaryCard,
-  VelocityChart,
-} from './analytics/charts'
+import { BurndownChart, HorizontalBars, VelocityChart } from './analytics/charts'
 
 interface AnalyticsPayload {
   scope: { type: string; id: number | null; label: string }
@@ -48,10 +43,10 @@ const VIEWS: Array<{ value: View; label: string }> = [
 const STATUS_COLORS: Record<string, string> = {
   backlog: '#71717a',
   todo: '#a1a1aa',
-  in_progress: '#3b82f6',
+  in_progress: '#f2c94c',
   blocked: '#ef4444',
   in_review: '#a855f7',
-  done: '#22c55e',
+  done: '#5e6ad2',
   cancelled: '#71717a',
 }
 
@@ -161,32 +156,9 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
 
   const data = analytics.data
 
-  return (
-    <div className={print ? 'p-8 print:p-0' : 'p-6'}>
-      {!print ? (
-        <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Analytics</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {data?.scope.label ?? ws?.name ?? '…'}
-              {data?.period.from ? (
-                <>
-                  {' · '}
-                  {format(new Date(data.period.from), 'MMM d')} – {format(new Date(data.period.to ?? data.period.from), 'MMM d, yyyy')}
-                </>
-              ) : null}
-            </p>
-          </div>
-          <button
-            onClick={openPrintView}
-            disabled={!data}
-            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Download size={12} />
-            Download PDF
-          </button>
-        </header>
-      ) : (
+  if (print) {
+    return (
+      <div className="p-8 print:p-0">
         <header className="mb-6">
           <h1 className="text-2xl font-semibold">{data?.scope.label ?? ''} — Analytics</h1>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -196,101 +168,148 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
               : 'all-time'}
           </p>
         </header>
-      )}
+        {analytics.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !data ? (
+          <p className="text-sm text-muted-foreground">No analytics available.</p>
+        ) : (
+          <AnalyticsBody data={data} />
+        )}
+      </div>
+    )
+  }
 
-      {!print ? (
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border border-border bg-card/30 p-0.5">
-            {VIEWS.map((v) => (
-              <button
-                key={v.value}
-                onClick={() => {
-                  setView(v.value)
-                  setTargetId(null)
-                }}
-                className={`rounded px-2.5 py-1 text-xs ${
-                  view === v.value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-          {view !== 'workspace' ? (
-            <select
-              value={targetId ?? ''}
-              onChange={(e) => setTargetId(e.target.value ? parseInt(e.target.value) : null)}
-              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs"
-            >
-              <option value="">Pick {view}…</option>
-              {targetOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+  return (
+    <div>
+      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <h1 className="text-[13px] font-medium">Analytics</h1>
+        <span className="text-xs text-muted-foreground">
+          {data?.scope.label ?? ws?.name ?? '…'}
+          {data?.period.from ? (
+            <>
+              {' · '}
+              {format(new Date(data.period.from), 'MMM d')} –{' '}
+              {format(new Date(data.period.to ?? data.period.from), 'MMM d, yyyy')}
+            </>
           ) : null}
-          <div className="ml-auto inline-flex items-center gap-1 rounded-md border border-border bg-card/30 p-0.5">
-            <Calendar size={11} className="ml-1 text-muted-foreground" />
-            {PRESETS.map((p) => (
-              <button
-                key={p.label}
-                onClick={() => setPreset(p.days)}
-                className={`rounded px-2.5 py-1 text-xs ${
-                  preset === p.days
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
+        </span>
+        <button
+          onClick={openPrintView}
+          disabled={!data}
+          className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          <Download size={12} />
+          Download PDF
+        </button>
+      </header>
 
-      {analytics.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : !data ? (
-        <p className="text-sm text-muted-foreground">
-          {view !== 'workspace'
-            ? `Select a ${view} above to see analytics.`
-            : 'No analytics available.'}
-        </p>
-      ) : (
-        <AnalyticsBody data={data} />
-      )}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+        <div className="inline-flex items-center gap-0.5">
+          {VIEWS.map((v) => (
+            <button
+              key={v.value}
+              onClick={() => {
+                setView(v.value)
+                setTargetId(null)
+              }}
+              className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                view === v.value
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {view !== 'workspace' ? (
+          <select
+            value={targetId ?? ''}
+            onChange={(e) => setTargetId(e.target.value ? parseInt(e.target.value) : null)}
+            className="rounded-md border border-border bg-transparent px-2.5 py-1 text-xs"
+          >
+            <option value="">Pick {view}…</option>
+            {targetOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <div className="ml-auto inline-flex items-center gap-0.5">
+          <Calendar size={11} className="mr-1 text-muted-foreground" />
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => setPreset(p.days)}
+              className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                preset === p.days
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-6">
+        {analytics.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !data ? (
+          <p className="text-sm text-muted-foreground">
+            {view !== 'workspace'
+              ? `Select a ${view} above to see analytics.`
+              : 'No analytics available.'}
+          </p>
+        ) : (
+          <AnalyticsBody data={data} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
+  return (
+    <div className="bg-background p-4">
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+      {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
   )
 }
 
 function AnalyticsBody({ data }: { data: AnalyticsPayload }) {
   return (
-    <div className="space-y-6">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="Total issues" value={data.summary.total_issues} />
-        <SummaryCard label="Open" value={data.summary.open + data.summary.in_progress} hint={`${data.summary.in_progress} in progress`} />
-        <SummaryCard
+    <div className="space-y-8">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-border lg:grid-cols-4">
+        <Stat label="Total issues" value={data.summary.total_issues} />
+        <Stat
+          label="Open"
+          value={data.summary.open + data.summary.in_progress}
+          hint={`${data.summary.in_progress} in progress`}
+        />
+        <Stat
           label="Created (period)"
           value={data.summary.created_in_period}
           hint={`${data.summary.completed_in_period} completed`}
         />
-        <SummaryCard
+        <Stat
           label="Avg cycle time"
           value={data.summary.avg_cycle_time_hours != null ? `${data.summary.avg_cycle_time_hours}h` : '—'}
           hint={`${data.summary.active_members_in_period} active members`}
         />
       </section>
 
-      <section className="rounded-lg border border-border bg-card/30 p-4">
+      <section>
         <h2 className="mb-3 text-sm font-medium">Velocity</h2>
         <VelocityChart data={data.velocity_series} />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card/30 p-4">
+      <section className="grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-2">
+        <div>
           <h2 className="mb-3 text-sm font-medium">By status</h2>
           <HorizontalBars
             items={data.by_status.map((s) => ({
@@ -300,7 +319,7 @@ function AnalyticsBody({ data }: { data: AnalyticsPayload }) {
             }))}
           />
         </div>
-        <div className="rounded-lg border border-border bg-card/30 p-4">
+        <div>
           <h2 className="mb-3 text-sm font-medium">By priority</h2>
           <HorizontalBars
             items={data.by_priority.map((p) => ({
@@ -309,7 +328,7 @@ function AnalyticsBody({ data }: { data: AnalyticsPayload }) {
             }))}
           />
         </div>
-        <div className="rounded-lg border border-border bg-card/30 p-4">
+        <div>
           <h2 className="mb-3 text-sm font-medium">By assignee</h2>
           {data.by_assignee.length === 0 ? (
             <p className="text-xs text-muted-foreground">No assignees yet.</p>
@@ -322,7 +341,7 @@ function AnalyticsBody({ data }: { data: AnalyticsPayload }) {
             />
           )}
         </div>
-        <div className="rounded-lg border border-border bg-card/30 p-4">
+        <div>
           <h2 className="mb-3 text-sm font-medium">By label</h2>
           {data.by_label.length === 0 ? (
             <p className="text-xs text-muted-foreground">No labels in use.</p>
@@ -339,14 +358,14 @@ function AnalyticsBody({ data }: { data: AnalyticsPayload }) {
       </section>
 
       {data.burndown_series && data.burndown_series.length > 0 ? (
-        <section className="rounded-lg border border-border bg-card/30 p-4">
+        <section>
           <h2 className="mb-3 text-sm font-medium">Milestone burndown</h2>
           <BurndownChart data={data.burndown_series} />
         </section>
       ) : null}
 
       {data.top_active_members.length > 0 ? (
-        <section className="rounded-lg border border-border bg-card/30 p-4">
+        <section>
           <h2 className="mb-3 text-sm font-medium">Top active members</h2>
           <HorizontalBars
             items={data.top_active_members.map((m) => ({

@@ -1,12 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow, isPast, isToday } from 'date-fns'
 import { toast } from 'sonner'
-import { ArrowLeft, Edit3, Send, Trash2 } from 'lucide-react'
+import { ChevronRight, Trash2 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
+import { DatePicker } from '@/components/ui/date-picker'
+import { StatusIcon, ProgressRing } from '@/components/ui/work-item-icons'
+import { MemberAvatar } from '@/components/ui/member-avatar'
+import { PropertySelect } from '@/components/ui/property-select'
 
 interface MilestoneDetail {
   id: number
@@ -16,6 +22,8 @@ interface MilestoneDetail {
   description: string | null
   due_date: string | null
   status: string | null
+  created_at: string | null
+  updated_at: string | null
   project_name: string | null
   issue_count: number
   completed_issues: number
@@ -26,7 +34,10 @@ interface IssueRow {
   seq: number | null
   title: string
   status: string
+  due_date: string | null
   assignee_name: string | null
+  assignee_email: string | null
+  assignee_avatar: string | null
 }
 
 interface Comment {
@@ -44,20 +55,21 @@ interface Project {
   name: string
 }
 
-const STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
+interface Member {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url?: string | null
+}
 
 export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
-  const [editingName, setEditingName] = useState(false)
-  const [nameDraft, setNameDraft] = useState('')
-  const [editingDesc, setEditingDesc] = useState(false)
-  const [descDraft, setDescDraft] = useState('')
-  const [newComment, setNewComment] = useState('')
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [composerKey, setComposerKey] = useState(0)
+  const descRef = useRef<string>('')
 
   const milestone = useQuery({
     queryKey: ['milestone', milestoneId, ws?.slug],
@@ -104,6 +116,17 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     },
   })
 
+  const members = useQuery({
+    queryKey: ['ws-members', ws?.slug],
+    enabled: !!ws,
+    queryFn: async (): Promise<Member[]> => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
+      if (!res.ok) return []
+      const j = await res.json()
+      return j.data
+    },
+  })
+
   const patch = useMutation({
     mutationFn: async (input: Record<string, unknown>) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}`, {
@@ -114,6 +137,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
+      toast.success('Milestone updated')
       queryClient.invalidateQueries({ queryKey: ['milestone', milestoneId] })
       queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
     },
@@ -130,9 +154,12 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      setNewComment('')
+      setCommentDraft('')
+      setComposerKey((k) => k + 1)
+      toast.success('Comment added')
       queryClient.invalidateQueries({ queryKey: ['milestone-comments', milestoneId] })
     },
+    onError: () => toast.error('Failed to add comment'),
   })
 
   const remove = useMutation({
@@ -146,18 +173,17 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       toast.success('Milestone deleted')
       window.location.href = '/dashboard/milestones'
     },
+    onError: () => toast.error('Could not delete milestone'),
   })
 
-  useEffect(() => {
-    if (milestone.data && !editingName) setNameDraft(milestone.data.name)
-  }, [milestone.data, editingName])
-
-  useEffect(() => {
-    if (milestone.data && !editingDesc) setDescDraft(milestone.data.description ?? '')
-  }, [milestone.data, editingDesc])
-
   if (milestone.isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-10">
+        <div className="h-8 w-2/3 animate-pulse rounded bg-secondary/50" />
+        <div className="h-4 w-full animate-pulse rounded bg-secondary/40" />
+        <div className="h-4 w-5/6 animate-pulse rounded bg-secondary/40" />
+      </div>
+    )
   }
   if (!milestone.data) {
     return (
@@ -177,248 +203,279 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   const done = data.completed_issues
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
+  const mentionItems: MentionItem[] = (members.data ?? []).map((m) => ({
+    id: m.user_id,
+    label: m.name ?? m.email,
+    avatarUrl: m.avatar_url,
+  }))
+
+  function commitName() {
+    const next = nameDraft?.trim()
+    if (next && next !== data.name) patch.mutate({ name: next })
+    setNameDraft(null)
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_280px]">
-      <main>
+    <div className="flex min-h-screen flex-col">
+      {/* Breadcrumb header */}
+      <header className="sticky top-0 z-20 flex h-11 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[13px] backdrop-blur">
         <Link
           href="/dashboard/milestones"
-          className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           prefetch={false}
+          className="text-muted-foreground transition-colors hover:text-foreground"
         >
-          <ArrowLeft size={12} />
-          Back to milestones
+          Milestones
         </Link>
-
-        {editingName ? (
-          <div className="mb-4 flex gap-2">
-            <input
-              autoFocus
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              maxLength={120}
-              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-lg font-semibold outline-none focus:ring-1 focus:ring-primary"
-            />
-            <button
-              onClick={() => patch.mutate({ name: nameDraft }, { onSuccess: () => setEditingName(false) })}
-              className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditingName(false)}
-              className="rounded-md border border-border px-3 py-2 text-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <h1
-            onDoubleClick={() => setEditingName(true)}
-            className="mb-2 cursor-text text-2xl font-semibold"
-          >
-            {data.name}
-          </h1>
-        )}
-        <p className="mb-4 text-xs text-muted-foreground">
-          {data.project_name ?? 'Standalone'} · {total > 0 ? `${done}/${total} done (${pct}%)` : '0 issues'}
-        </p>
-        <div className="mb-6 h-1 overflow-hidden rounded-full bg-secondary">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-        </div>
-
-        <section className="mb-6 rounded-lg border border-border bg-card/30 p-4">
-          <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-            <span>Description</span>
-            {!editingDesc ? (
-              <button
-                onClick={() => setEditingDesc(true)}
-                className="inline-flex items-center gap-1 hover:text-foreground"
-              >
-                <Edit3 size={11} />
-                Edit
-              </button>
-            ) : null}
-          </div>
-          {editingDesc ? (
-            <>
-              <textarea
-                value={descDraft}
-                onChange={(e) => setDescDraft(e.target.value)}
-                rows={4}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-              />
-              <div className="mt-2 flex gap-2">
-                <button
-                  onClick={() =>
-                    patch.mutate(
-                      { description: descDraft },
-                      { onSuccess: () => setEditingDesc(false) }
-                    )
-                  }
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingDesc(false)}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground"
-                >
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : data.description ? (
-            <pre className="whitespace-pre-wrap break-words font-sans text-sm">{data.description}</pre>
-          ) : (
-            <p className="text-sm italic text-muted-foreground">No description.</p>
-          )}
-        </section>
-
-        <section className="mb-6">
-          <h2 className="mb-3 text-sm font-medium">
-            Issues <span className="text-muted-foreground">({issues.data?.length ?? 0})</span>
-          </h2>
-          {issues.data?.length ? (
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/30">
-              {issues.data.map((i) => (
-                <li key={i.id}>
-                  <Link
-                    href={`/dashboard/issues/${i.id}`}
-                    prefetch={false}
-                    className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-secondary/50"
-                  >
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
-                    </span>
-                    <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-                      {i.status.replace('_', ' ')}
-                    </span>
-                    <span className="flex-1 truncate">{i.title}</span>
-                    {i.assignee_name ? (
-                      <span className="text-[10px] text-muted-foreground">{i.assignee_name}</span>
-                    ) : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm italic text-muted-foreground">No issues in this milestone yet.</p>
-          )}
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-sm font-medium">
-            Discussion <span className="text-muted-foreground">({comments.data?.length ?? 0})</span>
-          </h2>
-          {comments.data?.length ? (
-            <ul className="mb-4 space-y-3">
-              {comments.data.map((c) => (
-                <li key={c.id} className="rounded-lg border border-border bg-card/30 p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <div className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-                      {(c.author_name ?? c.author_email ?? '?')[0].toUpperCase()}
-                    </div>
-                    <span className="text-xs font-medium">{c.author_name ?? c.author_email}</span>
-                    <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-                      {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                    </span>
-                  </div>
-                  <pre className="whitespace-pre-wrap break-words font-sans text-sm">{c.content}</pre>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (newComment.trim()) createComment.mutate(newComment.trim())
+        <ChevronRight size={13} className="text-muted-foreground/50" />
+        <span className="max-w-[36ch] truncate font-medium">{data.name}</span>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Delete milestone "${data.name}"?`,
+                  description: 'This cannot be undone.',
+                  destructive: true,
+                  confirmLabel: 'Delete',
+                }))
+              )
+                return
+              remove.mutate()
             }}
-            className="rounded-lg border border-border bg-card/30 p-3"
+            title="Delete milestone"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
           >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 flex-col xl:flex-row">
+        {/* Document */}
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
+            {/* Title — seamless editable, saves on blur/Enter */}
             <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Write a comment…"
-              rows={2}
-              className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+              rows={1}
+              value={nameDraft ?? data.name}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  ;(e.target as HTMLTextAreaElement).blur()
+                }
+              }}
+              maxLength={120}
+              placeholder="Milestone name"
+              className="mb-2 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
+              ref={(el) => {
+                if (el) {
+                  el.style.height = 'auto'
+                  el.style.height = `${el.scrollHeight}px`
+                }
+              }}
             />
-            <div className="mt-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={!newComment.trim()}
-                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
-              >
-                <Send size={12} />
-                Comment
-              </button>
+
+            {/* Description — seamless TipTap, editable by default, autosaves on blur */}
+            <div className="mb-6">
+              <RichTextEditor
+                key={`mdesc-${data.id}`}
+                content={data.description ?? ''}
+                onChange={(html) => {
+                  descRef.current = html
+                }}
+                onBlur={() => {
+                  const next = descRef.current
+                  if (next !== (data.description ?? '')) patch.mutate({ description: next })
+                }}
+                placeholder="Add description… type @ to mention someone"
+                variant="seamless"
+                minHeight="100px"
+                mentionItems={mentionItems}
+                onImageUpload={async (file) => {
+                  const fd = new FormData()
+                  fd.append('file', file)
+                  const res = await fetch('/api/upload', { method: 'POST', body: fd })
+                  if (!res.ok) throw new Error('upload failed')
+                  const j = await res.json()
+                  return j.url
+                }}
+              />
             </div>
-          </form>
-        </section>
-      </main>
 
-      <aside className="space-y-3">
-        <SidebarField label="Status">
-          <select
-            value={data.status ?? 'active'}
-            onChange={(e) => patch.mutate({ status: e.target.value })}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-          >
-            {STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </SidebarField>
-        <SidebarField label="Due date">
-          <input
-            type="date"
-            value={data.due_date ?? ''}
-            onChange={(e) => patch.mutate({ due_date: e.target.value || null })}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-          />
-          {overdue ? <p className="mt-1 text-[10px] text-red-400">Overdue</p> : null}
-        </SidebarField>
-        <SidebarField label="Project">
-          <select
-            value={data.project_id ?? ''}
-            onChange={(e) =>
-              patch.mutate({ project_id: e.target.value ? parseInt(e.target.value) : null })
-            }
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-          >
-            <option value="">No project</option>
-            {projects.data?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </SidebarField>
+            {/* Progress summary */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <ProgressRing pct={pct} size={16} />
+              <span>
+                {done} of {total} issues completed
+              </span>
+            </div>
 
-        <button
-          onClick={() => {
-            if (confirm(`Delete milestone "${data.name}"?`)) remove.mutate()
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 size={12} />
-          Delete milestone
-        </button>
+            {/* Issues */}
+            <section className="mt-10">
+              <div className="mb-2 flex items-center gap-3">
+                <h2 className="text-sm font-medium">
+                  Issues{' '}
+                  <span className="text-muted-foreground">({issues.data?.length ?? 0})</span>
+                </h2>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              {issues.data?.length ? (
+                <ul>
+                  {issues.data.map((i) => (
+                    <li key={i.id}>
+                      <Link
+                        href={`/dashboard/issues/${i.id}`}
+                        prefetch={false}
+                        className="flex h-10 items-center gap-3 rounded-md px-0 transition-colors hover:bg-secondary/40"
+                      >
+                        <StatusIcon status={i.status} size={14} />
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
+                        </span>
+                        <span className="flex-1 truncate text-[13px]">{i.title}</span>
+                        {i.due_date ? (
+                          <span className="shrink-0 text-[11px] text-muted-foreground" suppressHydrationWarning>
+                            {format(new Date(i.due_date), 'MMM d')}
+                          </span>
+                        ) : null}
+                        {i.assignee_name || i.assignee_email ? (
+                          <MemberAvatar
+                            name={i.assignee_name}
+                            email={i.assignee_email}
+                            avatarUrl={i.assignee_avatar}
+                            size={18}
+                          />
+                        ) : null}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-2 text-[13px] text-muted-foreground">
+                  No issues in this milestone yet.
+                </p>
+              )}
+            </section>
 
-        <p className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-          {due ? `Due ${format(due, 'MMM d, yyyy')}` : 'No due date'}
-        </p>
-      </aside>
-    </div>
-  )
-}
+            {/* Discussion */}
+            <section className="mt-12">
+              <div className="mb-4 flex items-center gap-3">
+                <h2 className="text-sm font-medium">
+                  Discussion{' '}
+                  <span className="text-muted-foreground">({comments.data?.length ?? 0})</span>
+                </h2>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              {comments.data?.length ? (
+                <ul className="mb-6 space-y-4">
+                  {comments.data.map((c) => (
+                    <li key={c.id} className="rounded-lg border border-border bg-card/40 p-3.5">
+                      <div className="mb-2 flex items-center gap-2">
+                        <MemberAvatar name={c.author_name} email={c.author_email} size={20} />
+                        <span className="text-[13px] font-medium">
+                          {c.author_name ?? c.author_email}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
+                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                          {c.edited_at ? ' · edited' : ''}
+                        </span>
+                      </div>
+                      {c.content.includes('<') ? (
+                        <RichTextDisplay content={c.content} />
+                      ) : (
+                        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
+                          {c.content}
+                        </pre>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
-function SidebarField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-card/30 p-3">
-      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      {children}
+              {/* Composer */}
+              <div className="rounded-lg border border-border bg-card/40 transition-colors focus-within:border-ring/60">
+                <RichTextEditor
+                  key={`mcomposer-${composerKey}`}
+                  content=""
+                  onChange={setCommentDraft}
+                  placeholder="Leave a comment… type @ to mention"
+                  variant="bordered"
+                  hideToolbar
+                  mentionItems={mentionItems}
+                  minHeight="64px"
+                />
+                <div className="flex justify-end border-t border-border px-2.5 py-2">
+                  <button
+                    onClick={() => {
+                      const text = commentDraft.replace(/<[^>]*>/g, '').trim()
+                      if (text) createComment.mutate(commentDraft)
+                    }}
+                    disabled={
+                      createComment.isPending ||
+                      !commentDraft.replace(/<[^>]*>/g, '').trim()
+                    }
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    Comment
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        {/* Properties sidebar */}
+        <aside className="w-full shrink-0 border-t border-border xl:w-72 xl:border-l xl:border-t-0">
+          <div className="sticky top-11 px-4 py-5">
+            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Properties</p>
+
+            <PropertySelect
+              value={data.project_id ? String(data.project_id) : ''}
+              placeholder="Add to project"
+              searchPlaceholder="Move to project…"
+              options={[
+                { value: '', label: 'No project' },
+                ...(projects.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
+              ]}
+              onChange={(v) => patch.mutate({ project_id: v ? parseInt(v) : null })}
+            />
+
+            <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Target date</p>
+            <DatePicker
+              variant="inline"
+              value={data.due_date ?? null}
+              onChange={(v) => patch.mutate({ due_date: v })}
+              placeholder="Set target date"
+            />
+            {overdue ? (
+              <p className="mt-1 px-2 text-[11px] text-destructive">Overdue</p>
+            ) : null}
+
+            <div className="my-4 h-px bg-border" />
+            <ul className="space-y-1.5 px-2 text-[11px] text-muted-foreground">
+              {data.created_at ? (
+                <li className="flex justify-between">
+                  <span>Created</span>
+                  <span suppressHydrationWarning>
+                    {format(new Date(data.created_at), 'MMM d, yyyy')}
+                  </span>
+                </li>
+              ) : null}
+              {data.updated_at ? (
+                <li className="flex justify-between">
+                  <span>Updated</span>
+                  <span suppressHydrationWarning>
+                    {formatDistanceToNow(new Date(data.updated_at), { addSuffix: true })}
+                  </span>
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }

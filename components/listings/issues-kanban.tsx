@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ISSUE_STATUSES, issuePriorityColor, issuePriorityLabel } from '@/lib/work-items'
+import { ISSUE_STATUSES } from '@/lib/work-items'
+import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
+import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface IssueRow {
   id: number
@@ -17,7 +19,7 @@ interface IssueRow {
   assignee_name: string | null
 }
 
-const COLUMNS = ISSUE_STATUSES.map((s) => ({ status: s.value, label: s.label, color: s.color }))
+const COLUMNS = ISSUE_STATUSES.map((s) => ({ status: s.value, label: s.label }))
 
 export function IssuesKanban({
   issues,
@@ -86,7 +88,7 @@ export function IssuesKanban({
           return (
             <div key={col.status} className="flex w-64 shrink-0 flex-col">
               <header className="mb-2 flex items-center gap-2 px-1">
-                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: col.color }} />
+                <StatusIcon status={col.status} size={14} className="shrink-0" />
                 <span className="flex-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   {col.label}
                 </span>
@@ -116,28 +118,18 @@ export function IssuesKanban({
                               s.isDragging ? 'shadow-lg ring-1 ring-primary' : 'hover:bg-card/80'
                             }`}
                           >
-                            <div className="mb-1 flex items-center gap-2">
-                              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                                 {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
                               </span>
-                              <span
-                                className="text-[10px] font-medium"
-                                style={{ color: issuePriorityColor(issue.priority) }}
-                              >
-                                {issuePriorityLabel(issue.priority)}
-                              </span>
+                              {issue.assignee_name ? (
+                                <MemberAvatar name={issue.assignee_name} size={16} />
+                              ) : null}
                             </div>
-                            <p className="line-clamp-2 text-sm">{issue.title}</p>
-                            {issue.assignee_name ? (
-                              <div className="mt-2 flex items-center gap-1.5">
-                                <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-[9px] text-primary">
-                                  {issue.assignee_name[0].toUpperCase()}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {issue.assignee_name}
-                                </span>
-                              </div>
-                            ) : null}
+                            <p className="line-clamp-2 text-[13px] font-medium">{issue.title}</p>
+                            <div className="mt-2 flex items-center gap-1.5">
+                              <PriorityIcon priority={issuePriorityKey(issue.priority)} size={14} />
+                            </div>
                           </Link>
                         )}
                       </Draggable>
