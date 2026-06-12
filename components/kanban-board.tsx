@@ -177,14 +177,14 @@ export function KanbanBoard({
       return res.json()
     },
     onSuccess: () => {
-      // Invalidate caches to ensure persistence
-      queryClient.invalidateQueries({ queryKey: ['all-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
     },
     onError: (error) => {
       console.error('Mutation error:', error)
       toast.error('Failed to update issue')
-      // Revert optimistic update by refetching
       queryClient.invalidateQueries({ queryKey: ['project-issues', project.id] })
     },
   })
@@ -425,7 +425,7 @@ export function KanbanBoard({
                   placeholder="Search issues..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
+                  className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring sm:w-64"
                 />
               </div>
 

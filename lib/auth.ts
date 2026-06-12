@@ -5,6 +5,7 @@ import { getUserByEmail, touchLastLogin, upsertUserFromOAuth } from './db/querie
 import { verifyPassword } from './auth/password'
 import { materializePendingInvitationsForUser } from './db/queries/invitations'
 import { ensureDefaultWorkspace } from './db/queries/workspaces'
+import { isSuperAdmin, isEmailAllowed } from './auth/whitelist'
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -51,6 +52,9 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
         if (!user.email) return false
+        // Whitelist gate: block non-allowed emails from Google OAuth
+        const allowed = await isEmailAllowed(user.email)
+        if (!allowed) return '/blocked'
         try {
           const result = await upsertUserFromOAuth({
             google_id: account.providerAccountId,
@@ -85,6 +89,7 @@ export const authOptions: NextAuthOptions = {
             ? dbUser.password_changed_at.getTime()
             : 0
         }
+        token.isSuperAdmin = isSuperAdmin(user.email)
         if (account.provider === 'google' && account.access_token) {
           token.accessToken = account.access_token
         }
@@ -95,6 +100,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         if (typeof token.id === 'number') session.user.id = token.id
         if (typeof token.pwStamp === 'number') session.user.pwStamp = token.pwStamp
+        if (typeof token.isSuperAdmin === 'boolean') session.user.isSuperAdmin = token.isSuperAdmin
       }
       return session
     },

@@ -108,7 +108,15 @@ export function MembersView() {
       setInviteEmail('')
       queryClient.invalidateQueries({ queryKey: ['workspace-invitations'] })
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      if (e.message.includes('approved list')) {
+        toast.error('Email not in the approved list — contact a super admin to add it first.', {
+          duration: 6000,
+        })
+      } else {
+        toast.error(e.message)
+      }
+    },
   })
 
   const revoke = useMutation({
@@ -172,14 +180,14 @@ export function MembersView() {
             }}
             className="ml-auto flex items-center gap-2"
           >
-            <div className="relative hidden sm:block">
+            <div className="relative">
               <Mail size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="Invite by email…"
-                className="h-9 w-56 rounded-md border border-border bg-transparent pl-8 pr-2.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                className="h-9 w-40 rounded-md border border-border bg-transparent pl-8 pr-2.5 text-sm outline-none focus:ring-1 focus:ring-primary sm:w-56"
               />
             </div>
             <button

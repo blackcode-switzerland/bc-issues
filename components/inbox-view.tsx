@@ -19,6 +19,13 @@ import {
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { issueStatusLabel, projectStatusLabel } from '@/lib/work-items'
+import {
+  motion,
+  AnimatePresence,
+  Skeleton,
+  listContainerVariants,
+  listItemVariants,
+} from '@/components/ui/motion'
 
 // Notifications can be about issues or projects — resolve whichever vocabulary matches.
 function statusName(value: unknown): string {
@@ -197,10 +204,18 @@ export function InboxView() {
               <button
                 key={t}
                 onClick={() => { setTab(t); setSelectedId(null) }}
-                className={`rounded-md px-2.5 py-1 text-[13px] capitalize transition-colors ${
-                  tab === t ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
+                className={`relative rounded-md px-2.5 py-1 text-[13px] capitalize transition-colors ${
+                  tab === t ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
+                {tab === t && (
+                  <motion.span
+                    layoutId="inbox-tab-bg"
+                    className="absolute inset-0 rounded-md bg-secondary"
+                    transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+                    style={{ zIndex: -1 }}
+                  />
+                )}
                 {t === 'all' ? 'All' : t === 'unread' ? 'Unread' : 'Archived'}
               </button>
             ))}
@@ -218,123 +233,188 @@ export function InboxView() {
 
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <p className="px-6 py-4 text-sm text-muted-foreground">Loading…</p>
-          ) : !data?.data.length ? (
-            <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
-              <InboxIcon size={28} className="mb-3 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                {tab === 'unread' ? 'No unread notifications' : tab === 'archived' ? 'No archived notifications' : 'No notifications'}
-              </p>
-            </div>
-          ) : (
-            <ul>
-              {data.data.map((m) => (
-                <li
-                  key={m.id}
-                  onClick={() => handleSelect(m)}
-                  className={`group flex cursor-pointer items-start gap-3 px-4 py-2.5 transition-colors hover:bg-secondary/40 ${
-                    m.id === selectedId ? 'bg-secondary/60' : ''
-                  } ${m.read_at ? 'opacity-60' : ''}`}
-                >
-                  <span className="flex w-3 shrink-0 items-center justify-center pt-1.5">
-                    {!m.read_at ? <span className="size-1.5 rounded-full bg-primary" /> : null}
-                  </span>
-                  <div className="mt-0.5 shrink-0">{ICONS[m.type] ?? <Building2 size={15} className="text-muted-foreground" />}</div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] leading-snug">{renderMessage(m)}</p>
-                    {m.type === 'invitation' && typeof m.payload.invitation_id === 'number' ? (
-                      <InvitationActions
-                        invitationId={m.payload.invitation_id}
-                        onAccept={accept.mutate}
-                      />
-                    ) : null}
-                    <p className="mt-0.5 text-xs text-muted-foreground" suppressHydrationWarning>
-                      {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
-                  <div
-                    className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {!m.read_at && tab !== 'archived' ? (
-                      <button
-                        onClick={() => markRead.mutate({ ids: [m.id] })}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-                        title="Mark as read"
-                      >
-                        <Check size={14} />
-                      </button>
-                    ) : null}
-                    {tab === 'archived' ? (
-                      <button
-                        onClick={() => {
-                          if (m.id === selectedId) setSelectedId(null)
-                          unarchive.mutate([m.id])
-                        }}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-                        title="Unarchive"
-                      >
-                        <ArchiveX size={14} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (m.id === selectedId) setSelectedId(null)
-                          archive.mutate([m.id])
-                        }}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-                        title="Archive"
-                      >
-                        <Archive size={14} />
-                      </button>
-                    )}
-                  </div>
-                </li>
+            <div>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <InboxSkeletonRow key={i} i={i} />
               ))}
-            </ul>
+            </div>
+          ) : !data?.data.length ? (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24 }}
+              className="flex flex-col items-center justify-center px-6 py-24 text-center"
+            >
+              <div className="mb-4 rounded-xl border border-border bg-secondary/40 p-4 text-muted-foreground">
+                <InboxIcon size={24} />
+              </div>
+              <p className="text-[14px] font-medium text-foreground/70">
+                {tab === 'unread' ? 'All caught up' : tab === 'archived' ? 'Nothing archived' : 'No notifications'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tab === 'unread' ? 'No unread notifications right now.' : tab === 'archived' ? 'Archived notifications appear here.' : 'New activity will show up here.'}
+              </p>
+            </motion.div>
+          ) : (
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.ul
+                key={tab}
+                variants={listContainerVariants}
+                initial="hidden"
+                animate="show"
+              >
+                <AnimatePresence initial={false}>
+                  {data.data.map((m) => (
+                    <motion.li
+                      key={m.id}
+                      variants={listItemVariants}
+                      exit={{ opacity: 0, x: -12, transition: { duration: 0.18 } }}
+                      layout="position"
+                      onClick={() => handleSelect(m)}
+                      className={`group flex cursor-pointer items-start gap-3 border-b border-border/40 px-4 py-3 transition-colors hover:bg-secondary/40 ${
+                        m.id === selectedId ? 'bg-secondary/60' : ''
+                      } ${m.read_at ? 'opacity-55' : ''}`}
+                    >
+                      <span className="flex w-3 shrink-0 items-center justify-center pt-1.5">
+                        {!m.read_at ? (
+                          <motion.span
+                            className="size-1.5 rounded-full bg-primary"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: 'spring', damping: 14, stiffness: 300 }}
+                          />
+                        ) : null}
+                      </span>
+                      <div className="mt-0.5 shrink-0">{ICONS[m.type] ?? <Building2 size={15} className="text-muted-foreground" />}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] leading-snug">{renderMessage(m)}</p>
+                        {m.type === 'invitation' && typeof m.payload.invitation_id === 'number' ? (
+                          <InvitationActions
+                            invitationId={m.payload.invitation_id}
+                            onAccept={accept.mutate}
+                          />
+                        ) : null}
+                        <p className="mt-0.5 text-xs text-muted-foreground" suppressHydrationWarning>
+                          {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                      <div
+                        className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {!m.read_at && tab !== 'archived' ? (
+                          <button
+                            onClick={() => markRead.mutate({ ids: [m.id] })}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                            title="Mark as read"
+                          >
+                            <Check size={14} />
+                          </button>
+                        ) : null}
+                        {tab === 'archived' ? (
+                          <button
+                            onClick={() => {
+                              if (m.id === selectedId) setSelectedId(null)
+                              unarchive.mutate([m.id])
+                            }}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                            title="Unarchive"
+                          >
+                            <ArchiveX size={14} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (m.id === selectedId) setSelectedId(null)
+                              archive.mutate([m.id])
+                            }}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                            title="Archive"
+                          >
+                            <Archive size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </motion.ul>
+            </AnimatePresence>
           )}
         </div>
       </div>
 
       {/* Right: detail pane */}
-      {selectedMessage ? (
-        <div className="relative flex flex-1 flex-col overflow-hidden">
-          <button
-            onClick={() => setSelectedId(null)}
-            className="absolute right-3 top-3 z-20 rounded-md p-1.5 text-muted-foreground hover:bg-secondary md:hidden"
-            title="Close"
+      <AnimatePresence mode="wait">
+        {selectedMessage ? (
+          <motion.div
+            key={selectedMessage.id}
+            className="relative flex flex-1 flex-col overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
           >
-            <X size={16} />
-          </button>
-          {/* Close button for desktop too */}
-          <button
-            onClick={() => setSelectedId(null)}
-            className="absolute right-3 top-3 z-20 hidden rounded-md p-1.5 text-muted-foreground hover:bg-secondary md:flex"
-            title="Close"
+            <button
+              onClick={() => setSelectedId(null)}
+              className="absolute right-3 top-3 z-20 rounded-md p-1.5 text-muted-foreground hover:bg-secondary md:hidden"
+              title="Close"
+            >
+              <X size={16} />
+            </button>
+            <button
+              onClick={() => setSelectedId(null)}
+              className="absolute right-3 top-3 z-20 hidden rounded-md p-1.5 text-muted-foreground hover:bg-secondary md:flex"
+              title="Close"
+            >
+              <X size={16} />
+            </button>
+            <div className="flex-1 overflow-y-auto">
+              {selectedMessage.entity_type === 'issue' && selectedMessage.entity_id ? (
+                <IssueDetailView issueId={selectedMessage.entity_id} />
+              ) : selectedMessage.entity_type === 'project' && selectedMessage.entity_id ? (
+                <ProjectDetailView projectId={selectedMessage.entity_id} />
+              ) : selectedMessage.entity_type === 'milestone' && selectedMessage.entity_id ? (
+                <MilestoneDetailView milestoneId={selectedMessage.entity_id} />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  <InboxIcon size={28} className="mb-3 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">No linked item for this notification.</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="empty-pane"
+            className="hidden flex-1 flex-col items-center justify-center text-center md:flex"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
           >
-            <X size={16} />
-          </button>
-          <div className="flex-1 overflow-y-auto">
-            {selectedMessage.entity_type === 'issue' && selectedMessage.entity_id ? (
-              <IssueDetailView issueId={selectedMessage.entity_id} />
-            ) : selectedMessage.entity_type === 'project' && selectedMessage.entity_id ? (
-              <ProjectDetailView projectId={selectedMessage.entity_id} />
-            ) : selectedMessage.entity_type === 'milestone' && selectedMessage.entity_id ? (
-              <MilestoneDetailView milestoneId={selectedMessage.entity_id} />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <InboxIcon size={28} className="mb-3 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">No linked item for this notification.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="hidden flex-1 flex-col items-center justify-center text-center md:flex">
-          <InboxIcon size={32} className="mb-3 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Select a notification to view details</p>
-        </div>
-      )}
+            <InboxIcon size={32} className="mb-3 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">Select a notification to view details</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function InboxSkeletonRow({ i }: { i: number }) {
+  const w1 = ['w-48', 'w-56', 'w-44', 'w-52'][i % 4]
+  const w2 = ['w-24', 'w-32', 'w-20', 'w-28'][i % 4]
+  return (
+    <div className="flex items-start gap-3 border-b border-border/40 px-4 py-3">
+      <span className="flex w-3 shrink-0 items-center justify-center pt-1.5">
+        <Skeleton className="size-1.5 rounded-full" />
+      </span>
+      <Skeleton className="mt-0.5 size-[15px] shrink-0 rounded-sm" />
+      <div className="flex-1 space-y-2 pt-0.5">
+        <Skeleton className={`h-3 ${w1}`} />
+        <Skeleton className={`h-2.5 ${w2}`} />
+      </div>
     </div>
   )
 }

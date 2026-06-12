@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { Folder, ListChecks, RotateCcw, Target, Trash2 } from 'lucide-react'
@@ -14,6 +14,7 @@ import {
   type RestoreConflict,
   type RestoreResolution,
 } from '@/components/ui/restore-conflict-dialog'
+import { TrashSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
 
 type TrashType = 'issue' | 'project' | 'milestone'
 
@@ -71,6 +72,7 @@ export function TrashView() {
   const trash = useQuery({
     queryKey: ['ws-trash', slug, tab],
     enabled: !!slug,
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<TrashItem[]> => {
       const q = tab === 'all' ? '' : `?type=${tab}`
       const res = await fetch(`/api/workspaces/${slug}/trash${q}`)
@@ -86,8 +88,13 @@ export function TrashView() {
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ['ws-trash', slug] })
     queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
-    queryClient.invalidateQueries({ queryKey: ['ws-projects-listing', slug] })
-    queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing', slug] })
+    queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+    queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
     queryClient.invalidateQueries({ queryKey: ['sidebar-counts', slug] })
     setSelected(new Set())
   }
@@ -239,7 +246,7 @@ export function TrashView() {
   )
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Trash</h1>
@@ -274,51 +281,84 @@ export function TrashView() {
       </div>
 
       {trash.isLoading ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>
-      ) : items.length === 0 ? (
-        <div className="py-16 text-center">
-          <Trash2 size={28} className="mx-auto text-muted-foreground/40" />
-          <p className="mt-3 text-sm text-muted-foreground">Trash is empty.</p>
-        </div>
-      ) : (
         <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <TrashSkeletonRow key={i} />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="flex flex-col items-center justify-center py-20 text-center"
+        >
+          <div className="mb-4 rounded-xl border border-border bg-secondary/40 p-5 text-muted-foreground/50">
+            <Trash2 size={28} />
+          </div>
+          <p className="text-[15px] font-semibold text-foreground/60">Trash is empty</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">Deleted items appear here. You can restore them or remove them permanently.</p>
+        </motion.div>
+      ) : (
+        <motion.div
+          className="space-y-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2 }}
+        >
+          <AnimatePresence initial={false}>
           {groups.map((g) =>
             g.batchId != null ? (
-              <BatchCard
+              <motion.div
                 key={`batch-${g.batchId}`}
-                batchId={g.batchId}
-                items={g.items}
-                selected={selected}
-                onToggle={toggle}
-                onRestore={() => startRestore([], g.batchId!)}
-                onPurge={
-                  isOwner
-                    ? () => startPurge([], g.batchId!, `this group of ${g.items.length} items`)
-                    : undefined
-                }
-              />
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15 } }}
+                transition={{ duration: 0.2 }}
+              >
+                <BatchCard
+                  batchId={g.batchId}
+                  items={g.items}
+                  selected={selected}
+                  onToggle={toggle}
+                  onRestore={() => startRestore([], g.batchId!)}
+                  onPurge={
+                    isOwner
+                      ? () => startPurge([], g.batchId!, `this group of ${g.items.length} items`)
+                      : undefined
+                  }
+                />
+              </motion.div>
             ) : (
-              <TrashRow
+              <motion.div
                 key={keyOf(g.items[0])}
-                item={g.items[0]}
-                selected={selected.has(keyOf(g.items[0]))}
-                anySelected={selected.size > 0}
-                onToggle={() => toggle(g.items[0])}
-                onRestore={() => startRestore([{ type: g.items[0].type, id: g.items[0].id }])}
-                onPurge={
-                  isOwner
-                    ? () =>
-                        startPurge(
-                          [{ type: g.items[0].type, id: g.items[0].id }],
-                          undefined,
-                          `“${g.items[0].title}”`
-                        )
-                    : undefined
-                }
-              />
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15 } }}
+                transition={{ duration: 0.2 }}
+              >
+                <TrashRow
+                  item={g.items[0]}
+                  selected={selected.has(keyOf(g.items[0]))}
+                  anySelected={selected.size > 0}
+                  onToggle={() => toggle(g.items[0])}
+                  onRestore={() => startRestore([{ type: g.items[0].type, id: g.items[0].id }])}
+                  onPurge={
+                    isOwner
+                      ? () =>
+                          startPurge(
+                            [{ type: g.items[0].type, id: g.items[0].id }],
+                            undefined,
+                            `"${g.items[0].title}"`
+                          )
+                      : undefined
+                  }
+                />
+              </motion.div>
             )
           )}
-        </div>
+          </AnimatePresence>
+        </motion.div>
       )}
 
       <BulkActionBar

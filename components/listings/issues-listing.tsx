@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -18,6 +18,7 @@ import { PropertySelect } from '@/components/ui/property-select'
 import { ProjectIcon } from '../project-icon'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EmptyState, IssueSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
 
 interface IssueRow {
   id: number
@@ -108,6 +109,8 @@ export function IssuesListing() {
       return res.json() as Promise<{ id: number; seq: number | null }>
     },
     onSuccess: (issue) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/issues/${issue.id}?new=1`)
     },
     onError: () => toast.error('Failed to create issue'),
@@ -155,9 +158,12 @@ export function IssuesListing() {
     },
   })
 
+  const hasFilters = !!(search || status.length || priority.length || assignees.length || projects.length || milestones.length || labels.length)
+
   const issuesQuery = useQuery({
     queryKey: ['ws-issues', ws?.slug, { search, status, priority, assignees, projects, milestones, labels, labelMode }],
     enabled: !!ws,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (search) params.set('search', search)
@@ -218,6 +224,10 @@ export function IssuesListing() {
       )
     )
     queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
+    queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
   }
 
   async function bulkAddLabel(labelId: number) {
@@ -232,6 +242,9 @@ export function IssuesListing() {
       )
     )
     queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
+    queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
   }
 
   async function bulkDelete() {
@@ -243,16 +256,25 @@ export function IssuesListing() {
       confirmLabel: `Move ${ids.length} ${ids.length === 1 ? 'issue' : 'issues'} to Trash`,
     })
     if (!ok) return
+    // Optimistically remove from cache
+    const snapshot = queryClient.getQueriesData<IssueRow[]>({ queryKey: ['ws-issues', ws?.slug] })
+    queryClient.setQueriesData<IssueRow[]>(
+      { queryKey: ['ws-issues', ws?.slug] },
+      (old) => old?.filter((i) => !ids.includes(i.id))
+    )
+    setSelectedIds(new Set())
     try {
-      await Promise.all(
-        ids.map((id) =>
-          fetch(`/api/issues/${id}`, { method: 'DELETE' })
-        )
-      )
+      await Promise.all(ids.map((id) => fetch(`/api/issues/${id}`, { method: 'DELETE' })))
       toast.success(`Moved ${ids.length} ${ids.length === 1 ? 'issue' : 'issues'} to Trash`)
-      setSelectedIds(new Set())
       queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
+      // Restore snapshot on failure
+      snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data))
       toast.error('Some issues could not be deleted')
     }
   }
@@ -395,7 +417,7 @@ export function IssuesListing() {
       </header>
 
 
-<div className="flex items-center gap-2 border-b border-border px-4 py-3">
+<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search issues…" />
         <FilterBar>
           <MultiSelect
@@ -475,6 +497,10 @@ export function IssuesListing() {
           workspaceSlug={ws?.slug ?? ''}
           members={members ?? []}
           loading={issuesQuery.isLoading}
+          hasFilters={hasFilters}
+          onClearFilters={() => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setMilestones([]); setLabels([]) }}
+          onNewIssue={() => ws && createIssue.mutate()}
+          creatingIssue={createIssue.isPending}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
@@ -575,6 +601,10 @@ function IssueListView({
   workspaceSlug,
   members,
   loading,
+  hasFilters,
+  onClearFilters,
+  onNewIssue,
+  creatingIssue,
   selectedIds,
   onSelectionChange,
 }: {
@@ -583,6 +613,10 @@ function IssueListView({
   workspaceSlug: string
   members: Member[]
   loading: boolean
+  hasFilters: boolean
+  onClearFilters: () => void
+  onNewIssue: () => void
+  creatingIssue: boolean
   selectedIds: Set<number>
   onSelectionChange: (ids: Set<number>) => void
 }) {
@@ -625,18 +659,27 @@ function IssueListView({
   if (loading) {
     return (
       <div>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="mx-6 my-2 h-10 animate-pulse rounded bg-secondary/40" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <IssueSkeletonRow key={i} i={i} />
         ))}
       </div>
     )
   }
   if (localIssues.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-16 text-center">
-        <CircleDot size={32} className="mb-3 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">No issues match your filters.</p>
-      </div>
+    return hasFilters ? (
+      <EmptyState
+        icon={<CircleDot size={28} />}
+        title="No issues match your filters"
+        description="Try adjusting or clearing your filters to see results."
+        secondaryAction={{ label: 'Clear filters', onClick: onClearFilters }}
+      />
+    ) : (
+      <EmptyState
+        icon={<CircleDot size={28} />}
+        title="No issues yet"
+        description="Create your first issue to start tracking work."
+        action={{ label: <><Plus size={14} />New issue</>, onClick: onNewIssue, loading: creatingIssue }}
+      />
     )
   }
 
@@ -671,12 +714,19 @@ function IssueListView({
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <div>
+        <AnimatePresence initial={false}>
         {groups.map((group) => {
           const groupIds = group.items.map((i) => i.id)
           const allGroupSelected = groupIds.length > 0 && groupIds.every((id) => selectedIds.has(id))
           const someGroupSelected = groupIds.some((id) => selectedIds.has(id))
           return (
-            <section key={group.status}>
+            <motion.section
+              key={group.status}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+            >
               <div className="group/header flex w-full items-center gap-2 border-b border-border bg-secondary/30 px-6 py-2">
                 {/* Group checkbox */}
                 <div
@@ -735,9 +785,10 @@ function IssueListView({
                   </ul>
                 )}
               </Droppable>
-            </section>
+            </motion.section>
           )
         })}
+        </AnimatePresence>
       </div>
     </DragDropContext>
   )
@@ -793,8 +844,25 @@ function IssueRowItem({
       if (!res.ok) throw new Error('failed')
       return res.json()
     },
-    onSuccess: () => {
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ['ws-issues', workspaceSlug] })
+      const snapshot = queryClient.getQueriesData<IssueRow[]>({ queryKey: ['ws-issues', workspaceSlug] })
+      queryClient.setQueriesData<IssueRow[]>(
+        { queryKey: ['ws-issues', workspaceSlug] },
+        (old) => old?.map((i) => (i.id === issue.id ? { ...i, ...data } : i))
+      )
+      return { snapshot }
+    },
+    onError: (_err, _data, ctx) => {
+      ctx?.snapshot?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      toast.error('Could not update issue')
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ws-issues', workspaceSlug] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
     },
   })
 
@@ -856,7 +924,7 @@ function IssueRowItem({
             noSearch
           />
         </div>
-        <span className="w-[4.5rem] shrink-0 font-mono text-xs tabular-nums text-muted-foreground/70">
+        <span className="hidden w-[4.5rem] shrink-0 font-mono text-xs tabular-nums text-muted-foreground/70 sm:block">
           {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
         </span>
         {/* Status — inline editable, icon-only */}
@@ -907,7 +975,7 @@ function IssueRowItem({
             align="right"
           />
         </div>
-        <span className="w-10 shrink-0 text-right text-xs text-muted-foreground" suppressHydrationWarning>
+        <span className="hidden w-10 shrink-0 text-right text-xs text-muted-foreground sm:block" suppressHydrationWarning>
           {format(new Date(issue.created_at), 'MMM d')}
         </span>
       </div>

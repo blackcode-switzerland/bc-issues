@@ -11,6 +11,7 @@ import { useActiveWorkspace } from './listings/use-active-workspace'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
 import { ActivityFeed } from './activity-feed'
+import { DetailPageSkeleton } from '@/components/ui/motion'
 import { DatePicker } from '@/components/ui/date-picker'
 import { StatusIcon, ProgressRing } from '@/components/ui/work-item-icons'
 import { MemberAvatar } from '@/components/ui/member-avatar'
@@ -71,6 +72,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   const nameInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const descRef = useRef<string>('')
+  const descModifiedRef = useRef(false)
 
   const milestone = useQuery({
     queryKey: ['milestone', milestoneId, ws?.slug],
@@ -139,6 +141,10 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       return res.json() as Promise<{ id: number }>
     },
     onSuccess: (issue) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues', milestoneId] })
+      queryClient.invalidateQueries({ queryKey: ['milestone', milestoneId] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/issues/${issue.id}?new=1`)
     },
     onError: () => toast.error('Failed to create issue'),
@@ -155,8 +161,11 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     },
     onSuccess: () => {
       toast.success('Milestone updated')
+      descModifiedRef.current = false
       queryClient.invalidateQueries({ queryKey: ['milestone', milestoneId] })
       queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
     },
     onError: () => toast.error('Failed to update milestone'),
   })
@@ -170,19 +179,31 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     },
     onSuccess: () => {
       toast.success('Milestone moved to Trash')
-      window.location.href = '/dashboard/milestones'
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['ws-milestones-listing'] }, (old) =>
+        old?.filter((m) => m.id !== milestoneId)
+      )
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
+      router.push('/dashboard/milestones')
     },
     onError: () => toast.error('Could not delete milestone'),
   })
 
+  // Must be above early returns — hooks must be called unconditionally.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (nameDraft !== null || descModifiedRef.current) e.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [nameDraft])
+
   if (milestone.isLoading) {
-    return (
-      <div className="mx-auto max-w-3xl space-y-4 p-10">
-        <div className="h-8 w-2/3 animate-pulse rounded bg-secondary/50" />
-        <div className="h-4 w-full animate-pulse rounded bg-secondary/40" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-secondary/40" />
-      </div>
-    )
+    return <DetailPageSkeleton />
   }
   if (!milestone.data) {
     return (
@@ -281,10 +302,15 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                 content={data.description ?? ''}
                 onChange={(html) => {
                   descRef.current = html
+                  descModifiedRef.current = true
                 }}
                 onBlur={() => {
                   const next = descRef.current
-                  if (next !== (data.description ?? '')) patch.mutate({ description: next })
+                  if (next !== (data.description ?? '')) {
+                    patch.mutate({ description: next })
+                  } else {
+                    descModifiedRef.current = false
+                  }
                 }}
                 placeholder="Add description… type @ to mention someone"
                 variant="seamless"

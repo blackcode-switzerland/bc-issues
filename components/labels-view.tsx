@@ -4,6 +4,14 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Edit3, Plus, Tag, Trash2, X } from 'lucide-react'
+import {
+  EmptyState,
+  LabelSkeletonRow,
+  AnimatePresence,
+  motion,
+  listContainerVariants,
+  listItemVariants,
+} from '@/components/ui/motion'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './listings/bulk-action-bar'
@@ -79,6 +87,9 @@ export function LabelsView() {
       setCreating(false)
       queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -101,6 +112,10 @@ export function LabelsView() {
       setEditingId(null)
       queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -114,6 +129,11 @@ export function LabelsView() {
       toast.success('Label deleted')
       queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     },
     onError: () => toast.error('Could not delete label'),
   })
@@ -136,6 +156,11 @@ export function LabelsView() {
       setSelectedIds(new Set())
       queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
       toast.error('Some labels could not be deleted')
     }
@@ -163,6 +188,10 @@ export function LabelsView() {
       toast.success(`Updated color on ${ids.length} ${ids.length === 1 ? 'label' : 'labels'}`)
       queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
     } catch {
       toast.error('Some labels could not be updated')
     }
@@ -206,26 +235,41 @@ export function LabelsView() {
       ) : null}
 
       {labels.isLoading ? (
-        <p className="px-6 py-4 text-sm text-muted-foreground">Loading…</p>
-      ) : !labels.data?.length ? (
-        <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
-          <Tag size={28} className="mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No labels yet. Create one to tag issues.</p>
+        <div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <LabelSkeletonRow key={i} i={i} />
+          ))}
         </div>
+      ) : !labels.data?.length ? (
+        <EmptyState
+          icon={<Tag size={28} />}
+          title="No labels yet"
+          description="Create labels to categorize and filter your issues."
+          action={{ label: <><Plus size={14} />New label</>, onClick: () => setCreating(true) }}
+        />
       ) : (
-        <ul>
+        <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
+          <AnimatePresence initial={false}>
           {labels.data.map((l) =>
             editingId === l.id ? (
-              <li key={l.id} className="border-b border-border px-6 py-4">
+              <motion.li
+                key={l.id}
+                variants={listItemVariants}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                className="border-b border-border px-6 py-4"
+              >
                 <LabelForm
                   initial={l}
                   onSubmit={(v) => update.mutate({ id: l.id, ...v })}
                   onCancel={() => setEditingId(null)}
                 />
-              </li>
+              </motion.li>
             ) : (
-              <li
+              <motion.li
                 key={l.id}
+                variants={listItemVariants}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                layout
                 className={`group flex items-center gap-3 border-b border-border/50 px-6 py-2.5 transition-colors hover:bg-secondary/40 ${selectedIds.has(l.id) ? 'bg-primary/5' : ''}`}
                 onClick={() => {
                   if (anySelected) {
@@ -249,7 +293,7 @@ export function LabelsView() {
                   className="size-4 shrink-0"
                 />
 
-                <span className="size-3.5 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
+                <span className="size-3.5 shrink-0 rounded-full transition-transform hover:scale-110" style={{ backgroundColor: l.color }} />
                 <span className="shrink-0 text-sm font-medium">{l.name}</span>
                 <div className="min-w-0 flex-1">
                   {l.description ? (
@@ -289,10 +333,11 @@ export function LabelsView() {
                     <Trash2 size={14} />
                   </button>
                 </div>
-              </li>
+              </motion.li>
             )
           )}
-        </ul>
+          </AnimatePresence>
+        </motion.ul>
       )}
 
       <BulkActionBar

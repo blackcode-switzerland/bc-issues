@@ -141,7 +141,7 @@ interface SearchInputProps {
 
 export function SearchInput({ value, onChange, placeholder = 'Search…' }: SearchInputProps) {
   return (
-    <div className="relative w-60 shrink-0">
+    <div className="relative w-full shrink-0 sm:w-60">
       <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
       <input
         value={value}

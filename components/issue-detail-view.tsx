@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import {
   issuePriorityKey,
 } from '@/components/ui/work-item-icons'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES } from '@/lib/work-items'
+import { DetailPageSkeleton } from '@/components/ui/motion'
 
 interface IssueDetail {
   id: number
@@ -74,6 +75,7 @@ interface Milestone {
 
 export function IssueDetailView({ issueId }: { issueId: number }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
 
@@ -194,6 +196,10 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['issue', issueId] })
       queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
     },
     onError: (e: Error) => toast.error(e.message),
     onSettled: () => setSaving(false),
@@ -229,6 +235,19 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   // Flush pending edits when leaving the page.
   useEffect(() => () => flushDescription(), [flushDescription])
 
+  // Warn before close/reload when there are unsaved changes.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      const hasDirtyTitle = titleDraft !== null
+      const hasDirtyDesc =
+        debounceRef.current !== null ||
+        (descRef.current !== null && descRef.current !== savedDescRef.current)
+      if (hasDirtyTitle || hasDirtyDesc) e.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [titleDraft])
+
   const attachLabel = useMutation({
     mutationFn: async (labelId: number) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/labels`, {
@@ -241,6 +260,9 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-labels', issueId] })
       queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
     },
     onError: () => toast.error('Could not update labels'),
   })
@@ -256,6 +278,9 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-labels', issueId] })
       queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
     },
     onError: () => toast.error('Could not update labels'),
   })
@@ -298,7 +323,22 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
     onSuccess: () => {
       toast.success('Issue moved to Trash')
-      window.location.href = '/dashboard/issues'
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['ws-issues'] }, (old) =>
+        old?.filter((i) => i.id !== issueId)
+      )
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['project-issues'] }, (old) =>
+        old?.filter((i) => i.id !== issueId)
+      )
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['milestone-issues'] }, (old) =>
+        old?.filter((i) => i.id !== issueId)
+      )
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
+      router.push('/dashboard/issues')
     },
     onError: () => toast.error('Could not delete issue'),
   })
@@ -306,13 +346,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   /* ------------------------------ render ------------------------------- */
 
   if (issue.isLoading) {
-    return (
-      <div className="mx-auto max-w-3xl space-y-4 p-10">
-        <div className="h-8 w-2/3 animate-pulse rounded bg-secondary/50" />
-        <div className="h-4 w-full animate-pulse rounded bg-secondary/40" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-secondary/40" />
-      </div>
-    )
+    return <DetailPageSkeleton />
   }
   if (!issue.data) {
     return (

@@ -30,6 +30,7 @@ import {
   projectUpdateStatusColor,
 } from '@/lib/work-items'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
+import { DetailPageSkeleton } from '@/components/ui/motion'
 
 interface ProjectMember {
   user_id: number
@@ -100,6 +101,10 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       return res.json() as Promise<{ id: number }>
     },
     onSuccess: (milestone) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['project-milestones', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/milestones/${milestone.id}?new=1`)
     },
     onError: () => toast.error('Failed to create milestone'),
@@ -118,6 +123,9 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       return res.json() as Promise<{ id: number }>
     },
     onSuccess: (issue) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/issues/${issue.id}?new=1`)
     },
     onError: () => toast.error('Failed to create issue'),
@@ -148,6 +156,15 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       nameInputRef.current.select()
     }
   }, [isNew, project.data?.id])
+
+  // Warn before close/reload when there are unsaved changes.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (nameDraft !== null || descTouchedRef.current) e.preventDefault()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [nameDraft])
 
   const issues = useQuery({
     queryKey: ['project-issues', projectId, ws?.slug],
@@ -217,6 +234,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
       toast.success('Saved')
     },
     onError: () => toast.error('Failed to update project'),
@@ -255,20 +273,22 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
     },
     onSuccess: () => {
       toast.success('Project moved to Trash')
-      window.location.href = '/dashboard'
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['ws-projects-listing'] }, (old) =>
+        old?.filter((p) => p.id !== projectId)
+      )
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
+      router.push('/dashboard')
     },
     onError: () => toast.error('Could not delete project'),
   })
 
   if (project.isLoading) {
-    return (
-      <div className="mx-auto max-w-3xl space-y-4 p-10">
-        <div className="size-10 animate-pulse rounded-lg bg-secondary/50" />
-        <div className="h-8 w-2/3 animate-pulse rounded bg-secondary/50" />
-        <div className="h-4 w-full animate-pulse rounded bg-secondary/40" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-secondary/40" />
-      </div>
-    )
+    return <DetailPageSkeleton hasIcon />
   }
   if (!project.data) {
     return (
@@ -516,6 +536,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 if (descTouchedRef.current && descRef.current !== (data.description ?? '')) {
                   patch.mutate({ description: descRef.current })
                 }
+                descTouchedRef.current = false
               }}
               placeholder="Add description… type @ to mention someone"
               variant="seamless"

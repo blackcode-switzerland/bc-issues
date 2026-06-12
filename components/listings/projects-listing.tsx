@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { toast } from 'sonner'
 import { Folder, GripVertical, Plus } from 'lucide-react'
@@ -32,6 +32,7 @@ import {
 } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
+import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
 
 interface ProjectRow {
   id: number
@@ -99,6 +100,9 @@ export function ProjectsListing() {
       return res.json() as Promise<{ id: number }>
     },
     onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/${project.id}?new=1`)
     },
     onError: () => toast.error('Failed to create project'),
@@ -115,9 +119,12 @@ export function ProjectsListing() {
     },
   })
 
+  const hasFilters = !!(search || status.length)
+
   const projects = useQuery({
     queryKey: ['ws-projects-listing', ws?.slug, { search, status }],
     enabled: !!ws,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (search) params.set('search', search)
@@ -174,6 +181,7 @@ export function ProjectsListing() {
       )
     )
     queryClient.invalidateQueries({ queryKey: ['ws-projects-listing', ws?.slug] })
+    queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
   }
 
   async function bulkDelete() {
@@ -185,18 +193,28 @@ export function ProjectsListing() {
       confirmLabel: `Move ${ids.length} ${noun} to Trash`,
     })
     if (!decision) return
+    // Optimistically remove from cache
+    const snapshot = queryClient.getQueriesData<ProjectRow[]>({ queryKey: ['ws-projects-listing', ws?.slug] })
+    queryClient.setQueriesData<ProjectRow[]>(
+      { queryKey: ['ws-projects-listing', ws?.slug] },
+      (old) => old?.filter((p) => !ids.includes(p.id))
+    )
+    setSelectedIds(new Set())
     try {
       await Promise.all(
         ids.map((id) =>
-          fetch(`/api/workspaces/${ws!.slug}/projects/${id}?mode=${decision.mode}`, {
-            method: 'DELETE',
-          })
+          fetch(`/api/workspaces/${ws!.slug}/projects/${id}?mode=${decision.mode}`, { method: 'DELETE' })
         )
       )
       toast.success(`Moved ${ids.length} ${noun} to Trash`)
-      setSelectedIds(new Set())
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing', ws?.slug] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
+      snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data))
       toast.error('Some projects could not be deleted')
     }
   }
@@ -255,25 +273,33 @@ export function ProjectsListing() {
       </header>
 
 
-<div className="flex items-center gap-2 border-b border-border px-4 py-3">
+<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
         <MultiSelect label="Status" options={PROJECT_STATUS_OPTIONS} selected={status} onChange={setStatus} />
       </div>
 
       {projects.isLoading ? (
         <div>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex h-11 items-center gap-3 px-6">
-              <span className="size-[18px] animate-pulse rounded bg-secondary" />
-              <span className="h-3 w-48 animate-pulse rounded bg-secondary" />
-            </div>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <ProjectSkeletonRow key={i} i={i} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <Folder size={28} className="mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No projects yet.</p>
-        </div>
+        hasFilters ? (
+          <EmptyState
+            icon={<Folder size={28} />}
+            title="No projects found"
+            description="No projects match your current filters."
+            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setStatus([]) } }}
+          />
+        ) : (
+          <EmptyState
+            icon={<Folder size={28} />}
+            title="No projects yet"
+            description="Create your first project to organize issues and milestones."
+            action={{ label: <><Plus size={14} />New project</>, onClick: () => ws && createProject.mutate(), loading: createProject.isPending }}
+          />
+        )
       ) : view === 'kanban' ? (
         <div className="p-4">
           <ProjectsKanban projects={filtered} wsSlug={ws?.slug ?? ''} />
@@ -289,12 +315,12 @@ export function ProjectsListing() {
             <div className="flex items-center gap-3 border-b border-border px-6 py-2.5 text-[13px] font-medium text-muted-foreground">
               <span className="w-8 shrink-0" />
               <span className="flex-1">Name</span>
-              <span className="w-28 shrink-0">Health</span>
+              <span className="hidden w-28 shrink-0 sm:flex">Health</span>
               <span className="w-28 shrink-0">Status</span>
               <span className="hidden w-20 shrink-0 lg:flex">Priority</span>
               <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
               <span className="hidden w-24 shrink-0 lg:block">Target</span>
-              <span className="w-12 shrink-0">Issues</span>
+              <span className="hidden w-12 shrink-0 sm:block">Issues</span>
               <span className="w-20 shrink-0">Progress</span>
             </div>
             <Droppable droppableId="projects-list">
@@ -383,8 +409,23 @@ function ProjectRowItem({
       if (!res.ok) throw new Error('failed')
       return res.json()
     },
-    onSuccess: () => {
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ['ws-projects-listing', wsSlug] })
+      const snapshot = queryClient.getQueriesData<ProjectRow[]>({ queryKey: ['ws-projects-listing', wsSlug] })
+      queryClient.setQueriesData<ProjectRow[]>(
+        { queryKey: ['ws-projects-listing', wsSlug] },
+        (old) => old?.map((item) => (item.id === p.id ? { ...item, ...data } : item))
+      )
+      return { snapshot }
+    },
+    onError: (_err, _data, ctx) => {
+      ctx?.snapshot?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      toast.error('Could not update project')
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing', wsSlug] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['project', p.id] })
     },
   })
 
@@ -444,7 +485,7 @@ function ProjectRowItem({
         </div>
 
         {/* Health — read-only */}
-        <span className="flex w-28 shrink-0 items-center gap-1.5">
+        <span className="hidden w-28 shrink-0 items-center gap-1.5 sm:flex">
           <HealthIcon status={p.health} size={15} />
           <span className="truncate text-[13px] text-muted-foreground">
             {projectUpdateStatusLabel(p.health)}
@@ -500,7 +541,7 @@ function ProjectRowItem({
         </div>
 
         {/* Issues count */}
-        <span className="w-12 shrink-0 text-[13px] tabular-nums text-muted-foreground">
+        <span className="hidden w-12 shrink-0 text-[13px] tabular-nums text-muted-foreground sm:block">
           {total}
         </span>
 

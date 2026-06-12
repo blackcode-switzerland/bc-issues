@@ -42,7 +42,7 @@ export function BulkActionBar({ count, onClear, actions, onDelete, deleteLabel }
           transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
           className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
         >
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-popover px-2.5 py-2 shadow-2xl shadow-black/20">
+          <div className="flex max-w-[calc(100vw-2rem)] items-center gap-1 overflow-x-auto rounded-xl border border-border bg-popover px-2.5 py-2 shadow-2xl shadow-black/20">
             {/* Selection count */}
             <div className="flex items-center gap-2 rounded-lg bg-secondary/60 px-3.5 py-2 text-sm font-semibold">
               <span className="tabular-nums text-foreground">{count} selected</span>

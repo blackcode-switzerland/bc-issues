@@ -5,6 +5,8 @@ import {
   listWorkspaceInvitations,
 } from '@/lib/db/queries/invitations'
 import { sendInvitationEmail } from '@/lib/email/send'
+import { isEmailAllowed, isSuperAdmin, isWhitelistEnabled } from '@/lib/auth/whitelist'
+import { addWhitelistEntry } from '@/lib/db/queries/whitelist'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -40,12 +42,27 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   requireOwner(ctx)
 
   const body = await req.json().catch(() => null)
-  const email = typeof body?.email === 'string' ? body.email.trim() : ''
+  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
   if (!email || !EMAIL_RE.test(email)) {
     throw Errors.badRequest('invalid_email', 'email is required and must be a valid email')
   }
   if (email.length > 255) {
     throw Errors.badRequest('email_too_long', 'email max 255 chars')
+  }
+
+  // Whitelist gate for invitations
+  if (isWhitelistEnabled()) {
+    const allowed = await isEmailAllowed(email)
+    if (!allowed) {
+      if (isSuperAdmin(ctx.user.email)) {
+        // Super admins can invite anyone — auto-add the email to the whitelist
+        await addWhitelistEntry({ type: 'email', value: email, added_by: ctx.user.id })
+      } else {
+        throw Errors.forbidden(
+          `${email} is not in the approved list. Only Blackcode team members can be invited. Contact a super admin to add them first.`
+        )
+      }
+    }
   }
 
   try {

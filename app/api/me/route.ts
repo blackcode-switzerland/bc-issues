@@ -7,6 +7,7 @@ import {
   softDeleteUser,
   updateUserProfile,
 } from '@/lib/db/queries/users'
+import { isSuperAdmin } from '@/lib/auth/whitelist'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const user = await resolveUser(request)
@@ -25,6 +26,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // it here — it re-syncs on each Google sign-in.
     connected_google: !!fresh.google_id,
     avatar_editable: !fresh.google_id,
+    is_super_admin: isSuperAdmin(fresh.email),
   })
 })
 

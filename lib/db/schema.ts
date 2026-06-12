@@ -595,6 +595,21 @@ export const errorEvents = pgTable(
   })
 )
 
+export const emailWhitelist = pgTable(
+  'email_whitelist',
+  {
+    id: serial('id').primaryKey(),
+    type: varchar('type', { length: 10 }).notNull(), // 'email' | 'domain'
+    value: varchar('value', { length: 255 }).notNull(),
+    added_by: integer('added_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    typeValueUniq: uniqueIndex('uq_email_whitelist_type_value').on(t.type, t.value),
+    typeCheck: check('email_whitelist_type_check', sql`${t.type} IN ('email', 'domain')`),
+  })
+)
+
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Project = typeof projects.$inferSelect
@@ -631,3 +646,5 @@ export type InboxMessage = typeof inboxMessages.$inferSelect
 export type NewInboxMessage = typeof inboxMessages.$inferInsert
 export type IssueWatcher = typeof issueWatchers.$inferSelect
 export type NewIssueWatcher = typeof issueWatchers.$inferInsert
+export type EmailWhitelistEntry = typeof emailWhitelist.$inferSelect
+export type NewEmailWhitelistEntry = typeof emailWhitelist.$inferInsert

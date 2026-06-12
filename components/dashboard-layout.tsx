@@ -5,6 +5,7 @@ import { signOut, useSession } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings,
   LogOut,
@@ -21,6 +22,8 @@ import {
   Trash2,
   Menu,
   X,
+  ShieldCheck,
+  ListChecks,
   type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -53,6 +56,11 @@ const NAV_MANAGE = [
   { href: '/dashboard/trash', label: 'Trash', icon: Trash2, match: (p: string) => p === '/dashboard/trash' },
 ]
 
+const NAV_SUPER_ADMIN = [
+  { href: '/dashboard/super-admin/users', label: 'All Members', icon: Users, match: (p: string) => p === '/dashboard/super-admin/users' },
+  { href: '/dashboard/super-admin/whitelist', label: 'Access Whitelist', icon: ListChecks, match: (p: string) => p === '/dashboard/super-admin/whitelist' },
+]
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
@@ -79,6 +87,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         name: string | null
         email: string
         avatar_url: string | null
+        is_super_admin: boolean
       }>
     },
   })
@@ -86,7 +95,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { data: counts } = useQuery({
     queryKey: ['sidebar-counts', ws?.slug],
     enabled: !!ws,
-    staleTime: 30_000,
     queryFn: async () => {
       const slug = ws!.slug
       const [p, m, i, l] = await Promise.all([
@@ -154,6 +162,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
           ))}
         </div>
+
+        {me?.is_super_admin && (
+          <>
+            <SectionLabel className="text-violet-500/80">Super Admin</SectionLabel>
+            <div className="space-y-0.5">
+              {NAV_SUPER_ADMIN.map((item) => (
+                <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
+              ))}
+            </div>
+          </>
+        )}
       </nav>
 
       {/* User */}
@@ -223,24 +242,40 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </header>
 
       {/* Mobile drawer */}
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-sidebar-border bg-sidebar shadow-xl">
-            {sidebar}
-          </aside>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            className="fixed inset-0 z-40 lg:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="absolute left-0 top-0 h-full w-64 border-r border-sidebar-border bg-sidebar shadow-xl"
+            >
+              {sidebar}
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Main content */}
-      <main className="lg:ml-60">{children}</main>
+      {/* Main content — CSS-based page fade (avoids React 18 concurrent-mode flash) */}
+      <main key={pathname} className="page-fade-in lg:ml-60">
+        {children}
+      </main>
     </div>
   )
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className="px-2.5 pb-1 pt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+    <p className={`px-2.5 pb-1 pt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 ${className ?? ''}`}>
       {children}
     </p>
   )
@@ -279,12 +314,20 @@ function NavItem({
   return (
     <Link
       href={item.href}
-      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
+      className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
         active
           ? 'bg-sidebar-accent text-foreground'
           : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
       }`}
     >
+      {active && (
+        <motion.span
+          layoutId="nav-active"
+          className="absolute inset-0 rounded-md bg-sidebar-accent"
+          transition={{ type: 'spring', damping: 30, stiffness: 350 }}
+          style={{ zIndex: -1 }}
+        />
+      )}
       <Icon size={17} />
       <span className="flex-1 truncate">{item.label}</span>
       {item.trailing ? <InboxBadge /> : null}

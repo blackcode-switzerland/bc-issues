@@ -241,9 +241,14 @@ function LoginPageInner() {
         })
         const body = await res.json().catch(() => ({}))
         if (!res.ok) {
-          const message = body.error ?? 'Failed to create account.'
-          // Map known server errors to the email field; otherwise toast.
-          if (res.status === 409 || /email/i.test(message)) {
+          const errorCode = body.error ?? ''
+          const message = body.message ?? body.error ?? 'Failed to create account.'
+          if (errorCode === 'not_in_whitelist') {
+            toast.error("You're not on the approved list", {
+              description: "Blackcode is invite-only. Ask a super admin to add your email or domain.",
+              duration: 8000,
+            })
+          } else if (res.status === 409 || /email/i.test(message)) {
             setFieldError('email', message)
             document.getElementById(inputId('signup', 'email'))?.focus()
           } else {

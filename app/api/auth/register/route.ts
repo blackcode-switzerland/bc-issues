@@ -3,6 +3,7 @@ import { createUserWithPassword, getUserByEmail } from '@/lib/db/queries/users'
 import { hashPassword, validateEmail, validatePassword } from '@/lib/auth/password'
 import { materializePendingInvitationsForUser } from '@/lib/db/queries/invitations'
 import { ensureDefaultWorkspace } from '@/lib/db/queries/workspaces'
+import { isEmailAllowed } from '@/lib/auth/whitelist'
 
 export async function POST(request: NextRequest) {
   let body: { email?: string; password?: string; name?: string } = {}
@@ -26,6 +27,14 @@ export async function POST(request: NextRequest) {
   const passwordErr = validatePassword(password)
   if (passwordErr) {
     return NextResponse.json({ error: passwordErr }, { status: 400 })
+  }
+
+  const allowed = await isEmailAllowed(email)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'not_in_whitelist', message: 'This platform is invite-only for Blackcode team members. Reach out to a super admin to get access.' },
+      { status: 403 }
+    )
   }
 
   const existing = await getUserByEmail(email)

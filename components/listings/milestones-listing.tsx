@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { isPast, isToday } from 'date-fns'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, Target } from 'lucide-react'
 import { useActiveWorkspace } from './use-active-workspace'
@@ -14,6 +14,14 @@ import { ProjectIcon } from '@/components/project-icon'
 import { DatePicker } from '@/components/ui/date-picker'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
+import {
+  EmptyState,
+  MilestoneSkeletonRow,
+  AnimatePresence,
+  motion,
+  listContainerVariants,
+  listItemVariants,
+} from '@/components/ui/motion'
 
 interface MilestoneRow {
   id: number
@@ -57,6 +65,9 @@ export function MilestonesListing() {
       return res.json() as Promise<{ id: number }>
     },
     onSuccess: (milestone) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/milestones/${milestone.id}?new=1`)
     },
     onError: () => toast.error('Failed to create milestone'),
@@ -73,9 +84,12 @@ export function MilestonesListing() {
     },
   })
 
+  const hasFilters = !!(search || projectIds.length)
+
   const milestones = useQuery({
     queryKey: ['ws-milestones-listing', ws?.slug, { search, projectIds }],
     enabled: !!ws,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (search) params.set('search', search)
@@ -130,6 +144,8 @@ export function MilestonesListing() {
       )
     )
     queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing', ws?.slug] })
+    queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+    queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
   }
 
   async function bulkDelete() {
@@ -141,18 +157,27 @@ export function MilestonesListing() {
       confirmLabel: `Move ${ids.length} ${noun} to Trash`,
     })
     if (!decision) return
+    // Optimistically remove from cache
+    const snapshot = queryClient.getQueriesData<MilestoneRow[]>({ queryKey: ['ws-milestones-listing', ws?.slug] })
+    queryClient.setQueriesData<MilestoneRow[]>(
+      { queryKey: ['ws-milestones-listing', ws?.slug] },
+      (old) => old?.filter((m) => !ids.includes(m.id))
+    )
+    setSelectedIds(new Set())
     try {
       await Promise.all(
         ids.map((id) =>
-          fetch(`/api/workspaces/${ws!.slug}/milestones/${id}?mode=${decision.mode}`, {
-            method: 'DELETE',
-          })
+          fetch(`/api/workspaces/${ws!.slug}/milestones/${id}?mode=${decision.mode}`, { method: 'DELETE' })
         )
       )
       toast.success(`Moved ${ids.length} ${noun} to Trash`)
-      setSelectedIds(new Set())
       queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing', ws?.slug] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
+      snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data))
       toast.error('Some milestones could not be deleted')
     }
   }
@@ -199,7 +224,7 @@ export function MilestonesListing() {
       </header>
 
 
-<div className="flex items-center gap-2 border-b border-border px-4 py-3">
+<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search milestones…" />
         <MultiSelect
           label="Project"
@@ -211,46 +236,66 @@ export function MilestonesListing() {
 
       {milestones.isLoading ? (
         <div>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex h-11 items-center gap-3 px-6">
-              <span className="size-3.5 animate-pulse rounded bg-secondary" />
-              <span className="h-3 w-48 animate-pulse rounded bg-secondary" />
-            </div>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <MilestoneSkeletonRow key={i} i={i} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <Target size={28} className="mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No milestones match your filters.</p>
-        </div>
+        hasFilters ? (
+          <EmptyState
+            icon={<Target size={28} />}
+            title="No milestones found"
+            description="No milestones match your current filters."
+            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setProjectIds([]) } }}
+          />
+        ) : (
+          <EmptyState
+            icon={<Target size={28} />}
+            title="No milestones yet"
+            description="Create milestones to track and group related issues."
+            action={{ label: <><Plus size={14} />New milestone</>, onClick: () => ws && createMilestone.mutate(), loading: createMilestone.isPending }}
+          />
+        )
       ) : (
         <div>
           {/* Table header */}
           <div className="flex items-center gap-3 border-b border-border px-6 py-2.5 text-[13px] font-medium text-muted-foreground">
             <span className="w-4 shrink-0" />
             <span className="flex-1">Name</span>
-            <span className="w-28 shrink-0">Project</span>
+            <span className="hidden w-28 shrink-0 sm:block">Project</span>
             <span className="w-24 shrink-0">Due date</span>
-            <span className="w-12 shrink-0">Issues</span>
+            <span className="hidden w-12 shrink-0 sm:block">Issues</span>
             <span className="w-20 shrink-0">Progress</span>
           </div>
-          <ul>
+          <motion.ul
+            variants={listContainerVariants}
+            initial="hidden"
+            animate="show"
+          >
+            <AnimatePresence initial={false}>
             {filtered.map((m) => (
-              <MilestoneRowItem
+              <motion.div
                 key={m.id}
-                milestone={m}
-                wsSlug={ws?.slug ?? ''}
-                selected={selectedIds.has(m.id)}
-                anySelected={anySelected}
-                onToggle={(checked) => {
-                  const next = new Set(selectedIds)
-                  if (checked) next.add(m.id)
-                  else next.delete(m.id)
-                  setSelectedIds(next)
-                }}
-              />
+                variants={listItemVariants}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                layout
+              >
+                <MilestoneRowItem
+                  milestone={m}
+                  wsSlug={ws?.slug ?? ''}
+                  selected={selectedIds.has(m.id)}
+                  anySelected={anySelected}
+                  onToggle={(checked) => {
+                    const next = new Set(selectedIds)
+                    if (checked) next.add(m.id)
+                    else next.delete(m.id)
+                    setSelectedIds(next)
+                  }}
+                />
+              </motion.div>
             ))}
-          </ul>
+            </AnimatePresence>
+          </motion.ul>
         </div>
       )}
 
@@ -297,8 +342,24 @@ function MilestoneRowItem({
       if (!res.ok) throw new Error('failed')
       return res.json()
     },
-    onSuccess: () => {
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ['ws-milestones-listing', wsSlug] })
+      const snapshot = queryClient.getQueriesData<MilestoneRow[]>({ queryKey: ['ws-milestones-listing', wsSlug] })
+      queryClient.setQueriesData<MilestoneRow[]>(
+        { queryKey: ['ws-milestones-listing', wsSlug] },
+        (old) => old?.map((item) => (item.id === m.id ? { ...item, ...data } : item))
+      )
+      return { snapshot }
+    },
+    onError: (_err, _data, ctx) => {
+      ctx?.snapshot?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      toast.error('Could not update milestone')
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing', wsSlug] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['milestone', m.id] })
+      queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
     },
   })
 
@@ -333,7 +394,7 @@ function MilestoneRowItem({
         </div>
 
         {/* Project */}
-        <span className="flex w-28 shrink-0 items-center gap-1.5 truncate text-[13px] text-muted-foreground">
+        <span className="hidden w-28 shrink-0 items-center gap-1.5 truncate text-[13px] text-muted-foreground sm:flex">
           {m.project_name ? (
             <>
               <ProjectIcon icon={m.project_icon} color={m.project_color} name={m.project_name} size={15} />
@@ -357,7 +418,7 @@ function MilestoneRowItem({
         </div>
 
         {/* Issues */}
-        <span className="w-12 shrink-0 text-[13px] tabular-nums text-muted-foreground">
+        <span className="hidden w-12 shrink-0 text-[13px] tabular-nums text-muted-foreground sm:block">
           {total}
         </span>
 
