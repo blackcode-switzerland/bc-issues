@@ -160,22 +160,22 @@ export function ProfileSettingsView() {
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || setAvatar.isPending}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary disabled:opacity-50"
               >
-                {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                 {data?.avatar_url ? 'Change photo' : 'Upload photo'}
               </button>
               {data?.avatar_url ? (
                 <button
                   onClick={() => setAvatar.mutate(null)}
                   disabled={uploading || setAvatar.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={14} />
                   Remove
                 </button>
               ) : null}
-              <p className="w-full text-[11px] text-muted-foreground">
+              <p className="w-full text-xs text-muted-foreground">
                 JPG, PNG, GIF, or WebP. Max 5MB. Square images look best.
               </p>
             </div>

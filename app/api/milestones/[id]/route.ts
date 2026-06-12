@@ -12,6 +12,7 @@ import {
   updateMilestone,
 } from '@/lib/db/queries/milestones'
 import { getIssuesByMilestone } from '@/lib/db/queries/issues'
+import type { DeleteMode } from '@/lib/db/queries/deletion'
 import { getMembership } from '@/lib/db/queries/workspaces'
 
 interface Params {
@@ -62,6 +63,7 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const { id: idStr } = await params
   const { id, workspaceId } = await loadAndCheck(idStr, user.id)
 
-  await deleteMilestone(workspaceId, id, user.id)
+  const mode: DeleteMode = req.nextUrl.searchParams.get('mode') === 'cascade' ? 'cascade' : 'detach'
+  await deleteMilestone(workspaceId, id, user.id, mode)
   return NextResponse.json({ success: true })
 })

@@ -5,10 +5,9 @@ import {
   getProjectInWorkspace,
   updateProject,
 } from '@/lib/db/queries/projects'
+import { previewDeletion, type DeleteMode } from '@/lib/db/queries/deletion'
 import {
-  listProjectLabels,
   listProjectMembers,
-  setProjectLabels,
   setProjectMembers,
 } from '@/lib/db/queries/project-relations'
 import { db } from '@/lib/db/client'
@@ -22,13 +21,18 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const id = parseInt(idStr)
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+
+  // ?preview=1 reports how many attached issues/milestones a delete would touch,
+  // so the delete dialog can show "delete N issues too?" without mutating.
+  if (req.nextUrl.searchParams.get('preview')) {
+    const counts = await previewDeletion(ctx.workspace.id, 'project', id)
+    return NextResponse.json(counts)
+  }
+
   const project = await getProjectInWorkspace(ctx.workspace.id, id)
   if (!project) throw Errors.notFound('project')
-  const [members, labels] = await Promise.all([
-    listProjectMembers(id),
-    listProjectLabels(id),
-  ])
-  return NextResponse.json({ ...project, members, labels })
+  const members = await listProjectMembers(id)
+  return NextResponse.json({ ...project, members })
 })
 
 export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -41,23 +45,16 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     throw Errors.badRequest('invalid_body', 'expected JSON object')
   }
 
-  // member_ids / label_ids replace the full sets when present.
+  // member_ids replaces the full set when present.
   if (Array.isArray(body.member_ids)) {
     const ids = body.member_ids.filter((n: unknown): n is number => typeof n === 'number')
     await setProjectMembers(db, id, ids)
   }
-  if (Array.isArray(body.label_ids)) {
-    const ids = body.label_ids.filter((n: unknown): n is number => typeof n === 'number')
-    await setProjectLabels(db, id, ctx.workspace.id, ids)
-  }
 
   const updated = await updateProject(ctx.workspace.id, id, body, ctx.user.id)
   if (!updated) throw Errors.notFound('project')
-  const [members, labels] = await Promise.all([
-    listProjectMembers(id),
-    listProjectLabels(id),
-  ])
-  return NextResponse.json({ ...updated, members, labels })
+  const members = await listProjectMembers(id)
+  return NextResponse.json({ ...updated, members })
 })
 
 export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -65,7 +62,9 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const id = parseInt(idStr)
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
-  const ok = await deleteProject(ctx.workspace.id, id, ctx.user.id)
+
+  const mode: DeleteMode = req.nextUrl.searchParams.get('mode') === 'cascade' ? 'cascade' : 'detach'
+  const ok = await deleteProject(ctx.workspace.id, id, ctx.user.id, mode)
   if (!ok) throw Errors.notFound('project')
-  return NextResponse.json({ deleted: true })
+  return NextResponse.json({ deleted: true, mode })
 })

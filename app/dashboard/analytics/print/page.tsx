@@ -19,5 +19,6 @@ export default async function AnalyticsPrintPage({
   const id = typeof sp.id === 'string' ? parseInt(sp.id) : null
   const from = typeof sp.from === 'string' ? sp.from : null
   const to = typeof sp.to === 'string' ? sp.to : null
-  return <PrintAnalyticsView view={view} id={id} from={from} to={to} />
+  const theme = typeof sp.theme === 'string' ? sp.theme : null
+  return <PrintAnalyticsView view={view} id={id} from={from} to={to} theme={theme} />
 }

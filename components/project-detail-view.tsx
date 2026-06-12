@@ -29,19 +29,13 @@ import {
   projectUpdateStatusLabel,
   projectUpdateStatusColor,
 } from '@/lib/work-items'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 
 interface ProjectMember {
   user_id: number
   email: string
   name: string | null
   avatar_url: string | null
-}
-
-interface Label {
-  id: number
-  name: string
-  color: string
 }
 
 interface ProjectDetail {
@@ -58,7 +52,6 @@ interface ProjectDetail {
   end_date: string | null
   created_at: string
   members: ProjectMember[]
-  labels: Label[]
 }
 
 interface IssueRow {
@@ -87,7 +80,7 @@ interface WsMember {
 
 export function ProjectDetailView({ projectId }: { projectId: number }) {
   const queryClient = useQueryClient()
-  const { confirm } = useConfirm()
+  const { confirmDelete } = useDeleteDialog()
   const { data: ws } = useActiveWorkspace()
   const searchParams = useSearchParams()
   const isNew = searchParams.get('new') === '1'
@@ -212,17 +205,6 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
     },
   })
 
-  const wsLabels = useQuery({
-    queryKey: ['ws-labels', ws?.slug],
-    enabled: !!ws,
-    queryFn: async (): Promise<Label[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/labels`)
-      if (!res.ok) return []
-      const j = await res.json()
-      return j.data
-    },
-  })
-
   const patch = useMutation({
     mutationFn: async (input: Record<string, unknown>) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}`, {
@@ -265,14 +247,14 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   })
 
   const remove = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}`, {
+    mutationFn: async (mode: 'cascade' | 'detach') => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}?mode=${mode}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      toast.success('Project deleted')
+      toast.success('Project moved to Trash')
       window.location.href = '/dashboard'
     },
     onError: () => toast.error('Could not delete project'),
@@ -307,8 +289,6 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
   const memberIds = new Set((data.members ?? []).map((m) => m.user_id))
   const addableMembers = (wsMembers.data ?? []).filter((m) => !memberIds.has(m.user_id))
-  const labelIds = new Set((data.labels ?? []).map((l) => l.id))
-  const addableLabels = (wsLabels.data ?? []).filter((l) => !labelIds.has(l.id))
 
   const mentionItems: MentionItem[] = (wsMembers.data ?? []).map((m) => ({
     id: m.user_id,
@@ -327,7 +307,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Breadcrumb header */}
-      <header className="sticky top-0 z-20 flex h-11 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[13px] backdrop-blur">
+      <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
           href="/dashboard"
           prefetch={false}
@@ -341,16 +321,13 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={async () => {
-              if (
-                !(await confirm({
-                  title: `Delete project "${data.name}"?`,
-                  description: 'Issues and milestones in it will become standalone.',
-                  destructive: true,
-                  confirmLabel: 'Delete project',
-                }))
-              )
-                return
-              remove.mutate()
+              const decision = await confirmDelete({
+                kind: 'project',
+                name: data.name,
+                previewUrl: `/api/workspaces/${ws!.slug}/projects/${projectId}?preview=1`,
+              })
+              if (!decision) return
+              remove.mutate(decision.mode)
             }}
             title="Delete project"
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -364,50 +341,48 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
         {/* Document */}
         <main className="min-w-0 flex-1">
           <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
-            {/* Icon — picker keeps icon/color editing */}
-            <div className="mb-4">
-              <IconPicker
-                icon={data.icon}
-                color={data.color ?? '#5e6ad2'}
-                name={data.name}
-                onChange={(v) => patch.mutate({ icon: v.icon, color: v.color })}
+            {/* Icon + Title — same row */}
+            <div className="mb-3 flex items-start gap-3">
+              <div className="mt-1 shrink-0">
+                <IconPicker
+                  icon={data.icon}
+                  color={data.color ?? '#5e6ad2'}
+                  name={data.name}
+                  onChange={(v) => patch.mutate({ icon: v.icon, color: v.color })}
+                />
+              </div>
+              <textarea
+                rows={1}
+                value={nameDraft ?? data.name}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    ;(e.target as HTMLTextAreaElement).blur()
+                  }
+                }}
+                maxLength={100}
+                placeholder="Project name"
+                className="w-full resize-none overflow-hidden bg-transparent pt-1 text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
+                ref={(el) => {
+                  nameInputRef.current = el
+                  if (el) {
+                    el.style.height = 'auto'
+                    el.style.height = `${el.scrollHeight}px`
+                  }
+                }}
               />
             </div>
-
-            {/* Title — always editable, saves on blur/Enter */}
-            <textarea
-              rows={1}
-              value={nameDraft ?? data.name}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  ;(e.target as HTMLTextAreaElement).blur()
-                }
-              }}
-              maxLength={100}
-              placeholder="Project name"
-              className="mb-3 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
-              ref={(el) => {
-                nameInputRef.current = el
-                if (el) {
-                  el.style.height = 'auto'
-                  el.style.height = `${el.scrollHeight}px`
-                }
-              }}
-            />
 
             {/* Updates */}
             <section className="mb-6 mt-1">
               <div className="mb-2 flex items-center gap-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Updates
-                </p>
+                <h2 className="text-base font-medium">Updates</h2>
                 <div className="h-px flex-1 bg-border" />
                 <button
                   onClick={() => setShowUpdateComposer((v) => !v)}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   {showUpdateComposer ? <X size={13} /> : <Plus size={13} />}
                   {showUpdateComposer ? 'Cancel' : 'Add update'}
@@ -433,7 +408,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                     content=""
                     onChange={setUpdateBody}
                     placeholder="Write an update…"
-                    variant="bordered"
+                    variant="seamless"
                     minHeight="80px"
                     mentionItems={mentionItems}
                     onFileUpload={async (file) => {
@@ -453,14 +428,14 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                         setUpdateBodyKey((k) => k + 1)
                         setUpdateStatus('on_track')
                       }}
-                      className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={() => postUpdate.mutate()}
                       disabled={postUpdate.isPending}
-                      className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                      className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                     >
                       Post update
                     </button>
@@ -468,7 +443,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 </div>
               ) : selUpdate ? (
                 <div className="rounded-lg border border-border bg-card/40 p-3.5">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
                     <HealthIcon status={selUpdate.status} size={16} />
                     <span
                       className="font-medium"
@@ -486,7 +461,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                       <span>{selUpdate.author_name ?? selUpdate.author_email}</span>
                     </span>
                     <span
-                      className="ml-auto text-[11px] text-muted-foreground"
+                      className="ml-auto text-xs text-muted-foreground"
                       suppressHydrationWarning
                     >
                       {formatDistanceToNow(new Date(selUpdate.created_at), { addSuffix: true })}
@@ -503,7 +478,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                         <button
                           key={u.id}
                           onClick={() => setSelectedUpdate(i)}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors ${
                             i === selectedUpdate
                               ? 'border-border bg-secondary text-foreground'
                               : 'border-transparent text-muted-foreground hover:bg-secondary/60'
@@ -559,7 +534,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
             {/* Milestones */}
             <section className="mt-12">
               <div className="mb-2 flex items-center gap-3">
-                <h2 className="text-sm font-medium">
+                <h2 className="text-base font-medium">
                   Milestones{' '}
                   {milestones.data?.length ? (
                     <span className="font-normal text-muted-foreground">{milestones.data.length}</span>
@@ -569,7 +544,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 <button
                   onClick={() => ws && createMilestone.mutate()}
                   disabled={createMilestone.isPending || !ws}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                 >
                   <Plus size={13} />
                   New milestone
@@ -595,13 +570,13 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                           <span className="flex-1 truncate">{m.name}</span>
                           {m.due_date ? (
                             <span
-                              className="shrink-0 text-[11px] text-muted-foreground"
+                              className="shrink-0 text-xs text-muted-foreground"
                               suppressHydrationWarning
                             >
                               {format(new Date(m.due_date), 'MMM d')}
                             </span>
                           ) : null}
-                          <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                             <ProgressRing pct={p} size={13} />
                             {d}/{t}
                           </span>
@@ -628,7 +603,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
             {/* Issues */}
             <section className="mt-12">
               <div className="mb-2 flex items-center gap-3">
-                <h2 className="text-sm font-medium">
+                <h2 className="text-base font-medium">
                   Issues{' '}
                   <span className="font-normal text-muted-foreground">{total}</span>
                 </h2>
@@ -636,7 +611,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 <button
                   onClick={() => ws && createIssue.mutate(null)}
                   disabled={createIssue.isPending || !ws}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                 >
                   <Plus size={13} />
                   New issue
@@ -652,7 +627,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                         className="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-secondary/50"
                       >
                         <StatusIcon status={i.status} className="shrink-0" />
-                        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
                           {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
                         </span>
                         <span className="flex-1 truncate">{i.title}</span>
@@ -673,7 +648,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
             {/* Activity */}
             <section className="mt-12">
               <div className="mb-4 flex items-center gap-3">
-                <h2 className="text-sm font-medium">Activity</h2>
+                <h2 className="text-base font-medium">Activity</h2>
                 <div className="h-px flex-1 bg-border" />
               </div>
               <ActivityFeed
@@ -691,8 +666,8 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
         {/* Properties sidebar */}
         <aside className="w-full shrink-0 border-t border-border xl:w-72 xl:border-l xl:border-t-0">
-          <div className="sticky top-11 px-4 py-5">
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Properties</p>
+          <div className="sticky top-12 px-4 py-5">
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Properties</p>
 
             <PropertySelect
               value={data.status}
@@ -737,12 +712,12 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
             />
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Members</p>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Members</p>
             <ul className="space-y-0.5">
               {(data.members ?? []).map((m) => (
                 <li
                   key={m.user_id}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-secondary"
+                  className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-secondary"
                 >
                   <MemberAvatar
                     name={m.name}
@@ -772,7 +747,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 value=""
                 placeholder="Add member"
                 searchPlaceholder="Add member…"
-                buttonClassName="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                buttonClassName="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 options={addableMembers.map((m) => ({
                   value: String(m.user_id),
                   label: m.name ?? m.email,
@@ -794,89 +769,33 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 }}
               />
             ) : (data.members ?? []).length === 0 ? (
-              <p className="px-2 text-[11px] text-muted-foreground">No members</p>
+              <p className="px-2 text-xs text-muted-foreground">No members</p>
             ) : null}
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Labels</p>
-            <div className="flex flex-wrap items-center gap-1.5 px-2">
-              {(data.labels ?? []).map((l) => (
-                <span
-                  key={l.id}
-                  className="group inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]"
-                >
-                  <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
-                  {l.name}
-                  <button
-                    onClick={() =>
-                      patch.mutate({
-                        label_ids: (data.labels ?? [])
-                          .filter((x) => x.id !== l.id)
-                          .map((x) => x.id),
-                      })
-                    }
-                    className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
-                    title="Remove label"
-                  >
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
-              {addableLabels.length > 0 ? (
-                <PropertySelect
-                  value=""
-                  placeholder="Add label"
-                  searchPlaceholder="Add label…"
-                  buttonClassName="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                  options={addableLabels.map((l) => ({
-                    value: String(l.id),
-                    label: l.name,
-                    icon: (
-                      <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
-                    ),
-                  }))}
-                  onChange={(v) => {
-                    if (v) {
-                      patch.mutate({
-                        label_ids: [...(data.labels ?? []).map((x) => x.id), parseInt(v)],
-                      })
-                    }
-                  }}
-                />
-              ) : null}
-              {!(data.labels ?? []).length && addableLabels.length === 0 ? (
-                <span className="text-[11px] text-muted-foreground">No labels</span>
-              ) : null}
-            </div>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Start date</p>
+            <DatePicker
+              variant="inline"
+              value={data.start_date ?? null}
+              onChange={(v) => patch.mutate({ start_date: v })}
+              placeholder="Set start date"
+            />
+            <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Target date</p>
+            <DatePicker
+              variant="inline"
+              value={data.end_date ?? null}
+              onChange={(v) => patch.mutate({ end_date: v })}
+              placeholder="Set target date"
+            />
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Dates</p>
-            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px]">
-              <span className="w-12 shrink-0 text-muted-foreground">Start</span>
-              <DatePicker
-                variant="inline"
-                value={data.start_date ?? null}
-                onChange={(v) => patch.mutate({ start_date: v })}
-                placeholder="Set start date"
-              />
-            </div>
-            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px]">
-              <span className="w-12 shrink-0 text-muted-foreground">Target</span>
-              <DatePicker
-                variant="inline"
-                value={data.end_date ?? null}
-                onChange={(v) => patch.mutate({ end_date: v })}
-                placeholder="Set target date"
-              />
-            </div>
-
-            <div className="my-4 h-px bg-border" />
-            <div className="flex items-center gap-2.5 px-2 text-[13px]">
+            <div className="flex items-center gap-2.5 px-2 text-sm">
               <ProgressRing pct={pct} size={16} />
               <span className="text-muted-foreground">
                 {done} of {total} issues done
               </span>
-              <span className="ml-auto text-[11px] text-muted-foreground">{pct}%</span>
+              <span className="ml-auto text-xs text-muted-foreground">{pct}%</span>
             </div>
             {(milestones.data?.length ?? 0) > 0 ? (() => {
               const mTotal = milestones.data!.length
@@ -888,7 +807,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                   <span className="text-muted-foreground">
                     {mDone} of {mTotal} milestones done
                   </span>
-                  <span className="ml-auto text-[11px] text-muted-foreground">{mPct}%</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{mPct}%</span>
                 </div>
               )
             })() : null}

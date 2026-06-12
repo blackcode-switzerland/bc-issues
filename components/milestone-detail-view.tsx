@@ -8,13 +8,14 @@ import { format, formatDistanceToNow, isPast, isToday } from 'date-fns'
 import { toast } from 'sonner'
 import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
 import { ActivityFeed } from './activity-feed'
 import { DatePicker } from '@/components/ui/date-picker'
 import { StatusIcon, ProgressRing } from '@/components/ui/work-item-icons'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import { PropertySelect } from '@/components/ui/property-select'
+import { ProjectIcon } from '@/components/project-icon'
 
 interface MilestoneDetail {
   id: number
@@ -27,6 +28,8 @@ interface MilestoneDetail {
   created_at: string | null
   updated_at: string | null
   project_name: string | null
+  project_icon: string | null
+  project_color: string | null
   issue_count: number
   completed_issues: number
 }
@@ -40,11 +43,16 @@ interface IssueRow {
   assignee_name: string | null
   assignee_email: string | null
   assignee_avatar: string | null
+  project_name: string | null
+  project_icon: string | null
+  project_color: string | null
 }
 
 interface Project {
   id: number
   name: string
+  icon: string | null
+  color: string | null
 }
 
 interface Member {
@@ -56,7 +64,7 @@ interface Member {
 
 export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   const queryClient = useQueryClient()
-  const { confirm } = useConfirm()
+  const { confirmDelete } = useDeleteDialog()
   const { data: ws } = useActiveWorkspace()
   const searchParams = useSearchParams()
   const isNew = searchParams.get('new') === '1'
@@ -154,14 +162,14 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   })
 
   const remove = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}`, {
+    mutationFn: async (mode: 'cascade' | 'detach') => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}?mode=${mode}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      toast.success('Milestone deleted')
+      toast.success('Milestone moved to Trash')
       window.location.href = '/dashboard/milestones'
     },
     onError: () => toast.error('Could not delete milestone'),
@@ -209,7 +217,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Breadcrumb header */}
-      <header className="sticky top-0 z-20 flex h-11 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[13px] backdrop-blur">
+      <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
           href="/dashboard/milestones"
           prefetch={false}
@@ -222,16 +230,13 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={async () => {
-              if (
-                !(await confirm({
-                  title: `Delete milestone "${data.name}"?`,
-                  description: 'This cannot be undone.',
-                  destructive: true,
-                  confirmLabel: 'Delete',
-                }))
-              )
-                return
-              remove.mutate()
+              const decision = await confirmDelete({
+                kind: 'milestone',
+                name: data.name,
+                previewUrl: `/api/workspaces/${ws!.slug}/milestones/${milestoneId}?preview=1`,
+              })
+              if (!decision) return
+              remove.mutate(decision.mode)
             }}
             title="Delete milestone"
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -307,7 +312,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
             {/* Issues */}
             <section className="mt-10">
               <div className="mb-2 flex items-center gap-3">
-                <h2 className="text-sm font-medium">
+                <h2 className="text-base font-medium">
                   Issues{' '}
                   <span className="text-muted-foreground">({issues.data?.length ?? 0})</span>
                 </h2>
@@ -315,7 +320,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                 <button
                   onClick={() => ws && createIssue.mutate()}
                   disabled={createIssue.isPending || !ws}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                 >
                   <Plus size={13} />
                   New issue
@@ -328,15 +333,21 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                       <Link
                         href={`/dashboard/issues/${i.id}`}
                         prefetch={false}
-                        className="flex h-10 items-center gap-3 rounded-md px-0 transition-colors hover:bg-secondary/40"
+                        className="flex h-11 items-center gap-3 rounded-md px-0 transition-colors hover:bg-secondary/40"
                       >
                         <StatusIcon status={i.status} size={14} />
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono text-xs text-muted-foreground">
                           {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
                         </span>
                         <span className="flex-1 truncate text-[13px]">{i.title}</span>
+                        {i.project_name ? (
+                          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                            <ProjectIcon icon={i.project_icon} color={i.project_color} name={i.project_name} size={13} />
+                            <span className="hidden sm:inline">{i.project_name}</span>
+                          </span>
+                        ) : null}
                         {i.due_date ? (
-                          <span className="shrink-0 text-[11px] text-muted-foreground" suppressHydrationWarning>
+                          <span className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
                             {format(new Date(i.due_date), 'MMM d')}
                           </span>
                         ) : null}
@@ -362,7 +373,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
             {/* Activity */}
             <section className="mt-12">
               <div className="mb-4 flex items-center gap-3">
-                <h2 className="text-sm font-medium">Activity</h2>
+                <h2 className="text-base font-medium">Activity</h2>
                 <div className="h-px flex-1 bg-border" />
               </div>
               <ActivityFeed
@@ -380,8 +391,8 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
 
         {/* Properties sidebar */}
         <aside className="w-full shrink-0 border-t border-border xl:w-72 xl:border-l xl:border-t-0">
-          <div className="sticky top-11 px-4 py-5">
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Properties</p>
+          <div className="sticky top-12 px-4 py-5">
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Properties</p>
 
             <PropertySelect
               value={data.project_id ? String(data.project_id) : ''}
@@ -389,13 +400,17 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
               searchPlaceholder="Move to project…"
               options={[
                 { value: '', label: 'No project' },
-                ...(projects.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
+                ...(projects.data ?? []).map((p) => ({
+                  value: String(p.id),
+                  label: p.name,
+                  icon: <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={14} />,
+                })),
               ]}
               onChange={(v) => patch.mutate({ project_id: v ? parseInt(v) : null })}
             />
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Target date</p>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Target date</p>
             <DatePicker
               variant="inline"
               value={data.due_date ?? null}
@@ -403,11 +418,11 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
               placeholder="Set target date"
             />
             {overdue ? (
-              <p className="mt-1 px-2 text-[11px] text-destructive">Overdue</p>
+              <p className="mt-1 px-2 text-xs text-destructive">Overdue</p>
             ) : null}
 
             <div className="my-4 h-px bg-border" />
-            <ul className="space-y-1.5 px-2 text-[11px] text-muted-foreground">
+            <ul className="space-y-1.5 px-2 text-xs text-muted-foreground">
               {data.created_at ? (
                 <li className="flex justify-between">
                   <span>Created</span>

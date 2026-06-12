@@ -19,6 +19,7 @@ import {
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { FilterBar, MultiSelect, SearchInput } from './listings/filter-bar'
 import { MemberAvatar } from '@/components/ui/member-avatar'
+import { issueStatusLabel, projectStatusLabel } from '@/lib/work-items'
 
 interface EventRow {
   id: number
@@ -138,13 +139,17 @@ export function ActivityView() {
 
   return (
     <div>
-      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-sm font-semibold">Activity</h1>
-        <span className="text-xs text-muted-foreground">{ws?.name ?? '…'}</span>
+      <header className="sticky top-0 z-10 flex h-12 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <h1 className="text-[15px] font-semibold">Activity</h1>
+        {events.data ? (
+          <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">
+            {filtered.length}
+          </span>
+        ) : null}
       </header>
 
-      <div className="flex flex-col gap-2 border-b border-border px-4 py-2">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search in metadata…" />
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search activity…" />
         <FilterBar>
           <MultiSelect
             label="Entity"
@@ -177,7 +182,7 @@ export function ActivityView() {
         <div>
           {grouped.map(([day, rows]) => (
             <section key={day}>
-              <h2 className="bg-secondary/30 px-6 py-1.5 text-[11px] text-muted-foreground">
+              <h2 className="bg-secondary/30 px-6 py-1.5 text-xs text-muted-foreground">
                 {format(new Date(day), 'EEEE, MMMM d')}
               </h2>
               <ul>
@@ -203,7 +208,7 @@ export function ActivityView() {
                       <span className="text-sm font-medium">
                         {e.actor_name ?? e.actor_email ?? 'system'}
                       </span>{' '}
-                      <span className="text-sm text-muted-foreground">{describe(e)}</span>
+                      <span className="text-sm text-muted-foreground">{describe(e, ws?.key)}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
                       {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}
@@ -219,36 +224,62 @@ export function ActivityView() {
   )
 }
 
-function describe(e: EventRow): string {
+// Comment excerpts arrive as raw TipTap HTML — render as plain text.
+function stripHtml(html: string, max = 80): string {
+  const text = html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^>]*$/, ' ') // excerpt may be truncated mid-tag
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function statusName(value: unknown): string {
+  const v = String(value ?? '')
+  const asIssue = issueStatusLabel(v)
+  return asIssue !== v ? asIssue : projectStatusLabel(v)
+}
+
+function describe(e: EventRow, wsKey?: string): string {
   const meta = (e.meta ?? {}) as Record<string, string | number | null | undefined>
-  const entityRef = e.entity_type === 'issue' && meta.seq
-    ? `${e.entity_type} ${meta.seq}`
-    : e.entity_type
+  const entityRef =
+    e.entity_type === 'issue' && meta.seq
+      ? wsKey
+        ? `${wsKey}-${meta.seq}`
+        : `issue ${meta.seq}`
+      : e.entity_type
+  const titled = meta.title ? `${entityRef} "${meta.title}"` : entityRef
   switch (e.action) {
     case 'created':
-      return `created ${entityRef}${meta.title ? `: ${meta.title}` : ''}`
+      return `created ${titled}`
     case 'updated':
-      return `updated ${entityRef}`
+      return `updated ${titled}`
     case 'deleted':
-      return `deleted ${entityRef}`
+      return `deleted ${titled}`
     case 'assigned':
-      return `assigned ${entityRef}${meta.title ? ` "${meta.title}"` : ''}`
+      return `assigned ${titled}`
     case 'unassigned':
-      return `unassigned ${entityRef}`
+      return `unassigned ${titled}`
     case 'status_changed':
-      return `moved ${entityRef} ${meta.from} → ${meta.to}`
+      return `moved ${entityRef} from ${statusName(meta.from)} to ${statusName(meta.to)}`
     case 'priority_changed':
       return `changed priority of ${entityRef}`
     case 'milestone_changed':
-      return `re-milestoned ${entityRef}`
+      return `changed the milestone of ${entityRef}`
     case 'project_changed':
-      return `moved ${entityRef} between projects`
+      return `moved ${entityRef} to another project`
+    case 'due_date_changed':
+      return `changed the due date of ${titled}`
     case 'labeled':
       return `labeled ${entityRef}${meta.label_name ? ` with "${meta.label_name}"` : ''}`
     case 'unlabeled':
       return `removed label${meta.label_name ? ` "${meta.label_name}"` : ''} from ${entityRef}`
     case 'commented':
-      return `commented on ${entityRef}${meta.excerpt ? `: "${meta.excerpt}"` : ''}`
+      return `commented on ${entityRef}${meta.excerpt ? `: "${stripHtml(String(meta.excerpt))}"` : ''}`
     case 'member_added':
       return `joined as member`
     case 'member_removed':
@@ -262,6 +293,6 @@ function describe(e: EventRow): string {
     case 'ownership_transferred':
       return `transferred ownership`
     default:
-      return `${e.action} ${entityRef}`
+      return `${e.action.replace(/_/g, ' ')} ${titled}`
   }
 }

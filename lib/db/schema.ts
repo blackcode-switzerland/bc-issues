@@ -122,11 +122,14 @@ export const workspaceInvitations = pgTable(
   })
 )
 
-export const projects = pgTable('projects', {
+export const projects = pgTable(
+  'projects',
+  {
   id: serial('id').primaryKey(),
   // Phase 1: nullable during backfill window. Phase 13 cleanup tightens to NOT NULL.
   workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
+  summary: text('summary'),
   description: text('description'),
   status: varchar('status', { length: 50 }).default('active'),
   owner_id: integer('owner_id').references(() => users.id, { onDelete: 'set null' }),
@@ -141,7 +144,18 @@ export const projects = pgTable('projects', {
   end_date: date('end_date'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+  position: integer('position'),
+  // Recycle bin (0022): deleted_at IS NULL => active. Soft-delete keeps the row
+  // so child FKs survive for batch-aware restore. See lib/db/queries/deletion.ts.
+  deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  deleted_by: integer('deleted_by').references(() => users.id, { onDelete: 'set null' }),
+  delete_batch_id: integer('delete_batch_id'),
+  },
+  (t) => ({
+    deletedIdx: index('idx_projects_deleted').on(t.workspace_id, t.deleted_at),
+    batchIdx: index('idx_projects_batch').on(t.delete_batch_id),
+  })
+)
 
 // Project status updates ("health" posts). Each project accumulates a feed of
 // updates; the latest one is the project's current health. status is one of
@@ -187,9 +201,15 @@ export const milestones = pgTable(
     status: varchar('status', { length: 50 }).default('active'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+    // Recycle bin (0022). See lib/db/queries/deletion.ts.
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+    deleted_by: integer('deleted_by').references(() => users.id, { onDelete: 'set null' }),
+    delete_batch_id: integer('delete_batch_id'),
   },
   (t) => ({
     projectIdx: index('idx_milestones_project').on(t.project_id),
+    deletedIdx: index('idx_milestones_deleted').on(t.workspace_id, t.deleted_at),
+    batchIdx: index('idx_milestones_batch').on(t.delete_batch_id),
   })
 )
 
@@ -223,6 +243,11 @@ export const issues = pgTable(
     cancelled_at: timestamp('cancelled_at', { withTimezone: true }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+    position: integer('position'),
+    // Recycle bin (0022). See lib/db/queries/deletion.ts.
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+    deleted_by: integer('deleted_by').references(() => users.id, { onDelete: 'set null' }),
+    delete_batch_id: integer('delete_batch_id'),
   },
   (t) => ({
     projectIdx: index('idx_issues_project').on(t.project_id),
@@ -232,6 +257,8 @@ export const issues = pgTable(
     priorityIdx: index('idx_issues_priority').on(t.priority),
     workspaceIdx: index('idx_issues_workspace').on(t.workspace_id),
     workspaceSeqUniq: uniqueIndex('uq_issues_workspace_seq').on(t.workspace_id, t.seq),
+    deletedIdx: index('idx_issues_deleted').on(t.workspace_id, t.deleted_at),
+    batchIdx: index('idx_issues_batch').on(t.delete_batch_id),
     priorityCheck: check('issues_priority_check', sql`${t.priority} >= 1 AND ${t.priority} <= 5`),
   })
 )
@@ -517,6 +544,33 @@ export const inboxMessages = pgTable(
   })
 )
 
+// Recycle bin (0022): one row per delete operation. Groups the binned items so
+// restore can be batch-aware — items deleted together with their parent restore
+// as a group; items deleted alone restore standalone. `mode` records whether the
+// children were cascaded into the bin or detached (kept active).
+export const deletionBatches = pgTable(
+  'deletion_batches',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    actor_user_id: integer('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    mode: varchar('mode', { length: 10 }).notNull(),
+    root_type: varchar('root_type', { length: 20 }).notNull(),
+    root_id: integer('root_id').notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    wsIdx: index('idx_deletion_batches_ws').on(t.workspace_id, t.created_at),
+    modeCheck: check('deletion_batches_mode_check', sql`${t.mode} IN ('cascade', 'detach')`),
+    rootTypeCheck: check(
+      'deletion_batches_root_type_check',
+      sql`${t.root_type} IN ('project', 'milestone', 'issue')`
+    ),
+  })
+)
+
 export const errorEvents = pgTable(
   'error_events',
   {
@@ -561,6 +615,9 @@ export type PasswordResetOtp = typeof passwordResetOtps.$inferSelect
 export type NewPasswordResetOtp = typeof passwordResetOtps.$inferInsert
 export type ErrorEvent = typeof errorEvents.$inferSelect
 export type NewErrorEvent = typeof errorEvents.$inferInsert
+export type DeletionBatch = typeof deletionBatches.$inferSelect
+export type NewDeletionBatch = typeof deletionBatches.$inferInsert
+export type NewMilestone = typeof milestones.$inferInsert
 export type Workspace = typeof workspaces.$inferSelect
 export type NewWorkspace = typeof workspaces.$inferInsert
 export type WorkspaceMember = typeof workspaceMembers.$inferSelect

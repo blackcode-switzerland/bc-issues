@@ -26,7 +26,6 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   const data = await listMilestonesInWorkspace(ctx.workspace.id, {
     projectId,
-    status: sp.get('status') ?? undefined,
     search: sp.get('search') ?? undefined,
   })
   return NextResponse.json({ data })
@@ -60,7 +59,6 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     name,
     description: typeof body.description === 'string' ? body.description : null,
     due_date: typeof body.due_date === 'string' ? body.due_date : null,
-    status: typeof body.status === 'string' ? body.status : undefined,
     actorUserId: ctx.user.id,
   })
   return NextResponse.json(milestone, { status: 201 })

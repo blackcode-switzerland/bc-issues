@@ -49,7 +49,7 @@ export function Dashboard({ user }: { user: User }) {
   })
 
   const createProject = useMutation({
-    mutationFn: async (data: { name: string; description: string }) => {
+    mutationFn: async (data: { name: string; summary: string }) => {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,11 +331,11 @@ function NewProjectModal({
   isLoading,
 }: {
   onClose: () => void
-  onCreate: (data: { name: string; description: string }) => void
+  onCreate: (data: { name: string; summary: string }) => void
   isLoading: boolean
 }) {
   const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const [summary, setSummary] = useState('')
   const [priority, setPriority] = useState('P2')
   const [visibility, setVisibility] = useState('team')
   const [color, setColor] = useState('#3B82F6')
@@ -442,7 +442,7 @@ function NewProjectModal({
               onSubmit={(e) => {
                 e.preventDefault()
                 if (name.trim()) {
-                  onCreate({ name: name.trim(), description: description.trim() })
+                  onCreate({ name: name.trim(), summary: summary.trim() })
                 }
               }}
               className="space-y-5"
@@ -462,16 +462,16 @@ function NewProjectModal({
                 />
               </div>
 
-              {/* Description */}
+              {/* Summary */}
               <div>
                 <label className="block text-sm font-medium mb-1.5">
-                  Description
+                  Summary
                 </label>
                 <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What's this project about?"
-                  rows={3}
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  placeholder="A short plain-text summary of this project…"
+                  rows={2}
                   className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>

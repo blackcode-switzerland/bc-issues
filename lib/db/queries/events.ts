@@ -52,6 +52,9 @@ export type EventAction =
   | 'unattached'
   | 'mentioned'
   | 'due_date_changed'
+  // recycle bin
+  | 'restored'
+  | 'purged'
 
 export interface RecordEventInput {
   workspaceId: number

@@ -18,6 +18,7 @@ import {
   Inbox,
   Users,
   Tag,
+  Trash2,
   Menu,
   X,
   type LucideIcon,
@@ -49,6 +50,7 @@ const NAV_MANAGE = [
   { href: '/dashboard/members', label: 'Members', icon: Users, match: (p: string) => p.startsWith('/dashboard/members') },
   { href: '/dashboard/activity', label: 'Activity', icon: Clock, match: (p: string) => p === '/dashboard/activity' },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, match: (p: string) => p === '/dashboard/analytics' },
+  { href: '/dashboard/trash', label: 'Trash', icon: Trash2, match: (p: string) => p === '/dashboard/trash' },
 ]
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -89,8 +91,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       const slug = ws!.slug
       const [p, m, i, l] = await Promise.all([
         fetch(`/api/workspaces/${slug}/projects`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
-        fetch(`/api/workspaces/${slug}/milestones?limit=1`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
-        fetch(`/api/workspaces/${slug}/issues?limit=1`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/milestones`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/issues`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
         fetch(`/api/workspaces/${slug}/labels`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
       ])
       return { projects: p, milestones: m, issues: i, labels: l }
@@ -106,7 +108,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Brand */}
       <div className="flex items-center gap-2 border-b border-sidebar-border px-3.5 py-3">
         <Image src="/logo.png" alt="blackcode" width={22} height={22} className="rounded-md" />
-        <span className="text-sm font-semibold tracking-tight">blackcode</span>
+        <span className="text-[15px] font-semibold tracking-tight">blackcode</span>
       </div>
 
       {/* Workspace switcher / top */}
@@ -161,11 +163,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             name={displayName || null}
             email={displayEmail || null}
             avatarUrl={avatarUrl}
-            size={28}
+            size={30}
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium leading-tight">{displayName}</p>
-            <p className="truncate text-[11px] leading-tight text-muted-foreground">{displayEmail}</p>
+            <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
+            <p className="truncate text-xs leading-tight text-muted-foreground">{displayEmail}</p>
           </div>
         </div>
         <div className="flex items-center justify-end gap-1">
@@ -209,7 +211,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* Mobile top bar (static so page-level sticky headers can take top-0) */}
-      <header className="flex h-12 items-center gap-2 border-b border-border bg-background px-3 lg:hidden">
+      <header className="dashboard-mobile-header flex h-12 items-center gap-2 border-b border-border bg-background px-3 lg:hidden">
         <button
           onClick={() => setMobileOpen(true)}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
@@ -238,7 +240,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-2.5 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+    <p className="px-2.5 pb-1 pt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
       {children}
     </p>
   )
@@ -277,17 +279,17 @@ function NavItem({
   return (
     <Link
       href={item.href}
-      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
         active
           ? 'bg-sidebar-accent text-foreground'
           : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
       }`}
     >
-      <Icon size={16} />
+      <Icon size={17} />
       <span className="flex-1 truncate">{item.label}</span>
       {item.trailing ? <InboxBadge /> : null}
       {count != null && !item.trailing ? (
-        <span className="text-[11px] tabular-nums text-muted-foreground/60">{count}</span>
+        <span className="text-xs tabular-nums text-muted-foreground/60">{count}</span>
       ) : null}
     </Link>
   )

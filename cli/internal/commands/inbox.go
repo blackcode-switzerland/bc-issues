@@ -19,6 +19,7 @@ func newInboxCmd() *cobra.Command {
 		newInboxListCmd(),
 		newInboxReadCmd(),
 		newInboxArchiveCmd(),
+		newInboxUnarchiveCmd(),
 	)
 	return cmd
 }
@@ -133,6 +134,34 @@ func newInboxArchiveCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "archived %d\n", count)
+			return nil
+		},
+	}
+}
+
+func newInboxUnarchiveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unarchive <id> [id ...]",
+		Short: "Move archived messages back to inbox",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, _, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ids := make([]int, 0, len(args))
+			for _, a := range args {
+				n, err := strconv.Atoi(a)
+				if err != nil {
+					return fmt.Errorf("invalid id %q", a)
+				}
+				ids = append(ids, n)
+			}
+			count, err := c.UnarchiveInbox(ids)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "unarchived %d\n", count)
 			return nil
 		},
 	}

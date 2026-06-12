@@ -4,7 +4,7 @@
 // (NOT NULL for now) and mirrored on issue-parent comments so the old code
 // path doesn't break.
 
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
 import {
   comments,
@@ -108,7 +108,13 @@ export async function verifyCommentParent(
     const rows = await db
       .select({ id: issues.id })
       .from(issues)
-      .where(and(eq(issues.id, parentId), eq(issues.workspace_id, workspaceId)))
+      .where(
+        and(
+          eq(issues.id, parentId),
+          eq(issues.workspace_id, workspaceId),
+          isNull(issues.deleted_at)
+        )
+      )
       .limit(1)
     return !!rows[0]
   }
@@ -116,14 +122,22 @@ export async function verifyCommentParent(
     const rows = await db
       .select({ id: milestones.id })
       .from(milestones)
-      .where(and(eq(milestones.id, parentId), eq(milestones.workspace_id, workspaceId)))
+      .where(
+        and(
+          eq(milestones.id, parentId),
+          eq(milestones.workspace_id, workspaceId),
+          isNull(milestones.deleted_at)
+        )
+      )
       .limit(1)
     return !!rows[0]
   }
   const rows = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, parentId), eq(projects.workspace_id, workspaceId)))
+    .where(
+      and(eq(projects.id, parentId), eq(projects.workspace_id, workspaceId), isNull(projects.deleted_at))
+    )
     .limit(1)
   return !!rows[0]
 }

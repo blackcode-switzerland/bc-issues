@@ -210,12 +210,12 @@ export function ApiTokensSettings() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
-                <th className="px-6 py-2 font-medium">Name</th>
-                <th className="px-6 py-2 font-medium">Prefix</th>
-                <th className="px-6 py-2 font-medium">Created</th>
-                <th className="px-6 py-2 font-medium">Last used</th>
-                <th className="px-6 py-2 font-medium">Expires</th>
+              <tr className="text-left text-[13px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                <th className="px-6 py-3 font-medium">Name</th>
+                <th className="px-6 py-3 font-medium">Prefix</th>
+                <th className="px-6 py-3 font-medium">Created</th>
+                <th className="px-6 py-3 font-medium">Last used</th>
+                <th className="px-6 py-3 font-medium">Expires</th>
                 <th className="px-6 py-2"></th>
               </tr>
             </thead>

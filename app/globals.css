@@ -21,22 +21,22 @@
 :root {
   /* Surfaces */
   --background: oklch(1 0 0);
-  --foreground: oklch(0.205 0 0);
+  --foreground: oklch(0.185 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0 0);
+  --card-foreground: oklch(0.185 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.185 0 0);
 
   /* Brand */
   --primary: #007bd3;
   --primary-foreground: oklch(0.985 0 0);
 
   /* Neutrals */
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.955 0 0);
   --secondary-foreground: oklch(0.245 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.535 0 0);
-  --accent: oklch(0.96 0 0);
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.49 0 0);
+  --accent: oklch(0.945 0 0);
   --accent-foreground: oklch(0.245 0 0);
 
   /* Feedback */
@@ -44,8 +44,8 @@
   --destructive-foreground: oklch(0.985 0 0);
 
   /* Form chrome */
-  --border: oklch(0.916 0 0);
-  --input: oklch(0.916 0 0);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.9 0 0);
   --ring: #007bd3;
 
   /* Charts — brand indigo lead, then neutral-friendly distinct hues */
@@ -55,14 +55,14 @@
   --chart-4: oklch(0.78 0.16 70);
   --chart-5: oklch(0.62 0.2 25);
 
-  /* Sidebar */
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.205 0 0);
+  /* Sidebar — a step warmer-gray than the content so the app has depth */
+  --sidebar: oklch(0.972 0 0);
+  --sidebar-foreground: oklch(0.185 0 0);
   --sidebar-primary: #007bd3;
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.952 0 0);
-  --sidebar-accent-foreground: oklch(0.245 0 0);
-  --sidebar-border: oklch(0.916 0 0);
+  --sidebar-accent: oklch(0.93 0 0);
+  --sidebar-accent-foreground: oklch(0.185 0 0);
+  --sidebar-border: oklch(0.9 0 0);
   --sidebar-ring: #007bd3;
 
   --radius: 0.5rem;
@@ -164,6 +164,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+  button, [role="button"], a, select, label[for], [tabindex]:not([tabindex="-1"]) {
+    cursor: pointer;
+  }
+  button:disabled, [disabled] {
+    cursor: not-allowed;
   }
 }
 

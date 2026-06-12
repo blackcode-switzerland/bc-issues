@@ -5,7 +5,7 @@
 // Names are case-insensitive unique within a workspace (enforced at the
 // application layer; Phase 13 cleanup will add a partial unique index).
 
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { issueLabels, issues, labels, type Label } from '../schema'
 import { recordEvent } from './events'
@@ -19,7 +19,8 @@ export async function listLabelsInWorkspace(workspaceId: number): Promise<LabelL
     SELECT l.*,
       (SELECT COUNT(*)::int FROM issue_labels il
         INNER JOIN issues i ON i.id = il.issue_id
-        WHERE il.label_id = l.id AND i.workspace_id = ${workspaceId}) AS issue_count
+        WHERE il.label_id = l.id AND i.workspace_id = ${workspaceId}
+          AND i.deleted_at IS NULL) AS issue_count
     FROM labels l
     WHERE l.workspace_id = ${workspaceId}
     ORDER BY l.name ASC
@@ -196,7 +197,9 @@ export async function attachLabel(
     const ok = await tx
       .select({ i: issues.id })
       .from(issues)
-      .where(and(eq(issues.id, issueId), eq(issues.workspace_id, workspaceId)))
+      .where(
+        and(eq(issues.id, issueId), eq(issues.workspace_id, workspaceId), isNull(issues.deleted_at))
+      )
       .limit(1)
     if (!ok[0]) return false
     const lbl = await tx

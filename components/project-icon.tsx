@@ -219,7 +219,7 @@ export function ProjectIcon({
       {Icon ? (
         <Icon size={iconSize} />
       ) : (
-        <span style={{ fontSize: Math.round(size * 0.42), fontWeight: 600 }}>
+        <span style={{ fontSize: Math.round(size * 0.42), fontWeight: 600, lineHeight: 1 }}>
           {(name?.trim()?.[0] ?? '?').toUpperCase()}
         </span>
       )}

@@ -11,6 +11,7 @@ import {
   updateProject,
 } from '@/lib/db/queries/projects'
 import { getMembership } from '@/lib/db/queries/workspaces'
+import type { DeleteMode } from '@/lib/db/queries/deletion'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -61,6 +62,7 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const membership = await getMembership(project.workspace_id, user.id)
   if (!membership) throw Errors.notFound('project')
 
-  await deleteProject(project.workspace_id, id, user.id)
+  const mode: DeleteMode = req.nextUrl.searchParams.get('mode') === 'cascade' ? 'cascade' : 'detach'
+  await deleteProject(project.workspace_id, id, user.id, mode)
   return NextResponse.json({ success: true })
 })

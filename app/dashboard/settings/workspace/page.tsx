@@ -1,7 +1,8 @@
-import { WorkspaceSettingsView } from '@/components/workspace-settings-view'
+import { redirect } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
-
-export default function WorkspaceSettingsPage() {
-  return <WorkspaceSettingsView />
+// Workspace settings moved out of the Settings tabs into a dedicated
+// /dashboard/workspaces page (with a per-workspace manage subpage). Keep this
+// route as a redirect so old links/bookmarks still resolve.
+export default function WorkspaceSettingsRedirect() {
+  redirect('/dashboard/workspaces')
 }

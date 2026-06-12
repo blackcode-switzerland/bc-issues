@@ -17,9 +17,32 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDistanceToNow } from 'date-fns'
+import { issueStatusLabel, projectStatusLabel } from '@/lib/work-items'
+
+// Notifications can be about issues or projects — resolve whichever vocabulary matches.
+function statusName(value: unknown): string {
+  const v = String(value ?? '')
+  const asIssue = issueStatusLabel(v)
+  return asIssue !== v ? asIssue : projectStatusLabel(v)
+}
 import { IssueDetailView } from './issue-detail-view'
 import { ProjectDetailView } from './project-detail-view'
 import { MilestoneDetailView } from './milestone-detail-view'
+
+// Comment excerpts arrive as raw TipTap HTML — render them as plain text.
+function stripHtml(html: string, max = 90): string {
+  const text = html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^>]*$/, ' ') // excerpt may be truncated mid-tag
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
 
 interface InboxMessage {
   id: number
@@ -164,17 +187,17 @@ export function InboxView() {
     <div className="flex h-[calc(100vh-0px)] overflow-hidden">
       {/* Left: message list */}
       <div className={`flex flex-col border-r border-border ${selectedMessage ? 'hidden md:flex md:w-80 lg:w-96' : 'w-full md:w-80 lg:w-96'}`}>
-        <header className="sticky top-0 z-10 flex h-11 shrink-0 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-          <h1 className="text-sm font-semibold">Inbox</h1>
+        <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
+          <h1 className="text-[15px] font-semibold">Inbox</h1>
           {(data?.unread_count ?? 0) > 0 && tab !== 'archived' ? (
-            <span className="text-xs text-muted-foreground">{data?.unread_count} unread</span>
+            <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">{data?.unread_count}</span>
           ) : null}
           <div className="ml-auto flex items-center gap-1">
             {(['all', 'unread', 'archived'] as InboxTab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => { setTab(t); setSelectedId(null) }}
-                className={`rounded-md px-2 py-1 text-xs capitalize transition-colors ${
+                className={`rounded-md px-2.5 py-1 text-[13px] capitalize transition-colors ${
                   tab === t ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -225,8 +248,8 @@ export function InboxView() {
                         onAccept={accept.mutate}
                       />
                     ) : null}
-                    <p className="mt-0.5 text-[11px] text-muted-foreground" suppressHydrationWarning>
-                      {new Date(m.created_at).toLocaleString()}
+                    <p className="mt-0.5 text-xs text-muted-foreground" suppressHydrationWarning>
+                      {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
                     </p>
                   </div>
                   <div
@@ -330,16 +353,18 @@ function renderMessage(m: InboxMessage): React.ReactNode {
     case 'status_changed':
       return (
         <>
-          <strong>{issueLabel}</strong> moved <span className="font-mono text-xs">{p.from}</span> →{' '}
-          <span className="font-mono text-xs">{p.to}</span>
+          <strong>{issueLabel}</strong> moved from {statusName(p.from)} to {statusName(p.to)}
         </>
       )
-    case 'commented':
+    case 'commented': {
+      const excerpt = p.excerpt ? stripHtml(String(p.excerpt)) : ''
       return (
         <>
-          New comment on <strong>{issueLabel}</strong>{p.excerpt ? `: "${p.excerpt}"` : ''}
+          New comment on <strong>{issueLabel}</strong>
+          {excerpt ? <span className="text-muted-foreground"> — {excerpt}</span> : ''}
         </>
       )
+    }
     case 'mention':
       return <>You were mentioned in <strong>{issueLabel}</strong></>
     case 'member_added':

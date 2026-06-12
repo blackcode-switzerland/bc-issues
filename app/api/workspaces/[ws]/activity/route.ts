@@ -42,6 +42,9 @@ const ACTIONS = new Set<EventAction>([
   'attached',
   'unattached',
   'mentioned',
+  'due_date_changed',
+  'restored',
+  'purged',
 ])
 
 function parseList<T extends string>(raw: string | null, allowed: Set<T>): T[] | undefined {

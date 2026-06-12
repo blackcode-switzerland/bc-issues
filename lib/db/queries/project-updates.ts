@@ -1,7 +1,7 @@
 // Project status updates ("health" feed). Each project has a chronological feed
 // of updates; the most recent is the project's current health.
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '../client'
 import { projectUpdates, projects, users, type ProjectUpdate } from '../schema'
 import { recordEvent } from './events'
@@ -45,7 +45,9 @@ export async function verifyProjectInWorkspace(
   const rows = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.workspace_id, workspaceId)))
+    .where(
+      and(eq(projects.id, projectId), eq(projects.workspace_id, workspaceId), isNull(projects.deleted_at))
+    )
     .limit(1)
   return !!rows[0]
 }

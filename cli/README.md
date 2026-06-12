@@ -133,7 +133,7 @@ bk project milestones <id>
 
 bk project create --name N [--description D | --description-file F]
 bk project edit <id> [--name N] [--description D | --description-file F] [--status S]
-bk project delete <id> [--yes]                       (owner only)
+bk project delete <id> [--yes] [--cascade | --detach]   move to Trash
 
 bk project add-member <id> --email E [--role owner|admin|member|viewer]
 bk project remove-member <id> --user <id|email|name> [--yes]
@@ -162,7 +162,7 @@ bk issue edit <id> [--title T] [--description D | --description-file F]
 
 bk issue assign <id> <user>        set assignee (id, email, name, or me)
 bk issue unassign <id>             clear assignee
-bk issue delete <id> [--yes]       (project owner/admin)
+bk issue delete <id> [--yes]       move to Trash (restore with `bk trash`)
 
 bk issue comment <id> --body "..." | --body-file F | --body -
 bk issue comments <id>
@@ -186,8 +186,32 @@ bk milestone create --project N --name M
                     [--description D | --description-file F] [--due-date YYYY-MM-DD]
 bk milestone edit <id> [--name M] [--description D | --description-file F]
                        [--due-date <YYYY-MM-DD|none>]
-bk milestone delete <id> [--yes]
+bk milestone delete <id> [--yes] [--cascade | --detach]   move to Trash
 ```
+
+### Trash (recycle bin, workspace-scoped)
+
+Deleting an issue, project, or milestone moves it to the Trash instead of
+removing it permanently. Restore items individually, in bulk, or as a delete
+group. Purging (permanent delete) is **owner-only**.
+
+```
+bk trash list [--type issue|project|milestone]
+bk trash restore <type:id>...        e.g. bk trash restore issue:42 project:3
+bk trash restore --batch <id>        restore a whole delete group
+      [--restore-parents | --standalone]   force how dangling parents resolve
+bk trash purge <type:id>... [--yes]  permanent delete (owner only)
+bk trash purge --batch <id> [--yes]
+bk trash empty [--yes]               permanently delete everything (owner only)
+```
+
+When a project/milestone is deleted with `--cascade`, its attached issues (and
+a project's milestones) go to the Trash with it as one batch, so restoring the
+batch brings the whole group back, re-linked. With `--detach` (the default) only
+the parent is binned and the children stay active, unlinked. On restore, if an
+item's parent is itself still in the Trash, the items it was deleted *with*
+restore as a group; items deleted alone restore standalone — override per item in
+the UI, or force it CLI-wide with `--restore-parents` / `--standalone`.
 
 ### Labels (workspace-scoped)
 ```

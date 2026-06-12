@@ -7,6 +7,7 @@ import {
 } from '@/lib/db/queries/milestones'
 import { getIssuesByMilestone } from '@/lib/db/queries/issues'
 import { getProjectInWorkspace } from '@/lib/db/queries/projects'
+import { previewDeletion, type DeleteMode } from '@/lib/db/queries/deletion'
 
 interface Params {
   params: Promise<{ ws: string; id: string }>
@@ -17,6 +18,11 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const id = parseInt(idStr)
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+
+  if (req.nextUrl.searchParams.get('preview')) {
+    const counts = await previewDeletion(ctx.workspace.id, 'milestone', id)
+    return NextResponse.json(counts)
+  }
 
   const m = await getMilestoneInWorkspace(ctx.workspace.id, id)
   if (!m) throw Errors.notFound('milestone')
@@ -60,7 +66,9 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const id = parseInt(idStr)
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
-  const ok = await deleteMilestone(ctx.workspace.id, id, ctx.user.id)
+
+  const mode: DeleteMode = req.nextUrl.searchParams.get('mode') === 'cascade' ? 'cascade' : 'detach'
+  const ok = await deleteMilestone(ctx.workspace.id, id, ctx.user.id, mode)
   if (!ok) throw Errors.notFound('milestone')
-  return NextResponse.json({ deleted: true })
+  return NextResponse.json({ deleted: true, mode })
 })

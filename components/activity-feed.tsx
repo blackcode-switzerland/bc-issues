@@ -409,7 +409,7 @@ export function ActivityFeed({
               if (draft.replace(/<[^>]*>/g, '').trim()) createRoot.mutate(draft)
             }}
             disabled={createRoot.isPending || !draft.replace(/<[^>]*>/g, '').trim()}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {createRoot.isPending ? 'Posting…' : 'Comment'}
           </button>
@@ -431,8 +431,8 @@ function eventLeftIcon(
     case 'status_changed': {
       const to = meta?.to as string | undefined
       return (
-        <span className="flex size-[18px] shrink-0 items-center justify-center">
-          <StatusIcon status={to ?? ''} size={14} />
+        <span className="flex size-[20px] shrink-0 items-center justify-center">
+          <StatusIcon status={to ?? ''} size={15} />
         </span>
       )
     }
@@ -443,15 +443,15 @@ function eventLeftIcon(
         ? projectPriorityKey(String(to ?? ''))
         : issuePriorityKey(Number(to ?? 0))
       return (
-        <span className="flex size-[18px] shrink-0 items-center justify-center">
-          <PriorityIcon priority={toKey} size={14} />
+        <span className="flex size-[20px] shrink-0 items-center justify-center">
+          <PriorityIcon priority={toKey} size={15} />
         </span>
       )
     }
     case 'due_date_changed':
       return (
-        <span className="flex size-[18px] shrink-0 items-center justify-center">
-          <CalendarDays size={13} className="text-muted-foreground/70" />
+        <span className="flex size-[20px] shrink-0 items-center justify-center">
+          <CalendarDays size={14} className="text-muted-foreground/70" />
         </span>
       )
     default:
@@ -461,7 +461,7 @@ function eventLeftIcon(
           name={actorMember?.name ?? actorName}
           email={actorEmail ?? ''}
           avatarUrl={actorMember?.avatar_url}
-          size={18}
+          size={20}
           className="shrink-0"
         />
       )
@@ -490,13 +490,13 @@ function EventRow({
   )
 
   return (
-    <div className="flex items-center gap-2 py-0.5 text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground">
       {leftIcon}
       <span className="inline-flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
         <span className="font-medium text-foreground/80">{actorName}</span>
         <span className="inline-flex flex-wrap items-center gap-1">{text}</span>
       </span>
-      <span className="ml-2 shrink-0 text-[11px]" suppressHydrationWarning>
+      <span className="ml-2 shrink-0 text-xs" suppressHydrationWarning>
         {formatDistanceToNow(new Date(event.occurred_at), { addSuffix: true })}
       </span>
     </div>
@@ -654,23 +654,23 @@ function CommentRow({
           name={comment.author_name}
           email={comment.author_email}
           avatarUrl={comment.author_avatar}
-          size={26}
+          size={28}
         />
 
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-[13px] font-medium">
+            <span className="text-sm font-medium">
               {comment.author_name ?? comment.author_email ?? 'Unknown'}
             </span>
             <span
-              className="text-[11px] text-muted-foreground"
+              className="text-xs text-muted-foreground"
               suppressHydrationWarning
               title={new Date(comment.created_at).toLocaleString()}
             >
               {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
             </span>
             {comment.edited_at ? (
-              <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
                 edited
               </span>
             ) : null}
@@ -729,7 +729,7 @@ function CommentRow({
                 <>
                   <button
                     onClick={startEdit}
-                    className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
                   >
                     <Edit3 size={11} />
                     Edit
@@ -737,7 +737,7 @@ function CommentRow({
                   <button
                     onClick={handleDelete}
                     disabled={deleteMutation.isPending}
-                    className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
                   >
                     <Trash2 size={11} />
                     Delete
@@ -808,7 +808,7 @@ function ReplyComposer({
           email={me.data ? `user-${me.data.id}` : ''}
           size={20}
         />
-        <span className="flex-1 text-[13px] text-muted-foreground/50">Leave a reply…</span>
+        <span className="flex-1 text-sm text-muted-foreground/50">Leave a reply…</span>
         <Paperclip size={14} className="shrink-0 text-muted-foreground/30" />
         <ArrowUp size={14} className="shrink-0 text-muted-foreground/30" />
       </div>
@@ -854,7 +854,7 @@ function ReplyComposer({
               if (draft.replace(/<[^>]*>/g, '').trim()) reply.mutate(draft)
             }}
             disabled={reply.isPending || !draft.replace(/<[^>]*>/g, '').trim()}
-            className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {reply.isPending ? 'Replying…' : 'Reply'}
           </button>

@@ -6,11 +6,12 @@
 //
 // Every mutation records an event in the same transaction.
 
-import { and, desc, eq, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { projects, type Project } from '../schema'
 import { recordEvent } from './events'
-import { setProjectLabels, setProjectMembers } from './project-relations'
+import { softDeleteProject, type DeleteMode } from './deletion'
+import { setProjectMembers } from './project-relations'
 
 export interface ProjectListItem extends Project {
   issue_count: number
@@ -37,7 +38,7 @@ export async function listProjectsInWorkspace(
       upd.status AS health,
       upd.created_at AS health_at
     FROM projects p
-    LEFT JOIN issues i ON i.project_id = p.id
+    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
     LEFT JOIN users lead ON lead.id = p.owner_id
     LEFT JOIN LATERAL (
       SELECT status, created_at
@@ -47,6 +48,7 @@ export async function listProjectsInWorkspace(
       LIMIT 1
     ) upd ON true
     WHERE p.workspace_id = ${workspaceId}
+      AND p.deleted_at IS NULL
       ${options.status ? sql`AND p.status = ${options.status}` : sql``}
       ${
         options.search
@@ -54,7 +56,7 @@ export async function listProjectsInWorkspace(
           : sql``
       }
     GROUP BY p.id, lead.name, lead.email, lead.avatar_url, upd.status, upd.created_at
-    ORDER BY p.updated_at DESC
+    ORDER BY COALESCE(p.position, 0) ASC, p.id DESC
   `)
   return result.rows as unknown as ProjectListItem[]
 }
@@ -78,11 +80,12 @@ export async function pageProjectsInWorkspace(opts: {
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status NOT IN ('done', 'cancelled'))::int AS open_issues
     FROM projects p
-    LEFT JOIN issues i ON i.project_id = p.id
+    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
     WHERE p.workspace_id = ${workspaceId}
+      AND p.deleted_at IS NULL
       ${filterCursor ? sql`AND p.id < ${cursor}` : sql``}
     GROUP BY p.id
-    ORDER BY p.id DESC
+    ORDER BY COALESCE(p.position, 0) ASC, p.id DESC
     LIMIT ${limit + 1}
   `)
 
@@ -93,6 +96,29 @@ export async function pageProjectsInWorkspace(opts: {
   return { data, next_cursor }
 }
 
+// Persist manual ordering for projects in a workspace. Positions are global
+// (not per-status) so list view and kanban share the same ordering.
+export async function reorderProjects(
+  workspaceId: number,
+  orderedIds: number[]
+): Promise<void> {
+  if (orderedIds.length === 0) return
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(projects)
+        .set({ position: i + 1 })
+        .where(
+          and(
+            eq(projects.workspace_id, workspaceId),
+            eq(projects.id, orderedIds[i]),
+            isNull(projects.deleted_at)
+          )
+        )
+    }
+  })
+}
+
 export async function getProjectInWorkspace(
   workspaceId: number,
   id: number
@@ -100,7 +126,9 @@ export async function getProjectInWorkspace(
   const rows = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, id), eq(projects.workspace_id, workspaceId)))
+    .where(
+      and(eq(projects.id, id), eq(projects.workspace_id, workspaceId), isNull(projects.deleted_at))
+    )
     .limit(1)
   return rows[0] ?? null
 }
@@ -109,13 +137,18 @@ export async function getProjectInWorkspace(
 // dashboard UI still calls it. Just fetches by id; workspace gating happens at
 // the route layer.
 export async function getProject(id: number): Promise<Project | null> {
-  const rows = await db.select().from(projects).where(eq(projects.id, id)).limit(1)
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, id), isNull(projects.deleted_at)))
+    .limit(1)
   return rows[0] ?? null
 }
 
 export interface CreateProjectInput {
   workspaceId: number
   name: string
+  summary?: string | null
   description?: string | null
   color?: string
   icon?: string | null
@@ -125,7 +158,6 @@ export interface CreateProjectInput {
   end_date?: string | null
   status?: string
   member_ids?: number[]
-  label_ids?: number[]
   actorUserId: number
 }
 
@@ -136,6 +168,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       .values({
         workspace_id: input.workspaceId,
         name: input.name,
+        summary: input.summary ?? null,
         description: input.description ?? null,
         color: input.color ?? '#3B82F6',
         icon: input.icon ?? null,
@@ -150,9 +183,6 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
     if (input.member_ids && input.member_ids.length > 0) {
       await setProjectMembers(tx, row.id, input.member_ids)
-    }
-    if (input.label_ids && input.label_ids.length > 0) {
-      await setProjectLabels(tx, row.id, input.workspaceId, input.label_ids)
     }
 
     await recordEvent(tx, {
@@ -172,6 +202,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
 export interface UpdateProjectInput {
   name?: string
+  summary?: string | null
   description?: string | null
   status?: string
   color?: string
@@ -210,6 +241,7 @@ export async function updateProject(
 
     const updates: Record<string, unknown> = {}
     if (patch.name !== undefined) updates.name = patch.name
+    if (patch.summary !== undefined) updates.summary = patch.summary
     if (patch.description !== undefined) updates.description = patch.description
     if (patch.status !== undefined) updates.status = patch.status
     if (patch.color !== undefined) updates.color = patch.color
@@ -304,35 +336,17 @@ export async function updateProject(
   })
 }
 
+// Delete now means soft-delete (move to the recycle bin). `mode` controls the
+// attached issues/milestones: 'detach' (default) keeps them active but unlinks
+// them — matching the old hard-delete + FK SET NULL behavior; 'cascade' bins
+// them together so they restore as a group. See lib/db/queries/deletion.ts.
 export async function deleteProject(
   workspaceId: number,
   id: number,
-  actorUserId: number
+  actorUserId: number,
+  mode: DeleteMode = 'detach'
 ): Promise<boolean> {
-  return await db.transaction(async (tx) => {
-    const beforeRows = await tx
-      .select()
-      .from(projects)
-      .where(and(eq(projects.id, id), eq(projects.workspace_id, workspaceId)))
-      .limit(1)
-    if (!beforeRows[0]) return false
-
-    // Record event BEFORE delete so the FK cascade doesn't wipe it (events
-    // cascade-deletes with workspace, not with project; this is fine).
-    await recordEvent(tx, {
-      workspaceId,
-      actorUserId,
-      entityType: 'project',
-      entityId: id,
-      action: 'deleted',
-      diff: { before: { name: beforeRows[0].name, status: beforeRows[0].status } },
-    })
-
-    const result = await tx
-      .delete(projects)
-      .where(and(eq(projects.id, id), eq(projects.workspace_id, workspaceId)))
-    return (result.rowCount ?? 0) > 0
-  })
+  return softDeleteProject(workspaceId, id, actorUserId, mode)
 }
 
 // --- Legacy compatibility shims ---
@@ -344,7 +358,8 @@ export async function getProjects(userId?: number) {
     const result = await db.execute(sql`
       SELECT p.*, COUNT(i.id)::int AS issue_count,
         COUNT(i.id) FILTER (WHERE i.status NOT IN ('done','cancelled'))::int AS open_issues
-      FROM projects p LEFT JOIN issues i ON i.project_id = p.id
+      FROM projects p LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
+      WHERE p.deleted_at IS NULL
       GROUP BY p.id ORDER BY p.updated_at DESC
     `)
     return result.rows
@@ -358,7 +373,8 @@ export async function getProjects(userId?: number) {
     FROM projects p
     INNER JOIN workspace_members wm
       ON wm.workspace_id = p.workspace_id AND wm.user_id = ${userId}
-    LEFT JOIN issues i ON i.project_id = p.id
+    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL
     GROUP BY p.id, wm.role
     ORDER BY p.updated_at DESC
   `)
@@ -381,8 +397,9 @@ export async function getProjectsPage(opts: {
     FROM projects p
     INNER JOIN workspace_members wm
       ON wm.workspace_id = p.workspace_id AND wm.user_id = ${user_id}
-    LEFT JOIN issues i ON i.project_id = p.id
+    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
     WHERE 1=1
+      AND p.deleted_at IS NULL
       ${filterCursor ? sql`AND p.id < ${cursor}` : sql``}
     GROUP BY p.id, wm.role
     ORDER BY p.id DESC

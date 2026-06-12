@@ -29,6 +29,10 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-r
  */
 
 const DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+]
 
 function parseValue(value: string | null | undefined): Date | null {
   if (!value) return null
@@ -47,6 +51,7 @@ export function DatePicker({
   align = 'left',
   displayFormat = 'MMM d, yyyy',
   clearable = true,
+  hideIconWhenEmpty = false,
   buttonClassName,
 }: {
   value: string | null | undefined
@@ -58,6 +63,8 @@ export function DatePicker({
   align?: 'left' | 'right'
   displayFormat?: string
   clearable?: boolean
+  /** Chip variant: hide the calendar icon when no date is selected. */
+  hideIconWhenEmpty?: boolean
   buttonClassName?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -101,7 +108,7 @@ export function DatePicker({
           'inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1 text-xs hover:bg-secondary'
         }
       >
-        <CalendarIcon size={12} className="text-muted-foreground" />
+        {(!hideIconWhenEmpty || display) ? <CalendarIcon size={15} className="text-muted-foreground" /> : null}
         {label ? <span className="text-muted-foreground">{label}</span> : null}
         <span className={display ? 'text-foreground' : 'text-muted-foreground'}>
           {display ?? placeholder}
@@ -155,7 +162,30 @@ export function DatePicker({
             >
               <ChevronLeft size={15} />
             </button>
-            <span className="text-[13px] font-medium">{format(viewMonth, 'MMMM yyyy')}</span>
+            <div className="flex items-center gap-0.5">
+              <select
+                value={viewMonth.getMonth()}
+                onChange={(e) =>
+                  setViewMonth(new Date(viewMonth.getFullYear(), parseInt(e.target.value), 1))
+                }
+                className="cursor-pointer rounded px-1 py-0.5 text-[13px] font-medium bg-transparent hover:bg-secondary outline-none"
+              >
+                {MONTHS.map((m, i) => (
+                  <option key={i} value={i}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={viewMonth.getFullYear()}
+                onChange={(e) =>
+                  setViewMonth(new Date(parseInt(e.target.value), viewMonth.getMonth(), 1))
+                }
+                className="cursor-pointer rounded px-1 py-0.5 text-[13px] font-medium bg-transparent hover:bg-secondary outline-none"
+              >
+                {Array.from({ length: 21 }, (_, i) => viewMonth.getFullYear() - 10 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
               onClick={() => setViewMonth((m) => addMonths(m, 1))}

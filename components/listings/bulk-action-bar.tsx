@@ -42,19 +42,19 @@ export function BulkActionBar({ count, onClear, actions, onDelete, deleteLabel }
           transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
           className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
         >
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-popover px-2 py-1.5 shadow-2xl shadow-black/20">
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-popover px-2.5 py-2 shadow-2xl shadow-black/20">
             {/* Selection count */}
-            <div className="flex items-center gap-2 rounded-lg bg-secondary/60 px-3 py-1.5 text-xs font-semibold">
+            <div className="flex items-center gap-2 rounded-lg bg-secondary/60 px-3.5 py-2 text-sm font-semibold">
               <span className="tabular-nums text-foreground">{count} selected</span>
               <button
                 onClick={onClear}
                 className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
-                <X size={12} />
+                <X size={14} />
               </button>
             </div>
 
-            <div className="mx-1 h-5 w-px bg-border" />
+            <div className="mx-1 h-6 w-px bg-border" />
 
             {/* Action buttons */}
             {actions.map((action) => (
@@ -64,12 +64,12 @@ export function BulkActionBar({ count, onClear, actions, onDelete, deleteLabel }
             {/* Delete */}
             {onDelete ? (
               <>
-                <div className="mx-1 h-5 w-px bg-border" />
+                <div className="mx-1 h-6 w-px bg-border" />
                 <button
                   onClick={onDelete}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                  className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={15} />
                   {deleteLabel ?? 'Delete'}
                 </button>
               </>
@@ -115,11 +115,11 @@ function BulkActionMenu({ action }: { action: BulkAction }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
       >
         {action.icon}
         {action.label}
-        <ChevronDown size={11} className="text-muted-foreground/60" />
+        <ChevronDown size={13} className="text-muted-foreground/60" />
       </button>
       <AnimatePresence>
         {open ? (

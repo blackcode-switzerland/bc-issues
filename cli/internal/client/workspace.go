@@ -323,3 +323,263 @@ func (c *Client) DetachIssueLabel(slugOrID string, issueID, labelID int) error {
 		nil,
 	)
 }
+
+// ---------- project updates ----------
+
+func (c *Client) ListProjectUpdates(slugOrID string, projectID int) ([]ProjectUpdate, error) {
+	var resp struct {
+		Data []ProjectUpdate `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/projects/%d/updates", slugOrID, projectID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) CreateProjectUpdate(slugOrID string, projectID int, req CreateProjectUpdateRequest) (*ProjectUpdate, error) {
+	var upd ProjectUpdate
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/projects/%d/updates", slugOrID, projectID), req, &upd); err != nil {
+		return nil, err
+	}
+	return &upd, nil
+}
+
+func (c *Client) DeleteProjectUpdate(slugOrID string, projectID, updateID int) error {
+	return c.deleteJSON(
+		fmt.Sprintf("/api/workspaces/%s/projects/%d/updates/%d", slugOrID, projectID, updateID),
+		nil,
+		nil,
+	)
+}
+
+// ---------- workspace-scoped comments (issues, milestones, projects) ----------
+
+func (c *Client) ListIssueCommentsWS(slugOrID string, issueID int) ([]WorkspaceComment, error) {
+	var resp struct {
+		Data []WorkspaceComment `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/issues/%d/comments", slugOrID, issueID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) CreateIssueCommentWS(slugOrID string, issueID int, content string) (*WorkspaceComment, error) {
+	var cm WorkspaceComment
+	if err := c.postJSON(
+		fmt.Sprintf("/api/workspaces/%s/issues/%d/comments", slugOrID, issueID),
+		map[string]string{"content": content},
+		&cm,
+	); err != nil {
+		return nil, err
+	}
+	return &cm, nil
+}
+
+func (c *Client) ListMilestoneComments(slugOrID string, milestoneID int) ([]WorkspaceComment, error) {
+	var resp struct {
+		Data []WorkspaceComment `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/milestones/%d/comments", slugOrID, milestoneID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) CreateMilestoneComment(slugOrID string, milestoneID int, content string) (*WorkspaceComment, error) {
+	var cm WorkspaceComment
+	if err := c.postJSON(
+		fmt.Sprintf("/api/workspaces/%s/milestones/%d/comments", slugOrID, milestoneID),
+		map[string]string{"content": content},
+		&cm,
+	); err != nil {
+		return nil, err
+	}
+	return &cm, nil
+}
+
+func (c *Client) ListProjectComments(slugOrID string, projectID int) ([]WorkspaceComment, error) {
+	var resp struct {
+		Data []WorkspaceComment `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/projects/%d/comments", slugOrID, projectID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) CreateProjectComment(slugOrID string, projectID int, content string) (*WorkspaceComment, error) {
+	var cm WorkspaceComment
+	if err := c.postJSON(
+		fmt.Sprintf("/api/workspaces/%s/projects/%d/comments", slugOrID, projectID),
+		map[string]string{"content": content},
+		&cm,
+	); err != nil {
+		return nil, err
+	}
+	return &cm, nil
+}
+
+func (c *Client) EditComment(slugOrID string, commentID int, content string) (*WorkspaceComment, error) {
+	var cm WorkspaceComment
+	if err := c.patchJSON(
+		fmt.Sprintf("/api/workspaces/%s/comments/%d", slugOrID, commentID),
+		map[string]string{"content": content},
+		&cm,
+	); err != nil {
+		return nil, err
+	}
+	return &cm, nil
+}
+
+func (c *Client) DeleteComment(slugOrID string, commentID int) error {
+	return c.deleteJSON(
+		fmt.Sprintf("/api/workspaces/%s/comments/%d", slugOrID, commentID),
+		nil,
+		nil,
+	)
+}
+
+// ---------- issue watchers ----------
+
+func (c *Client) WatchIssue(slugOrID string, issueID int) error {
+	return c.postJSON(
+		fmt.Sprintf("/api/workspaces/%s/issues/%d/watch", slugOrID, issueID),
+		nil,
+		nil,
+	)
+}
+
+func (c *Client) UnwatchIssue(slugOrID string, issueID int) error {
+	return c.deleteJSON(
+		fmt.Sprintf("/api/workspaces/%s/issues/%d/watch", slugOrID, issueID),
+		nil,
+		nil,
+	)
+}
+
+func (c *Client) GetWatchStatus(slugOrID string, issueID int) (bool, error) {
+	var resp struct {
+		Watching bool `json:"watching"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/issues/%d/watch", slugOrID, issueID), &resp); err != nil {
+		return false, err
+	}
+	return resp.Watching, nil
+}
+
+// ---------- recycle bin (trash) ----------
+
+// ListTrash lists binned items. typ is "" for all, or issue|project|milestone.
+func (c *Client) ListTrash(slugOrID, typ string) ([]TrashItem, error) {
+	path := fmt.Sprintf("/api/workspaces/%s/trash", slugOrID)
+	if typ != "" {
+		path += "?type=" + typ
+	}
+	var resp struct {
+		Data []TrashItem `json:"data"`
+	}
+	if err := c.get(path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) RestoreTrash(slugOrID string, req RestoreTrashRequest) (*RestoreTrashResponse, error) {
+	var resp RestoreTrashResponse
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/trash/restore", slugOrID), req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *Client) PurgeTrash(slugOrID string, req PurgeTrashRequest) (int, error) {
+	var resp struct {
+		Purged int `json:"purged"`
+	}
+	if err := c.deleteJSON(fmt.Sprintf("/api/workspaces/%s/trash/purge", slugOrID), req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Purged, nil
+}
+
+func (c *Client) EmptyTrash(slugOrID string) (int, error) {
+	var resp struct {
+		Purged int `json:"purged"`
+	}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/trash/empty", slugOrID), nil, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Purged, nil
+}
+
+// ---------- inbox unarchive ----------
+
+func (c *Client) UnarchiveInbox(ids []int) (int, error) {
+	body := map[string]any{"ids": ids}
+	var resp struct {
+		Unarchived int `json:"unarchived"`
+	}
+	if err := c.postJSON("/api/me/inbox/unarchive", body, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Unarchived, nil
+}
+
+// ---------- API tokens ----------
+
+func (c *Client) ListTokens() ([]APIToken, error) {
+	var tokens []APIToken
+	if err := c.get("/api/tokens", &tokens); err != nil {
+		return nil, err
+	}
+	return tokens, nil
+}
+
+func (c *Client) CreateToken(name string, expiresAt *string) (*CreatedToken, error) {
+	body := map[string]any{"name": name}
+	if expiresAt != nil {
+		body["expires_at"] = *expiresAt
+	}
+	var tok CreatedToken
+	if err := c.postJSON("/api/tokens", body, &tok); err != nil {
+		return nil, err
+	}
+	return &tok, nil
+}
+
+func (c *Client) DeleteToken(id int) error {
+	return c.deleteJSON(fmt.Sprintf("/api/tokens/%d", id), nil, nil)
+}
+
+// ---------- profile ----------
+
+func (c *Client) GetMe() (*Me, error) {
+	var me Me
+	if err := c.get("/api/me", &me); err != nil {
+		return nil, err
+	}
+	return &me, nil
+}
+
+func (c *Client) UpdateProfile(req UpdateProfileRequest) (*Me, error) {
+	var me Me
+	if err := c.patchJSON("/api/me", req, &me); err != nil {
+		return nil, err
+	}
+	return &me, nil
+}
+
+// ---------- workspace member role ----------
+
+func (c *Client) UpdateWorkspaceMemberRole(slugOrID string, userID int, role string) (*WorkspaceMember, error) {
+	var m WorkspaceMember
+	if err := c.patchJSON(
+		fmt.Sprintf("/api/workspaces/%s/members/%d", slugOrID, userID),
+		map[string]string{"role": role},
+		&m,
+	); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}

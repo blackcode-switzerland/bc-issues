@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { ConfirmProvider } from '@/components/ui/confirm-dialog'
+import { DeleteDialogProvider } from '@/components/ui/delete-with-children-dialog'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,7 +24,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <ConfirmProvider>{children}</ConfirmProvider>
+          <ConfirmProvider>
+            <DeleteDialogProvider>{children}</DeleteDialogProvider>
+          </ConfirmProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </SessionProvider>

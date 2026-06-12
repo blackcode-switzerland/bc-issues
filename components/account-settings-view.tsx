@@ -55,11 +55,11 @@ export function AccountSettingsView() {
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-border bg-card/30 p-5">
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-medium">
-          <KeyRound size={14} />
+        <h2 className="mb-2 flex items-center gap-2 text-base font-semibold">
+          <KeyRound size={15} />
           Password
         </h2>
-        <p className="mb-4 text-xs text-muted-foreground">
+        <p className="mb-4 text-sm text-muted-foreground">
           Change your password using a one-time code sent to your email. You can use this to set a
           password for the first time too (for example if you signed up with Google).
         </p>
@@ -87,11 +87,11 @@ export function AccountSettingsView() {
       </section>
 
       <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
-      <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-destructive">
-        <AlertTriangle size={14} />
+      <h2 className="mb-2 flex items-center gap-2 text-base font-semibold text-destructive">
+        <AlertTriangle size={15} />
         Delete account
       </h2>
-      <p className="mb-4 text-xs text-muted-foreground">
+      <p className="mb-4 text-sm text-muted-foreground">
         This soft-deletes your account, hard-deletes workspaces you solely own with no other
         members, and revokes all your API tokens. Your email becomes reusable for a fresh signup.
         Workspaces you&apos;re a member of will still show your past activity, marked as deleted.

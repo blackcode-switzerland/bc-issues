@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { addDays, differenceInDays, format, max as maxDate, min as minDate, startOfDay } from 'date-fns'
 import { issueStatusColor } from '@/lib/work-items'
+import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
+import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface IssueRow {
   id: number
@@ -15,11 +17,14 @@ interface IssueRow {
   created_at: string
   updated_at: string
   assignee_name: string | null
+  assignee_email: string | null
+  assignee_avatar?: string | null
 }
 
-const ROW_HEIGHT = 36
-const DAY_WIDTH = 28
-const LABEL_WIDTH = 220
+const ROW_HEIGHT = 48
+const HEADER_HEIGHT = 44
+const DAY_WIDTH = 26
+const LABEL_WIDTH = 260
 
 export function IssuesTimeline({
   issues,
@@ -38,136 +43,202 @@ export function IssuesTimeline({
 
   const today = startOfDay(new Date())
   const ranges = issues.map((i) => issueRange(i, today))
-  const earliest = startOfDay(minDate(ranges.map((r) => r.start)))
-  const latest = startOfDay(maxDate(ranges.map((r) => r.end)))
-  const totalDays = Math.max(differenceInDays(latest, earliest) + 1, 7)
+
+  const earliest = addDays(startOfDay(minDate(ranges.map((r) => r.start))), -14)
+  const latest = addDays(startOfDay(maxDate(ranges.map((r) => r.end))), 28)
+  const totalDays = Math.max(differenceInDays(latest, earliest) + 1, 60)
   const timelineWidth = totalDays * DAY_WIDTH
 
-  // Day markers — show a tick per day, label every 5 days
-  const ticks: Array<{ day: number; date: Date; isFirstOfMonth: boolean }> = []
+  // Week ticks every 7 days
+  const weekTicks: number[] = []
+  for (let d = 0; d < totalDays; d += 7) weekTicks.push(d)
+
+  // Month markers
+  const monthMarkers: Array<{ day: number; label: string }> = []
   for (let d = 0; d < totalDays; d++) {
     const date = addDays(earliest, d)
-    ticks.push({ day: d, date, isFirstOfMonth: date.getDate() === 1 })
+    if (date.getDate() === 1) {
+      monthMarkers.push({ day: d, label: format(date, date.getMonth() === 0 ? 'MMM yyyy' : 'MMM') })
+    }
   }
+  if (monthMarkers.length === 0 || monthMarkers[0].day > 14) {
+    monthMarkers.unshift({ day: 0, label: format(earliest, 'MMM yyyy') })
+  }
+
   const todayOffset = differenceInDays(today, earliest)
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card/30">
-      <div style={{ width: LABEL_WIDTH + timelineWidth + 16 }}>
-        {/* Axis */}
-        <div className="sticky top-0 z-10 flex border-b border-border bg-card/60 backdrop-blur">
-          <div className="shrink-0 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground" style={{ width: LABEL_WIDTH }}>
-            Issue
+    <div className="rounded-lg border border-border bg-card/30">
+      <div className="flex overflow-hidden">
+
+        {/* ── LEFT PANEL ── */}
+        <div className="z-20 shrink-0" style={{ width: LABEL_WIDTH }}>
+          {/* Header */}
+          <div
+            className="sticky top-0 z-20 flex items-center border-b border-r border-border bg-card/80 px-3 backdrop-blur"
+            style={{ height: HEADER_HEIGHT }}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Issue
+            </span>
           </div>
-          <div className="relative" style={{ width: timelineWidth }}>
-            {ticks.map((t) => (
-              <div
-                key={t.day}
-                className="absolute top-0 h-full border-l border-border/40 text-[9px] text-muted-foreground"
-                style={{ left: t.day * DAY_WIDTH }}
-              >
-                {t.isFirstOfMonth ? (
-                  <span className="absolute left-1 top-1.5 font-medium text-foreground">
-                    {format(t.date, 'MMM')}
-                  </span>
-                ) : t.day % 5 === 0 ? (
-                  <span className="absolute left-1 top-1.5">{format(t.date, 'd')}</span>
-                ) : null}
-              </div>
-            ))}
-            {/* today line */}
-            {todayOffset >= 0 && todayOffset < totalDays ? (
-              <div
-                className="absolute top-0 h-full w-px bg-primary"
-                style={{ left: todayOffset * DAY_WIDTH }}
-              />
-            ) : null}
-          </div>
+
+          {/* Issue rows */}
+          {issues.map((issue) => (
+            <Link
+              key={issue.id}
+              href={`/dashboard/issues/${issue.id}`}
+              prefetch={false}
+              className="flex items-center gap-2 border-b border-r border-border/60 px-3 transition-colors hover:bg-secondary/30"
+              style={{ height: ROW_HEIGHT }}
+            >
+              <StatusIcon status={issue.status} size={13} className="shrink-0" />
+              <PriorityIcon priority={issuePriorityKey(issue.priority)} size={12} className="shrink-0 text-muted-foreground" />
+              <span className="font-mono text-[10px] shrink-0 tabular-nums text-muted-foreground">
+                {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
+              </span>
+              <span className="flex-1 truncate text-[13px] font-medium">{issue.title}</span>
+              {issue.assignee_email ? (
+                <MemberAvatar
+                  name={issue.assignee_name}
+                  email={issue.assignee_email}
+                  avatarUrl={issue.assignee_avatar ?? null}
+                  size={16}
+                />
+              ) : (
+                <span className="size-4 shrink-0 rounded-full border border-dashed border-muted-foreground/30" />
+              )}
+            </Link>
+          ))}
         </div>
 
-        {/* Rows */}
-        <div>
-          {issues.map((issue, idx) => {
-            const r = ranges[idx]
-            const left = differenceInDays(r.start, earliest) * DAY_WIDTH
-            const width = Math.max((differenceInDays(r.end, r.start) + 1) * DAY_WIDTH - 4, 4)
-            const color = issueStatusColor(issue.status)
-            return (
-              <div
-                key={issue.id}
-                className="flex border-b border-border/40 hover:bg-secondary/20"
-                style={{ height: ROW_HEIGHT }}
-              >
-                <Link
-                  href={`/dashboard/issues/${issue.id}`}
-                  prefetch={false}
-                  className="flex shrink-0 items-center gap-2 px-3 text-xs"
-                  style={{ width: LABEL_WIDTH }}
-                >
-                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                    {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
+        {/* ── RIGHT PANEL (scrolls horizontally) ── */}
+        <div className="flex-1 overflow-x-auto">
+          <div style={{ width: timelineWidth }}>
+
+            {/* Two-row date header */}
+            <div
+              className="sticky top-0 z-10 relative overflow-hidden border-b border-border bg-card/90 backdrop-blur"
+              style={{ height: HEADER_HEIGHT }}
+            >
+              {/* Month row */}
+              <div className="relative border-b border-border/40" style={{ height: HEADER_HEIGHT / 2 }}>
+                {monthMarkers.map((m) => (
+                  <span
+                    key={m.day}
+                    className="absolute top-1/2 -translate-y-1/2 pl-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/80"
+                    style={{ left: m.day * DAY_WIDTH }}
+                  >
+                    {m.label}
                   </span>
-                  <span className="flex-1 truncate">{issue.title}</span>
-                </Link>
-                <div className="relative" style={{ width: timelineWidth, height: ROW_HEIGHT }}>
-                  {/* day grid */}
-                  {ticks.map((t) => (
+                ))}
+                {monthMarkers.map((m) => (
+                  <div
+                    key={`ml-${m.day}`}
+                    className="absolute top-0 h-full w-px bg-border/60"
+                    style={{ left: m.day * DAY_WIDTH }}
+                  />
+                ))}
+              </div>
+
+              {/* Date row */}
+              <div className="relative" style={{ height: HEADER_HEIGHT / 2 }}>
+                {weekTicks.map((d) => (
+                  <span
+                    key={d}
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-[9px] text-muted-foreground"
+                    style={{ left: d * DAY_WIDTH }}
+                  >
+                    {format(addDays(earliest, d), 'd')}
+                  </span>
+                ))}
+                {weekTicks.map((d) => (
+                  <div
+                    key={`wl-${d}`}
+                    className="absolute top-0 h-full w-px bg-border/20"
+                    style={{ left: d * DAY_WIDTH }}
+                  />
+                ))}
+                {todayOffset >= 0 && todayOffset < totalDays ? (
+                  <div
+                    className="absolute top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-sm bg-primary px-1 py-px text-[9px] font-bold text-primary-foreground"
+                    style={{ left: todayOffset * DAY_WIDTH }}
+                  >
+                    {format(today, 'd')}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Timeline rows */}
+            {issues.map((issue, idx) => {
+              const r = ranges[idx]
+              const left = differenceInDays(r.start, earliest) * DAY_WIDTH
+              const width = Math.max((differenceInDays(r.end, r.start) + 1) * DAY_WIDTH - 4, 16)
+              const barColor = issueStatusColor(issue.status)
+              return (
+                <div
+                  key={issue.id}
+                  className="relative border-b border-border/40 hover:bg-secondary/10"
+                  style={{ height: ROW_HEIGHT }}
+                >
+                  {/* Grid lines */}
+                  {weekTicks.map((d) => (
                     <div
-                      key={t.day}
-                      className="absolute top-0 h-full border-l border-border/20"
-                      style={{ left: t.day * DAY_WIDTH }}
+                      key={d}
+                      className="absolute top-0 h-full border-l border-border/10"
+                      style={{ left: d * DAY_WIDTH }}
                     />
                   ))}
-                  {/* today line */}
+                  {monthMarkers.map((m) => (
+                    <div
+                      key={`mg-${m.day}`}
+                      className="absolute top-0 h-full border-l border-border/30"
+                      style={{ left: m.day * DAY_WIDTH }}
+                    />
+                  ))}
+                  {/* Today line */}
                   {todayOffset >= 0 && todayOffset < totalDays ? (
                     <div
-                      className="absolute top-0 h-full w-px bg-primary/40"
+                      className="absolute top-0 h-full w-px bg-primary/30"
                       style={{ left: todayOffset * DAY_WIDTH }}
                     />
                   ) : null}
+                  {/* Bar */}
                   <Link
                     href={`/dashboard/issues/${issue.id}`}
                     prefetch={false}
-                    className="absolute top-1/2 -translate-y-1/2 rounded text-[10px] font-medium leading-tight shadow-sm"
+                    className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium shadow-sm transition-opacity hover:opacity-90"
                     style={{
                       left,
                       width,
-                      height: 18,
-                      backgroundColor: color + '30',
-                      border: `1px solid ${color}80`,
-                      color,
-                      paddingLeft: 6,
-                      paddingRight: 6,
-                      display: 'flex',
-                      alignItems: 'center',
+                      height: 26,
+                      backgroundColor: barColor + '28',
+                      border: `1px solid ${barColor}70`,
+                      color: barColor,
                       overflow: 'hidden',
                     }}
                     title={`${issue.title} — ${format(r.start, 'MMM d')} → ${format(r.end, 'MMM d')}`}
                   >
-                    <span className="truncate">{issue.assignee_name ?? issue.status.replace('_', ' ')}</span>
+                    <span className="truncate">{issue.title}</span>
                   </Link>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
+
       </div>
     </div>
   )
 }
 
 function issueRange(issue: IssueRow, today: Date): { start: Date; end: Date } {
-  const start =
-    issue.start_date ?? issue.created_at
-      ? startOfDay(new Date(issue.start_date ?? issue.created_at))
-      : today
-  const end =
-    issue.due_date
-      ? startOfDay(new Date(issue.due_date))
-      : addDays(start, 1)
-  // Guarantee end >= start
-  return {
-    start,
-    end: end.getTime() < start.getTime() ? start : end,
-  }
+  const start = issue.start_date
+    ? startOfDay(new Date(issue.start_date))
+    : startOfDay(new Date(issue.created_at))
+  const end = issue.due_date
+    ? startOfDay(new Date(issue.due_date))
+    : addDays(start, 7)
+  return { start, end: end.getTime() < start.getTime() ? start : end }
 }

@@ -4,8 +4,10 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, subDays } from 'date-fns'
 import { Download, Calendar } from 'lucide-react'
+import { useTheme } from 'next-themes'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { BurndownChart, HorizontalBars, VelocityChart } from './analytics/charts'
+import { issueStatusLabel } from '@/lib/work-items'
 
 interface AnalyticsPayload {
   scope: { type: string; id: number | null; label: string }
@@ -80,6 +82,7 @@ const PRESETS = [
 ]
 
 export function AnalyticsView({ print = false }: { print?: boolean }) {
+  const { resolvedTheme } = useTheme()
   const { data: ws } = useActiveWorkspace()
   const [view, setView] = useState<View>('workspace')
   const [targetId, setTargetId] = useState<number | null>(null)
@@ -142,6 +145,7 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
     if (targetId !== null) params.set('id', String(targetId))
     if (range.from) params.set('from', range.from)
     if (range.to) params.set('to', range.to)
+    if (resolvedTheme) params.set('theme', resolvedTheme)
     window.open(`/dashboard/analytics/print?${params.toString()}`, '_blank')
   }
 
@@ -181,9 +185,9 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
 
   return (
     <div>
-      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-sm font-semibold">Analytics</h1>
-        <span className="text-xs text-muted-foreground">
+      <header className="sticky top-0 z-10 flex h-12 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <h1 className="text-[15px] font-semibold">Analytics</h1>
+        <span className="text-[13px] text-muted-foreground">
           {data?.scope.label ?? ws?.name ?? '…'}
           {data?.period.from ? (
             <>
@@ -196,14 +200,14 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
         <button
           onClick={openPrintView}
           disabled={!data}
-          className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
-          <Download size={12} />
+          <Download size={14} />
           Download PDF
         </button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
         <div className="inline-flex items-center gap-0.5">
           {VIEWS.map((v) => (
             <button
@@ -212,7 +216,7 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
                 setView(v.value)
                 setTargetId(null)
               }}
-              className={`rounded-md px-2 py-1 text-xs transition-colors ${
+              className={`rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
                 view === v.value
                   ? 'bg-secondary text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -226,7 +230,7 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
           <select
             value={targetId ?? ''}
             onChange={(e) => setTargetId(e.target.value ? parseInt(e.target.value) : null)}
-            className="rounded-md border border-border bg-transparent px-2.5 py-1 text-xs"
+            className="rounded-md border border-border bg-transparent px-2.5 py-1.5 text-[13px]"
           >
             <option value="">Pick {view}…</option>
             {targetOptions.map((o) => (
@@ -237,12 +241,12 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
           </select>
         ) : null}
         <div className="ml-auto inline-flex items-center gap-0.5">
-          <Calendar size={11} className="mr-1 text-muted-foreground" />
+          <Calendar size={13} className="mr-1 text-muted-foreground" />
           {PRESETS.map((p) => (
             <button
               key={p.label}
               onClick={() => setPreset(p.days)}
-              className={`rounded-md px-2 py-1 text-xs transition-colors ${
+              className={`rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
                 preset === p.days
                   ? 'bg-secondary text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -274,7 +278,7 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
     <div className="bg-background p-4">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
       {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
@@ -313,7 +317,7 @@ function AnalyticsBody({ data }: { data: AnalyticsPayload }) {
           <h2 className="mb-3 text-sm font-medium">By status</h2>
           <HorizontalBars
             items={data.by_status.map((s) => ({
-              label: s.status.replace('_', ' '),
+              label: issueStatusLabel(s.status),
               value: s.count,
               color: STATUS_COLORS[s.status],
             }))}

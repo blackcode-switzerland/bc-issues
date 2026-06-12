@@ -185,14 +185,16 @@ export function LabelsView() {
 
   return (
     <div>
-      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-sm font-semibold">Labels</h1>
-        <span className="text-xs text-muted-foreground">{labels.data?.length ?? 0}</span>
+      <header className="sticky top-0 z-10 flex h-12 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <span className="text-[15px] font-semibold">Labels</span>
+        <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">
+          {labels.data?.length ?? 0}
+        </span>
         <button
           onClick={() => setCreating(true)}
-          className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
-          <Plus size={13} />
+          <Plus size={15} />
           New label
         </button>
       </header>

@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 )
 
+
 // AddYesFlag attaches the --yes/-y skip-confirmation flag to a destructive command.
 func AddYesFlag(cmd *cobra.Command, target *bool) {
 	cmd.Flags().BoolVarP(target, "yes", "y", false, "Skip the interactive confirmation")
@@ -151,6 +152,26 @@ func StringOrNullJSON(ref string) []byte {
 	}
 	b, _ := jsonString(r)
 	return b
+}
+
+// renderCommentList returns a table renderer for workspace-scoped comments.
+func renderCommentList(comments []client.WorkspaceComment, stderr io.Writer) func(io.Writer) error {
+	return func(w io.Writer) error {
+		if len(comments) == 0 {
+			fmt.Fprintln(stderr, "(no comments)")
+			return nil
+		}
+		for _, cm := range comments {
+			author := derefOr(cm.AuthorName, derefOr(cm.AuthorEmail, "—"))
+			ts := derefOr(cm.CreatedAt, "")
+			edited := ""
+			if cm.EditedAt != nil {
+				edited = " (edited)"
+			}
+			fmt.Fprintf(w, "── #%d · %s · %s%s ─────\n%s\n\n", cm.ID, author, ts, edited, cm.Content)
+		}
+		return nil
+	}
 }
 
 func jsonString(s string) ([]byte, error) {

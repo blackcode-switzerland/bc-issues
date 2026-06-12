@@ -80,11 +80,13 @@ export function VelocityChart({ data }: { data: DualSeriesPoint[] }) {
   if (data.length === 0) {
     return <p className="text-xs text-muted-foreground">No data in the selected range.</p>
   }
-  const max =
+  const rawMax =
     data.reduce(
       (m, p) => Math.max(m, p.created, p.completed),
       0
     ) || 1
+  // Round the scale up so axis ticks land on whole numbers.
+  const max = Math.ceil(rawMax / 4) * 4
   const w = 600
   const h = 160
   const padding = 28

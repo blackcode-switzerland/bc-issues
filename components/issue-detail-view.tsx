@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
-import { Bell, BellOff, ChevronRight, Plus, Trash2, X } from 'lucide-react'
+import { Bell, BellOff, ChevronRight, Plus, Tag, Target, Trash2, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
@@ -260,6 +260,23 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     onError: () => toast.error('Could not update labels'),
   })
 
+  const createLabel = useMutation({
+    mutationFn: async ({ name, color }: { name: string; color: string }) => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, color }),
+      })
+      if (!res.ok) throw new Error('failed')
+      return res.json() as Promise<Label>
+    },
+    onSuccess: async (newLabel) => {
+      await queryClient.invalidateQueries({ queryKey: ['ws-labels', ws?.slug] })
+      attachLabel.mutate(newLabel.id)
+    },
+    onError: () => toast.error('Could not create label'),
+  })
+
   const watch = useMutation({
     mutationFn: async (start: boolean) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/watch`, {
@@ -280,7 +297,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      toast.success('Issue deleted')
+      toast.success('Issue moved to Trash')
       window.location.href = '/dashboard/issues'
     },
     onError: () => toast.error('Could not delete issue'),
@@ -330,7 +347,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Breadcrumb header */}
-      <header className="sticky top-0 z-20 flex h-11 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[13px] backdrop-blur">
+      <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
           href="/dashboard/issues"
           prefetch={false}
@@ -357,9 +374,9 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               if (
                 !(await confirm({
                   title: `Delete ${issueIdLabel}?`,
-                  description: 'This cannot be undone.',
+                  description: 'It will be moved to Trash. You can restore it later.',
                   destructive: true,
-                  confirmLabel: 'Delete',
+                  confirmLabel: 'Move to Trash',
                 }))
               )
                 return
@@ -424,7 +441,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
             {/* Activity */}
             <section className="mt-12">
               <div className="mb-4 flex items-center gap-3">
-                <h2 className="text-sm font-medium">Activity</h2>
+                <h2 className="text-base font-medium">Activity</h2>
                 <div className="h-px flex-1 bg-border" />
               </div>
               <ActivityFeed
@@ -442,8 +459,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
         {/* Properties sidebar */}
         <aside className="w-full shrink-0 border-t border-border xl:w-72 xl:border-l xl:border-t-0">
-          <div className="sticky top-11 px-4 py-5">
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Properties</p>
+          <div className="sticky top-12 px-4 py-5">
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Properties</p>
 
             <PropertySelect
               value={data.status}
@@ -483,12 +500,12 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
             />
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Labels</p>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Labels</p>
             <div className="flex flex-wrap items-center gap-1.5 px-2">
               {(labels.data ?? []).map((l) => (
                 <span
                   key={l.id}
-                  className="group inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]"
+                  className="group inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs"
                 >
                   <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
                   {l.name}
@@ -501,26 +518,15 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
                   </button>
                 </span>
               ))}
-              <PropertySelect
-                value=""
-                placeholder="+ Add label"
-                searchPlaceholder="Add label…"
-                buttonClassName="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                options={availableLabels.map((l) => ({
-                  value: String(l.id),
-                  label: l.name,
-                  icon: (
-                    <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
-                  ),
-                }))}
-                onChange={(v) => {
-                  if (v) attachLabel.mutate(parseInt(v))
-                }}
+              <LabelPicker
+                available={availableLabels}
+                onSelect={(id) => attachLabel.mutate(id)}
+                onCreate={(name, color) => createLabel.mutate({ name, color })}
               />
             </div>
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Project</p>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Project</p>
             <PropertySelect
               value={data.project_id ? String(data.project_id) : ''}
               placeholder="Add to project"
@@ -541,13 +547,17 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               searchPlaceholder="Set milestone…"
               options={[
                 { value: '', label: 'No milestone' },
-                ...(milestones.data ?? []).map((m) => ({ value: String(m.id), label: m.name })),
+                ...(milestones.data ?? []).map((m) => ({
+                  value: String(m.id),
+                  label: m.name,
+                  icon: <Target size={14} className="text-muted-foreground" />,
+                })),
               ]}
               onChange={(v) => patchIssue.mutate({ milestone_id: v ? parseInt(v) : null })}
             />
 
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-xs font-medium text-muted-foreground">Due date</p>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Due date</p>
             <DatePicker
               variant="inline"
               value={data.due_date ?? null}
@@ -556,7 +566,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
             />
 
             <div className="my-4 h-px bg-border" />
-            <ul className="space-y-1.5 px-2 text-[11px] text-muted-foreground">
+            <ul className="space-y-1.5 px-2 text-xs text-muted-foreground">
               <li className="flex justify-between">
                 <span>Created</span>
                 <span suppressHydrationWarning>
@@ -586,6 +596,139 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       <span className="hidden">
         <Plus />
       </span>
+    </div>
+  )
+}
+
+const LABEL_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e',
+  '#14b8a6', '#5e6ad2', '#a855f7', '#ec4899', '#8a8f98',
+]
+
+function LabelPicker({
+  available,
+  onSelect,
+  onCreate,
+}: {
+  available: { id: number; name: string; color: string }[]
+  onSelect: (id: number) => void
+  onCreate: (name: string, color: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [pendingColor, setPendingColor] = useState(LABEL_COLORS[0])
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      setQuery('')
+      setPendingColor(LABEL_COLORS[0])
+      requestAnimationFrame(() => inputRef.current?.focus())
+    }
+  }, [open])
+
+  const filtered = query
+    ? available.filter((l) => l.name.toLowerCase().includes(query.toLowerCase()))
+    : available
+
+  const canCreate = query.trim().length > 0 && !available.some(
+    (l) => l.name.toLowerCase() === query.trim().toLowerCase()
+  )
+
+  function handleSelect(id: number) {
+    onSelect(id)
+    setOpen(false)
+    setQuery('')
+  }
+
+  function handleCreate() {
+    const name = query.trim()
+    if (!name) return
+    onCreate(name, pendingColor)
+    setOpen(false)
+    setQuery('')
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      >
+        <Plus size={10} />
+        Add label
+      </button>
+
+      {open ? (
+        <div className="absolute bottom-full right-0 z-40 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-popover shadow-xl duration-100 animate-in fade-in zoom-in-95">
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                if (filtered.length === 1) handleSelect(filtered[0].id)
+                else if (canCreate) handleCreate()
+              } else if (e.key === 'Escape') setOpen(false)
+            }}
+            placeholder="Search or create…"
+            className="w-full border-b border-border bg-transparent px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground"
+          />
+          <ul className="max-h-52 overflow-y-auto py-1">
+            {filtered.map((l) => (
+              <li key={l.id}>
+                <button
+                  type="button"
+                  onClick={() => handleSelect(l.id)}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] hover:bg-secondary"
+                >
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
+                  <span className="flex-1 truncate">{l.name}</span>
+                </button>
+              </li>
+            ))}
+            {canCreate ? (
+              <li>
+                <div className="border-t border-border px-3 pb-1 pt-2">
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    {LABEL_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setPendingColor(c)}
+                        className={`size-3.5 rounded-full transition-transform hover:scale-110 ${pendingColor === c ? 'ring-2 ring-offset-1 ring-offset-popover' : ''}`}
+                        style={{ backgroundColor: c, outlineColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCreate}
+                    className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-[13px] hover:bg-secondary"
+                  >
+                    <Tag size={12} className="shrink-0 text-muted-foreground" />
+                    <span>Create <span className="font-medium">"{query.trim()}"</span></span>
+                    <span className="ml-auto size-2.5 shrink-0 rounded-full" style={{ backgroundColor: pendingColor }} />
+                  </button>
+                </div>
+              </li>
+            ) : filtered.length === 0 ? (
+              <li className="px-3 py-2 text-xs text-muted-foreground">No labels found</li>
+            ) : null}
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -56,7 +56,11 @@ export interface ComputeAnalyticsInput {
 
 // Build a SQL fragment that restricts the issues query to the requested scope.
 function scopeWhere(input: ComputeAnalyticsInput): SQL {
-  const base = sql`i.workspace_id = ${input.workspaceId}`
+  // Binned issues never count toward analytics. This base predicate flows into
+  // summary / by_status / by_priority / by_assignee / by_label / velocity via
+  // ${where}. The burndown sub-selects below bypass `where`, so they carry the
+  // `deleted_at IS NULL` filter explicitly.
+  const base = sql`i.workspace_id = ${input.workspaceId} AND i.deleted_at IS NULL`
   if (input.view === 'workspace') return base
   if (input.view === 'project' && input.id != null) {
     return sql`${base} AND i.project_id = ${input.id}`
@@ -272,7 +276,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
       const series = await db.execute<{ date: string; remaining: number }>(sql`
         WITH bounds AS (
           SELECT
-            COALESCE((SELECT MIN(i.created_at) FROM issues i WHERE i.milestone_id = ${input.id}), NOW() - interval '14 days') AS start_at,
+            COALESCE((SELECT MIN(i.created_at) FROM issues i WHERE i.milestone_id = ${input.id} AND i.deleted_at IS NULL), NOW() - interval '14 days') AS start_at,
             (${due}::date + interval '1 day') AS end_at
         ),
         days AS (
@@ -283,6 +287,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
         SELECT to_char(days.d, 'YYYY-MM-DD') AS date,
           (SELECT COUNT(*)::int FROM issues i
            WHERE i.milestone_id = ${input.id}
+             AND i.deleted_at IS NULL
              AND i.created_at <= days.d + interval '1 day'
              AND (i.completed_at IS NULL OR i.completed_at > days.d + interval '1 day')) AS remaining
         FROM days

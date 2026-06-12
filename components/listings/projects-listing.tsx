@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { toast } from 'sonner'
-import { Folder, Plus } from 'lucide-react'
+import { Folder, GripVertical, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { useActiveWorkspace } from './use-active-workspace'
 import { MultiSelect, SearchInput, ViewToggle, type ViewMode } from './filter-bar'
@@ -30,11 +31,13 @@ import {
   projectUpdateStatusLabel,
 } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 
 interface ProjectRow {
   id: number
   workspace_id: number
   name: string
+  summary: string | null
   description: string | null
   status: string
   color: string | null
@@ -64,22 +67,22 @@ interface Member {
 const PROJECT_STATUS_OPTIONS = PROJECT_STATUSES.map((s) => ({
   value: s.value,
   label: s.label,
-  icon: <StatusIcon status={s.value} size={13} />,
+  icon: <StatusIcon status={s.value} size={15} />,
 }))
 
 const PROJECT_PRIORITY_OPTIONS = PROJECT_PRIORITIES.map((p) => ({
   value: p.value,
   label: p.label,
-  icon: <PriorityIcon priority={projectPriorityKey(p.value)} size={13} />,
+  icon: <PriorityIcon priority={projectPriorityKey(p.value)} size={15} />,
 }))
 
-const STATUSES = PROJECT_STATUSES.map((s) => ({ value: s.value, label: s.label }))
 
 export function ProjectsListing() {
   const { data: ws } = useActiveWorkspace()
   const queryClient = useQueryClient()
   const router = useRouter()
   const { confirm } = useConfirm()
+  const { confirmDelete } = useDeleteDialog()
   const [view, setView] = useState<ViewMode>('list')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<Array<string | number>>([])
@@ -132,6 +135,33 @@ export function ProjectsListing() {
     return data
   }, [projects.data, status])
 
+  const [localProjects, setLocalProjects] = useState(filtered)
+  useEffect(() => { setLocalProjects(filtered) }, [filtered])
+
+  const reorderProjects = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('failed')
+    },
+    onError: () => {
+      toast.error('Reorder failed — reverting')
+      setLocalProjects(filtered)
+    },
+  })
+
+  function onProjectListDragEnd(result: DropResult) {
+    if (!result.destination || result.source.index === result.destination.index) return
+    const next = [...localProjects]
+    const [moved] = next.splice(result.source.index, 1)
+    next.splice(result.destination.index, 0, moved)
+    setLocalProjects(next)
+    reorderProjects.mutate(next.map((p) => p.id))
+  }
+
   async function bulkPatch(patch: Record<string, unknown>) {
     const ids = Array.from(selectedIds)
     await Promise.all(
@@ -148,21 +178,22 @@ export function ProjectsListing() {
 
   async function bulkDelete() {
     const ids = Array.from(selectedIds)
-    const ok = await confirm({
-      title: `Delete ${ids.length} ${ids.length === 1 ? 'project' : 'projects'}?`,
-      description:
-        'This will permanently delete the selected projects, along with all their issues, milestones, and activity. This cannot be undone.',
-      destructive: true,
-      confirmLabel: `Delete ${ids.length} ${ids.length === 1 ? 'project' : 'projects'}`,
+    const noun = ids.length === 1 ? 'project' : 'projects'
+    const decision = await confirmDelete({
+      kind: 'project',
+      childLabel: `the issues and milestones inside the selected ${noun}`,
+      confirmLabel: `Move ${ids.length} ${noun} to Trash`,
     })
-    if (!ok) return
+    if (!decision) return
     try {
       await Promise.all(
         ids.map((id) =>
-          fetch(`/api/workspaces/${ws!.slug}/projects/${id}`, { method: 'DELETE' })
+          fetch(`/api/workspaces/${ws!.slug}/projects/${id}?mode=${decision.mode}`, {
+            method: 'DELETE',
+          })
         )
       )
-      toast.success(`Deleted ${ids.length} ${ids.length === 1 ? 'project' : 'projects'}`)
+      toast.success(`Moved ${ids.length} ${noun} to Trash`)
       setSelectedIds(new Set())
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing', ws?.slug] })
     } catch {
@@ -205,26 +236,28 @@ export function ProjectsListing() {
 
   return (
     <div>
-      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <span className="text-sm font-semibold">Projects</span>
-        <span className="text-xs text-muted-foreground">{filtered.length}</span>
+      <header className="sticky top-0 z-10 flex h-12 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <span className="text-[15px] font-semibold">Projects</span>
+        <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">
+          {filtered.length}
+        </span>
         <div className="ml-auto flex items-center gap-2">
           <ViewToggle value={view} onChange={setView} />
           <button
             onClick={() => ws && createProject.mutate()}
             disabled={createProject.isPending || !ws}
-            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
-            <Plus size={13} />
+            <Plus size={15} />
             New project
           </button>
         </div>
       </header>
 
 
-<div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+<div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
-        <MultiSelect label="Status" options={STATUSES} selected={status} onChange={setStatus} />
+        <MultiSelect label="Status" options={PROJECT_STATUS_OPTIONS} selected={status} onChange={setStatus} />
       </div>
 
       {projects.isLoading ? (
@@ -250,38 +283,52 @@ export function ProjectsListing() {
           <ProjectsTimeline projects={filtered} />
         </div>
       ) : (
-        <div>
-          {/* Column header */}
-          <div className="flex items-center gap-3 border-b border-border px-6 py-2 text-xs font-medium text-muted-foreground">
-            <span className="w-4 shrink-0" />
-            <span className="flex-1">Name</span>
-            <span className="w-28 shrink-0">Health</span>
-            <span className="w-28 shrink-0">Status</span>
-            <span className="hidden w-20 shrink-0 lg:flex">Priority</span>
-            <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
-            <span className="hidden w-24 shrink-0 lg:block">Target</span>
-            <span className="w-12 shrink-0 text-right">Issues</span>
-            <span className="w-20 shrink-0 text-right">Progress</span>
+        <DragDropContext onDragEnd={onProjectListDragEnd}>
+          <div>
+            {/* Column header */}
+            <div className="flex items-center gap-3 border-b border-border px-6 py-2.5 text-[13px] font-medium text-muted-foreground">
+              <span className="w-8 shrink-0" />
+              <span className="flex-1">Name</span>
+              <span className="w-28 shrink-0">Health</span>
+              <span className="w-28 shrink-0">Status</span>
+              <span className="hidden w-20 shrink-0 lg:flex">Priority</span>
+              <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
+              <span className="hidden w-24 shrink-0 lg:block">Target</span>
+              <span className="w-12 shrink-0">Issues</span>
+              <span className="w-20 shrink-0">Progress</span>
+            </div>
+            <Droppable droppableId="projects-list">
+              {(provided) => (
+                <ul ref={provided.innerRef} {...provided.droppableProps}>
+                  {localProjects.map((p, idx) => (
+                    <Draggable key={p.id} draggableId={String(p.id)} index={idx}>
+                      {(prov, snap) => (
+                        <ProjectRowItem
+                          project={p}
+                          wsSlug={ws?.slug ?? ''}
+                          members={members ?? []}
+                          selected={selectedIds.has(p.id)}
+                          anySelected={selectedIds.size > 0}
+                          onToggle={(checked) => {
+                            const next = new Set(selectedIds)
+                            if (checked) next.add(p.id)
+                            else next.delete(p.id)
+                            setSelectedIds(next)
+                          }}
+                          draggableRef={prov.innerRef}
+                          draggableProps={prov.draggableProps}
+                          dragHandleProps={prov.dragHandleProps}
+                          isDragging={snap.isDragging}
+                        />
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </ul>
+              )}
+            </Droppable>
           </div>
-          <ul>
-            {filtered.map((p) => (
-              <ProjectRowItem
-                key={p.id}
-                project={p}
-                wsSlug={ws?.slug ?? ''}
-                members={members ?? []}
-                selected={selectedIds.has(p.id)}
-                anySelected={selectedIds.size > 0}
-                onToggle={(checked) => {
-                  const next = new Set(selectedIds)
-                  if (checked) next.add(p.id)
-                  else next.delete(p.id)
-                  setSelectedIds(next)
-                }}
-              />
-            ))}
-          </ul>
-        </div>
+        </DragDropContext>
       )}
 
       <BulkActionBar
@@ -302,6 +349,10 @@ function ProjectRowItem({
   selected,
   anySelected,
   onToggle,
+  draggableRef,
+  draggableProps,
+  dragHandleProps,
+  isDragging,
 }: {
   project: ProjectRow
   wsSlug: string
@@ -309,6 +360,10 @@ function ProjectRowItem({
   selected: boolean
   anySelected: boolean
   onToggle: (checked: boolean) => void
+  draggableRef?: React.Ref<HTMLLIElement>
+  draggableProps?: object
+  dragHandleProps?: object | null
+  isDragging?: boolean
 }) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -342,7 +397,7 @@ function ProjectRowItem({
     ...members.map((m) => ({
       value: String(m.user_id),
       label: m.name ?? m.email,
-      icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={14} />,
+      icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={15} />,
     })),
   ]
 
@@ -351,7 +406,11 @@ function ProjectRowItem({
   }
 
   return (
-    <li>
+    <li
+      ref={draggableRef as React.Ref<HTMLLIElement>}
+      {...(draggableProps as object)}
+      className={isDragging ? 'opacity-80 shadow-lg' : undefined}
+    >
       <div
         onClick={() => {
           if (anySelected) {
@@ -360,8 +419,16 @@ function ProjectRowItem({
           }
           router.push(`/dashboard/${p.id}`)
         }}
-        className={`group flex h-11 cursor-pointer items-center gap-3 border-b border-border/50 px-6 transition-colors hover:bg-secondary/40 ${selected ? 'bg-primary/5' : ''}`}
+        className={`group flex h-12 cursor-pointer items-center gap-3 px-3 pl-2 transition-colors hover:bg-secondary/40 ${selected ? 'bg-primary/5' : ''}`}
       >
+        {/* Drag handle */}
+        <div
+          {...(dragHandleProps as object)}
+          className="flex shrink-0 cursor-grab items-center justify-center px-1 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical size={14} />
+        </div>
         {/* Checkbox */}
         <RowCheckbox
           checked={selected}
@@ -372,14 +439,14 @@ function ProjectRowItem({
 
         {/* Name — navigates */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={20} />
+          <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={26} />
           <span className="truncate text-sm font-medium">{p.name}</span>
         </div>
 
         {/* Health — read-only */}
         <span className="flex w-28 shrink-0 items-center gap-1.5">
-          <HealthIcon status={p.health} size={14} />
-          <span className="truncate text-xs text-muted-foreground">
+          <HealthIcon status={p.health} size={15} />
+          <span className="truncate text-[13px] text-muted-foreground">
             {projectUpdateStatusLabel(p.health)}
           </span>
         </span>
@@ -391,7 +458,7 @@ function ProjectRowItem({
             options={PROJECT_STATUS_OPTIONS}
             onChange={(v) => patch.mutate({ status: v })}
             noSearch
-            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-secondary"
+            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:bg-secondary"
           />
         </div>
 
@@ -402,7 +469,7 @@ function ProjectRowItem({
             options={PROJECT_PRIORITY_OPTIONS}
             onChange={(v) => patch.mutate({ priority: v })}
             noSearch
-            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-secondary"
+            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:bg-secondary"
           />
         </div>
 
@@ -414,7 +481,7 @@ function ProjectRowItem({
             onChange={(v) => patch.mutate({ lead_user_id: v ? parseInt(v) : null })}
             noSearch
             align="right"
-            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-secondary"
+            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:bg-secondary"
           />
         </div>
 
@@ -423,23 +490,24 @@ function ProjectRowItem({
           <DatePicker
             value={p.end_date}
             onChange={(v) => patch.mutate({ end_date: v })}
-            placeholder="No date"
+            placeholder="—"
             variant="chip"
             align="right"
             displayFormat="MMM d"
-            buttonClassName="flex w-full items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-secondary"
+            hideIconWhenEmpty
+            buttonClassName="flex w-full items-center gap-1 rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:bg-secondary"
           />
         </div>
 
         {/* Issues count */}
-        <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        <span className="w-12 shrink-0 text-[13px] tabular-nums text-muted-foreground">
           {total}
         </span>
 
         {/* Progress */}
-        <span className="flex w-20 shrink-0 items-center justify-end gap-1.5">
-          <ProgressRing pct={pct} size={14} />
-          <span className="text-[11px] tabular-nums text-muted-foreground">{pct}%</span>
+        <span className="flex w-20 shrink-0 items-center gap-1.5">
+          <ProgressRing pct={pct} size={15} />
+          <span className="text-xs tabular-nums text-muted-foreground">{pct}%</span>
         </span>
       </div>
     </li>

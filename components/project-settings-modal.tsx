@@ -22,6 +22,7 @@ import { DatePicker } from '@/components/ui/date-picker'
 interface Project {
   id: number
   name: string
+  summary?: string | null
   description?: string | null
   status?: string | null
   owner_id?: number | null
@@ -68,6 +69,7 @@ export function ProjectSettingsModal({
 
   // Form state initialized from project
   const [name, setName] = useState(project.name)
+  const [summary, setSummary] = useState(project.summary || '')
   const [description, setDescription] = useState(project.description || '')
   const [priority, setPriority] = useState(project.priority || 'P2')
   const [visibility, setVisibility] = useState(project.visibility || 'team')
@@ -155,6 +157,7 @@ export function ProjectSettingsModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
+          summary: summary.trim() || null,
           description: description.trim() || null,
           priority,
           visibility,
@@ -323,6 +326,20 @@ export function ProjectSettingsModal({
                   onChange={(e) => setName(e.target.value)}
                   placeholder="My Awesome Project"
                   className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* Summary */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Summary
+                </label>
+                <textarea
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  placeholder="A short plain-text summary shown in kanban cards and overviews…"
+                  rows={2}
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
 

@@ -23,6 +23,8 @@ and the rest of bk operates within it.`,
 		newWorkspaceShowCmd(),
 		newWorkspaceCreateCmd(),
 		newWorkspaceUseCmd(),
+		newWorkspaceEditCmd(),
+		newWorkspaceTransferCmd(),
 	)
 	return cmd
 }
@@ -172,6 +174,90 @@ func newWorkspaceUseCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newWorkspaceEditCmd() *cobra.Command {
+	var name, slug, key string
+	cmd := &cobra.Command{
+		Use:   "edit [slug|id]",
+		Short: "Edit workspace settings (name, slug, key)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ref, err := resolveWorkspaceRef(cfg, args)
+			if err != nil {
+				return err
+			}
+			req := client.UpdateWorkspaceRequest{}
+			if cmd.Flags().Changed("name") {
+				req.Name = &name
+			}
+			if cmd.Flags().Changed("slug") {
+				req.Slug = &slug
+			}
+			if cmd.Flags().Changed("key") {
+				req.Key = &key
+			}
+			ws, err := c.UpdateWorkspace(ref, req)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "updated workspace %q (slug: %s, key: %s)\n",
+				ws.Name, ws.Slug, ws.Key)
+			// Refresh config if the active workspace was edited
+			if cfg.ActiveWorkspaceSlug == ref || fmt.Sprint(cfg.ActiveWorkspaceID) == ref {
+				cfg.ActiveWorkspaceSlug = ws.Slug
+				cfg.ActiveWorkspaceKey = ws.Key
+				_ = config.Save(cfg)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "New workspace name")
+	cmd.Flags().StringVar(&slug, "slug", "", "New URL slug (lowercase, no spaces)")
+	cmd.Flags().StringVar(&key, "key", "", "New short key (2-10 uppercase chars)")
+	return cmd
+}
+
+func newWorkspaceTransferCmd() *cobra.Command {
+	var userRef string
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "transfer [slug|id]",
+		Short: "Transfer workspace ownership to another member (owner only)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if userRef == "" {
+				return fmt.Errorf("--to is required (user id, email, or name)")
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ref, err := resolveWorkspaceRef(cfg, args)
+			if err != nil {
+				return err
+			}
+			newOwnerID, err := ResolveUserRef(c, cfg, userRef)
+			if err != nil {
+				return err
+			}
+			if !Confirm(fmt.Sprintf("Transfer workspace %q to user #%d? You will become a regular member.", ref, newOwnerID), yes) {
+				return fmt.Errorf("aborted")
+			}
+			if err := c.TransferOwnership(ref, newOwnerID); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "ownership transferred to user #%d\n", newOwnerID)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&userRef, "to", "", "New owner (id, email, or name)")
+	AddYesFlag(cmd, &yes)
+	return cmd
 }
 
 // ---------- shared helpers ----------

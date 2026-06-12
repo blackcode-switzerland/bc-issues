@@ -60,13 +60,11 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const memberIds = Array.isArray(body.member_ids)
     ? body.member_ids.filter((n: unknown): n is number => typeof n === 'number')
     : undefined
-  const labelIds = Array.isArray(body.label_ids)
-    ? body.label_ids.filter((n: unknown): n is number => typeof n === 'number')
-    : undefined
 
   const project = await createProject({
     workspaceId: ctx.workspace.id,
     name,
+    summary: typeof body.summary === 'string' ? body.summary : null,
     description: typeof body.description === 'string' ? body.description : null,
     color: typeof body.color === 'string' ? body.color : undefined,
     icon: typeof body.icon === 'string' ? body.icon : null,
@@ -76,7 +74,6 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     end_date: typeof body.end_date === 'string' ? body.end_date : null,
     status: typeof body.status === 'string' ? body.status : undefined,
     member_ids: memberIds,
-    label_ids: labelIds,
     actorUserId: ctx.user.id,
   })
   return NextResponse.json(project, { status: 201 })

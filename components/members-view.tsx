@@ -139,6 +139,15 @@ export function MembersView() {
     onError: () => toast.error('Failed to remove member'),
   })
 
+  const filteredMembers = useMemo(() => {
+    if (!members) return []
+    if (!search.trim()) return members
+    const q = search.toLowerCase()
+    return members.filter(
+      (m) => m.email.toLowerCase().includes(q) || (m.name ?? '').toLowerCase().includes(q)
+    )
+  }, [members, search])
+
   if (!ws) {
     return (
       <div className="p-8">
@@ -150,20 +159,11 @@ export function MembersView() {
   const isOwner = ws.member_role === 'owner'
   const pendingInvitations = invitations?.filter((i) => i.status === 'pending') ?? []
 
-  const filteredMembers = useMemo(() => {
-    if (!members) return []
-    if (!search.trim()) return members
-    const q = search.toLowerCase()
-    return members.filter(
-      (m) => m.email.toLowerCase().includes(q) || (m.name ?? '').toLowerCase().includes(q)
-    )
-  }, [members, search])
-
   return (
     <div>
-      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-sm font-semibold">Members</h1>
-        <span className="text-xs text-muted-foreground">{members?.length ?? 0}</span>
+      <header className="sticky top-0 z-10 flex h-12 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <h1 className="text-[15px] font-semibold">Members</h1>
+        <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">{members?.length ?? 0}</span>
         {isOwner ? (
           <form
             onSubmit={(e) => {
@@ -173,21 +173,21 @@ export function MembersView() {
             className="ml-auto flex items-center gap-2"
           >
             <div className="relative hidden sm:block">
-              <Mail size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Mail size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="Invite by email…"
-                className="h-8 w-52 rounded-md border border-border bg-transparent pl-8 pr-2.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                className="h-9 w-56 rounded-md border border-border bg-transparent pl-8 pr-2.5 text-sm outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
             <button
               type="submit"
               disabled={invite.isPending}
-              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              <UserPlus size={13} />
+              <UserPlus size={15} />
               Invite
             </button>
           </form>
@@ -212,7 +212,7 @@ export function MembersView() {
       ) : (
         <div>
           {/* Column header */}
-          <div className="hidden items-center gap-3 border-b border-border px-6 py-2 text-xs font-medium text-muted-foreground sm:flex">
+          <div className="hidden items-center gap-3 border-b border-border px-6 py-2.5 text-[13px] font-medium text-muted-foreground sm:flex">
             <span className="flex-1">Name</span>
             <span className="hidden w-56 shrink-0 md:block">Email</span>
             <span className="w-24 shrink-0">Role</span>
@@ -288,7 +288,7 @@ export function MembersView() {
 
       {isOwner && pendingInvitations.length > 0 ? (
         <section>
-          <h2 className="border-y border-border bg-secondary/30 px-6 py-1.5 text-xs font-medium text-muted-foreground">
+          <h2 className="border-y border-border bg-secondary/30 px-6 py-1.5 text-[13px] font-medium text-muted-foreground">
             Pending invitations · {pendingInvitations.length}
           </h2>
           <ul>

@@ -28,10 +28,14 @@ func newIssueCmd() *cobra.Command {
 		newIssueUnassignCmd(),
 		newIssueCommentCmd(),
 		newIssueCommentsCmd(),
+		newIssueEditCommentCmd(),
+		newIssueDeleteCommentCmd(),
 		newIssueActivityCmd(),
 		newIssueAttachCmd(),
 		newIssueDetachCmd(),
 		newIssueAttachmentsCmd(),
+		newIssueWatchCmd(),
+		newIssueUnwatchCmd(),
 	)
 	return cmd
 }
@@ -530,6 +534,146 @@ func newIssueCommentCmd() *cobra.Command {
 	cmd.Flags().StringVar(&body, "body", "", "Comment text (use \"-\" for stdin)")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from a file")
 	return cmd
+}
+
+func newIssueEditCommentCmd() *cobra.Command {
+	var body, bodyFile string
+	cmd := &cobra.Command{
+		Use:   "edit-comment <issue-id> <comment-id>",
+		Short: "Edit a comment on an issue (author only)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid issue id: %w", err)
+			}
+			commentID, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid comment id: %w", err)
+			}
+			content, err := ReadBody(body, bodyFile)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(content) == "" {
+				return fmt.Errorf("comment body is empty")
+			}
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			cm, err := c.EditComment(ws, commentID, content)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, cm, func(w io.Writer) error {
+				fmt.Fprintf(w, "comment #%d updated\n", cm.ID)
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringVar(&body, "body", "", "New comment text (\"-\" for stdin)")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from file")
+	return cmd
+}
+
+func newIssueDeleteCommentCmd() *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "delete-comment <issue-id> <comment-id>",
+		Short: "Delete a comment (author only)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid issue id: %w", err)
+			}
+			commentID, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid comment id: %w", err)
+			}
+			if !Confirm(fmt.Sprintf("Delete comment #%d?", commentID), yes) {
+				return fmt.Errorf("aborted")
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			if err := c.DeleteComment(ws, commentID); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted comment #%d\n", commentID)
+			return nil
+		},
+	}
+	AddYesFlag(cmd, &yes)
+	return cmd
+}
+
+func newIssueWatchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "watch <id>",
+		Short: "Subscribe to notifications on an issue",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid id: %w", err)
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			if err := c.WatchIssue(ws, id); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "watching issue #%d\n", id)
+			return nil
+		},
+	}
+}
+
+func newIssueUnwatchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unwatch <id>",
+		Short: "Unsubscribe from notifications on an issue",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid id: %w", err)
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			if err := c.UnwatchIssue(ws, id); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "no longer watching issue #%d\n", id)
+			return nil
+		},
+	}
 }
 
 func newIssueAttachCmd() *cobra.Command {

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useTheme } from 'next-themes'
 import { format } from 'date-fns'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import {
@@ -58,13 +59,24 @@ export function PrintAnalyticsView({
   id,
   from,
   to,
+  theme,
 }: {
   view: 'workspace' | 'project' | 'milestone' | 'member'
   id: number | null
   from: string | null
   to: string | null
+  theme: string | null
 }) {
+  const { setTheme } = useTheme()
   const { data: ws } = useActiveWorkspace()
+
+  useEffect(() => {
+    if (theme === 'dark' || theme === 'light') {
+      setTheme(theme)
+      document.documentElement.classList.toggle('dark', theme === 'dark')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const analytics = useQuery({
     queryKey: ['print-analytics', ws?.slug, view, id, from, to],
@@ -83,7 +95,7 @@ export function PrintAnalyticsView({
 
   useEffect(() => {
     if (analytics.data) {
-      const t = setTimeout(() => window.print(), 600)
+      const t = setTimeout(() => window.print(), 900)
       return () => clearTimeout(t)
     }
   }, [analytics.data])
@@ -96,10 +108,15 @@ export function PrintAnalyticsView({
   return (
     <main className="mx-auto max-w-3xl px-8 py-10 text-foreground">
       <style>{`
+        html {
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
         @media print {
-          body { background: white !important; }
           .no-print { display: none !important; }
-          aside, nav, header.app-header { display: none !important; }
+          aside { display: none !important; }
+          .dashboard-mobile-header { display: none !important; }
+          main { margin-left: 0 !important; }
         }
         @page { margin: 1cm; }
       `}</style>

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Crown, Loader2, Save, Trash2, Upload } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowLeft, Crown, Loader2, Save, Trash2, Upload } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { avatarColor } from '@/components/ui/member-avatar'
 
@@ -28,22 +29,30 @@ interface Member {
   role: 'owner' | 'member'
 }
 
-async function fetchActiveWorkspace(): Promise<Workspace | null> {
+// Resolve the workspace to manage. When `slug` is given we look that specific
+// workspace up (so any workspace can be managed from /dashboard/workspaces/[slug]);
+// otherwise we fall back to the user's active workspace.
+async function fetchWorkspace(slug?: string): Promise<Workspace | null> {
+  const wsRes = await fetch('/api/me/workspaces')
+  if (!wsRes.ok) return null
+  const { data } = await wsRes.json()
+  const all = data as Workspace[]
+  if (slug) return all.find((w) => w.slug === slug) ?? null
   const meRes = await fetch('/api/me')
   if (!meRes.ok) return null
   const me = await meRes.json()
   if (!me.active_workspace_id) return null
-  const wsRes = await fetch('/api/me/workspaces')
-  if (!wsRes.ok) return null
-  const { data } = await wsRes.json()
-  return (data as Workspace[]).find((w) => w.id === me.active_workspace_id) ?? null
+  return all.find((w) => w.id === me.active_workspace_id) ?? null
 }
 
-export function WorkspaceSettingsView() {
+export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backHref?: string } = {}) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { confirm, prompt } = useConfirm()
-  const { data: ws } = useQuery({ queryKey: ['active-workspace'], queryFn: fetchActiveWorkspace })
+  const { data: ws } = useQuery({
+    queryKey: slug ? ['workspace', slug] : ['active-workspace'],
+    queryFn: () => fetchWorkspace(slug),
+  })
   const logoFileRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState('')
@@ -94,6 +103,7 @@ export function WorkspaceSettingsView() {
       setSavedName(name)
       setSavedKey(key)
       queryClient.invalidateQueries({ queryKey: ['active-workspace'] })
+      if (slug) queryClient.invalidateQueries({ queryKey: ['workspace', slug] })
       queryClient.invalidateQueries({ queryKey: ['me-workspaces'] })
       router.refresh()
     },
@@ -131,7 +141,7 @@ export function WorkspaceSettingsView() {
     onSuccess: () => {
       toast.success('Workspace deleted')
       queryClient.invalidateQueries()
-      router.push('/dashboard')
+      router.push(backHref ?? '/dashboard')
       router.refresh()
     },
     onError: (e: Error) => toast.error(e.message),
@@ -180,7 +190,16 @@ export function WorkspaceSettingsView() {
   return (
     <div>
       <header className="mb-8">
-        <h1 className="text-xl font-semibold">Workspace</h1>
+        {backHref ? (
+          <Link
+            href={backHref}
+            className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft size={14} />
+            All workspaces
+          </Link>
+        ) : null}
+        <h1 className="text-xl font-semibold">{ws.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isOwner ? `You own ${ws.name}.` : `You are a member of ${ws.name}.`}
         </p>
@@ -215,7 +234,7 @@ export function WorkspaceSettingsView() {
                     type="button"
                     onClick={() => logoFileRef.current?.click()}
                     disabled={logoUploading || save.isPending}
-                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50"
+                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary disabled:opacity-50"
                   >
                     {logoUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
                     {logoUrl ? 'Change logo' : 'Upload logo'}
@@ -228,7 +247,7 @@ export function WorkspaceSettingsView() {
                         save.mutate({ name, key, logo_url: null })
                       }}
                       disabled={save.isPending}
-                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
                     >
                       Remove
                     </button>
@@ -339,7 +358,7 @@ export function WorkspaceSettingsView() {
           <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
             <div>
               <p className="text-sm font-medium">Delete workspace</p>
-              <p className="text-xs text-muted-foreground">Permanently delete {ws.name} and all its data</p>
+              <p className="text-sm text-muted-foreground">Permanently delete {ws.name} and all its data</p>
             </div>
             <button
               onClick={async () => {

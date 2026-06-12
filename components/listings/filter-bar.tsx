@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Filter, List, LayoutGrid, GanttChart, Search, X } from 'lucide-react'
+import { Check, ChevronDown, List, LayoutGrid, GanttChart, Search, X } from 'lucide-react'
 
 export interface MultiSelectOption {
   value: string | number
@@ -16,9 +16,10 @@ interface MultiSelectProps {
   selected: Array<string | number>
   onChange: (v: Array<string | number>) => void
   searchable?: boolean
+  buttonClassName?: string
 }
 
-export function MultiSelect({ label, options, selected, onChange, searchable }: MultiSelectProps) {
+export function MultiSelect({ label, options, selected, onChange, searchable, buttonClassName }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -59,17 +60,17 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+        className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
           selected.length > 0
             ? 'border-primary/40 bg-primary/10 text-primary'
             : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-        }`}
+        } ${buttonClassName ?? ''}`}
       >
         {label}
         {selected.length > 0 ? (
-          <span className="rounded-full bg-primary/20 px-1.5 text-[10px] font-semibold">{selected.length}</span>
+          <span className="rounded-full bg-primary/20 px-1.5 text-[11px] font-semibold">{selected.length}</span>
         ) : null}
-        <ChevronDown size={11} />
+        <ChevronDown size={12} />
       </button>
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
@@ -140,20 +141,20 @@ interface SearchInputProps {
 
 export function SearchInput({ value, onChange, placeholder = 'Search…' }: SearchInputProps) {
   return (
-    <div className="relative w-52 shrink-0">
-      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
+    <div className="relative w-60 shrink-0">
+      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 w-full rounded-md border border-border bg-secondary/30 pl-8 pr-7 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-ring/50 focus:bg-background focus:ring-0"
+        className="h-9 w-full rounded-md border border-border bg-secondary/30 pl-8 pr-7 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-ring/50 focus:bg-background focus:ring-0"
       />
       {value ? (
         <button
           onClick={() => onChange('')}
           className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-secondary"
         >
-          <X size={12} />
+          <X size={13} />
         </button>
       ) : null}
     </div>
@@ -169,20 +170,20 @@ interface ViewToggleProps {
 }
 
 const VIEW_ICONS: Record<ViewMode, React.ReactNode> = {
-  list: <List size={14} />,
-  kanban: <LayoutGrid size={14} />,
-  timeline: <GanttChart size={14} />,
+  list: <List size={15} />,
+  kanban: <LayoutGrid size={15} />,
+  timeline: <GanttChart size={15} />,
 }
 
 export function ViewToggle({ value, onChange, available = ['list', 'kanban', 'timeline'] }: ViewToggleProps) {
   return (
-    <div className="inline-flex items-center rounded-md border border-border bg-secondary/50 p-0.5">
+    <div className="inline-flex h-9 items-center rounded-md border border-border bg-secondary/50 p-0.5">
       {available.map((m) => (
         <button
           key={m}
           onClick={() => onChange(m)}
           title={m.charAt(0).toUpperCase() + m.slice(1)}
-          className={`flex items-center justify-center rounded px-2 py-1 transition-colors ${
+          className={`flex h-full items-center justify-center rounded px-2.5 transition-colors ${
             value === m
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
@@ -202,7 +203,6 @@ interface FilterBarProps {
 export function FilterBar({ children }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Filter size={13} className="shrink-0 text-muted-foreground/60" />
       {children}
     </div>
   )

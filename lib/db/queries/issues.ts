@@ -11,10 +11,11 @@
 // This lets the activity feed and inbox surface meaningful events without
 // dredging through diff jsonb.
 
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { issueLabels, issues, labels, type Issue } from '../schema'
 import { recordEvent } from './events'
+import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
 import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
@@ -28,8 +29,11 @@ export interface IssueListRow extends Issue {
   assignee_avatar?: string | null
   milestone_name?: string | null
   project_name?: string | null
+  project_icon?: string | null
+  project_color?: string | null
   comment_count?: number
   attachment_count?: number
+  labels?: Array<{ id: number; name: string; color: string }>
 }
 
 const issueListSelect = sql`
@@ -39,8 +43,11 @@ const issueListSelect = sql`
   u.avatar_url AS assignee_avatar,
   m.name AS milestone_name,
   p.name AS project_name,
+  p.icon AS project_icon,
+  p.color AS project_color,
   (SELECT COUNT(*)::int FROM comments c WHERE c.issue_id = i.id) AS comment_count,
-  (SELECT COUNT(*)::int FROM attachments a WHERE a.issue_id = i.id) AS attachment_count
+  (SELECT COUNT(*)::int FROM attachments a WHERE a.issue_id = i.id) AS attachment_count,
+  COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM issue_labels il JOIN labels lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
 `
 
 export interface ListIssuesOptions {
@@ -94,6 +101,7 @@ export async function listIssuesInWorkspace(
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE i.workspace_id = ${workspaceId}
+      AND i.deleted_at IS NULL
       ${projectFilter}
       ${milestoneFilter}
       ${assigneeFilter}
@@ -105,7 +113,7 @@ export async function listIssuesInWorkspace(
           : sql``
       }
       ${opts.cursor ? sql`AND i.id < ${opts.cursor}` : sql``}
-    ORDER BY i.id DESC
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
     LIMIT ${limit + 1}
   `)
 
@@ -126,7 +134,7 @@ export async function getIssueInWorkspace(
     LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
-    WHERE i.id = ${id} AND i.workspace_id = ${workspaceId}
+    WHERE i.id = ${id} AND i.workspace_id = ${workspaceId} AND i.deleted_at IS NULL
   `)
   return (result.rows[0] as unknown as IssueListRow | undefined) ?? null
 }
@@ -134,7 +142,11 @@ export async function getIssueInWorkspace(
 // Legacy by-id lookup — used by /api/issues/[id] shim. Just bare row; workspace
 // gating happens at the route layer.
 export async function getIssue(id: number): Promise<Issue | null> {
-  const rows = await db.select().from(issues).where(eq(issues.id, id)).limit(1)
+  const rows = await db
+    .select()
+    .from(issues)
+    .where(and(eq(issues.id, id), isNull(issues.deleted_at)))
+    .limit(1)
   return rows[0] ?? null
 }
 
@@ -463,33 +475,14 @@ export async function updateIssue(
   })
 }
 
+// Delete now means soft-delete (move to the recycle bin). The row is kept and
+// hidden from active views; restore/purge live in lib/db/queries/deletion.ts.
 export async function deleteIssue(
   workspaceId: number,
   id: number,
   actorUserId: number
 ): Promise<boolean> {
-  return await db.transaction(async (tx) => {
-    const beforeRows = await tx
-      .select()
-      .from(issues)
-      .where(and(eq(issues.id, id), eq(issues.workspace_id, workspaceId)))
-      .limit(1)
-    if (!beforeRows[0]) return false
-
-    await recordEvent(tx, {
-      workspaceId,
-      actorUserId,
-      entityType: 'issue',
-      entityId: id,
-      action: 'deleted',
-      meta: { seq: beforeRows[0].seq, title: beforeRows[0].title },
-    })
-
-    const result = await tx
-      .delete(issues)
-      .where(and(eq(issues.id, id), eq(issues.workspace_id, workspaceId)))
-    return (result.rowCount ?? 0) > 0
-  })
+  return softDeleteIssue(workspaceId, id, actorUserId)
 }
 
 // --- Legacy compatibility ---
@@ -501,8 +494,8 @@ export async function getIssuesByProject(projectId: number) {
     LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
-    WHERE i.project_id = ${projectId}
-    ORDER BY i.priority ASC, i.updated_at DESC
+    WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows
 }
@@ -514,7 +507,8 @@ export async function getAllIssuesWithProjects() {
     LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
-    ORDER BY i.priority ASC, i.updated_at DESC
+    WHERE i.deleted_at IS NULL
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows
 }
@@ -540,9 +534,10 @@ export async function getIssuesPage(opts: {
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE 1=1
+      AND i.deleted_at IS NULL
       ${filterProject ? sql`AND i.project_id = ${project_id}` : sql``}
       ${filterCursor ? sql`AND i.id < ${cursor}` : sql``}
-    ORDER BY i.id DESC
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
     LIMIT ${limit + 1}
   `)
   const rows = result.rows as Array<{ id: number }>
@@ -559,8 +554,8 @@ export async function getIssuesByMilestone(milestoneId: number) {
     LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
-    WHERE i.milestone_id = ${milestoneId}
-    ORDER BY i.priority ASC, i.updated_at DESC
+    WHERE i.milestone_id = ${milestoneId} AND i.deleted_at IS NULL
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows
 }
@@ -579,4 +574,30 @@ export async function getKanbanView(projectId: number) {
     else kanban.backlog.push(r)
   }
   return kanban
+}
+
+// Persist manual ordering for a status group. Assigns positions 1..N in the
+// given order. Only updates issues that belong to this workspace and have the
+// matching status, so cross-status positions don't collide.
+export async function reorderIssues(
+  workspaceId: number,
+  status: string,
+  orderedIds: number[]
+): Promise<void> {
+  if (orderedIds.length === 0) return
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(issues)
+        .set({ position: i + 1 })
+        .where(
+          and(
+            eq(issues.workspace_id, workspaceId),
+            eq(issues.id, orderedIds[i]),
+            eq(issues.status, status),
+            isNull(issues.deleted_at)
+          )
+        )
+    }
+  })
 }

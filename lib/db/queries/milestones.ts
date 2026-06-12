@@ -10,9 +10,12 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { milestones, type Milestone } from '../schema'
 import { recordEvent } from './events'
+import { softDeleteMilestone, type DeleteMode } from './deletion'
 
 export interface MilestoneListItem extends Milestone {
   project_name: string | null
+  project_icon: string | null
+  project_color: string | null
   issue_count: number
   completed_issues: number
 }
@@ -31,12 +34,15 @@ export async function listMilestonesInWorkspace(
     SELECT
       m.*,
       p.name AS project_name,
+      p.icon AS project_icon,
+      p.color AS project_color,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM milestones m
-    LEFT JOIN projects p ON p.id = m.project_id
-    LEFT JOIN issues i ON i.milestone_id = m.id
+    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
     WHERE m.workspace_id = ${workspaceId}
+      AND m.deleted_at IS NULL
       ${
         opts.projectId === null
           ? sql`AND m.project_id IS NULL`
@@ -50,7 +56,7 @@ export async function listMilestonesInWorkspace(
           ? sql`AND (m.name ILIKE ${'%' + opts.search + '%'} OR m.description ILIKE ${'%' + opts.search + '%'})`
           : sql``
       }
-    GROUP BY m.id, p.name
+    GROUP BY m.id, p.name, p.icon, p.color
     ORDER BY m.due_date ASC NULLS LAST, m.id DESC
   `)
   return result.rows as unknown as MilestoneListItem[]
@@ -64,13 +70,15 @@ export async function getMilestoneInWorkspace(
     SELECT
       m.*,
       p.name AS project_name,
+      p.icon AS project_icon,
+      p.color AS project_color,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM milestones m
-    LEFT JOIN projects p ON p.id = m.project_id
-    LEFT JOIN issues i ON i.milestone_id = m.id
-    WHERE m.id = ${id} AND m.workspace_id = ${workspaceId}
-    GROUP BY m.id, p.name
+    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    WHERE m.id = ${id} AND m.workspace_id = ${workspaceId} AND m.deleted_at IS NULL
+    GROUP BY m.id, p.name, p.icon, p.color
   `)
   return (result.rows[0] as unknown as MilestoneListItem) ?? null
 }
@@ -78,7 +86,11 @@ export async function getMilestoneInWorkspace(
 // Legacy by-id lookup — used by the old /api/milestones/[id] endpoint while
 // the dashboard UI still calls it. Workspace gating happens at the route layer.
 export async function getMilestone(id: number): Promise<Milestone | null> {
-  const rows = await db.select().from(milestones).where(eq(milestones.id, id)).limit(1)
+  const rows = await db
+    .select()
+    .from(milestones)
+    .where(and(eq(milestones.id, id), isNull(milestones.deleted_at)))
+    .limit(1)
   return rows[0] ?? null
 }
 
@@ -213,33 +225,16 @@ export async function updateMilestone(
   })
 }
 
+// Delete now means soft-delete (move to the recycle bin). `mode` controls the
+// attached issues: 'detach' (default) keeps them active but unlinks them;
+// 'cascade' bins them together. See lib/db/queries/deletion.ts.
 export async function deleteMilestone(
   workspaceId: number,
   id: number,
-  actorUserId: number
+  actorUserId: number,
+  mode: DeleteMode = 'detach'
 ): Promise<boolean> {
-  return await db.transaction(async (tx) => {
-    const beforeRows = await tx
-      .select()
-      .from(milestones)
-      .where(and(eq(milestones.id, id), eq(milestones.workspace_id, workspaceId)))
-      .limit(1)
-    if (!beforeRows[0]) return false
-
-    await recordEvent(tx, {
-      workspaceId,
-      actorUserId,
-      entityType: 'milestone',
-      entityId: id,
-      action: 'deleted',
-      diff: { before: { name: beforeRows[0].name } },
-    })
-
-    const result = await tx
-      .delete(milestones)
-      .where(and(eq(milestones.id, id), eq(milestones.workspace_id, workspaceId)))
-    return (result.rowCount ?? 0) > 0
-  })
+  return softDeleteMilestone(workspaceId, id, actorUserId, mode)
 }
 
 // --- Legacy compatibility ---
@@ -250,8 +245,8 @@ export async function getMilestones(projectId: number) {
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM milestones m
-    LEFT JOIN issues i ON i.milestone_id = m.id
-    WHERE m.project_id = ${projectId}
+    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    WHERE m.project_id = ${projectId} AND m.deleted_at IS NULL
     GROUP BY m.id
     ORDER BY m.due_date ASC NULLS LAST
   `)
@@ -264,8 +259,9 @@ export async function getAllMilestones() {
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM milestones m
-    LEFT JOIN projects p ON p.id = m.project_id
-    LEFT JOIN issues i ON i.milestone_id = m.id
+    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    WHERE m.deleted_at IS NULL
     GROUP BY m.id, p.name
     ORDER BY m.due_date ASC NULLS LAST
   `)
@@ -278,13 +274,10 @@ export async function getMilestoneWithDetails(id: number) {
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM milestones m
-    LEFT JOIN projects p ON p.id = m.project_id
-    LEFT JOIN issues i ON i.milestone_id = m.id
-    WHERE m.id = ${id}
+    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    WHERE m.id = ${id} AND m.deleted_at IS NULL
     GROUP BY m.id, p.name
   `)
   return result.rows[0] ?? null
 }
-
-// Used only to satisfy `isNull` import; remove when unused.
-void isNull

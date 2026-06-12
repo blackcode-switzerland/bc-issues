@@ -995,4 +995,73 @@ If something here turns out to be a must-have, it gets a phase 14+ and a write-u
 
 ---
 
+## Appendix D — Recycle bin (soft-delete, restore, purge)
+
+Added after v1. Deleting an issue, project, or milestone no longer hard-deletes
+it; it moves to a per-workspace **Trash** (`/dashboard/trash`, `bk trash`).
+
+### Data model (migration `0022_recycle_bin`)
+- `issues`, `projects`, `milestones` each gain `deleted_at` (NULL = active),
+  `deleted_by`, and `delete_batch_id`.
+- `deletion_batches(id, workspace_id, actor_user_id, mode, root_type, root_id,
+  created_at)` records one delete operation. `mode` is `cascade` (children binned
+  with the root) or `detach` (children kept active, unlinked).
+
+**Why soft-delete keeps the row, not a snapshot:** the row's FK columns
+(`project_id`, `milestone_id`) survive, so cascade-deleted children re-link to
+their parent automatically on restore, and an issue's `seq` slot is never freed —
+restore can't collide on `uq_issues_workspace_seq`. There are no unique-name
+constraints on projects/milestones, so restore never collides on name either.
+
+### Engine — `lib/db/queries/deletion.ts`
+- `softDelete{Issue,Project,Milestone}` / `softDeleteEntity` — stamp the row,
+  create a batch, record a `deleted` event. Cascade stamps children (FKs kept);
+  detach nulls children's link and leaves them active.
+- `previewDeletion` — active child counts for the "delete N issues too?" dialog.
+- `listTrash` — union view of binned rows with batch + actor metadata.
+- `previewRestore` — dry-run returning conflicts (a child whose parent is also
+  binned or was purged). A parent that's part of the same selection/batch is NOT
+  a conflict — it restores alongside, link intact.
+- `restoreItems` / `restoreBatch` — clear the soft-delete columns, set
+  `position = NULL` (floats to top), record `restored`. Batch-aware default: a
+  child binned in the *same batch* as its parent restores as a group; a child
+  binned alone restores standalone (dangling link cleared). Overridable per item.
+- `purgeItems` / `purgeBatch` / `emptyTrash` — the only destructive path: hard
+  delete (the existing FK cascades wipe comments/attachments/labels/watchers).
+  Records `purged` before deleting. **Owner-only** at the route layer.
+
+The legacy `delete{Issue,Project,Milestone}` query functions now delegate to the
+soft-delete engine (default `mode = detach`, matching the old hard-delete + FK
+SET NULL behavior), so existing callers keep working.
+
+### Read-path filtering
+Every query that reads `issues`/`projects`/`milestones` filters
+`deleted_at IS NULL` so binned rows vanish from active views and counts. For the
+aggregate-count queries the filter goes in the JOIN condition
+(`LEFT JOIN issues i ON … AND i.deleted_at IS NULL`) to preserve zero-child rows.
+Analytics applies it in the `scopeWhere` base plus the two burndown sub-selects.
+The `events`/inbox/fanout paths are deliberately NOT filtered — the activity feed
+keeps showing `deleted`/`restored`/`purged` history.
+
+### Permissions
+This app's role model is `owner | member` only (no `admin` tier). Restore is open
+to any member; **purge and empty-bin require the workspace owner** (`requireOwner`).
+
+### Surfaces
+- API: `app/api/workspaces/[ws]/trash/{route,restore,purge,empty}`; existing
+  delete routes accept `?mode=cascade|detach`, and `?preview=1` on the parent
+  GET returns child counts for the delete dialog.
+- Web: top-level **Trash** nav; `components/trash-view.tsx`; custom dialogs
+  `delete-with-children-dialog` (cascade/detach toggle) and
+  `restore-conflict-dialog` (per-item parent resolution).
+- CLI: `bk trash list|restore|purge|empty`; `--cascade`/`--detach` on
+  `project delete` and `milestone delete`.
+
+### Tests
+`npm test` (Vitest) runs the route-parser unit tests; set `TEST_DATABASE_URL` to
+also run `deletion.integration.test.ts` (engine semantics against a real DB).
+`go test ./internal/commands` covers the CLI ref parser.
+
+---
+
 *End of plan v1.*
