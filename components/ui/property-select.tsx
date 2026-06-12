@@ -23,6 +23,8 @@ export function PropertySelect({
   buttonClassName,
   align = 'left',
   chevron = false,
+  iconOnly = false,
+  noSearch = false,
 }: {
   value: string
   options: PropertyOption[]
@@ -32,6 +34,8 @@ export function PropertySelect({
   buttonClassName?: string
   align?: 'left' | 'right'
   chevron?: boolean
+  iconOnly?: boolean
+  noSearch?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -51,10 +55,9 @@ export function PropertySelect({
     if (open) {
       setQuery('')
       setHighlight(0)
-      // focus the filter input on open
-      requestAnimationFrame(() => inputRef.current?.focus())
+      if (!noSearch) requestAnimationFrame(() => inputRef.current?.focus())
     }
-  }, [open])
+  }, [open, noSearch])
 
   const current = options.find((o) => o.value === value)
   const filtered = useMemo(() => {
@@ -78,9 +81,11 @@ export function PropertySelect({
         }
       >
         {current?.icon ? <span className="shrink-0">{current.icon}</span> : null}
-        <span className={`truncate ${current ? '' : 'text-muted-foreground'}`}>
-          {current?.label ?? placeholder}
-        </span>
+        {!iconOnly ? (
+          <span className={`truncate ${current ? '' : 'text-muted-foreground'}`}>
+            {current?.label ?? placeholder}
+          </span>
+        ) : null}
         {chevron ? <ChevronDown size={12} className="ml-auto shrink-0 text-muted-foreground" /> : null}
       </button>
 
@@ -90,31 +95,33 @@ export function PropertySelect({
             align === 'right' ? 'right-0' : 'left-0'
           }`}
         >
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setHighlight(0)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setHighlight((h) => Math.min(h + 1, filtered.length - 1))
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setHighlight((h) => Math.max(h - 1, 0))
-              } else if (e.key === 'Enter') {
-                e.preventDefault()
-                const opt = filtered[highlight]
-                if (opt) choose(opt.value)
-              } else if (e.key === 'Escape') {
-                setOpen(false)
-              }
-            }}
-            placeholder={searchPlaceholder}
-            className="w-full border-b border-border bg-transparent px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground"
-          />
+          {!noSearch ? (
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setHighlight(0)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setHighlight((h) => Math.min(h + 1, filtered.length - 1))
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setHighlight((h) => Math.max(h - 1, 0))
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const opt = filtered[highlight]
+                  if (opt) choose(opt.value)
+                } else if (e.key === 'Escape') {
+                  setOpen(false)
+                }
+              }}
+              placeholder={searchPlaceholder}
+              className="w-full border-b border-border bg-transparent px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground"
+            />
+          ) : null}
           <ul className="max-h-64 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-xs text-muted-foreground">No results</li>

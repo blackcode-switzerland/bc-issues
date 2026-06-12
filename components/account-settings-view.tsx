@@ -79,7 +79,7 @@ export function AccountSettingsView() {
         ) : (
           <button
             onClick={() => setChangingPw(true)}
-            className="rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+            className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
           >
             Change password
           </button>
@@ -98,13 +98,15 @@ export function AccountSettingsView() {
       </p>
 
       {!confirming ? (
-        <button
-          onClick={() => setConfirming(true)}
-          className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-        >
-          <Trash2 size={14} />
-          Start account deletion
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={() => setConfirming(true)}
+            className="cursor-pointer flex items-center gap-1.5 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+          >
+            <Trash2 size={14} />
+            Start account deletion
+          </button>
+        </div>
       ) : (
         <div className="space-y-4">
           {report.isLoading ? (
@@ -153,29 +155,29 @@ export function AccountSettingsView() {
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      disabled={phrase !== 'DELETE' || remove.isPending}
-                      onClick={() => remove.mutate()}
-                      className="rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground disabled:opacity-50"
-                    >
-                      Permanently delete my account
-                    </button>
+                  <div className="flex justify-end gap-2">
                     <button
                       onClick={() => {
                         setConfirming(false)
                         setPhrase('')
                       }}
-                      className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+                      className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
                     >
                       Cancel
+                    </button>
+                    <button
+                      disabled={phrase !== 'DELETE' || remove.isPending}
+                      onClick={() => remove.mutate()}
+                      className="cursor-pointer rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground disabled:opacity-50"
+                    >
+                      Permanently delete my account
                     </button>
                   </div>
                 </>
               ) : (
                 <button
                   onClick={() => setConfirming(false)}
-                  className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+                  className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
                 >
                   Back
                 </button>

@@ -38,6 +38,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     type: sp.get('type'),
     unreadOnly: sp.get('unread') === 'true',
     includeArchived: sp.get('include_archived') === 'true',
+    archivedOnly: sp.get('archived_only') === 'true',
     cursor,
     limit,
   })

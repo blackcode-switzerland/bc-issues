@@ -302,9 +302,21 @@
 .prose a { @apply text-primary underline hover:no-underline; }
 .prose img { @apply max-w-full rounded-lg my-4; }
 .prose hr { @apply border-border my-6; }
+.prose h4 { @apply text-base font-semibold mb-2 mt-3; }
 .prose strong { @apply font-semibold; }
 .prose em { @apply italic; }
 .prose s { @apply line-through; }
+.prose u { @apply underline; }
+
+/* Task list (checklist) */
+.prose ul[data-type="taskList"] { @apply list-none pl-0; }
+.prose ul[data-type="taskList"] li { @apply flex items-start gap-2 mb-1; }
+.prose ul[data-type="taskList"] li > label { @apply flex items-center mt-0.5; }
+.prose ul[data-type="taskList"] li > label input[type="checkbox"] {
+  @apply h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer;
+}
+.prose ul[data-type="taskList"] li > div { @apply flex-1; }
+.prose ul[data-type="taskList"] li[data-checked="true"] > div { @apply line-through text-muted-foreground; }
 
 /* TipTap editor — required for placeholder support */
 .ProseMirror { @apply focus:outline-none; }

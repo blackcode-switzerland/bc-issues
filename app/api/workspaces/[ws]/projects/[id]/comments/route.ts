@@ -29,6 +29,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const body = await req.json().catch(() => null)
   const content = typeof body?.content === 'string' ? body.content.trim() : ''
   if (!content) throw Errors.badRequest('invalid_content', 'content is required')
+  const parentCommentId = typeof body?.parent_comment_id === 'number' ? body.parent_comment_id : null
 
   const comment = await createComment({
     workspaceId: ctx.workspace.id,
@@ -36,6 +37,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     parentId: id,
     userId: ctx.user.id,
     content,
+    parentCommentId,
   })
   return NextResponse.json(comment, { status: 201 })
 })

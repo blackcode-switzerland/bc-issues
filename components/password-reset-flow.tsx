@@ -6,7 +6,7 @@
 //
 // Two steps: request a code, then verify the code + set a new password.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Eye, EyeOff, Loader2, Mail, ShieldCheck } from 'lucide-react'
 
@@ -34,6 +34,28 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current)
+    }
+  }, [])
+
+  function startResendCooldown() {
+    setResendCooldown(120)
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((v) => {
+        if (v <= 1) {
+          clearInterval(cooldownRef.current!)
+          cooldownRef.current = null
+          return 0
+        }
+        return v - 1
+      })
+    }, 1000)
+  }
 
   async function requestCode(e?: React.FormEvent) {
     e?.preventDefault()
@@ -55,6 +77,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
       }
       setSentTo(j.email ?? email.trim())
       setStep('verify')
+      startResendCooldown()
       toast.success('Verification code sent')
     } catch (err) {
       setError((err as Error).message)
@@ -134,24 +157,24 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
 
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
-              Send code
-            </button>
+          <div className="flex items-center justify-end gap-2">
             {onCancel ? (
               <button
                 type="button"
                 onClick={onCancel}
-                className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+                className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
               >
                 Cancel
               </button>
             ) : null}
+            <button
+              type="submit"
+              disabled={loading}
+              className="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+              Send code
+            </button>
           </div>
         </form>
       ) : (
@@ -216,18 +239,21 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
               Reset password
             </button>
             <button
               type="button"
-              onClick={() => requestCode()}
-              disabled={loading}
-              className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary disabled:opacity-50"
+              onClick={() => {
+                startResendCooldown()
+                requestCode()
+              }}
+              disabled={loading || resendCooldown > 0}
+              className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary disabled:opacity-50"
             >
-              Resend code
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
             </button>
           </div>
           {!authenticated ? (

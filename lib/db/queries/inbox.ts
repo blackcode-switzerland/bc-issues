@@ -8,7 +8,7 @@
 // rather than inserting a new row. This collapses rapid status flips into one
 // notification.
 
-import { and, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import { db } from '../client'
 import {
   inboxMessages,
@@ -93,6 +93,7 @@ export interface ListInboxFilter {
   type?: string | null
   unreadOnly?: boolean
   includeArchived?: boolean
+  archivedOnly?: boolean
   cursor?: number | null
   limit?: number
 }
@@ -109,7 +110,11 @@ const MAX_LIMIT = 200
 export async function listInbox(filter: ListInboxFilter): Promise<InboxPage> {
   const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
   const wheres = [eq(inboxMessages.user_id, filter.userId)]
-  if (!filter.includeArchived) wheres.push(isNull(inboxMessages.archived_at))
+  if (filter.archivedOnly) {
+    wheres.push(isNotNull(inboxMessages.archived_at))
+  } else if (!filter.includeArchived) {
+    wheres.push(isNull(inboxMessages.archived_at))
+  }
   if (filter.workspaceId != null) wheres.push(eq(inboxMessages.workspace_id, filter.workspaceId))
   if (filter.type) wheres.push(eq(inboxMessages.type, filter.type))
   if (filter.unreadOnly) wheres.push(isNull(inboxMessages.read_at))
@@ -173,6 +178,24 @@ export async function archiveMessages(
         eq(inboxMessages.user_id, userId),
         inArray(inboxMessages.id, ids),
         isNull(inboxMessages.archived_at)
+      )
+    )
+  return result.rowCount ?? 0
+}
+
+export async function unarchiveMessages(
+  userId: number,
+  ids: number[]
+): Promise<number> {
+  if (ids.length === 0) return 0
+  const result = await db
+    .update(inboxMessages)
+    .set({ archived_at: null })
+    .where(
+      and(
+        eq(inboxMessages.user_id, userId),
+        inArray(inboxMessages.id, ids),
+        isNotNull(inboxMessages.archived_at)
       )
     )
   return result.rowCount ?? 0

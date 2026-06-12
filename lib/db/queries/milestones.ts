@@ -163,6 +163,31 @@ export async function updateMilestone(
       .returning()
     if (!after) return null
 
+    if (patch.status !== undefined && before.status !== after.status) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'milestone',
+        entityId: id,
+        action: 'status_changed',
+        meta: { from: before.status, to: after.status, title: after.name },
+      })
+    }
+    if (patch.due_date !== undefined && String(before.due_date) !== String(after.due_date)) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'milestone',
+        entityId: id,
+        action: 'due_date_changed',
+        meta: {
+          from: before.due_date ? String(before.due_date).slice(0, 10) : null,
+          to: after.due_date ? String(after.due_date).slice(0, 10) : null,
+          title: after.name,
+        },
+      })
+    }
+
     const beforeSnap: Record<string, unknown> = {}
     const afterSnap: Record<string, unknown> = {}
     for (const k of MILESTONE_DIFF_KEYS) {
@@ -171,15 +196,19 @@ export async function updateMilestone(
         afterSnap[k] = (after as Record<string, unknown>)[k]
       }
     }
-
-    await recordEvent(tx, {
-      workspaceId,
-      actorUserId,
-      entityType: 'milestone',
-      entityId: id,
-      action: 'updated',
-      diff: { before: beforeSnap, after: afterSnap },
-    })
+    const remainingKeys = Object.keys(beforeSnap).filter(
+      (k) => !['status', 'due_date'].includes(k)
+    )
+    if (remainingKeys.length > 0) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'milestone',
+        entityId: id,
+        action: 'updated',
+        diff: { before: beforeSnap, after: afterSnap },
+      })
+    }
     return after
   })
 }

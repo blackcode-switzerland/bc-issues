@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2, Save, Trash2, Upload } from 'lucide-react'
+import { avatarColor } from '@/components/ui/member-avatar'
 
 interface Me {
   id: number
@@ -34,13 +35,21 @@ export function ProfileSettingsView() {
   const [name, setName] = useState('')
   const [tagline, setTagline] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [savedName, setSavedName] = useState('')
+  const [savedTagline, setSavedTagline] = useState('')
 
   useEffect(() => {
     if (data) {
-      setName(data.name ?? '')
-      setTagline(data.tagline ?? '')
+      const n = data.name ?? ''
+      const t = data.tagline ?? ''
+      setName(n)
+      setTagline(t)
+      setSavedName(n)
+      setSavedTagline(t)
     }
   }, [data])
+
+  const isDirty = name !== savedName || tagline !== savedTagline
 
   const save = useMutation({
     mutationFn: async (patch: Record<string, string | null>) => {
@@ -57,6 +66,8 @@ export function ProfileSettingsView() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me'] })
+      setSavedName(name)
+      setSavedTagline(tagline)
       toast.success('Profile updated')
     },
     onError: () => toast.error('Could not update profile'),
@@ -110,24 +121,25 @@ export function ProfileSettingsView() {
     }
   }
 
-  const initials = (data?.name?.trim()?.[0] ?? data?.email?.[0] ?? '?').toUpperCase()
-
   return (
-    <section className="rounded-lg border border-border bg-card/30 p-5">
-      <h2 className="mb-3 text-sm font-medium">Profile</h2>
-      <p className="mb-5 text-xs text-muted-foreground">
+    <section>
+      <h2 className="mb-1 text-base font-semibold">Profile</h2>
+      <p className="mb-6 text-sm text-muted-foreground">
         How you appear to teammates across all your workspaces.
       </p>
 
       {/* Avatar */}
       <div className="mb-6 flex items-center gap-4">
-        <div className="relative size-16 shrink-0 overflow-hidden rounded-full border border-border bg-primary/10">
+        <div
+          className="relative size-16 shrink-0 overflow-hidden rounded-full border border-border"
+          style={!data?.avatar_url ? { backgroundColor: avatarColor(data?.name?.trim() || data?.email || '?') } : undefined}
+        >
           {data?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={data.avatar_url} alt="Your avatar" className="size-full object-cover" />
           ) : (
-            <span className="flex size-full items-center justify-center text-xl font-medium text-primary">
-              {initials}
+            <span className="flex size-full items-center justify-center text-xl font-semibold text-white">
+              {(data?.name?.trim() || data?.email || '?')[0]?.toUpperCase() ?? '?'}
             </span>
           )}
         </div>
@@ -196,14 +208,18 @@ export function ProfileSettingsView() {
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
-        <button
-          onClick={() => save.mutate({ name: name || null, tagline: tagline || null })}
-          disabled={save.isPending}
-          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Save size={14} />
-          Save profile
-        </button>
+        {isDirty ? (
+          <div className="flex justify-end">
+            <button
+              onClick={() => save.mutate({ name: name || null, tagline: tagline || null })}
+              disabled={save.isPending}
+              className="cursor-pointer flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Save size={14} />
+              Save profile
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   )
@@ -212,9 +228,9 @@ export function ProfileSettingsView() {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium">{label}</label>
+      <label className="mb-1.5 block text-sm font-medium">{label}</label>
       {children}
-      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )
 }

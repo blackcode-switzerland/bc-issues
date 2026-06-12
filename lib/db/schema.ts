@@ -254,6 +254,7 @@ export const comments = pgTable(
     user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
     content: text('content').notNull(),
     mentions: integer('mentions').array(),
+    parent_comment_id: integer('parent_comment_id'),
     edited_at: timestamp('edited_at', { withTimezone: true }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -261,6 +262,7 @@ export const comments = pgTable(
   (t) => ({
     issueIdx: index('idx_comments_issue').on(t.issue_id),
     parentIdx: index('idx_comments_parent').on(t.parent_type, t.parent_id, t.created_at),
+    parentCommentIdx: index('idx_comments_parent_comment').on(t.parent_comment_id),
     parentTypeCheck: check(
       'comments_parent_type_check',
       sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'milestone', 'project')`

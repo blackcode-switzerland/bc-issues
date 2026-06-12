@@ -39,26 +39,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024
+    // Validate file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: 'File too large', suggestion: 'Maximum file size is 10MB' },
+        { error: 'File too large', suggestion: 'Maximum file size is 50MB' },
         { status: 400 }
       )
     }
 
-    // Validate file type for images (SVG excluded due to XSS risk)
-    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-    const allowedDocTypes = ['application/pdf', 'text/plain', 'application/json', 'text/markdown']
-    const allowedTypes = [...allowedImageTypes, ...allowedDocTypes]
-
-    if (!allowedTypes.includes(file.type)) {
+    // Block SVG due to XSS risk; allow everything else
+    if (file.type === 'image/svg+xml') {
       return NextResponse.json(
-        {
-          error: 'Invalid file type',
-          suggestion: `Allowed types: ${allowedTypes.join(', ')}`
-        },
+        { error: 'SVG files are not allowed for security reasons' },
         { status: 400 }
       )
     }

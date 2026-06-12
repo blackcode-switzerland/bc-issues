@@ -182,7 +182,7 @@ export function AnalyticsView({ print = false }: { print?: boolean }) {
   return (
     <div>
       <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-[13px] font-medium">Analytics</h1>
+        <h1 className="text-sm font-semibold">Analytics</h1>
         <span className="text-xs text-muted-foreground">
           {data?.scope.label ?? ws?.name ?? '…'}
           {data?.period.from ? (

@@ -1057,7 +1057,7 @@ function IssueDetailModal({
   }, [updateIssue])
 
   // Image upload handler
-  const handleImageUpload = async (file: File): Promise<string> => {
+  const handleFileUpload = async (file: File): Promise<string> => {
     const formData = new FormData()
     formData.append('file', file)
     const res = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -1211,7 +1211,7 @@ function IssueDetailModal({
                 content={description}
                 onChange={handleDescriptionChange}
                 placeholder="Add a description... Just start typing. Paste images with Ctrl+V."
-                onImageUpload={handleImageUpload}
+                onFileUpload={handleFileUpload}
                 hideToolbar={true}
                 minHeight="300px"
               />

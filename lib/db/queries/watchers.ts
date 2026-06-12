@@ -55,6 +55,15 @@ export async function removeWatcher(
     .where(and(eq(issueWatchers.issue_id, issueId), eq(issueWatchers.user_id, userId)))
 }
 
+export async function isWatcher(issueId: number, userId: number): Promise<boolean> {
+  const rows = await db
+    .select({ user_id: issueWatchers.user_id })
+    .from(issueWatchers)
+    .where(and(eq(issueWatchers.issue_id, issueId), eq(issueWatchers.user_id, userId)))
+    .limit(1)
+  return rows.length > 0
+}
+
 export async function listWatchers(issueId: number): Promise<IssueWatcher[]> {
   return await db
     .select()

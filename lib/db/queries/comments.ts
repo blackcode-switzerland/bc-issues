@@ -63,6 +63,9 @@ export interface CommentListItem extends Comment {
   author_name: string | null
   author_email: string | null
   author_avatar: string | null
+  // parent_comment_id is already on Comment via schema inference; re-declared here
+  // for the client type so it's always present (never undefined).
+  parent_comment_id: number | null
 }
 
 export async function listComments(
@@ -85,6 +88,7 @@ export async function listComments(
     author_name: r.author_name,
     author_email: r.author_email,
     author_avatar: r.author_avatar,
+    parent_comment_id: r.c.parent_comment_id ?? null,
   }))
 }
 
@@ -130,6 +134,7 @@ export interface CreateCommentInput {
   parentId: number
   userId: number
   content: string
+  parentCommentId?: number | null
 }
 
 export async function createComment(input: CreateCommentInput): Promise<Comment> {
@@ -153,6 +158,7 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
         user_id: input.userId,
         content: input.content,
         mentions: mentionedUserIds.length > 0 ? mentionedUserIds : null,
+        parent_comment_id: input.parentCommentId ?? null,
       })
       .returning()
     if (!row) throw new Error('comment insert returned nothing')

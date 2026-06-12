@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Archive,
+  ArchiveX,
   Check,
   Inbox as InboxIcon,
   AtSign,
@@ -13,8 +14,12 @@ import {
   Building2,
   Crown,
   CircleCheck,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { IssueDetailView } from './issue-detail-view'
+import { ProjectDetailView } from './project-detail-view'
+import { MilestoneDetailView } from './milestone-detail-view'
 
 interface InboxMessage {
   id: number
@@ -57,14 +62,29 @@ const ICONS: Record<string, React.ReactNode> = {
   ownership_transferred: <Crown size={15} className="text-muted-foreground" />,
 }
 
+type InboxTab = 'all' | 'unread' | 'archived'
+
 export function InboxView() {
   const queryClient = useQueryClient()
-  const [unreadOnly, setUnreadOnly] = useState(false)
+  const [tab, setTab] = useState<InboxTab>('all')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+
   const { data, isLoading } = useQuery({
-    queryKey: ['inbox', unreadOnly],
-    queryFn: () => fetchInbox(unreadOnly),
+    queryKey: ['inbox', tab],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (tab === 'unread') params.set('unread', 'true')
+      if (tab === 'archived') params.set('archived_only', 'true')
+      params.set('limit', '100')
+      return fetch(`/api/me/inbox?${params}`).then((r) => {
+        if (!r.ok) throw new Error('failed')
+        return r.json() as Promise<InboxPage>
+      })
+    },
     refetchOnWindowFocus: true,
   })
+
+  const selectedMessage = data?.data.find((m) => m.id === selectedId) ?? null
 
   const markRead = useMutation({
     mutationFn: async (opts: { ids?: number[]; all?: boolean }) => {
@@ -98,6 +118,21 @@ export function InboxView() {
     },
   })
 
+  const unarchive = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch('/api/me/inbox/unarchive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error('failed')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox'] })
+    },
+  })
+
   const accept = useMutation({
     mutationFn: async ({ token }: { token: string }) => {
       const res = await fetch('/api/invitations/accept', {
@@ -118,94 +153,164 @@ export function InboxView() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  return (
-    <div>
-      <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-[13px] font-medium">Inbox</h1>
-        {(data?.unread_count ?? 0) > 0 ? (
-          <span className="text-xs text-muted-foreground">{data?.unread_count} unread</span>
-        ) : null}
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={() => setUnreadOnly(false)}
-            className={`rounded-md px-2 py-1 text-xs transition-colors ${
-              !unreadOnly ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setUnreadOnly(true)}
-            className={`rounded-md px-2 py-1 text-xs transition-colors ${
-              unreadOnly ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Unread
-          </button>
-          {(data?.unread_count ?? 0) > 0 ? (
-            <button
-              onClick={() => markRead.mutate({ all: true })}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-              title="Mark all read"
-            >
-              <Check size={14} />
-            </button>
-          ) : null}
-        </div>
-      </header>
+  function handleSelect(m: InboxMessage) {
+    setSelectedId(m.id)
+    if (!m.read_at) {
+      markRead.mutate({ ids: [m.id] })
+    }
+  }
 
-      {isLoading ? (
-        <p className="px-6 py-4 text-sm text-muted-foreground">Loading…</p>
-      ) : !data?.data.length ? (
-        <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
-          <InboxIcon size={28} className="mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            {unreadOnly ? 'No unread notifications' : 'No notifications'}
-          </p>
+  return (
+    <div className="flex h-[calc(100vh-0px)] overflow-hidden">
+      {/* Left: message list */}
+      <div className={`flex flex-col border-r border-border ${selectedMessage ? 'hidden md:flex md:w-80 lg:w-96' : 'w-full md:w-80 lg:w-96'}`}>
+        <header className="sticky top-0 z-10 flex h-11 shrink-0 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+          <h1 className="text-sm font-semibold">Inbox</h1>
+          {(data?.unread_count ?? 0) > 0 && tab !== 'archived' ? (
+            <span className="text-xs text-muted-foreground">{data?.unread_count} unread</span>
+          ) : null}
+          <div className="ml-auto flex items-center gap-1">
+            {(['all', 'unread', 'archived'] as InboxTab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setSelectedId(null) }}
+                className={`rounded-md px-2 py-1 text-xs capitalize transition-colors ${
+                  tab === t ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t === 'all' ? 'All' : t === 'unread' ? 'Unread' : 'Archived'}
+              </button>
+            ))}
+            {(data?.unread_count ?? 0) > 0 && tab !== 'archived' ? (
+              <button
+                onClick={() => markRead.mutate({ all: true })}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                title="Mark all read"
+              >
+                <Check size={14} />
+              </button>
+            ) : null}
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <p className="px-6 py-4 text-sm text-muted-foreground">Loading…</p>
+          ) : !data?.data.length ? (
+            <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
+              <InboxIcon size={28} className="mb-3 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                {tab === 'unread' ? 'No unread notifications' : tab === 'archived' ? 'No archived notifications' : 'No notifications'}
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {data.data.map((m) => (
+                <li
+                  key={m.id}
+                  onClick={() => handleSelect(m)}
+                  className={`group flex cursor-pointer items-start gap-3 px-4 py-2.5 transition-colors hover:bg-secondary/40 ${
+                    m.id === selectedId ? 'bg-secondary/60' : ''
+                  } ${m.read_at ? 'opacity-60' : ''}`}
+                >
+                  <span className="flex w-3 shrink-0 items-center justify-center pt-1.5">
+                    {!m.read_at ? <span className="size-1.5 rounded-full bg-primary" /> : null}
+                  </span>
+                  <div className="mt-0.5 shrink-0">{ICONS[m.type] ?? <Building2 size={15} className="text-muted-foreground" />}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] leading-snug">{renderMessage(m)}</p>
+                    {m.type === 'invitation' && typeof m.payload.invitation_id === 'number' ? (
+                      <InvitationActions
+                        invitationId={m.payload.invitation_id}
+                        onAccept={accept.mutate}
+                      />
+                    ) : null}
+                    <p className="mt-0.5 text-[11px] text-muted-foreground" suppressHydrationWarning>
+                      {new Date(m.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div
+                    className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {!m.read_at && tab !== 'archived' ? (
+                      <button
+                        onClick={() => markRead.mutate({ ids: [m.id] })}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                        title="Mark as read"
+                      >
+                        <Check size={14} />
+                      </button>
+                    ) : null}
+                    {tab === 'archived' ? (
+                      <button
+                        onClick={() => {
+                          if (m.id === selectedId) setSelectedId(null)
+                          unarchive.mutate([m.id])
+                        }}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                        title="Unarchive"
+                      >
+                        <ArchiveX size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (m.id === selectedId) setSelectedId(null)
+                          archive.mutate([m.id])
+                        }}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                        title="Archive"
+                      >
+                        <Archive size={14} />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Right: detail pane */}
+      {selectedMessage ? (
+        <div className="relative flex flex-1 flex-col overflow-hidden">
+          <button
+            onClick={() => setSelectedId(null)}
+            className="absolute right-3 top-3 z-20 rounded-md p-1.5 text-muted-foreground hover:bg-secondary md:hidden"
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+          {/* Close button for desktop too */}
+          <button
+            onClick={() => setSelectedId(null)}
+            className="absolute right-3 top-3 z-20 hidden rounded-md p-1.5 text-muted-foreground hover:bg-secondary md:flex"
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+          <div className="flex-1 overflow-y-auto">
+            {selectedMessage.entity_type === 'issue' && selectedMessage.entity_id ? (
+              <IssueDetailView issueId={selectedMessage.entity_id} />
+            ) : selectedMessage.entity_type === 'project' && selectedMessage.entity_id ? (
+              <ProjectDetailView projectId={selectedMessage.entity_id} />
+            ) : selectedMessage.entity_type === 'milestone' && selectedMessage.entity_id ? (
+              <MilestoneDetailView milestoneId={selectedMessage.entity_id} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <InboxIcon size={28} className="mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No linked item for this notification.</p>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
-        <ul>
-          {data.data.map((m) => (
-            <li
-              key={m.id}
-              className={`group flex items-start gap-3 px-6 py-2.5 transition-colors hover:bg-secondary/40 ${
-                m.read_at ? 'opacity-60' : ''
-              }`}
-            >
-              <span className="flex w-3 shrink-0 items-center justify-center pt-1.5">
-                {!m.read_at ? <span className="size-1.5 rounded-full bg-primary" /> : null}
-              </span>
-              <div className="mt-0.5 shrink-0">{ICONS[m.type] ?? <Building2 size={15} className="text-muted-foreground" />}</div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px]">{renderMessage(m)}</p>
-                {m.type === 'invitation' && typeof m.payload.invitation_id === 'number' ? (
-                  <InvitationActions invitationId={m.payload.invitation_id} onAccept={accept.mutate} />
-                ) : null}
-              </div>
-              <span className="shrink-0 pt-0.5 text-[11px] text-muted-foreground" suppressHydrationWarning>
-                {new Date(m.created_at).toLocaleString()}
-              </span>
-              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                {!m.read_at ? (
-                  <button
-                    onClick={() => markRead.mutate({ ids: [m.id] })}
-                    className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-                    title="Mark as read"
-                  >
-                    <Check size={14} />
-                  </button>
-                ) : null}
-                <button
-                  onClick={() => archive.mutate([m.id])}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-                  title="Archive"
-                >
-                  <Archive size={14} />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="hidden flex-1 flex-col items-center justify-center text-center md:flex">
+          <InboxIcon size={32} className="mb-3 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">Select a notification to view details</p>
+        </div>
       )}
     </div>
   )
@@ -262,7 +367,6 @@ function InvitationActions({
   invitationId: number
   onAccept: (input: { token: string }) => void
 }) {
-  // We need the token. Fetch the pending invitations list (small).
   const { data } = useQuery({
     queryKey: ['pending-invitations'],
     queryFn: async () => {

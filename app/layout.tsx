@@ -43,6 +43,10 @@ export default function RootLayout({
                 color: 'var(--toast-text)',
                 border: '1px solid var(--toast-border)',
               },
+              classNames: {
+                success: '!border-green-600/40 !bg-green-950/60 !text-green-300',
+                error: '!border-red-600/40 !bg-red-950/60 !text-red-300',
+              },
             }}
           />
         </Providers>

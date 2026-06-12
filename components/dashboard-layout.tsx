@@ -26,6 +26,9 @@ import { useTheme } from 'next-themes'
 import { useQuery } from '@tanstack/react-query'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { InboxBadge } from './inbox-badge'
+import { useActiveWorkspace } from './listings/use-active-workspace'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -54,6 +57,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { data: session } = useSession()
   const user = session?.user
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { confirm } = useConfirm()
+  const { data: ws } = useActiveWorkspace()
 
   // Close the mobile drawer on route change.
   useEffect(() => {
@@ -76,10 +81,25 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     },
   })
 
+  const { data: counts } = useQuery({
+    queryKey: ['sidebar-counts', ws?.slug],
+    enabled: !!ws,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const slug = ws!.slug
+      const [p, m, i, l] = await Promise.all([
+        fetch(`/api/workspaces/${slug}/projects`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
+        fetch(`/api/workspaces/${slug}/milestones?limit=1`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/issues?limit=1`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/labels`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
+      ])
+      return { projects: p, milestones: m, issues: i, labels: l }
+    },
+  })
+
   const displayName = me?.name ?? user?.name ?? ''
   const displayEmail = me?.email ?? user?.email ?? ''
   const avatarUrl = me?.avatar_url ?? user?.image ?? null
-  const initials = (displayName.trim()[0] ?? displayEmail[0] ?? '?').toUpperCase()
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -113,9 +133,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         <SectionLabel>Workspace</SectionLabel>
         <div className="space-y-0.5">
-          {NAV_WORKSPACE.map((item) => (
-            <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
-          ))}
+          {NAV_WORKSPACE.map((item) => {
+            const countMap: Record<string, number | undefined> = {
+              '/dashboard': counts?.projects,
+              '/dashboard/milestones': counts?.milestones,
+              '/dashboard/issues': counts?.issues,
+              '/dashboard/labels': counts?.labels,
+            }
+            return (
+              <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} count={countMap[item.href]} />
+            )
+          })}
         </div>
 
         <SectionLabel>Manage</SectionLabel>
@@ -129,35 +157,41 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* User */}
       <div className="border-t border-sidebar-border p-2.5">
         <div className="mb-1 flex items-center gap-2.5 px-1.5 py-1">
-          <div className="size-7 shrink-0 overflow-hidden rounded-full border border-border bg-primary/10">
-            {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt={displayName || 'You'} className="size-full object-cover" />
-            ) : (
-              <span className="flex size-full items-center justify-center text-xs font-medium text-primary">
-                {initials}
-              </span>
-            )}
-          </div>
+          <MemberAvatar
+            name={displayName || null}
+            email={displayEmail || null}
+            avatarUrl={avatarUrl}
+            size={28}
+          />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium leading-tight">{displayName}</p>
             <p className="truncate text-[11px] leading-tight text-muted-foreground">{displayEmail}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center justify-end gap-1">
           <IconButton title="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </IconButton>
           <Link
             href="/dashboard/settings"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             title="Settings"
           >
             <Settings size={16} />
           </Link>
           <button
-            onClick={() => signOut()}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: 'Sign out?',
+                  description: 'You will be redirected to the login page.',
+                  confirmLabel: 'Sign out',
+                }))
+              )
+                return
+              signOut()
+            }}
+            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             title="Sign out"
           >
             <LogOut size={16} />
@@ -223,7 +257,7 @@ function IconButton({
     <button
       onClick={onClick}
       title={title}
-      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+      className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
     >
       {children}
     </button>
@@ -233,9 +267,11 @@ function IconButton({
 function NavItem({
   item,
   active,
+  count,
 }: {
   item: { href: string; label: string; icon: LucideIcon; trailing?: boolean }
   active: boolean
+  count?: number
 }) {
   const Icon = item.icon
   return (
@@ -250,6 +286,9 @@ function NavItem({
       <Icon size={16} />
       <span className="flex-1 truncate">{item.label}</span>
       {item.trailing ? <InboxBadge /> : null}
+      {count != null && !item.trailing ? (
+        <span className="text-[11px] tabular-nums text-muted-foreground/60">{count}</span>
+      ) : null}
     </Link>
   )
 }

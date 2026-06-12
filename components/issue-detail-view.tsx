@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
@@ -9,6 +10,8 @@ import { Bell, BellOff, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
+import { ActivityFeed } from './activity-feed'
+import { ProjectIcon } from './project-icon'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import { PropertySelect } from '@/components/ui/property-select'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -43,16 +46,6 @@ interface IssueDetail {
   project_name: string | null
 }
 
-interface Comment {
-  id: number
-  user_id: number | null
-  content: string
-  created_at: string
-  edited_at: string | null
-  author_name: string | null
-  author_email: string | null
-}
-
 interface Label {
   id: number
   name: string
@@ -69,6 +62,8 @@ interface Member {
 interface Project {
   id: number
   name: string
+  color: string | null
+  icon: string | null
 }
 
 interface Milestone {
@@ -77,24 +72,16 @@ interface Milestone {
   project_id: number | null
 }
 
-interface ActivityEvent {
-  id: number
-  action: string
-  actor_name: string | null
-  actor_email: string | null
-  meta: Record<string, unknown> | null
-  occurred_at: string
-}
-
 export function IssueDetailView({ issueId }: { issueId: number }) {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
 
+  const searchParams = useSearchParams()
+  const isNew = searchParams.get('new') === '1'
+  const titleInputRef = useRef<HTMLTextAreaElement | null>(null)
+
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
-  const [composerKey, setComposerKey] = useState(0)
-  const [commentDraft, setCommentDraft] = useState('')
-  const [watching, setWatching] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Guard: an unparseable id (e.g. /dashboard/issues/new before that page
@@ -112,16 +99,12 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
   })
 
-  const comments = useQuery({
-    queryKey: ['issue-comments', issueId],
-    enabled: validId,
-    retry: false,
-    queryFn: async (): Promise<Comment[]> => {
-      const res = await fetch(`/api/issues/${issueId}/comments`)
-      if (!res.ok) return []
-      return res.json()
-    },
-  })
+  useEffect(() => {
+    if (isNew && issue.data && titleInputRef.current) {
+      titleInputRef.current.focus()
+      titleInputRef.current.select()
+    }
+  }, [isNew, issue.data?.id])
 
   const labels = useQuery({
     queryKey: ['issue-labels', issueId, ws?.slug],
@@ -179,20 +162,18 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
   })
 
-  const events = useQuery({
-    queryKey: ['issue-events', issueId, ws?.slug],
-    enabled: !!ws,
-    queryFn: async (): Promise<ActivityEvent[]> => {
-      const res = await fetch(
-        `/api/workspaces/${ws!.slug}/activity?entity_type=issue&limit=50`
-      )
-      if (!res.ok) return []
+  const watchStatus = useQuery({
+    queryKey: ['issue-watch', issueId, ws?.slug],
+    enabled: !!ws && validId,
+    queryFn: async (): Promise<boolean> => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/watch`)
+      if (!res.ok) return false
       const j = await res.json()
-      return (j.data as Array<ActivityEvent & { entity_id: number }>).filter(
-        (e) => e.entity_id === issueId
-      )
+      return j.watching ?? false
     },
+    staleTime: 30_000,
   })
+  const watching = watchStatus.data ?? false
 
   // Quiet patch used by autosave + property pickers (the UI itself is the
   // feedback); errors always toast.
@@ -211,7 +192,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue', issueId] })
-      queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
+      queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
     },
     onError: (e: Error) => toast.error(e.message),
@@ -248,24 +229,6 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   // Flush pending edits when leaving the page.
   useEffect(() => () => flushDescription(), [flushDescription])
 
-  const createComment = useMutation({
-    mutationFn: async (content: string) => {
-      const res = await fetch(`/api/issues/${issueId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      if (!res.ok) throw new Error('failed')
-    },
-    onSuccess: () => {
-      setCommentDraft('')
-      setComposerKey((k) => k + 1) // reset the editor
-      queryClient.invalidateQueries({ queryKey: ['issue-comments', issueId] })
-      queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
-    },
-    onError: () => toast.error('Failed to post comment'),
-  })
-
   const attachLabel = useMutation({
     mutationFn: async (labelId: number) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/labels`, {
@@ -277,7 +240,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-labels', issueId] })
-      queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
+      queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
     },
     onError: () => toast.error('Could not update labels'),
   })
@@ -292,7 +255,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-labels', issueId] })
-      queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
+      queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
     },
     onError: () => toast.error('Could not update labels'),
   })
@@ -305,9 +268,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: (_d, start) => {
-      setWatching(start)
       toast.success(start ? 'Subscribed to issue' : 'Unsubscribed')
-      queryClient.invalidateQueries({ queryKey: ['issue-events', issueId] })
+      queryClient.invalidateQueries({ queryKey: ['issue-watch', issueId] })
     },
     onError: () => toast.error('Could not update subscription'),
   })
@@ -431,6 +393,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               placeholder="Issue title"
               className="mb-3 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
               ref={(el) => {
+                titleInputRef.current = el
                 if (el) {
                   el.style.height = 'auto'
                   el.style.height = `${el.scrollHeight}px`
@@ -448,7 +411,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               variant="seamless"
               mentionItems={mentionItems}
               minHeight="120px"
-              onImageUpload={async (file) => {
+              onFileUpload={async (file) => {
                 const fd = new FormData()
                 fd.append('file', file)
                 const res = await fetch('/api/upload', { method: 'POST', body: fd })
@@ -458,85 +421,21 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               }}
             />
 
-            {/* Activity + comments */}
+            {/* Activity */}
             <section className="mt-12">
               <div className="mb-4 flex items-center gap-3">
                 <h2 className="text-sm font-medium">Activity</h2>
                 <div className="h-px flex-1 bg-border" />
               </div>
-
-              {/* compact event feed */}
-              {events.data?.length ? (
-                <ul className="mb-6 space-y-2.5">
-                  {events.data.slice(0, 10).map((e) => (
-                    <li key={e.id} className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                      <span className="size-1.5 shrink-0 rounded-full bg-border" />
-                      <span className="font-medium text-foreground/80">
-                        {e.actor_name ?? e.actor_email ?? 'system'}
-                      </span>
-                      <span className="truncate">{e.action.replaceAll('_', ' ')}</span>
-                      <span className="ml-auto shrink-0 text-[11px]" suppressHydrationWarning>
-                        {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              {comments.data?.length ? (
-                <ul className="mb-6 space-y-4">
-                  {comments.data.map((c) => (
-                    <li key={c.id} className="rounded-lg border border-border bg-card/40 p-3.5">
-                      <div className="mb-2 flex items-center gap-2">
-                        <MemberAvatar name={c.author_name} email={c.author_email} size={20} />
-                        <span className="text-[13px] font-medium">
-                          {c.author_name ?? c.author_email}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                          {c.edited_at ? ' · edited' : ''}
-                        </span>
-                      </div>
-                      {c.content.includes('<') ? (
-                        <RichTextDisplay content={c.content} />
-                      ) : (
-                        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
-                          {c.content}
-                        </pre>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              {/* Composer */}
-              <div className="rounded-lg border border-border bg-card/40 transition-colors focus-within:border-ring/60">
-                <RichTextEditor
-                  key={`composer-${composerKey}`}
-                  content=""
-                  onChange={setCommentDraft}
-                  placeholder="Leave a comment… type @ to mention"
-                  variant="bordered"
-                  hideToolbar
-                  mentionItems={mentionItems}
-                  minHeight="64px"
-                />
-                <div className="flex justify-end border-t border-border px-2.5 py-2">
-                  <button
-                    onClick={() => {
-                      const text = commentDraft.replace(/<[^>]*>/g, '').trim()
-                      if (text) createComment.mutate(commentDraft)
-                    }}
-                    disabled={
-                      createComment.isPending ||
-                      !commentDraft.replace(/<[^>]*>/g, '').trim()
-                    }
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    Comment
-                  </button>
-                </div>
-              </div>
+              <ActivityFeed
+                entityType="issue"
+                entityId={issueId}
+                wsSlug={ws?.slug ?? ''}
+                commentsUrl={`/api/issues/${issueId}/comments`}
+                commentsQueryKey={['issue-comments', issueId]}
+                mentionItems={mentionItems}
+                members={members.data}
+              />
             </section>
           </div>
         </main>
@@ -602,27 +501,22 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
                   </button>
                 </span>
               ))}
-              {availableLabels.length > 0 ? (
-                <PropertySelect
-                  value=""
-                  placeholder="Add label"
-                  searchPlaceholder="Add label…"
-                  buttonClassName="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                  options={availableLabels.map((l) => ({
-                    value: String(l.id),
-                    label: l.name,
-                    icon: (
-                      <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
-                    ),
-                  }))}
-                  onChange={(v) => {
-                    if (v) attachLabel.mutate(parseInt(v))
-                  }}
-                />
-              ) : null}
-              {!labels.data?.length && availableLabels.length === 0 ? (
-                <span className="text-[11px] text-muted-foreground">No labels</span>
-              ) : null}
+              <PropertySelect
+                value=""
+                placeholder="+ Add label"
+                searchPlaceholder="Add label…"
+                buttonClassName="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                options={availableLabels.map((l) => ({
+                  value: String(l.id),
+                  label: l.name,
+                  icon: (
+                    <span className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
+                  ),
+                }))}
+                onChange={(v) => {
+                  if (v) attachLabel.mutate(parseInt(v))
+                }}
+              />
             </div>
 
             <div className="my-4 h-px bg-border" />
@@ -633,7 +527,11 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               searchPlaceholder="Move to project…"
               options={[
                 { value: '', label: 'No project' },
-                ...(projects.data ?? []).map((p) => ({ value: String(p.id), label: p.name })),
+                ...(projects.data ?? []).map((p) => ({
+                  value: String(p.id),
+                  label: p.name,
+                  icon: <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={14} />,
+                })),
               ]}
               onChange={(v) => patchIssue.mutate({ project_id: v ? parseInt(v) : null })}
             />

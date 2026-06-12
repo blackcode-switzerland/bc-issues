@@ -1,11 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Crown, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, Crown, Loader2, Save, Trash2, Upload } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { avatarColor } from '@/components/ui/member-avatar'
+
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const MAX_BYTES = 5 * 1024 * 1024
 
 interface Workspace {
   id: number
@@ -40,18 +44,26 @@ export function WorkspaceSettingsView() {
   const queryClient = useQueryClient()
   const { confirm, prompt } = useConfirm()
   const { data: ws } = useQuery({ queryKey: ['active-workspace'], queryFn: fetchActiveWorkspace })
+  const logoFileRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState('')
   const [key, setKey] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [savedName, setSavedName] = useState('')
+  const [savedKey, setSavedKey] = useState('')
 
   useEffect(() => {
     if (ws) {
       setName(ws.name)
       setKey(ws.key)
       setLogoUrl(ws.logo_url ?? '')
+      setSavedName(ws.name)
+      setSavedKey(ws.key)
     }
   }, [ws])
+
+  const isDirty = name !== savedName || key !== savedKey
 
   const { data: members } = useQuery({
     queryKey: ['workspace-members', ws?.slug],
@@ -79,6 +91,8 @@ export function WorkspaceSettingsView() {
     },
     onSuccess: () => {
       toast.success('Workspace updated')
+      setSavedName(name)
+      setSavedKey(key)
       queryClient.invalidateQueries({ queryKey: ['active-workspace'] })
       queryClient.invalidateQueries({ queryKey: ['me-workspaces'] })
       router.refresh()
@@ -123,6 +137,35 @@ export function WorkspaceSettingsView() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  async function onPickLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!ACCEPTED.includes(file.type)) {
+      toast.error('Please choose a JPG, PNG, GIF, or WebP image')
+      return
+    }
+    if (file.size > MAX_BYTES) {
+      toast.error('Image must be 5MB or smaller')
+      return
+    }
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok || !j.url) throw new Error(j.error ?? 'Upload failed')
+      setLogoUrl(j.url)
+      save.mutate({ name, key, logo_url: j.url })
+      toast.success('Logo updated')
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
   if (!ws) {
     return (
       <div className="p-8">
@@ -135,17 +178,65 @@ export function WorkspaceSettingsView() {
   const otherMembers = (members ?? []).filter((m) => m.user_id !== ws.owner_id)
 
   return (
-    <div className="mx-auto max-w-2xl p-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">Workspace settings</h1>
+    <div>
+      <header className="mb-8">
+        <h1 className="text-xl font-semibold">Workspace</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isOwner ? `You own ${ws.name}.` : `You are a member of ${ws.name}.`}
         </p>
       </header>
 
-      <section className="mb-8 rounded-lg border border-border bg-card/30 p-5">
-        <h2 className="mb-4 text-sm font-medium">General</h2>
-        <div className="space-y-4">
+      <section className="mb-8">
+        <div className="space-y-6">
+          {/* Logo — always first, saves immediately on upload */}
+          {isOwner ? (
+            <Field label="Logo" hint="Optional. Square image. JPG, PNG, GIF, or WebP. Max 5MB.">
+              <div className="flex items-center gap-3">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="Workspace logo" className="size-10 shrink-0 rounded-md object-cover" />
+                ) : (
+                  <div
+                    className="flex size-10 shrink-0 items-center justify-center rounded-md text-[15px] font-semibold text-white"
+                    style={{ backgroundColor: avatarColor(ws.name) }}
+                  >
+                    {(ws.name[0] ?? 'W').toUpperCase()}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={logoFileRef}
+                    type="file"
+                    accept={ACCEPTED.join(',')}
+                    onChange={onPickLogo}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => logoFileRef.current?.click()}
+                    disabled={logoUploading || save.isPending}
+                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary disabled:opacity-50"
+                  >
+                    {logoUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                    {logoUrl ? 'Change logo' : 'Upload logo'}
+                  </button>
+                  {logoUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLogoUrl('')
+                        save.mutate({ name, key, logo_url: null })
+                      }}
+                      disabled={save.isPending}
+                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </Field>
+          ) : null}
           <Field label="Name" hint="Displayed across the app." disabled={!isOwner}>
             <input
               value={name}
@@ -168,38 +259,40 @@ export function WorkspaceSettingsView() {
               className="w-32 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
             />
           </Field>
-          <Field label="Logo URL" hint="Optional. Public URL to a square image." disabled={!isOwner}>
-            <input
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://…"
-              disabled={!isOwner}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
-            />
-          </Field>
-          {isOwner ? (
-            <button
-              type="button"
-              disabled={save.isPending}
-              onClick={() =>
-                save.mutate({ name, key, logo_url: logoUrl || null })
-              }
-              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Save size={14} />
-              Save changes
-            </button>
+          {isOwner && isDirty ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={save.isPending}
+                onClick={async () => {
+                  if (key !== savedKey) {
+                    const ok = await confirm({
+                      title: `Rename workspace key to "${key}"?`,
+                      description: `All issue IDs will change from ${savedKey}-N to ${key}-N across the app and CLI. This cannot be undone.`,
+                      confirmLabel: 'Yes, rename key',
+                      destructive: true,
+                    })
+                    if (!ok) return
+                  }
+                  save.mutate({ name, key, logo_url: logoUrl || null })
+                }}
+                className="cursor-pointer flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Save size={14} />
+                Save changes
+              </button>
+            </div>
           ) : null}
         </div>
       </section>
 
       {isOwner && otherMembers.length > 0 ? (
-        <section className="mb-8 rounded-lg border border-border bg-card/30 p-5">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <Crown size={14} className="text-amber-400" />
+        <section className="mb-8 border-t border-border pt-8">
+          <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
+            <Crown size={15} className="text-amber-400" />
             Transfer ownership
           </h2>
-          <p className="mb-4 text-xs text-muted-foreground">
+          <p className="mb-4 text-sm text-muted-foreground">
             The current owner will become a regular member after transfer.
           </p>
           <select
@@ -234,35 +327,41 @@ export function WorkspaceSettingsView() {
       ) : null}
 
       {isOwner ? (
-        <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-destructive">
-            <AlertTriangle size={14} />
+        <section className="border-t border-destructive/20 pt-8">
+          <h2 className="mb-1 flex items-center gap-2 text-base font-semibold text-destructive">
+            <AlertTriangle size={15} />
             Danger zone
           </h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Deleting a workspace removes all of its projects, milestones, issues, comments, attachments, labels,
+          <p className="mb-5 text-sm text-muted-foreground">
+            Deleting a workspace permanently removes all its projects, milestones, issues, comments, attachments, labels,
             members, and history. This cannot be undone.
           </p>
-          <button
-            onClick={async () => {
-              const typed = await prompt({
-                title: 'Delete workspace?',
-                description:
-                  'This permanently deletes the workspace and all its data. This cannot be undone.',
-                inputLabel: `Type "${ws.name}" to confirm`,
-                placeholder: ws.name,
-                requireMatch: ws.name,
-                destructive: true,
-                confirmLabel: 'Delete workspace',
-              })
-              if (typed == null) return
-              if (typed === ws.name) remove.mutate()
-            }}
-            className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-          >
-            <Trash2 size={14} />
-            Delete workspace
-          </button>
+          <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Delete workspace</p>
+              <p className="text-xs text-muted-foreground">Permanently delete {ws.name} and all its data</p>
+            </div>
+            <button
+              onClick={async () => {
+                const typed = await prompt({
+                  title: 'Delete workspace?',
+                  description:
+                    'This permanently deletes the workspace and all its data. This cannot be undone.',
+                  inputLabel: `Type "${ws.name}" to confirm`,
+                  placeholder: ws.name,
+                  requireMatch: ws.name,
+                  destructive: true,
+                  confirmLabel: 'Delete workspace',
+                })
+                if (typed == null) return
+                if (typed === ws.name) remove.mutate()
+              }}
+              className="cursor-pointer flex items-center gap-1.5 rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          </div>
         </section>
       ) : null}
     </div>
@@ -281,12 +380,12 @@ function Field({
   disabled?: boolean
 }) {
   return (
-    <div>
-      <label className={`mb-1 block text-xs font-medium ${disabled ? 'text-muted-foreground' : ''}`}>
+    <div className="space-y-1.5">
+      <label className={`block text-sm font-medium ${disabled ? 'text-muted-foreground' : ''}`}>
         {label}
       </label>
       {children}
-      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )
 }

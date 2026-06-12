@@ -1,14 +1,16 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow, isPast, isToday } from 'date-fns'
 import { toast } from 'sonner'
-import { ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
+import { ActivityFeed } from './activity-feed'
 import { DatePicker } from '@/components/ui/date-picker'
 import { StatusIcon, ProgressRing } from '@/components/ui/work-item-icons'
 import { MemberAvatar } from '@/components/ui/member-avatar'
@@ -40,16 +42,6 @@ interface IssueRow {
   assignee_avatar: string | null
 }
 
-interface Comment {
-  id: number
-  user_id: number | null
-  content: string
-  created_at: string
-  edited_at: string | null
-  author_name: string | null
-  author_email: string | null
-}
-
 interface Project {
   id: number
   name: string
@@ -66,9 +58,10 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
+  const searchParams = useSearchParams()
+  const isNew = searchParams.get('new') === '1'
+  const nameInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [nameDraft, setNameDraft] = useState<string | null>(null)
-  const [commentDraft, setCommentDraft] = useState('')
-  const [composerKey, setComposerKey] = useState(0)
   const descRef = useRef<string>('')
 
   const milestone = useQuery({
@@ -81,6 +74,13 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     },
   })
 
+  useEffect(() => {
+    if (isNew && milestone.data && nameInputRef.current) {
+      nameInputRef.current.focus()
+      nameInputRef.current.select()
+    }
+  }, [isNew, milestone.data?.id])
+
   const issues = useQuery({
     queryKey: ['milestone-issues', milestoneId, ws?.slug],
     enabled: !!ws,
@@ -88,17 +88,6 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       const res = await fetch(
         `/api/workspaces/${ws!.slug}/issues?milestone_id=${milestoneId}&limit=200`
       )
-      if (!res.ok) return []
-      const j = await res.json()
-      return j.data
-    },
-  })
-
-  const comments = useQuery({
-    queryKey: ['milestone-comments', milestoneId, ws?.slug],
-    enabled: !!ws,
-    queryFn: async (): Promise<Comment[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}/comments`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -127,6 +116,26 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     },
   })
 
+  const router = useRouter()
+
+  const createIssue = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { title: 'New Issue', milestone_id: milestoneId }
+      if (milestone.data?.project_id != null) body.project_id = milestone.data.project_id
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error('Failed to create issue')
+      return res.json() as Promise<{ id: number }>
+    },
+    onSuccess: (issue) => {
+      router.push(`/dashboard/issues/${issue.id}?new=1`)
+    },
+    onError: () => toast.error('Failed to create issue'),
+  })
+
   const patch = useMutation({
     mutationFn: async (input: Record<string, unknown>) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}`, {
@@ -142,24 +151,6 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
     },
     onError: () => toast.error('Failed to update milestone'),
-  })
-
-  const createComment = useMutation({
-    mutationFn: async (content: string) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      if (!res.ok) throw new Error('failed')
-    },
-    onSuccess: () => {
-      setCommentDraft('')
-      setComposerKey((k) => k + 1)
-      toast.success('Comment added')
-      queryClient.invalidateQueries({ queryKey: ['milestone-comments', milestoneId] })
-    },
-    onError: () => toast.error('Failed to add comment'),
   })
 
   const remove = useMutation({
@@ -270,6 +261,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
               placeholder="Milestone name"
               className="mb-2 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
               ref={(el) => {
+                nameInputRef.current = el
                 if (el) {
                   el.style.height = 'auto'
                   el.style.height = `${el.scrollHeight}px`
@@ -293,7 +285,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                 variant="seamless"
                 minHeight="100px"
                 mentionItems={mentionItems}
-                onImageUpload={async (file) => {
+                onFileUpload={async (file) => {
                   const fd = new FormData()
                   fd.append('file', file)
                   const res = await fetch('/api/upload', { method: 'POST', body: fd })
@@ -320,6 +312,14 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                   <span className="text-muted-foreground">({issues.data?.length ?? 0})</span>
                 </h2>
                 <div className="h-px flex-1 bg-border" />
+                <button
+                  onClick={() => ws && createIssue.mutate()}
+                  disabled={createIssue.isPending || !ws}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                >
+                  <Plus size={13} />
+                  New issue
+                </button>
               </div>
               {issues.data?.length ? (
                 <ul>
@@ -359,69 +359,21 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
               )}
             </section>
 
-            {/* Discussion */}
+            {/* Activity */}
             <section className="mt-12">
               <div className="mb-4 flex items-center gap-3">
-                <h2 className="text-sm font-medium">
-                  Discussion{' '}
-                  <span className="text-muted-foreground">({comments.data?.length ?? 0})</span>
-                </h2>
+                <h2 className="text-sm font-medium">Activity</h2>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              {comments.data?.length ? (
-                <ul className="mb-6 space-y-4">
-                  {comments.data.map((c) => (
-                    <li key={c.id} className="rounded-lg border border-border bg-card/40 p-3.5">
-                      <div className="mb-2 flex items-center gap-2">
-                        <MemberAvatar name={c.author_name} email={c.author_email} size={20} />
-                        <span className="text-[13px] font-medium">
-                          {c.author_name ?? c.author_email}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                          {c.edited_at ? ' · edited' : ''}
-                        </span>
-                      </div>
-                      {c.content.includes('<') ? (
-                        <RichTextDisplay content={c.content} />
-                      ) : (
-                        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
-                          {c.content}
-                        </pre>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              {/* Composer */}
-              <div className="rounded-lg border border-border bg-card/40 transition-colors focus-within:border-ring/60">
-                <RichTextEditor
-                  key={`mcomposer-${composerKey}`}
-                  content=""
-                  onChange={setCommentDraft}
-                  placeholder="Leave a comment… type @ to mention"
-                  variant="bordered"
-                  hideToolbar
-                  mentionItems={mentionItems}
-                  minHeight="64px"
-                />
-                <div className="flex justify-end border-t border-border px-2.5 py-2">
-                  <button
-                    onClick={() => {
-                      const text = commentDraft.replace(/<[^>]*>/g, '').trim()
-                      if (text) createComment.mutate(commentDraft)
-                    }}
-                    disabled={
-                      createComment.isPending ||
-                      !commentDraft.replace(/<[^>]*>/g, '').trim()
-                    }
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    Comment
-                  </button>
-                </div>
-              </div>
+              <ActivityFeed
+                entityType="milestone"
+                entityId={milestoneId}
+                wsSlug={ws?.slug ?? ''}
+                commentsUrl={`/api/workspaces/${ws?.slug}/milestones/${milestoneId}/comments`}
+                commentsQueryKey={['milestone-comments', milestoneId, ws?.slug]}
+                mentionItems={mentionItems}
+                members={members.data}
+              />
             </section>
           </div>
         </main>

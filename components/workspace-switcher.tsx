@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Check, ChevronsUpDown, Plus } from 'lucide-react'
+import { Building2, ChevronsUpDown, Plus, Settings } from 'lucide-react'
+import Link from 'next/link'
+import { avatarColor } from '@/components/ui/member-avatar'
 import { toast } from 'sonner'
 import { WorkspaceCreateModal } from './workspace-create-modal'
 
@@ -30,19 +32,20 @@ async function fetchMe(): Promise<{ active_workspace_id: number | null }> {
 }
 
 function WsAvatar({ ws, size }: { ws: WorkspaceItem; size: number }) {
+  if (ws.logo_url) {
+    return (
+      <div className="shrink-0 overflow-hidden rounded-md" style={{ width: size, height: size }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={ws.logo_url} alt={ws.name} className="size-full object-cover" />
+      </div>
+    )
+  }
   return (
     <div
-      className="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-primary/10 text-primary"
-      style={{ width: size, height: size }}
+      className="flex shrink-0 items-center justify-center rounded-md font-semibold text-white"
+      style={{ width: size, height: size, backgroundColor: avatarColor(ws.name), fontSize: Math.round(size * 0.42) }}
     >
-      {ws.logo_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={ws.logo_url} alt="" className="size-full object-cover" />
-      ) : (
-        <span style={{ fontSize: Math.round(size * 0.42), fontWeight: 600 }}>
-          {(ws.name.trim()[0] ?? 'W').toUpperCase()}
-        </span>
-      )}
+      {(ws.name.trim()[0] ?? 'W').toUpperCase()}
     </div>
   )
 }
@@ -90,12 +93,12 @@ export function WorkspaceSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
+        className="cursor-pointer flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
       >
         {active ? (
           <WsAvatar ws={active} size={22} />
         ) : (
-          <div className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <div className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
             <Building2 size={13} />
           </div>
         )}
@@ -113,19 +116,30 @@ export function WorkspaceSwitcher() {
                 const isActive = w.id === me?.active_workspace_id
                 return (
                   <li key={w.id}>
-                    <button
-                      onClick={() => switchTo(w.id)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary"
-                    >
-                      <WsAvatar ws={w} size={24} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{w.name}</p>
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {w.key} · {w.member_role}
-                        </p>
-                      </div>
-                      {isActive ? <Check size={14} className="shrink-0 text-primary" /> : null}
-                    </button>
+                    <div className={`flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-secondary'}`}>
+                      <button
+                        onClick={() => switchTo(w.id)}
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+                      >
+                        <WsAvatar ws={w} size={24} />
+                        <div className="min-w-0 flex-1">
+                          <p className={`truncate font-medium ${isActive ? 'text-primary' : ''}`}>{w.name}</p>
+                          <p className={`truncate text-[10px] ${isActive ? 'text-primary/60' : 'text-muted-foreground'}`}>
+                            {w.key} · {w.member_role}
+                          </p>
+                        </div>
+                      </button>
+                      {isActive ? (
+                        <Link
+                          href="/dashboard/settings/workspace"
+                          onClick={() => setOpen(false)}
+                          title="Workspace settings"
+                          className="cursor-pointer shrink-0 rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        >
+                          <Settings size={13} />
+                        </Link>
+                      ) : null}
+                    </div>
                   </li>
                 )
               })}
@@ -138,7 +152,7 @@ export function WorkspaceSwitcher() {
                 setOpen(false)
                 setShowCreate(true)
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary"
+              className="cursor-pointer flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary"
             >
               <Plus size={14} />
               Create workspace

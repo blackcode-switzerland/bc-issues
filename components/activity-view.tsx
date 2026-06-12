@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { FilterBar, MultiSelect, SearchInput } from './listings/filter-bar'
+import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface EventRow {
   id: number
@@ -95,7 +96,7 @@ export function ActivityView() {
       const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
       if (!res.ok) return []
       const j = await res.json()
-      return j.data as Array<{ user_id: number; email: string; name: string | null }>
+      return j.data as Array<{ user_id: number; email: string; name: string | null; avatar_url: string | null }>
     },
   })
 
@@ -138,7 +139,7 @@ export function ActivityView() {
   return (
     <div>
       <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-[13px] font-medium">Activity</h1>
+        <h1 className="text-sm font-semibold">Activity</h1>
         <span className="text-xs text-muted-foreground">{ws?.name ?? '…'}</span>
       </header>
 
@@ -157,6 +158,7 @@ export function ActivityView() {
             options={(members.data ?? []).map((m) => ({
               value: m.user_id,
               label: m.name ?? m.email,
+              icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={14} />,
             }))}
             selected={actors}
             onChange={setActors}
@@ -182,16 +184,28 @@ export function ActivityView() {
                 {rows.map((e) => (
                   <li
                     key={e.id}
-                    className="flex items-start gap-3 px-6 py-2.5 transition-colors hover:bg-secondary/40"
+                    className="flex items-start gap-3 border-b border-border/40 px-6 py-2.5 transition-colors hover:bg-secondary/40"
                   >
                     <span className="mt-0.5 shrink-0">{ICONS[e.action] ?? <Edit3 size={14} className="text-muted-foreground" />}</span>
+                    {(() => {
+                      const member = members.data?.find((m) => m.user_id === e.actor_user_id)
+                      return e.actor_user_id ? (
+                        <MemberAvatar
+                          name={member?.name ?? e.actor_name}
+                          email={member?.email ?? e.actor_email}
+                          avatarUrl={member?.avatar_url ?? null}
+                          size={22}
+                          className="mt-0.5 shrink-0"
+                        />
+                      ) : null
+                    })()}
                     <span className="min-w-0 flex-1">
-                      <span className="text-[13px] font-medium">
+                      <span className="text-sm font-medium">
                         {e.actor_name ?? e.actor_email ?? 'system'}
                       </span>{' '}
-                      <span className="text-xs text-muted-foreground">{describe(e)}</span>
+                      <span className="text-sm text-muted-foreground">{describe(e)}</span>
                     </span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground" suppressHydrationWarning>
+                    <span className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
                       {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}
                     </span>
                   </li>

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Edit3, Plus, Tag, Trash2, X } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { BulkActionBar, RowCheckbox, type BulkAction } from './listings/bulk-action-bar'
 
 interface LabelRow {
   id: number
@@ -29,12 +30,26 @@ const PRESET_COLORS = [
   '#6b7280',
 ]
 
+const COLOR_NAMES: Record<string, string> = {
+  '#ef4444': 'Red',
+  '#f97316': 'Orange',
+  '#eab308': 'Yellow',
+  '#22c55e': 'Green',
+  '#14b8a6': 'Teal',
+  '#5e6ad2': 'Indigo',
+  '#8a8f98': 'Gray',
+  '#a855f7': 'Purple',
+  '#ec4899': 'Pink',
+  '#6b7280': 'Slate',
+}
+
 export function LabelsView() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
   const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const labels = useQuery({
     queryKey: ['ws-labels-listing', ws?.slug],
@@ -103,16 +118,81 @@ export function LabelsView() {
     onError: () => toast.error('Could not delete label'),
   })
 
+  async function bulkDelete() {
+    const ids = Array.from(selectedIds)
+    const ok = await confirm({
+      title: `Delete ${ids.length} ${ids.length === 1 ? 'label' : 'labels'}?`,
+      description:
+        'The selected labels will be removed from all issues. This cannot be undone.',
+      destructive: true,
+      confirmLabel: `Delete ${ids.length} ${ids.length === 1 ? 'label' : 'labels'}`,
+    })
+    if (!ok) return
+    try {
+      await Promise.all(
+        ids.map((id) => fetch(`/api/workspaces/${ws!.slug}/labels/${id}`, { method: 'DELETE' }))
+      )
+      toast.success(`Deleted ${ids.length} ${ids.length === 1 ? 'label' : 'labels'}`)
+      setSelectedIds(new Set())
+      queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+    } catch {
+      toast.error('Some labels could not be deleted')
+    }
+  }
+
+  async function bulkRecolor(color: string) {
+    const ids = Array.from(selectedIds)
+    const colorName = COLOR_NAMES[color] ?? color
+    const ok = await confirm({
+      title: `Change color for ${ids.length} ${ids.length === 1 ? 'label' : 'labels'}?`,
+      description: `All selected labels will be updated to ${colorName}.`,
+      confirmLabel: 'Apply',
+    })
+    if (!ok) return
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/workspaces/${ws!.slug}/labels/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ color }),
+          })
+        )
+      )
+      toast.success(`Updated color on ${ids.length} ${ids.length === 1 ? 'label' : 'labels'}`)
+      queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
+    } catch {
+      toast.error('Some labels could not be updated')
+    }
+  }
+
+  const anySelected = selectedIds.size > 0
+
+  const bulkActions: BulkAction[] = [
+    {
+      key: 'color',
+      label: 'Color',
+      options: PRESET_COLORS.map((c) => ({
+        value: c,
+        label: COLOR_NAMES[c] ?? c,
+        color: c,
+      })),
+      onSelect: (v) => bulkRecolor(String(v)),
+    },
+  ]
+
   return (
     <div>
       <header className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-        <h1 className="text-[13px] font-medium">Labels</h1>
+        <h1 className="text-sm font-semibold">Labels</h1>
         <span className="text-xs text-muted-foreground">{labels.data?.length ?? 0}</span>
         <button
           onClick={() => setCreating(true)}
-          className="ml-auto flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
-          <Plus size={12} />
+          <Plus size={13} />
           New label
         </button>
       </header>
@@ -144,19 +224,43 @@ export function LabelsView() {
             ) : (
               <li
                 key={l.id}
-                className="group flex items-center gap-3 px-6 py-2.5 transition-colors hover:bg-secondary/40"
+                className={`group flex items-center gap-3 border-b border-border/50 px-6 py-2.5 transition-colors hover:bg-secondary/40 ${selectedIds.has(l.id) ? 'bg-primary/5' : ''}`}
+                onClick={() => {
+                  if (anySelected) {
+                    const next = new Set(selectedIds)
+                    if (selectedIds.has(l.id)) next.delete(l.id)
+                    else next.add(l.id)
+                    setSelectedIds(next)
+                  }
+                }}
               >
-                <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
-                <span className="shrink-0 text-[13px]">{l.name}</span>
+                {/* Checkbox */}
+                <RowCheckbox
+                  checked={selectedIds.has(l.id)}
+                  onChange={(checked) => {
+                    const next = new Set(selectedIds)
+                    if (checked) next.add(l.id)
+                    else next.delete(l.id)
+                    setSelectedIds(next)
+                  }}
+                  anySelected={anySelected}
+                  className="size-4 shrink-0"
+                />
+
+                <span className="size-3.5 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
+                <span className="shrink-0 text-sm font-medium">{l.name}</span>
                 <div className="min-w-0 flex-1">
                   {l.description ? (
                     <p className="truncate text-xs text-muted-foreground">{l.description}</p>
                   ) : null}
                 </div>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {l.issue_count} {l.issue_count === 1 ? 'issue' : 'issues'}
                 </span>
-                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div
+                  className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <button
                     onClick={() => setEditingId(l.id)}
                     className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
@@ -188,6 +292,14 @@ export function LabelsView() {
           )}
         </ul>
       )}
+
+      <BulkActionBar
+        count={selectedIds.size}
+        onClear={() => setSelectedIds(new Set())}
+        actions={bulkActions}
+        onDelete={bulkDelete}
+        deleteLabel={`Delete ${selectedIds.size}`}
+      />
     </div>
   )
 }

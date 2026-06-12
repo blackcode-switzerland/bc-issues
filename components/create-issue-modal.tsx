@@ -127,7 +127,7 @@ export function CreateIssueModal({
   const currentMilestone = milestones.find((m: any) => m.id === milestoneId)
 
   // Image upload handler for rich text editor
-  const handleImageUpload = useCallback(async (file: File): Promise<string> => {
+  const handleFileUpload = useCallback(async (file: File): Promise<string> => {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -315,9 +315,9 @@ export function CreateIssueModal({
               <RichTextEditor
                 content={description}
                 onChange={setDescription}
-                placeholder="Add description... Paste images directly or use the toolbar for formatting."
-                onImageUpload={handleImageUpload}
-                hideToolbar={false}
+                placeholder="Add description… type @ to mention someone"
+                onFileUpload={handleFileUpload}
+                hideToolbar
                 minHeight={isExpanded ? '350px' : '200px'}
               />
             </div>

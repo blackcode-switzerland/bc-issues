@@ -420,12 +420,27 @@ export async function updateIssue(
       })
     }
 
-    // Generic updated event for everything else (title / description / dates).
+    if (patch.due_date !== undefined && String(before.due_date) !== String(after.due_date)) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'due_date_changed',
+        meta: {
+          from: before.due_date ? String(before.due_date).slice(0, 10) : null,
+          to: after.due_date ? String(after.due_date).slice(0, 10) : null,
+          seq: after.seq,
+          title: after.title,
+        },
+      })
+    }
+
+    // Generic updated event for everything else (title / description / start_date).
     const generic: Record<string, [unknown, unknown]> = {}
     if (patch.title !== undefined && before.title !== after.title) generic.title = [before.title, after.title]
     if (patch.description !== undefined && before.description !== after.description) generic.description = [before.description, after.description]
     if (patch.start_date !== undefined && String(before.start_date) !== String(after.start_date)) generic.start_date = [before.start_date, after.start_date]
-    if (patch.due_date !== undefined && String(before.due_date) !== String(after.due_date)) generic.due_date = [before.due_date, after.due_date]
     if (Object.keys(generic).length > 0) {
       const beforeSnap: Record<string, unknown> = {}
       const afterSnap: Record<string, unknown> = {}

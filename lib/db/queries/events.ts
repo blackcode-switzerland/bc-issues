@@ -51,6 +51,7 @@ export type EventAction =
   | 'attached'
   | 'unattached'
   | 'mentioned'
+  | 'due_date_changed'
 
 export interface RecordEventInput {
   workspaceId: number

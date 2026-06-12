@@ -229,6 +229,56 @@ export async function updateProject(
       .returning()
     if (!after) return null
 
+    if (patch.status !== undefined && before.status !== after.status) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'project',
+        entityId: id,
+        action: 'status_changed',
+        meta: { from: before.status, to: after.status, title: after.name },
+      })
+    }
+    if (patch.priority !== undefined && before.priority !== after.priority) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'project',
+        entityId: id,
+        action: 'priority_changed',
+        meta: { from: before.priority, to: after.priority, title: after.name },
+      })
+    }
+    if (patch.lead_user_id !== undefined && before.owner_id !== after.owner_id) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'project',
+        entityId: id,
+        action: after.owner_id ? 'assigned' : 'unassigned',
+        meta: {
+          assignee_id: after.owner_id,
+          previous_assignee_id: before.owner_id,
+          title: after.name,
+        },
+      })
+    }
+    if (patch.end_date !== undefined && String(before.end_date) !== String(after.end_date)) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'project',
+        entityId: id,
+        action: 'due_date_changed',
+        meta: {
+          from: before.end_date ? String(before.end_date).slice(0, 10) : null,
+          to: after.end_date ? String(after.end_date).slice(0, 10) : null,
+          title: after.name,
+        },
+      })
+    }
+
+    // Generic updated for name/description/color/icon
     const beforeSnap: Record<string, unknown> = {}
     const afterSnap: Record<string, unknown> = {}
     for (const k of PROJECT_DIFF_KEYS) {
@@ -237,15 +287,19 @@ export async function updateProject(
         afterSnap[k] = (after as Record<string, unknown>)[k]
       }
     }
-
-    await recordEvent(tx, {
-      workspaceId,
-      actorUserId,
-      entityType: 'project',
-      entityId: id,
-      action: 'updated',
-      diff: { before: beforeSnap, after: afterSnap },
-    })
+    const remainingKeys = Object.keys(beforeSnap).filter(
+      (k) => !['status', 'priority', 'end_date'].includes(k)
+    )
+    if (remainingKeys.length > 0) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'project',
+        entityId: id,
+        action: 'updated',
+        diff: { before: beforeSnap, after: afterSnap },
+      })
+    }
     return after
   })
 }

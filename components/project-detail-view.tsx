@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
@@ -10,6 +11,7 @@ import { useActiveWorkspace } from './listings/use-active-workspace'
 import { ProjectIcon } from './project-icon'
 import { IconPicker } from './icon-picker'
 import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
+import { ActivityFeed } from './activity-feed'
 import { DatePicker } from '@/components/ui/date-picker'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import { PropertySelect } from '@/components/ui/property-select'
@@ -28,8 +30,6 @@ import {
   projectUpdateStatusColor,
 } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { MilestoneCreateModal } from './milestone-create-modal'
-import { IssueCreateModal } from './issue-create-modal'
 
 interface ProjectMember {
   user_id: number
@@ -78,14 +78,6 @@ interface MilestoneRow {
   completed_issues: number
 }
 
-interface Comment {
-  id: number
-  content: string
-  created_at: string
-  author_name: string | null
-  author_email: string | null
-}
-
 interface WsMember {
   user_id: number
   email: string
@@ -97,14 +89,48 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
+  const searchParams = useSearchParams()
+  const isNew = searchParams.get('new') === '1'
+  const nameInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [nameDraft, setNameDraft] = useState<string | null>(null)
-  const [commentDraft, setCommentDraft] = useState('')
-  const [composerKey, setComposerKey] = useState(0)
+
+  const router = useRouter()
+
+  const createMilestone = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Milestone', project_id: projectId }),
+      })
+      if (!res.ok) throw new Error('Failed to create milestone')
+      return res.json() as Promise<{ id: number }>
+    },
+    onSuccess: (milestone) => {
+      router.push(`/dashboard/milestones/${milestone.id}?new=1`)
+    },
+    onError: () => toast.error('Failed to create milestone'),
+  })
+
+  const createIssue = useMutation({
+    mutationFn: async (milestoneId: number | null) => {
+      const body: Record<string, unknown> = { title: 'New Issue', project_id: projectId }
+      if (milestoneId != null) body.milestone_id = milestoneId
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error('Failed to create issue')
+      return res.json() as Promise<{ id: number }>
+    },
+    onSuccess: (issue) => {
+      router.push(`/dashboard/issues/${issue.id}?new=1`)
+    },
+    onError: () => toast.error('Failed to create issue'),
+  })
 
   // Project Updates
-  const [showMilestoneModal, setShowMilestoneModal] = useState(false)
-  const [showIssueModal, setShowIssueModal] = useState(false)
-  const [issueDefaultMilestoneId, setIssueDefaultMilestoneId] = useState<number | null>(null)
   const [showUpdateComposer, setShowUpdateComposer] = useState(false)
   const [updateStatus, setUpdateStatus] = useState('on_track')
   const [updateBody, setUpdateBody] = useState('')
@@ -122,6 +148,13 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       return res.json()
     },
   })
+
+  useEffect(() => {
+    if (isNew && project.data && nameInputRef.current) {
+      nameInputRef.current.focus()
+      nameInputRef.current.select()
+    }
+  }, [isNew, project.data?.id])
 
   const issues = useQuery({
     queryKey: ['project-issues', projectId, ws?.slug],
@@ -143,17 +176,6 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       const res = await fetch(
         `/api/workspaces/${ws!.slug}/milestones?project_id=${projectId}`
       )
-      if (!res.ok) return []
-      const j = await res.json()
-      return j.data
-    },
-  })
-
-  const comments = useQuery({
-    queryKey: ['project-comments', projectId, ws?.slug],
-    enabled: !!ws,
-    queryFn: async (): Promise<Comment[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/comments`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -216,23 +238,6 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       toast.success('Saved')
     },
     onError: () => toast.error('Failed to update project'),
-  })
-
-  const createComment = useMutation({
-    mutationFn: async (content: string) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      if (!res.ok) throw new Error('failed')
-    },
-    onSuccess: () => {
-      setCommentDraft('')
-      setComposerKey((k) => k + 1)
-      queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] })
-    },
-    onError: () => toast.error('Failed to post comment'),
   })
 
   const postUpdate = useMutation({
@@ -385,6 +390,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               placeholder="Project name"
               className="mb-3 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
               ref={(el) => {
+                nameInputRef.current = el
                 if (el) {
                   el.style.height = 'auto'
                   el.style.height = `${el.scrollHeight}px`
@@ -430,7 +436,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                     variant="bordered"
                     minHeight="80px"
                     mentionItems={mentionItems}
-                    onImageUpload={async (file) => {
+                    onFileUpload={async (file) => {
                       const fd = new FormData()
                       fd.append('file', file)
                       const res = await fetch('/api/upload', { method: 'POST', body: fd })
@@ -540,7 +546,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               variant="seamless"
               minHeight="100px"
               mentionItems={mentionItems}
-              onImageUpload={async (file) => {
+              onFileUpload={async (file) => {
                 const fd = new FormData()
                 fd.append('file', file)
                 const res = await fetch('/api/upload', { method: 'POST', body: fd })
@@ -561,8 +567,9 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 </h2>
                 <div className="h-px flex-1 bg-border" />
                 <button
-                  onClick={() => setShowMilestoneModal(true)}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  onClick={() => ws && createMilestone.mutate()}
+                  disabled={createMilestone.isPending || !ws}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                 >
                   <Plus size={13} />
                   New milestone
@@ -600,12 +607,10 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                           </span>
                         </Link>
                         <button
-                          onClick={() => {
-                            setIssueDefaultMilestoneId(m.id)
-                            setShowIssueModal(true)
-                          }}
+                          onClick={() => ws && createIssue.mutate(m.id)}
+                          disabled={createIssue.isPending || !ws}
                           title="Add issue to milestone"
-                          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100"
+                          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100 disabled:opacity-30"
                         >
                           <Plus size={13} />
                         </button>
@@ -629,11 +634,9 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 </h2>
                 <div className="h-px flex-1 bg-border" />
                 <button
-                  onClick={() => {
-                    setIssueDefaultMilestoneId(null)
-                    setShowIssueModal(true)
-                  }}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  onClick={() => ws && createIssue.mutate(null)}
+                  disabled={createIssue.isPending || !ws}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                 >
                   <Plus size={13} />
                   New issue
@@ -667,68 +670,21 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               )}
             </section>
 
-            {/* Discussion */}
+            {/* Activity */}
             <section className="mt-12">
               <div className="mb-4 flex items-center gap-3">
-                <h2 className="text-sm font-medium">
-                  Discussion{' '}
-                  <span className="font-normal text-muted-foreground">
-                    {comments.data?.length ?? 0}
-                  </span>
-                </h2>
+                <h2 className="text-sm font-medium">Activity</h2>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              {comments.data?.length ? (
-                <ul className="mb-6 space-y-4">
-                  {comments.data.map((c) => (
-                    <li key={c.id} className="rounded-lg border border-border bg-card/40 p-3.5">
-                      <div className="mb-2 flex items-center gap-2">
-                        <MemberAvatar name={c.author_name} email={c.author_email} size={20} />
-                        <span className="text-[13px] font-medium">
-                          {c.author_name ?? c.author_email}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground" suppressHydrationWarning>
-                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                        </span>
-                      </div>
-                      {c.content.includes('<') ? (
-                        <RichTextDisplay content={c.content} />
-                      ) : (
-                        <pre className="whitespace-pre-wrap break-words font-sans text-sm">
-                          {c.content}
-                        </pre>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="rounded-lg border border-border bg-card/40 transition-colors focus-within:border-ring/60">
-                <RichTextEditor
-                  key={`pcomposer-${composerKey}`}
-                  content=""
-                  onChange={setCommentDraft}
-                  placeholder="Leave a comment… type @ to mention"
-                  variant="bordered"
-                  hideToolbar
-                  mentionItems={mentionItems}
-                  minHeight="64px"
-                />
-                <div className="flex justify-end border-t border-border px-2.5 py-2">
-                  <button
-                    onClick={() => {
-                      const text = commentDraft.replace(/<[^>]*>/g, '').trim()
-                      if (text) createComment.mutate(commentDraft)
-                    }}
-                    disabled={
-                      createComment.isPending ||
-                      !commentDraft.replace(/<[^>]*>/g, '').trim()
-                    }
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    Comment
-                  </button>
-                </div>
-              </div>
+              <ActivityFeed
+                entityType="project"
+                entityId={projectId}
+                wsSlug={ws?.slug ?? ''}
+                commentsUrl={`/api/workspaces/${ws?.slug}/projects/${projectId}/comments`}
+                commentsQueryKey={['project-comments', projectId, ws?.slug]}
+                mentionItems={mentionItems}
+                members={wsMembers.data}
+              />
             </section>
           </div>
         </main>
@@ -940,24 +896,6 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
         </aside>
       </div>
 
-      <MilestoneCreateModal
-        open={showMilestoneModal}
-        onClose={() => setShowMilestoneModal(false)}
-        defaultProjectId={projectId}
-        onCreated={() => {
-          queryClient.invalidateQueries({ queryKey: ['project-milestones', projectId] })
-        }}
-      />
-      <IssueCreateModal
-        open={showIssueModal}
-        onClose={() => setShowIssueModal(false)}
-        defaultProjectId={projectId}
-        defaultMilestoneId={issueDefaultMilestoneId}
-        onCreated={() => {
-          queryClient.invalidateQueries({ queryKey: ['project-issues', projectId, ws?.slug] })
-          queryClient.invalidateQueries({ queryKey: ['project-milestones', projectId, ws?.slug] })
-        }}
-      />
     </div>
   )
 }
