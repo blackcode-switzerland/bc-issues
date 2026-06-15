@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mustneerar7/blackcode-issues/cli/internal/client"
-	"github.com/mustneerar7/blackcode-issues/cli/internal/output"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 )
 
 // newTrashCmd is the recycle bin: list / restore / purge / empty the soft-

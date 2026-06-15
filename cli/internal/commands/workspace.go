@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/mustneerar7/blackcode-issues/cli/internal/client"
-	"github.com/mustneerar7/blackcode-issues/cli/internal/config"
-	"github.com/mustneerar7/blackcode-issues/cli/internal/output"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 

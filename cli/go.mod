@@ -1,4 +1,4 @@
-module github.com/mustneerar7/blackcode-issues/cli
+module github.com/blackcode-switzerland/bc-issues/cli
 
 go 1.26.2
 

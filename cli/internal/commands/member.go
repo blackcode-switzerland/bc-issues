@@ -5,7 +5,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/mustneerar7/blackcode-issues/cli/internal/output"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 

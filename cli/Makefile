@@ -14,7 +14,7 @@
 
 BIN       := bk
 PKG       := ./cmd/bk
-MODULE    := github.com/mustneerar7/blackcode-issues/cli
+MODULE    := github.com/blackcode-switzerland/bc-issues/cli
 VERSION   ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo dev)
 COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
