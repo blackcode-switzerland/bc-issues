@@ -33,7 +33,7 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 | Auth | Bearer API tokens (same `api_tokens` table the web uses) |
 | Default server | `http://localhost:3000` |
 
-The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, milestones, labels, invitations, an inbox, the activity feed, analytics, and undo. Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
+The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, milestones, labels, invitations, an inbox, the activity feed, analytics, undo, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
 
 A typical session:
 
@@ -139,7 +139,7 @@ Deletes the local config file. The corresponding token row remains in the databa
 
 ### `bk whoami`
 
-Hits `GET /api/users/me`. Prints the authenticated user's id, email, name, role, and how the auth was resolved (`via`: `session` vs `token`).
+Hits `GET /api/users/me`. Prints the authenticated user's id, email, name, role, and how the auth was resolved (`via`: `session` vs `token`). If the token belongs to a super admin it also prints `super: yes`.
 
 ---
 
@@ -314,8 +314,62 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk activity [--limit N] [--offset N]` | `GET /api/activity` | Global change feed. `--limit` defaults to 50. |
-| `bk analytics` | `GET /api/analytics` | Admin-only; emitted as JSON regardless of `-o`. |
+| `bk analytics [flags]` | `GET /api/analytics` | Workspace analytics with full web-dashboard parity (see below). Any member; not admin-only. |
 | `bk undo [--count N] [--yes]` | `POST /api/undo` | Rolls back your last N operations (clamped to 1–10). Prompts to confirm. |
+
+**`bk analytics` flags** — all optional; defaults to the active workspace,
+workspace scope, last-30-days window, daily buckets:
+
+| Flag | Meaning |
+|---|---|
+| `--view workspace\|project\|milestone\|member` | Analytics scope. |
+| `--id N` | Target id — required for `project` / `milestone` / `member`. |
+| `--ws <slug\|id>` | Target a workspace without changing the active one. |
+| `--from`, `--to` | Window bounds (`YYYY-MM-DD` or ISO). Omit for all-time. |
+| `--interval day\|week` | Time-series bucket width. |
+| `--status`, `--priority`, `--label`, `--assignee` | Faceted filters; repeatable or comma-separated, applied to every metric. |
+
+Default output is a readable summary (KPIs + by-status / by-priority /
+by-assignee); `--json` / `--yaml` emit the **full** payload (trends, all series,
+histograms, burndown). Examples:
+
+```bash
+bk analytics                                              # active workspace, 30d
+bk analytics --view project --id 12 --interval week --json
+bk analytics --status todo,in_progress --priority 1 --priority 2
+bk analytics --ws acme --view member --id 5 --from 2026-01-01
+```
+
+### Super admin (platform-wide)
+
+The `bk super-admin` group (alias `admin`) mirrors the web Super Admin section.
+Every command requires a **super-admin token** — an account whose email is in
+the server's `SUPER_ADMINS` env var. Any other token is rejected by the API with
+`403` → exit code 4; there is no client-side bypass. These actions are **not**
+workspace-scoped — the whitelist and error log are platform-wide.
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk super-admin users` | `GET /api/super-admin/users` | Every member on the platform with their workspace count + last login. |
+| `bk super-admin whitelist list` | `GET /api/super-admin/whitelist` | Allowed domains and emails. |
+| `bk super-admin whitelist add --type domain\|email --value V` | `POST /api/super-admin/whitelist` | `domain` allows everyone on it; `email` allows one address. Idempotent. |
+| `bk super-admin whitelist remove <id> [--yes]` | `DELETE /api/super-admin/whitelist/{id}` | Prompts to confirm. |
+| `bk super-admin errors list [flags]` | `GET /api/super-admin/errors` | Filters: `--level`, `--status open\|resolved`, `--from`/`--to`, `--limit`/`--cursor`, `--stats`. Newest first. |
+| `bk super-admin errors view <id>` | `GET /api/super-admin/errors/{id}` | Full detail incl. stack + context. |
+| `bk super-admin errors resolve <id>` | `PATCH /api/super-admin/errors/{id}` | Sets `resolved: true`. |
+| `bk super-admin errors unresolve <id>` | `PATCH /api/super-admin/errors/{id}` | Sets `resolved: false`. |
+| `bk super-admin errors delete <id> [id ...] [--yes]` | `DELETE /api/super-admin/errors/{id}` (single) or `DELETE /api/super-admin/errors` `{ids}` (bulk) | Permanent. Prompts to confirm. |
+| `bk super-admin errors stats` | `GET /api/super-admin/errors?stats=1` | Total / open / resolved counts. |
+
+```bash
+bk super-admin whitelist add --type domain --value blackcode.ch
+bk super-admin users --json | jq '.[] | select(.workspace_count == 0)'
+bk super-admin errors list --status open --limit 20
+bk super-admin errors view 482
+bk super-admin errors resolve 482
+```
+
+`bk whoami` prints `super: yes` when the active token has super-admin access.
 
 ### Body / description input convention
 

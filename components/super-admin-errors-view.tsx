@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -12,7 +12,10 @@ import {
   Circle,
   RotateCcw,
   ShieldCheck,
+  Trash2,
+  X,
 } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface AdminErrorRow {
   id: number
@@ -60,9 +63,11 @@ const LEVEL_OPTIONS = ['all', 'error', 'warn', 'info']
 
 export function SuperAdminErrorsView() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [status, setStatus] = useState<StatusFilter>('open')
   const [level, setLevel] = useState('all')
   const [range, setRange] = useState<RangeFilter>('all')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
 
   const fromIso = useMemo(() => {
     const opt = RANGE_OPTIONS.find((r) => r.value === range)
@@ -93,6 +98,12 @@ export function SuperAdminErrorsView() {
   const stats = data?.pages[0]?.stats
   const rows = useMemo(() => data?.pages.flatMap((p) => p.data) ?? [], [data])
 
+  // Selection is keyed by id; clear it whenever the filtered result set changes
+  // so we never hold ids that are no longer on screen.
+  useEffect(() => {
+    setSelected(new Set())
+  }, [status, level, fromIso])
+
   const resolve = useMutation({
     mutationFn: async ({ id, resolved }: { id: number; resolved: boolean }) => {
       const res = await fetch(`/api/super-admin/errors/${id}`, {
@@ -110,6 +121,91 @@ export function SuperAdminErrorsView() {
     },
     onError: (e: Error) => toast.error(e.message),
   })
+
+  const deleteOne = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/super-admin/errors/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+    },
+    onSuccess: (_r, id) => {
+      toast.success('Error deleted')
+      setSelected((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      queryClient.invalidateQueries({ queryKey: ['super-admin-errors'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const deleteMany = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch('/api/super-admin/errors', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Failed to delete')
+      return j.deleted as number
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} error${count === 1 ? '' : 's'} deleted`)
+      setSelected(new Set())
+      queryClient.invalidateQueries({ queryKey: ['super-admin-errors'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  function toggleSelect(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allLoadedSelected = rows.length > 0 && rows.every((r) => selected.has(r.id))
+  const someSelected = selected.size > 0 && !allLoadedSelected
+
+  function toggleSelectAll() {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (rows.length > 0 && rows.every((r) => next.has(r.id))) {
+        rows.forEach((r) => next.delete(r.id))
+      } else {
+        rows.forEach((r) => next.add(r.id))
+      }
+      return next
+    })
+  }
+
+  async function handleDeleteOne(id: number) {
+    const ok = await confirm({
+      title: 'Delete this error?',
+      description: 'This permanently removes the log entry and cannot be undone.',
+      destructive: true,
+      confirmLabel: 'Delete',
+    })
+    if (ok) deleteOne.mutate(id)
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selected]
+    if (ids.length === 0) return
+    const ok = await confirm({
+      title: `Delete ${ids.length} error${ids.length === 1 ? '' : 's'}?`,
+      description: 'This permanently removes the selected log entries and cannot be undone.',
+      destructive: true,
+      confirmLabel: `Delete ${ids.length}`,
+    })
+    if (ok) deleteMany.mutate(ids)
+  }
+
+  const isDeleting = deleteOne.isPending || deleteMany.isPending
 
   return (
     <div>
@@ -181,8 +277,40 @@ export function SuperAdminErrorsView() {
         )}
       </div>
 
+      {/* Bulk action bar — appears when ≥1 row is selected */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 border-b border-border bg-secondary/50 px-6 py-2.5">
+          <span className="text-sm font-medium tabular-nums">
+            {selected.size} selected
+          </span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={isDeleting}
+            className="inline-flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+          >
+            <Trash2 size={14} />
+            {deleteMany.isPending ? 'Deleting…' : 'Delete selected'}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <X size={14} /> Clear
+          </button>
+        </div>
+      )}
+
       {/* Column header */}
       <div className="hidden items-center gap-3 border-b border-border px-6 py-2.5 text-[13px] font-medium text-muted-foreground md:flex">
+        <span className="flex w-4 shrink-0 items-center">
+          <Checkbox
+            checked={allLoadedSelected}
+            indeterminate={someSelected}
+            disabled={rows.length === 0}
+            onChange={toggleSelectAll}
+            label="Select all loaded errors"
+          />
+        </span>
         <span className="w-4 shrink-0" />
         <span className="w-16 shrink-0">Level</span>
         <span className="flex-1">Message</span>
@@ -208,8 +336,12 @@ export function SuperAdminErrorsView() {
             <ErrorRow
               key={row.id}
               row={row}
+              selected={selected.has(row.id)}
+              onToggleSelect={() => toggleSelect(row.id)}
               onToggleResolved={(resolved) => resolve.mutate({ id: row.id, resolved })}
+              onDelete={() => handleDeleteOne(row.id)}
               isUpdating={resolve.isPending}
+              isDeleting={isDeleting}
             />
           ))}
         </ul>
@@ -227,6 +359,36 @@ export function SuperAdminErrorsView() {
         </div>
       )}
     </div>
+  )
+}
+
+function Checkbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  indeterminate?: boolean
+  disabled?: boolean
+  onChange: () => void
+  label: string
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !!indeterminate && !checked
+  }, [indeterminate, checked])
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      aria-label={label}
+      className="size-4 shrink-0 cursor-pointer rounded border-border accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+    />
   )
 }
 
@@ -255,64 +417,83 @@ function Stat({
 
 function ErrorRow({
   row,
+  selected,
+  onToggleSelect,
   onToggleResolved,
+  onDelete,
   isUpdating,
+  isDeleting,
 }: {
   row: AdminErrorRow
+  selected: boolean
+  onToggleSelect: () => void
   onToggleResolved: (resolved: boolean) => void
+  onDelete: () => void
   isUpdating: boolean
+  isDeleting: boolean
 }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <li className="border-b border-border/50">
-      {/* Summary row */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-secondary/40"
-      >
-        <span className="w-4 shrink-0 text-muted-foreground">
-          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+    <li className={`border-b border-border/50 ${selected ? 'bg-primary/5' : ''}`}>
+      {/* Summary row — checkbox sits beside (not inside) the expand button */}
+      <div className="flex items-center gap-3 px-6 transition-colors hover:bg-secondary/40">
+        <span className="flex w-4 shrink-0 items-center">
+          <Checkbox
+            checked={selected}
+            onChange={onToggleSelect}
+            label={`Select error ${row.id}`}
+          />
         </span>
-        <span className="w-16 shrink-0">
-          <LevelBadge level={row.level} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{row.message}</span>
-          {row.code && (
-            <span className="block truncate font-mono text-[11px] text-muted-foreground">
-              {row.code}
-            </span>
-          )}
-        </span>
-        <span className="hidden w-40 shrink-0 truncate font-mono text-[12px] text-muted-foreground lg:block">
-          {row.method ? `${row.method} ` : ''}
-          {row.route ?? '—'}
-        </span>
-        <span className="w-16 shrink-0 text-center font-mono text-[12px] text-muted-foreground">
-          {row.status_code ?? '—'}
-        </span>
-        <span className="w-32 shrink-0 text-sm text-muted-foreground" suppressHydrationWarning>
-          {format(new Date(row.occurred_at), 'MMM d, HH:mm')}
-        </span>
-        <span className="flex w-24 shrink-0 justify-end">
-          {row.resolved ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-500">
-              <CheckCircle2 size={11} /> Resolved
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
-              <Circle size={11} /> Open
-            </span>
-          )}
-        </span>
-      </button>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left"
+        >
+          <span className="w-4 shrink-0 text-muted-foreground">
+            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+          <span className="w-16 shrink-0">
+            <LevelBadge level={row.level} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{row.message}</span>
+            {row.code && (
+              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                {row.code}
+              </span>
+            )}
+          </span>
+          <span className="hidden w-40 shrink-0 truncate font-mono text-[12px] text-muted-foreground lg:block">
+            {row.method ? `${row.method} ` : ''}
+            {row.route ?? '—'}
+          </span>
+          <span className="w-16 shrink-0 text-center font-mono text-[12px] text-muted-foreground">
+            {row.status_code ?? '—'}
+          </span>
+          <span className="w-32 shrink-0 text-sm text-muted-foreground" suppressHydrationWarning>
+            {format(new Date(row.occurred_at), 'MMM d, HH:mm')}
+          </span>
+          <span className="flex w-24 shrink-0 justify-end">
+            {row.resolved ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-500">
+                <CheckCircle2 size={11} /> Resolved
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
+                <Circle size={11} /> Open
+              </span>
+            )}
+          </span>
+        </button>
+      </div>
 
       {open && (
         <ErrorDetail
           row={row}
           onToggleResolved={onToggleResolved}
+          onDelete={onDelete}
           isUpdating={isUpdating}
+          isDeleting={isDeleting}
         />
       )}
     </li>
@@ -329,11 +510,15 @@ interface FullErrorEvent extends AdminErrorRow {
 function ErrorDetail({
   row,
   onToggleResolved,
+  onDelete,
   isUpdating,
+  isDeleting,
 }: {
   row: AdminErrorRow
   onToggleResolved: (resolved: boolean) => void
+  onDelete: () => void
   isUpdating: boolean
+  isDeleting: boolean
 }) {
   const { data: detail, isLoading } = useQuery({
     queryKey: ['super-admin-error', row.id],
@@ -372,6 +557,13 @@ function ErrorDetail({
             {detail?.resolved_by ? ` · by user #${detail.resolved_by}` : ''}
           </span>
         )}
+        <button
+          onClick={onDelete}
+          disabled={isDeleting}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-destructive/40 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+        >
+          <Trash2 size={14} /> Delete
+        </button>
       </div>
 
       {/* Metadata grid */}

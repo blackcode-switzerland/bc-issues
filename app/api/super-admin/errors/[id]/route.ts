@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors } from '@/lib/api'
 import { requireSuperAdminUser } from '@/lib/api/super-admin-guard'
-import { getErrorEvent, setErrorEventResolved } from '@/lib/db/queries/error-events'
+import {
+  deleteErrorEvent,
+  getErrorEvent,
+  setErrorEventResolved,
+} from '@/lib/db/queries/error-events'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -29,6 +33,15 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   const updated = await setErrorEventResolved(id, body.resolved, user.id)
   if (!updated) throw Errors.notFound('Error event not found')
   return NextResponse.json({ data: updated })
+})
+
+// DELETE /api/super-admin/errors/[id] — permanently remove one event.
+export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) => {
+  await requireSuperAdminUser(req)
+  const id = parseId((await params).id)
+  const removed = await deleteErrorEvent(id)
+  if (!removed) throw Errors.notFound('Error event not found')
+  return NextResponse.json({ deleted: true })
 })
 
 function parseId(raw: string): number {

@@ -314,9 +314,13 @@ func (c *Client) Activity(limit, offset int) ([]ActivityFeedItem, error) {
 	return items, nil
 }
 
-func (c *Client) AnalyticsRaw() (json.RawMessage, error) {
+func (c *Client) AnalyticsRaw(q url.Values) (json.RawMessage, error) {
+	path := "/api/analytics"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
 	var raw json.RawMessage
-	if err := c.get("/api/analytics", &raw); err != nil {
+	if err := c.get(path, &raw); err != nil {
 		return nil, err
 	}
 	return raw, nil

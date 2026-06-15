@@ -3,15 +3,16 @@ package client
 import "encoding/json"
 
 type Me struct {
-	ID          int     `json:"id" yaml:"id"`
-	Email       string  `json:"email" yaml:"email"`
-	Name        *string `json:"name" yaml:"name"`
-	Tagline     *string `json:"tagline" yaml:"tagline"`
-	AvatarURL   *string `json:"avatar_url" yaml:"avatar_url"`
-	Role        string  `json:"role" yaml:"role"`
-	Via         string  `json:"via" yaml:"via"`
-	ConnectedGoogle bool `json:"connected_google,omitempty" yaml:"connected_google,omitempty"`
-	AvatarEditable  bool `json:"avatar_editable,omitempty" yaml:"avatar_editable,omitempty"`
+	ID              int     `json:"id" yaml:"id"`
+	Email           string  `json:"email" yaml:"email"`
+	Name            *string `json:"name" yaml:"name"`
+	Tagline         *string `json:"tagline" yaml:"tagline"`
+	AvatarURL       *string `json:"avatar_url" yaml:"avatar_url"`
+	Role            string  `json:"role" yaml:"role"`
+	Via             string  `json:"via" yaml:"via"`
+	ConnectedGoogle bool    `json:"connected_google,omitempty" yaml:"connected_google,omitempty"`
+	AvatarEditable  bool    `json:"avatar_editable,omitempty" yaml:"avatar_editable,omitempty"`
+	IsSuperAdmin    bool    `json:"is_super_admin,omitempty" yaml:"is_super_admin,omitempty"`
 }
 
 type User struct {
@@ -85,18 +86,18 @@ type ProjectMember struct {
 }
 
 type Milestone struct {
-	ID               int     `json:"id" yaml:"id"`
-	ProjectID        int     `json:"project_id" yaml:"project_id"`
-	Name             string  `json:"name" yaml:"name"`
-	Description      *string `json:"description" yaml:"description"`
-	DueDate          *string `json:"due_date" yaml:"due_date"`
-	Status           *string `json:"status,omitempty" yaml:"status,omitempty"`
-	ProjectName      *string `json:"project_name,omitempty" yaml:"project_name,omitempty"`
-	IssueCount       *int    `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
-	CompletedIssues  *int    `json:"completed_issues,omitempty" yaml:"completed_issues,omitempty"`
-	CreatedAt        *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
-	UpdatedAt        *string `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
-	Issues           []Issue `json:"issues,omitempty" yaml:"issues,omitempty"`
+	ID              int     `json:"id" yaml:"id"`
+	ProjectID       int     `json:"project_id" yaml:"project_id"`
+	Name            string  `json:"name" yaml:"name"`
+	Description     *string `json:"description" yaml:"description"`
+	DueDate         *string `json:"due_date" yaml:"due_date"`
+	Status          *string `json:"status,omitempty" yaml:"status,omitempty"`
+	ProjectName     *string `json:"project_name,omitempty" yaml:"project_name,omitempty"`
+	IssueCount      *int    `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
+	CompletedIssues *int    `json:"completed_issues,omitempty" yaml:"completed_issues,omitempty"`
+	CreatedAt       *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+	UpdatedAt       *string `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
+	Issues          []Issue `json:"issues,omitempty" yaml:"issues,omitempty"`
 }
 
 type Comment struct {
@@ -220,18 +221,60 @@ type UploadResponse struct {
 }
 
 type Attachment struct {
-	ID        int     `json:"id" yaml:"id"`
-	IssueID   int     `json:"issue_id" yaml:"issue_id"`
-	Filename  string  `json:"filename" yaml:"filename"`
-	FileURL   string  `json:"file_url" yaml:"file_url"`
-	FileSize  *int    `json:"file_size" yaml:"file_size"`
-	MimeType  string  `json:"mime_type" yaml:"mime_type"`
-	UploadedBy *int   `json:"uploaded_by,omitempty" yaml:"uploaded_by,omitempty"`
-	CreatedAt *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+	ID         int     `json:"id" yaml:"id"`
+	IssueID    int     `json:"issue_id" yaml:"issue_id"`
+	Filename   string  `json:"filename" yaml:"filename"`
+	FileURL    string  `json:"file_url" yaml:"file_url"`
+	FileSize   *int    `json:"file_size" yaml:"file_size"`
+	MimeType   string  `json:"mime_type" yaml:"mime_type"`
+	UploadedBy *int    `json:"uploaded_by,omitempty" yaml:"uploaded_by,omitempty"`
+	CreatedAt  *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
 }
 
-type Analytics struct {
-	Raw json.RawMessage `json:"-" yaml:"-"`
+// AnalyticsPayload is a partial view of the analytics API response — enough to
+// render the default summary table. JSON/YAML output uses the full raw payload,
+// so this only needs the fields the table shows.
+type AnalyticsPayload struct {
+	Scope struct {
+		Type  string `json:"type"`
+		Label string `json:"label"`
+	} `json:"scope"`
+	Period struct {
+		From     *string `json:"from"`
+		To       *string `json:"to"`
+		Interval string  `json:"interval"`
+	} `json:"period"`
+	Summary struct {
+		TotalIssues          int      `json:"total_issues"`
+		Open                 int      `json:"open"`
+		InProgress           int      `json:"in_progress"`
+		Done                 int      `json:"done"`
+		Cancelled            int      `json:"cancelled"`
+		Overdue              int      `json:"overdue"`
+		Unassigned           int      `json:"unassigned"`
+		CreatedInPeriod      int      `json:"created_in_period"`
+		CompletedInPeriod    int      `json:"completed_in_period"`
+		CompletionRate       float64  `json:"completion_rate"`
+		AvgCycleTimeHours    *float64 `json:"avg_cycle_time_hours"`
+		MedianCycleTimeHours *float64 `json:"median_cycle_time_hours"`
+		ActiveMembers        int      `json:"active_members_in_period"`
+		TotalMembers         int      `json:"total_members"`
+	} `json:"summary"`
+	ByStatus []struct {
+		Status string `json:"status"`
+		Count  int    `json:"count"`
+	} `json:"by_status"`
+	ByPriority []struct {
+		Priority int `json:"priority"`
+		Count    int `json:"count"`
+	} `json:"by_priority"`
+	ByAssignee []struct {
+		Name  *string `json:"name"`
+		Email string  `json:"email"`
+		Open  int     `json:"open"`
+		Done  int     `json:"done"`
+	} `json:"by_assignee"`
+	Message string `json:"message,omitempty"`
 }
 
 // ProjectUpdate is a single health/status post on a project.

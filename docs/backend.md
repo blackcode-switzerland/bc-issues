@@ -337,12 +337,19 @@ GET  /api/super-admin/whitelist        list whitelist entries
 POST /api/super-admin/whitelist        add entry ({ type: 'email'|'domain', value })
 DELETE /api/super-admin/whitelist/{id} remove entry
 GET  /api/super-admin/errors           error log (cursor-paginated). Filters: ?status=open|resolved, ?level=, ?from=&to= (ISO), ?cursor=&limit=, ?stats=1 (adds aggregate counts)
+DELETE /api/super-admin/errors         bulk delete ({ ids: number[] }, max 500); returns { deleted: <count> }
 GET  /api/super-admin/errors/{id}      full event detail incl. stack + context
 PATCH /api/super-admin/errors/{id}     toggle triage state ({ resolved: boolean })
+DELETE /api/super-admin/errors/{id}    permanently delete one event
 ```
 
 All super-admin routes are guarded by `requireSuperAdminUser(req)` — 401 if
-unauthenticated, 403 if the caller's email is not in `SUPER_ADMINS`.
+unauthenticated, 403 if the caller's email is not in `SUPER_ADMINS`. The guard
+calls `resolveUser`, so it accepts **both** session cookies and `bk_live_…`
+bearer tokens — these endpoints are fully usable from the `bk` CLI
+(`bk super-admin …`), and a non-super-admin token gets the same 403. There is no
+separate "super-admin token" scope: privilege is derived from the token owner's
+email at request time.
 
 ### Personal, auth & system
 
@@ -384,6 +391,13 @@ POST     /api/errors/client                       client error beacon
 `bk` CLI, which still uses several of them. They resolve the workspace
 server-side from the caller. New web code should prefer the workspace-scoped
 routes.
+
+`/api/analytics` accepts the **same** query params as the canonical
+`/api/workspaces/{ws}/analytics` (both share `parseAnalyticsParams`): `view`,
+`id`, `from`, `to`, `interval`, and the `status`/`priority`/`label`/`assignee`
+filters — so the CLI (`bk analytics`) has full dashboard parity. It defaults to
+the caller's active workspace; pass `?ws=<slug|id>` (or `?workspace=`) to target
+another workspace the caller belongs to.
 
 ## Query layer
 

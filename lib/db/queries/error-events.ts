@@ -1,7 +1,7 @@
 // error_events queries. The public listing redacts sensitive columns; only the
 // owner detail view (gated at the route layer) gets the full row.
 
-import { and, count, desc, eq, gte, lt, lte, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { errorEvents, type ErrorEvent, type NewErrorEvent } from '../schema'
 
@@ -174,4 +174,23 @@ export async function setErrorEventResolved(
     .where(eq(errorEvents.id, id))
     .returning()
   return updated ?? null
+}
+
+/** Delete one event. Returns true if a row was removed. */
+export async function deleteErrorEvent(id: number): Promise<boolean> {
+  const removed = await db
+    .delete(errorEvents)
+    .where(eq(errorEvents.id, id))
+    .returning({ id: errorEvents.id })
+  return removed.length > 0
+}
+
+/** Delete many events by id. Returns the count actually removed. */
+export async function deleteErrorEvents(ids: number[]): Promise<number> {
+  if (ids.length === 0) return 0
+  const removed = await db
+    .delete(errorEvents)
+    .where(inArray(errorEvents.id, ids))
+    .returning({ id: errorEvents.id })
+  return removed.length
 }

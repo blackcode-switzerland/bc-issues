@@ -46,8 +46,8 @@ Command groups:
   invite      send, list, accept, decline, revoke, pending
   token       list, create, delete
   profile     view, edit
-  inbox       list, read, archive, unarchive`
-
+  inbox       list, read, archive, unarchive
+  super-admin users, whitelist, errors (super admins only; platform-wide)`
 
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{
@@ -77,6 +77,7 @@ func NewRoot() *cobra.Command {
 		newAnalyticsCmd(),
 		newTrashCmd(),
 		newUndoCmd(),
+		newSuperAdminCmd(),
 		newVersionCmd(),
 	)
 	return root

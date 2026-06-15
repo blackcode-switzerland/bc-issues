@@ -255,9 +255,38 @@ bk user view <id|email>            show one user (filtered client-side)
 ### Activity / Analytics / Undo
 ```
 bk activity [--limit N] [--offset N]   global change feed
-bk analytics                            admin-only stats (JSON)
+bk analytics [flags]                    workspace analytics (summary + filters)
 bk undo [--count N] [--yes]             roll back your last N writes (1-10)
 ```
+
+`bk analytics` mirrors the web dashboard. Flags (all optional): `--view`
+workspace|project|milestone|member, `--id`, `--ws <slug|id>`, `--from`/`--to`,
+`--interval day|week`, and the `--status`/`--priority`/`--label`/`--assignee`
+filters (repeatable or comma-separated). Default output is a readable summary;
+`--json`/`--yaml` emit the full payload.
+
+```
+```
+
+### Super admin (platform-wide; super admins only)
+```
+bk super-admin users                          list every member on the platform
+bk super-admin whitelist list                 list allowed domains + emails
+bk super-admin whitelist add --type domain|email --value V   allow a domain/email
+bk super-admin whitelist remove <id> [--yes]  remove a whitelist entry
+bk super-admin errors list [--status open|resolved] [--level L] [--from] [--to] [--limit] [--cursor] [--stats]
+bk super-admin errors view <id>               full detail incl. stack + context
+bk super-admin errors resolve <id>            mark resolved
+bk super-admin errors unresolve <id>          re-open
+bk super-admin errors delete <id> [id ...] [--yes]   permanently delete
+bk super-admin errors stats                   total / open / resolved counts
+```
+
+These require a **super-admin token** — an account whose email is in the
+server's `SUPER_ADMINS` env var. Any other token gets a `403` (exit code 4).
+`admin` is an alias for `super-admin`. Whitelist and error changes apply across
+the whole platform, not a single workspace. `bk whoami` shows `super: yes` when
+your token has access.
 
 ## Permissions cheat-sheet
 
@@ -271,7 +300,8 @@ The CLI inherits whatever the underlying token can do. Roughly:
 | Delete project | project owner |
 | Manage project members | project admin/owner |
 | Remove workspace member, list invitations | workspace owner |
-| `bk analytics` | server admin |
+| `bk analytics` | any workspace member |
+| `bk super-admin …` (users, whitelist, errors) | super admin (email in `SUPER_ADMINS`) |
 
 A 403 on any command means the API rejected it for permissions; check your role
 with `bk project members <id>`, `bk member list`, and `bk whoami`.

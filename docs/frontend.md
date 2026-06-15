@@ -215,8 +215,9 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
 - **Super admin:** `super-admin-users-view` (platform-wide member table with workspace count),
   `super-admin-whitelist-view` (add/remove allowed domains and emails),
   `super-admin-errors-view` (error log with status/level/date filters, stat cards,
-  expandable rows showing stack + sanitized context, and a resolve/reopen toggle;
-  `useInfiniteQuery` cursor pagination).
+  expandable rows showing stack + sanitized context, resolve/reopen toggle,
+  row checkboxes + select-all for bulk delete, and single-row delete;
+  destructive actions go through `useConfirm()`; `useInfiniteQuery` cursor pagination).
   All visible only when `me.is_super_admin === true` (from `/api/me`).
 - **Client error capture:** `app/error.tsx` (React error boundary, render errors) and
   `global-error-listener` (mounted in `Providers`; catches `window.onerror` +
