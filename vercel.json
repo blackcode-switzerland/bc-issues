@@ -4,9 +4,6 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "regions": ["iad1"],
-  "env": {
-    "NEXTAUTH_URL": "https://blackcode-issues.vercel.app"
-  },
   "headers": [
     {
       "source": "/api/(.*)",
@@ -19,9 +16,11 @@
     }
   ],
   "functions": {
+    "app/api/upload/route.ts": {
+      "maxDuration": 60
+    },
     "app/api/**/*.ts": {
-      "maxDuration": 10
+      "maxDuration": 30
     }
   }
 }
-
