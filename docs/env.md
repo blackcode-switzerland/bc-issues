@@ -84,7 +84,7 @@ Also update Google OAuth (see `GOOGLE_CLIENT_ID` section below).
 | | |
 |---|---|
 | **Purpose** | Comma-separated emails with super admin access at `/dashboard/super-admin` |
-| **Status** | Set ✓ — `balathanusan@blackcode.ch` |
+| **Status** | Set ✓ — `balathanusan@blackcode.ch,andrea@blackcode.ch` |
 | **Source** | Manual — your admin email(s) |
 | **Impact if missing** | No super admin UI; whitelist enforcement disabled |
 
