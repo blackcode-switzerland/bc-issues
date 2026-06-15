@@ -137,19 +137,16 @@ Step 3 (DB) → Step 6 (env vars) → Step 7 (migrations) → Step 5/6 redeploy.
 
 ### Optional environment variables (add via `vercel env add <NAME> production`)
 
-| Variable | Purpose | Impact if missing |
+| Variable | Purpose | Status |
 |---|---|---|
-| `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Google OAuth sign-in button | Only email/password login available |
-| `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Transactional email (invitations, password reset) | Invitations work via in-app inbox only; password reset disabled |
-| `BLOB_READ_WRITE_TOKEN` | File/image uploads in production | Uploads fall back to local `public/uploads/` — broken in serverless |
+| `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Transactional email (invitations, password reset) | Not set — invitations work via in-app inbox only; password reset disabled |
 
-After adding any env var, redeploy: `vercel --prod`
+After adding any env var, redeploy: `./devops/release.sh web`
 
 ### Infrastructure
 
-- [ ] **Custom domain** — currently live at `https://bc-issues.vercel.app`. When you have a domain, add it in Vercel dashboard → Settings → Domains, then update `NEXTAUTH_URL` env var to match.
+- [ ] **Custom domain** — currently live at `https://bc-issues.vercel.app`. See `docs/env.md` for exact steps when you have a domain.
 - [ ] **Vercel ↔ GitHub org access** — Vercel couldn't auto-link to `blackcode-switzerland` org during deploy. Fix in GitHub → Settings → Applications → Vercel → grant access to `blackcode-switzerland`. This enables auto-deploy on every push to `main`.
-- [ ] **Blob storage** — Add `BLOB_READ_WRITE_TOKEN` via Vercel Storage → Blob → Create, then link to `bc-issues` project. Required for file uploads to work in production.
 
 ### CLI
 
