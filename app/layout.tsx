@@ -9,6 +9,14 @@ export const metadata: Metadata = {
   icons: {
     icon: '/logo.png',
   },
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 }
 
 export default function RootLayout({

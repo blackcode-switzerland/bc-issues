@@ -73,7 +73,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (!membership) throw Errors.forbidden('You are not a member of the active workspace')
 
   const body = await request.json()
-  const { project_id, title, description, status, priority, assignee_id, milestone_id } = body
+  const { project_id, title, description, status, priority, assignee_id, assignee_ids, milestone_id } = body
 
   if (!title || typeof title !== 'string') {
     throw Errors.badRequest('invalid_title', 'title is required')
@@ -101,7 +101,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
       description: description ?? null,
       status: status ?? undefined,
       priority: typeof priority === 'number' ? priority : undefined,
-      assigneeId: typeof assignee_id === 'number' ? assignee_id : null,
+      assigneeIds: Array.isArray(assignee_ids)
+        ? assignee_ids.filter((v: unknown): v is number => typeof v === 'number')
+        : typeof assignee_id === 'number'
+          ? [assignee_id]
+          : [],
       reporterId: user.id,
       actorUserId: user.id,
     })

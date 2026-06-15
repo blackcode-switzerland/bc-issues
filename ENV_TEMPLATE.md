@@ -23,12 +23,18 @@ NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 
+# Super admin — comma-separated emails granted super admin access at
+# /dashboard/super-admin. When set, the whitelist feature activates: only
+# whitelisted emails/domains + these super admins can register or sign in
+# via Google OAuth. If unset, no whitelist enforcement and no super admin UI.
+SUPER_ADMINS=admin@yourdomain.com
+
 # Resend — transactional email (workspace invitations + password-reset codes).
 # If unset, the app still works: invitations fall back to the in-app inbox +
 # copyable accept links, and password reset is unavailable until configured.
 # Both vars must be set; RESEND_FROM_EMAIL must be on a domain verified in Resend.
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=invites@yourdomain.com
+RESEND_FROM_EMAIL=onboarding@resend.dev
 
 # Vercel Blob — file/image uploads in production. If unset, uploads are written
 # to the local `public/uploads/` directory (fine for dev).

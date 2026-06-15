@@ -16,9 +16,7 @@ interface IssueRow {
   due_date: string | null
   created_at: string
   updated_at: string
-  assignee_name: string | null
-  assignee_email: string | null
-  assignee_avatar?: string | null
+  assignees: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
 }
 
 const ROW_HEIGHT = 48
@@ -98,13 +96,14 @@ export function IssuesTimeline({
                 {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
               </span>
               <span className="flex-1 truncate text-[13px] font-medium">{issue.title}</span>
-              {issue.assignee_email ? (
-                <MemberAvatar
-                  name={issue.assignee_name}
-                  email={issue.assignee_email}
-                  avatarUrl={issue.assignee_avatar ?? null}
-                  size={16}
-                />
+              {(issue.assignees ?? []).length > 0 ? (
+                <span className="flex items-center shrink-0">
+                  {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+                    <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }}>
+                      <MemberAvatar name={a.name} email={a.email} avatarUrl={a.avatar_url} size={16} />
+                    </span>
+                  ))}
+                </span>
               ) : (
                 <span className="size-4 shrink-0 rounded-full border border-dashed border-muted-foreground/30" />
               )}

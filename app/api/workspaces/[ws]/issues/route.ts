@@ -40,10 +40,25 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     cursor = Number.isNaN(n) ? null : n
   }
 
+  // Assignee filter: ?assignee_id=null (unassigned), ?assignee_id=1 (single),
+  // or ?assignee_ids=1&assignee_ids=2 (multi). assignee_id is kept for
+  // backward compatibility with the CLI and any external integrations.
+  let assigneeIds: number[] | null | undefined
+  const assigneeIdRaw = sp.get('assignee_id')
+  const assigneeIdsRaw = sp.getAll('assignee_ids')
+  if (assigneeIdsRaw.length > 0) {
+    assigneeIds = assigneeIdsRaw.map(Number).filter((n) => !Number.isNaN(n))
+  } else if (assigneeIdRaw === 'null') {
+    assigneeIds = null
+  } else if (assigneeIdRaw !== null) {
+    const n = parseInt(assigneeIdRaw)
+    if (!Number.isNaN(n)) assigneeIds = [n]
+  }
+
   const page = await listIssuesInWorkspace(ctx.workspace.id, {
     projectId: parseNullableInt(sp.get('project_id'), 'project_id'),
     milestoneId: parseNullableInt(sp.get('milestone_id'), 'milestone_id'),
-    assigneeId: parseNullableInt(sp.get('assignee_id'), 'assignee_id'),
+    assigneeIds,
     status: sp.get('status') ?? undefined,
     priority: sp.get('priority') ? parseInt(sp.get('priority')!) || undefined : undefined,
     search: sp.get('search') ?? undefined,
@@ -76,14 +91,23 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     projectId = body.project_id
   }
 
-  let assigneeId: number | null = null
-  if (body.assignee_id != null) {
+  // Accept assignee_ids (preferred) or legacy assignee_id (single).
+  const rawAssigneeIds: number[] = []
+  if (Array.isArray(body.assignee_ids)) {
+    for (const v of body.assignee_ids) {
+      if (typeof v !== 'number') throw Errors.badRequest('invalid_assignee_ids', 'assignee_ids must be an array of integers')
+      rawAssigneeIds.push(v)
+    }
+  } else if (body.assignee_id != null) {
     if (typeof body.assignee_id !== 'number') {
       throw Errors.badRequest('invalid_assignee_id', 'assignee_id must be an integer or null')
     }
-    const member = await getMembership(ctx.workspace.id, body.assignee_id)
-    if (!member) throw Errors.badRequest('assignee_not_member', 'Assignee must be a workspace member')
-    assigneeId = body.assignee_id
+    rawAssigneeIds.push(body.assignee_id)
+  }
+  // Validate each assignee is a workspace member.
+  for (const uid of rawAssigneeIds) {
+    const member = await getMembership(ctx.workspace.id, uid)
+    if (!member) throw Errors.badRequest('assignee_not_member', `User ${uid} is not a workspace member`)
   }
 
   const labelIds = Array.isArray(body.label_ids)
@@ -97,7 +121,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       description: typeof body.description === 'string' ? body.description : null,
       status: typeof body.status === 'string' ? body.status : undefined,
       priority: typeof body.priority === 'number' ? body.priority : undefined,
-      assigneeId,
+      assigneeIds: rawAssigneeIds,
       milestoneId: typeof body.milestone_id === 'number' ? body.milestone_id : null,
       projectId,
       startDate: typeof body.start_date === 'string' ? body.start_date : null,

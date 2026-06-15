@@ -234,7 +234,6 @@ export const issues = pgTable(
     description: text('description'),
     status: varchar('status', { length: 50 }).default('backlog'),
     priority: integer('priority').default(3),
-    assignee_id: integer('assignee_id').references(() => users.id, { onDelete: 'set null' }),
     reporter_id: integer('reporter_id').references(() => users.id, { onDelete: 'set null' }),
     start_date: date('start_date'),
     due_date: date('due_date'),
@@ -252,7 +251,6 @@ export const issues = pgTable(
   (t) => ({
     projectIdx: index('idx_issues_project').on(t.project_id),
     statusIdx: index('idx_issues_status').on(t.status),
-    assigneeIdx: index('idx_issues_assignee').on(t.assignee_id),
     milestoneIdx: index('idx_issues_milestone').on(t.milestone_id),
     priorityIdx: index('idx_issues_priority').on(t.priority),
     workspaceIdx: index('idx_issues_workspace').on(t.workspace_id),
@@ -345,6 +343,27 @@ export const issueLabels = pgTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.issue_id, t.label_id] }),
+  })
+)
+
+// Issue ↔ assignee association (many-to-many). Replaces the former single
+// assignee_id column on issues. ON DELETE CASCADE on both sides so removing
+// either the issue or the user cleans up the row automatically.
+export const issueAssignees = pgTable(
+  'issue_assignees',
+  {
+    issue_id: integer('issue_id')
+      .notNull()
+      .references(() => issues.id, { onDelete: 'cascade' }),
+    user_id: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assigned_at: timestamp('assigned_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.issue_id, t.user_id] }),
+    issueIdx: index('idx_issue_assignees_issue').on(t.issue_id),
+    userIdx: index('idx_issue_assignees_user').on(t.user_id),
   })
 )
 
@@ -627,6 +646,7 @@ export type ProjectUpdate = typeof projectUpdates.$inferSelect
 export type NewProjectUpdate = typeof projectUpdates.$inferInsert
 export type Attachment = typeof attachments.$inferSelect
 export type Label = typeof labels.$inferSelect
+export type IssueAssignee = typeof issueAssignees.$inferSelect
 export type ProjectMember = typeof projectMembers.$inferSelect
 export type TransactionLogEntry = typeof transactionLog.$inferSelect
 export type ApiToken = typeof apiTokens.$inferSelect

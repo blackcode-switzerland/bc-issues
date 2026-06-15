@@ -42,9 +42,7 @@ interface Issue {
   description?: string
   status: string
   priority: number
-  assignee_id?: number
-  assignee_name?: string
-  assignee_avatar?: string
+  assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   comment_count: number
   attachment_count: number
   created_at: string
@@ -308,23 +306,27 @@ export function TimelineView({
                                       )}
                                     </div>
                                     
-                                    {/* Assignee */}
-                                    {issue.assignee_avatar ? (
-                                      <Image
-                                        src={issue.assignee_avatar}
-                                        alt={issue.assignee_name || 'Assignee'}
-                                        width={28}
-                                        height={28}
-                                        className="rounded-full ring-2 ring-background shrink-0"
-                                        title={issue.assignee_name}
-                                      />
-                                    ) : issue.assignee_name ? (
-                                      <div 
-                                        className="w-7 h-7 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium shrink-0"
-                                        title={issue.assignee_name}
-                                      >
-                                        {issue.assignee_name.charAt(0)}
-                                      </div>
+                                    {/* Assignees */}
+                                    {(issue.assignees ?? []).length > 0 ? (
+                                      <span className="flex items-center shrink-0">
+                                        {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+                                          <span key={a.id} style={{ marginLeft: idx > 0 ? '-6px' : 0 }} title={a.name ?? a.email}>
+                                            {a.avatar_url ? (
+                                              <Image
+                                                src={a.avatar_url}
+                                                alt={a.name ?? 'Assignee'}
+                                                width={28}
+                                                height={28}
+                                                className="rounded-full ring-2 ring-background"
+                                              />
+                                            ) : (
+                                              <div className="w-7 h-7 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium">
+                                                {(a.name ?? a.email).charAt(0)}
+                                              </div>
+                                            )}
+                                          </span>
+                                        ))}
+                                      </span>
                                     ) : (
                                       <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center shrink-0">
                                         <User2 size={14} className="text-muted-foreground" />

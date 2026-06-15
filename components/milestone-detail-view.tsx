@@ -41,9 +41,7 @@ interface IssueRow {
   title: string
   status: string
   due_date: string | null
-  assignee_name: string | null
-  assignee_email: string | null
-  assignee_avatar: string | null
+  assignees: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   project_name: string | null
   project_icon: string | null
   project_color: string | null
@@ -377,14 +375,11 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                             {format(new Date(i.due_date), 'MMM d')}
                           </span>
                         ) : null}
-                        {i.assignee_name || i.assignee_email ? (
-                          <MemberAvatar
-                            name={i.assignee_name}
-                            email={i.assignee_email}
-                            avatarUrl={i.assignee_avatar}
-                            size={18}
-                          />
-                        ) : null}
+                        {(i.assignees ?? []).slice(0, 2).map((a, idx) => (
+                          <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }}>
+                            <MemberAvatar name={a.name} email={a.email} avatarUrl={a.avatar_url} size={18} />
+                          </span>
+                        ))}
                       </Link>
                     </li>
                   ))}

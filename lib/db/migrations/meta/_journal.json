@@ -176,6 +176,13 @@
       "when": 1781600000000,
       "tag": "0024_error_event_resolution",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781700000000,
+      "tag": "0025_multi_assignees",
+      "breakpoints": true
     }
   ]
 }

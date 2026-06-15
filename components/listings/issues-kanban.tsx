@@ -12,16 +12,20 @@ import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import { ProjectIcon } from '../project-icon'
 
+interface IssueAssignee {
+  id: number
+  name: string | null
+  email: string
+  avatar_url: string | null
+}
+
 interface IssueRow {
   id: number
   seq: number | null
   title: string
   status: string
   priority: number
-  assignee_id: number | null
-  assignee_name: string | null
-  assignee_email: string | null
-  assignee_avatar?: string | null
+  assignees: IssueAssignee[]
   project_name: string | null
   project_icon: string | null
   project_color: string | null
@@ -152,14 +156,13 @@ export function IssuesKanban({
                               <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                                 {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
                               </span>
-                              {issue.assignee_email ? (
-                                <MemberAvatar
-                                  name={issue.assignee_name}
-                                  email={issue.assignee_email}
-                                  avatarUrl={issue.assignee_avatar ?? null}
-                                  size={16}
-                                />
-                              ) : null}
+                              <span className="flex items-center">
+                                {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+                                  <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }}>
+                                    <MemberAvatar name={a.name} email={a.email} avatarUrl={a.avatar_url} size={16} />
+                                  </span>
+                                ))}
+                              </span>
                             </div>
 
                             {/* Title */}

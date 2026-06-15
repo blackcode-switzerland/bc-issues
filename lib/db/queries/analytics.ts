@@ -117,7 +117,9 @@ function filterWhere(f?: AnalyticsFilters): SQL {
     parts.push(sql`i.priority IN (${sql.join(f.priority.map((p) => sql`${p}`), sql`, `)})`)
   }
   if (f?.assignee?.length) {
-    parts.push(sql`i.assignee_id IN (${sql.join(f.assignee.map((a) => sql`${a}`), sql`, `)})`)
+    parts.push(
+      sql`i.id IN (SELECT ia.issue_id FROM issue_assignees ia WHERE ia.user_id IN (${sql.join(f.assignee.map((a) => sql`${a}`), sql`, `)}))`
+    )
   }
   if (f?.label?.length) {
     parts.push(
@@ -144,7 +146,7 @@ function scopeWhere(input: ComputeAnalyticsInput): SQL {
     scoped = sql`${base} AND i.milestone_id = ${input.id}`
   } else if (input.view === 'member' && input.id != null) {
     // Issues this member is involved with: assignee OR reporter.
-    scoped = sql`${base} AND (i.assignee_id = ${input.id} OR i.reporter_id = ${input.id})`
+    scoped = sql`${base} AND (EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.user_id = ${input.id}) OR i.reporter_id = ${input.id})`
   }
   return sql`${scoped}${filterWhere(input.filters)}`
 }
@@ -251,7 +253,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
       COUNT(*) FILTER (WHERE i.status = 'done')::int AS done,
       COUNT(*) FILTER (WHERE i.status = 'cancelled')::int AS cancelled,
       COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled') AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE)::int AS overdue,
-      COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled') AND i.assignee_id IS NULL)::int AS unassigned,
+      COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled') AND NOT EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id))::int AS unassigned,
       (SUM(i.estimated_hours) FILTER (WHERE i.status NOT IN ('done','cancelled')))::float8 AS open_estimate
     FROM issues i
     WHERE ${where}
@@ -313,7 +315,8 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
       AVG(EXTRACT(EPOCH FROM (i.completed_at - i.created_at)) / 3600)
         FILTER (WHERE i.completed_at IS NOT NULL) AS cycle_avg
     FROM issues i
-    INNER JOIN users u ON u.id = i.assignee_id
+    INNER JOIN issue_assignees ia ON ia.issue_id = i.id
+    INNER JOIN users u ON u.id = ia.user_id
     WHERE ${where}
     GROUP BY u.id, u.name, u.email
     ORDER BY (COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled'))) DESC, done DESC

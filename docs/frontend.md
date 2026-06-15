@@ -280,6 +280,7 @@ kanban, detail pages, modals) rendering work-item state identically.
 - **`components/ui/member-avatar.tsx`** — `MemberAvatar({ name, email,
   avatarUrl, size? })`; image when present, else initials on a deterministic
   hashed color.
+- **`components/ui/multi-assignee-select.tsx`** — `MultiAssigneeSelect({ assignees, members, onChange, compact?, align? })`. Multi-select assignee picker that renders stacked `MemberAvatar`s (up to 2, then "+N") and a searchable checkbox dropdown. `onChange` receives the full `number[]` of selected user IDs. Use `compact` mode for tight list rows. Replaces the old single-value `PropertySelect` for assignees everywhere.
 - **`components/ui/property-select.tsx`** — `PropertySelect` quiet chip-button
   opening a searchable, keyboard-navigable popover. Replaces native `<select>`
   in detail sidebars and create modals. Options take an optional `icon`.

@@ -55,12 +55,19 @@ interface ProjectDetail {
   members: ProjectMember[]
 }
 
+interface IssueAssignee {
+  id: number
+  name: string | null
+  email: string
+  avatar_url: string | null
+}
+
 interface IssueRow {
   id: number
   seq: number | null
   title: string
   status: string
-  assignee_name: string | null
+  assignees: IssueAssignee[]
 }
 
 interface MilestoneRow {
@@ -652,9 +659,11 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                           {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
                         </span>
                         <span className="flex-1 truncate">{i.title}</span>
-                        {i.assignee_name ? (
-                          <MemberAvatar name={i.assignee_name} size={18} className="shrink-0" />
-                        ) : null}
+                        {(i.assignees ?? []).slice(0, 2).map((a, idx) => (
+                          <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }}>
+                            <MemberAvatar name={a.name} email={a.email} avatarUrl={a.avatar_url} size={18} className="shrink-0" />
+                          </span>
+                        ))}
                       </Link>
                     </li>
                   ))}

@@ -37,6 +37,13 @@ export interface Milestone {
   updated_at: string
 }
 
+export interface IssueAssignee {
+  id: number
+  name: string | null
+  email: string
+  avatar_url: string | null
+}
+
 export interface Issue {
   id: number
   project_id: number
@@ -45,12 +52,10 @@ export interface Issue {
   description?: string
   status: string
   priority: number
-  assignee_id?: number
+  assignees?: IssueAssignee[]
   reporter_id?: number
   due_date?: string
   estimate_hours?: number
-  assignee_name?: string
-  assignee_avatar?: string
   milestone_name?: string
   labels?: string[]
   comment_count: number

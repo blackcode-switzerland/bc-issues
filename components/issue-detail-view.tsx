@@ -23,6 +23,13 @@ import {
 import { ISSUE_PRIORITIES, ISSUE_STATUSES } from '@/lib/work-items'
 import { DetailPageSkeleton } from '@/components/ui/motion'
 
+interface AssigneeInfo {
+  id: number
+  name: string | null
+  email: string
+  avatar_url: string | null
+}
+
 interface IssueDetail {
   id: number
   workspace_id: number
@@ -31,7 +38,7 @@ interface IssueDetail {
   description: string | null
   status: string
   priority: number
-  assignee_id: number | null
+  assignees: AssigneeInfo[]
   reporter_id: number | null
   project_id: number | null
   milestone_id: number | null
@@ -41,8 +48,6 @@ interface IssueDetail {
   cancelled_at: string | null
   created_at: string
   updated_at: string
-  assignee_name: string | null
-  assignee_email: string | null
   milestone_name: string | null
   project_name: string | null
 }
@@ -363,6 +368,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   const issueIdLabel = data.seq != null && ws ? `${ws.key}-${data.seq}` : `#${data.id}`
   const issueLabelIds = new Set((labels.data ?? []).map((l) => l.id))
   const availableLabels = (wsLabels.data ?? []).filter((l) => !issueLabelIds.has(l.id))
+  const assignedIds = new Set((data.assignees ?? []).map((a) => a.id))
+  const addableAssignees = (members.data ?? []).filter((m) => !assignedIds.has(m.user_id))
   const mentionItems: MentionItem[] = (members.data ?? []).map((m) => ({
     id: m.user_id,
     label: m.name ?? m.email,
@@ -516,22 +523,55 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               }))}
               onChange={(v) => patchIssue.mutate({ priority: parseInt(v) })}
             />
-            <PropertySelect
-              value={data.assignee_id ? String(data.assignee_id) : ''}
-              placeholder="Assignee"
-              searchPlaceholder="Assign to…"
-              options={[
-                { value: '', label: 'Unassigned' },
-                ...(members.data ?? []).map((m) => ({
-                  value: String(m.user_id),
-                  label: m.name ?? m.email,
-                  icon: (
-                    <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={16} />
-                  ),
-                })),
-              ]}
-              onChange={(v) => patchIssue.mutate({ assignee_id: v ? parseInt(v) : null })}
-            />
+            <div>
+              <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Assignees</p>
+              <ul className="space-y-0.5">
+                {(data.assignees ?? []).map((a) => (
+                  <li
+                    key={a.id}
+                    className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-secondary"
+                  >
+                    <MemberAvatar name={a.name} email={a.email} avatarUrl={a.avatar_url} size={16} />
+                    <span className="flex-1 truncate">{a.name ?? a.email}</span>
+                    <button
+                      onClick={() =>
+                        patchIssue.mutate({
+                          assignee_ids: (data.assignees ?? [])
+                            .filter((x) => x.id !== a.id)
+                            .map((x) => x.id),
+                        })
+                      }
+                      className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                      title="Remove assignee"
+                    >
+                      <X size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {addableAssignees.length > 0 && (
+                <PropertySelect
+                  value=""
+                  placeholder="Add assignee"
+                  searchPlaceholder="Add assignee…"
+                  buttonClassName="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  options={addableAssignees.map((m) => ({
+                    value: String(m.user_id),
+                    label: m.name ?? m.email,
+                    icon: (
+                      <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={16} />
+                    ),
+                  }))}
+                  onChange={(v) => {
+                    if (v) {
+                      patchIssue.mutate({
+                        assignee_ids: [...(data.assignees ?? []).map((a) => a.id), parseInt(v)],
+                      })
+                    }
+                  }}
+                />
+              )}
+            </div>
 
             <div className="my-4 h-px bg-border" />
             <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Labels</p>

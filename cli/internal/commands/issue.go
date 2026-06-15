@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -107,7 +108,7 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 		fmt.Fprintln(tw, "ID\tPRIORITY\tSTATUS\tTITLE\tASSIGNEE")
 		for _, i := range filtered {
 			fmt.Fprintf(tw, "%d\tP%d\t%s\t%s\t%s\n",
-				i.ID, i.Priority, i.Status, truncate(i.Title, 60), derefOr(i.AssigneeName, "—"))
+				i.ID, i.Priority, i.Status, truncate(i.Title, 60), issueAssigneeLabel(i.Assignees))
 		}
 		if err := tw.Flush(); err != nil {
 			return err
@@ -177,7 +178,14 @@ func filterIssues(c *client.Client, cfg *config.Config, issues []client.Issue, f
 			continue
 		}
 		if resolveAssignee {
-			if i.AssigneeID == nil || *i.AssigneeID != assigneeID {
+			found := false
+			for _, a := range i.Assignees {
+				if a.ID == assigneeID {
+					found = true
+					break
+				}
+			}
+			if !found {
 				continue
 			}
 		}
@@ -214,7 +222,7 @@ func newIssueViewCmd() *cobra.Command {
 				fmt.Fprintf(w, "Project:     #%d %s\n", iss.ProjectID, derefOr(iss.ProjectName, ""))
 				fmt.Fprintf(w, "Status:      %s\n", iss.Status)
 				fmt.Fprintf(w, "Priority:    P%d\n", iss.Priority)
-				fmt.Fprintf(w, "Assignee:    %s\n", derefOr(iss.AssigneeName, "—"))
+				fmt.Fprintf(w, "Assignees:   %s\n", issueAssigneeLabel(iss.Assignees))
 				if iss.MilestoneName != nil {
 					fmt.Fprintf(w, "Milestone:   %s\n", *iss.MilestoneName)
 				}
@@ -262,12 +270,14 @@ func newIssueCreateCmd() *cobra.Command {
 				Status:      status,
 				Priority:    priority,
 			}
-			if assignee != "" {
-				raw, err := IntOrNullJSON(assignee, c, cfg)
+			if assignee != "" && !strings.EqualFold(assignee, "none") {
+				uid, err := ResolveUserID(assignee, c, cfg)
 				if err != nil {
 					return err
 				}
-				req.AssigneeID = raw
+				if uid > 0 {
+					req.AssigneeIDs = []int{uid}
+				}
 			}
 			if milestone != "" {
 				raw, err := PlainIntOrNullJSON(milestone)
@@ -359,11 +369,16 @@ func newIssueEditCmd() *cobra.Command {
 			}
 			c := client.New(cfg.Server, cfg.Token)
 			if cmd.Flags().Changed("assignee") {
-				raw, err := IntOrNullJSON(assignee, c, cfg)
-				if err != nil {
-					return err
+				if strings.EqualFold(assignee, "none") || strings.EqualFold(assignee, "null") || strings.EqualFold(assignee, "clear") || strings.EqualFold(assignee, "unset") {
+					req.AssigneeIDs = []byte("[]")
+				} else {
+					uid, err := ResolveUserID(assignee, c, cfg)
+					if err != nil {
+						return err
+					}
+					encoded, _ := json.Marshal([]int{uid})
+					req.AssigneeIDs = encoded
 				}
-				req.AssigneeID = raw
 			}
 			if cmd.Flags().Changed("milestone") {
 				raw, err := PlainIntOrNullJSON(milestone)
@@ -448,16 +463,36 @@ func newIssueAssignCmd() *cobra.Command {
 				return err
 			}
 			c := client.New(cfg.Server, cfg.Token)
-			raw, err := IntOrNullJSON(args[1], c, cfg)
+			uid, err := ResolveUserID(args[1], c, cfg)
 			if err != nil {
 				return err
 			}
-			iss, err := c.UpdateIssue(id, client.UpdateIssueRequest{AssigneeID: raw})
+			// Fetch current assignees and append the new one.
+			current, err := c.GetIssue(id)
+			if err != nil {
+				return err
+			}
+			ids := make([]int, 0, len(current.Assignees)+1)
+			for _, a := range current.Assignees {
+				ids = append(ids, a.ID)
+			}
+			alreadyAssigned := false
+			for _, existing := range ids {
+				if existing == uid {
+					alreadyAssigned = true
+					break
+				}
+			}
+			if !alreadyAssigned {
+				ids = append(ids, uid)
+			}
+			encoded, _ := json.Marshal(ids)
+			iss, err := c.UpdateIssue(id, client.UpdateIssueRequest{AssigneeIDs: encoded})
 			if err != nil {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "issue #%d assigned to %s\n", iss.ID, derefOr(iss.AssigneeName, "—"))
+				fmt.Fprintf(w, "issue #%d assigned: %s\n", iss.ID, issueAssigneeLabel(iss.Assignees))
 				return nil
 			})
 		},
@@ -483,7 +518,7 @@ func newIssueUnassignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			iss, err := c.UpdateIssue(id, client.UpdateIssueRequest{AssigneeID: []byte("null")})
+			iss, err := c.UpdateIssue(id, client.UpdateIssueRequest{AssigneeIDs: []byte("[]")})
 			if err != nil {
 				return err
 			}
@@ -881,6 +916,28 @@ func truncate(s string, n int) string {
 	}
 	r := []rune(s)
 	return string(r[:n-1]) + "…"
+}
+
+// ResolveUserID resolves a user reference (id, email, display name, or "me")
+// to a numeric user ID. Does not accept "none"/"null" — callers handle those.
+func ResolveUserID(ref string, c *client.Client, cfg *config.Config) (int, error) {
+	return ResolveUserRef(c, cfg, ref)
+}
+
+// issueAssigneeLabel formats the assignees list for one-line display.
+func issueAssigneeLabel(assignees []client.IssueAssignee) string {
+	if len(assignees) == 0 {
+		return "—"
+	}
+	names := make([]string, 0, len(assignees))
+	for _, a := range assignees {
+		if a.Name != nil && *a.Name != "" {
+			names = append(names, *a.Name)
+		} else {
+			names = append(names, a.Email)
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func humanBytes(n int) string {

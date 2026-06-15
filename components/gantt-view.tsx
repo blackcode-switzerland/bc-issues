@@ -58,9 +58,7 @@ interface Issue {
   description?: string
   status: string
   priority: number
-  assignee_id?: number
-  assignee_name?: string
-  assignee_avatar?: string
+  assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   milestone_id?: number
   milestone_name?: string
   start_date?: string | null
@@ -267,10 +265,12 @@ export function GanttView({
           key = issue.status
           label = STATUS_CONFIG[issue.status]?.label || issue.status
           break
-        case 'assignee':
-          key = issue.assignee_id?.toString() || 'unassigned'
-          label = issue.assignee_name || 'Unassigned'
+        case 'assignee': {
+          const first = (issue.assignees ?? [])[0]
+          key = first ? String(first.id) : 'unassigned'
+          label = first ? (first.name ?? first.email) : 'Unassigned'
           break
+        }
         default:
           key = 'all'
           label = 'All Issues'
@@ -608,24 +608,20 @@ export function GanttView({
                         <span className="text-sm truncate flex-1" title={issue.title}>
                           {issue.title}
                         </span>
-                        {/* Assignee avatar */}
-                        {issue.assignee_avatar ? (
-                          <Image
-                            src={issue.assignee_avatar}
-                            alt={issue.assignee_name || 'Assignee'}
-                            width={20}
-                            height={20}
-                            className="rounded-full shrink-0"
-                            title={issue.assignee_name}
-                          />
-                        ) : issue.assignee_name ? (
-                          <div
-                            className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
-                            title={issue.assignee_name}
-                          >
-                            {issue.assignee_name.charAt(0)}
-                          </div>
-                        ) : null}
+                        {/* Assignee avatars */}
+                        <span className="flex items-center shrink-0">
+                          {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+                            <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }} title={a.name ?? a.email}>
+                              {a.avatar_url ? (
+                                <Image src={a.avatar_url} alt={a.name ?? 'Assignee'} width={20} height={20} className="rounded-full" />
+                              ) : (
+                                <div className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium">
+                                  {(a.name ?? a.email).charAt(0)}
+                                </div>
+                              )}
+                            </span>
+                          ))}
+                        </span>
                       </div>
                     ))}
                   </div>

@@ -187,7 +187,8 @@ for exact column types, indexes, and check constraints.
 | `projects` | `workspace_id`, `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `end_date` |
 | `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
 | `milestones` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — milestones can be standalone), `due_date`, `status` |
-| `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`milestone_id`, `title`, `status`, `priority` (int 1–5, checked), `assignee_id`, `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at` |
+| `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`milestone_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
+| `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`milestone`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
 | `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by` |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |

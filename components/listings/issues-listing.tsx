@@ -14,11 +14,19 @@ import { IssuesKanban } from './issues-kanban'
 import { IssuesTimeline } from './issues-timeline'
 import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
 import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MultiAssigneeSelect } from '@/components/ui/multi-assignee-select'
 import { PropertySelect } from '@/components/ui/property-select'
 import { ProjectIcon } from '../project-icon'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState, IssueSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
+
+interface IssueAssignee {
+  id: number
+  name: string | null
+  email: string
+  avatar_url: string | null
+}
 
 interface IssueRow {
   id: number
@@ -29,9 +37,7 @@ interface IssueRow {
   priority: number
   project_id: number | null
   milestone_id: number | null
-  assignee_id: number | null
-  assignee_name: string | null
-  assignee_email: string | null
+  assignees: IssueAssignee[]
   milestone_name: string | null
   project_name: string | null
   project_icon: string | null
@@ -169,7 +175,7 @@ export function IssuesListing() {
       if (search) params.set('search', search)
       if (status.length === 1) params.set('status', String(status[0]))
       if (priority.length === 1) params.set('priority', String(priority[0]))
-      if (assignees.length === 1) params.set('assignee_id', String(assignees[0]))
+      if (assignees.length === 1) params.set('assignee_ids', String(assignees[0]))
       if (projects.length === 1 && projects[0] !== 'null') params.set('project_id', String(projects[0]))
       if (milestones.length === 1 && milestones[0] !== 'null') params.set('milestone_id', String(milestones[0]))
       params.set('limit', '200')
@@ -185,7 +191,7 @@ export function IssuesListing() {
     if (status.length > 1) data = data.filter((d) => status.includes(d.status))
     if (priority.length > 1) data = data.filter((d) => priority.includes(d.priority))
     if (assignees.length > 1)
-      data = data.filter((d) => d.assignee_id != null && assignees.includes(d.assignee_id))
+      data = data.filter((d) => (d.assignees ?? []).some((a) => assignees.includes(a.id)))
     if (projects.length > 1 || projects.includes('null')) {
       const hasNull = projects.includes('null')
       data = data.filter((d) =>
@@ -354,7 +360,7 @@ export function IssuesListing() {
           confirmLabel: 'Apply',
         })
         if (!ok) return
-        await bulkPatch({ assignee_id: v === '' ? null : Number(v) })
+        await bulkPatch({ assignee_ids: v === '' ? [] : [Number(v)] })
         toast.success(`Reassigned ${selectedIds.size} ${selectedIds.size === 1 ? 'issue' : 'issues'}`)
       },
     },
@@ -849,7 +855,21 @@ function IssueRowItem({
       const snapshot = queryClient.getQueriesData<IssueRow[]>({ queryKey: ['ws-issues', workspaceSlug] })
       queryClient.setQueriesData<IssueRow[]>(
         { queryKey: ['ws-issues', workspaceSlug] },
-        (old) => old?.map((i) => (i.id === issue.id ? { ...i, ...data } : i))
+        (old) =>
+          old?.map((i) => {
+            if (i.id !== issue.id) return i
+            const optimistic: IssueRow = { ...i, ...data }
+            // Resolve assignee_ids to AssigneeInfo objects for optimistic UI.
+            if (Array.isArray(data.assignee_ids)) {
+              optimistic.assignees = data.assignee_ids
+                .map((uid: number) => {
+                  const m = members.find((m) => m.user_id === uid)
+                  return m ? { id: m.user_id, name: m.name, email: m.email, avatar_url: m.avatar_url } : null
+                })
+                .filter(Boolean) as IssueRow['assignees']
+            }
+            return optimistic
+          })
       )
       return { snapshot }
     },
@@ -866,16 +886,7 @@ function IssueRowItem({
     },
   })
 
-  const assigneeOptions = [
-    { value: '', label: 'Unassigned', icon: <span className="flex size-[15px] items-center justify-center rounded-full bg-neutral-700 text-[7px] font-semibold tracking-tight text-neutral-400">UA</span> },
-    ...members.map((m) => ({
-      value: String(m.user_id),
-      label: m.name ?? m.email,
-      icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={15} />,
-    })),
-  ]
-
-  const currentAssigneeId = issue.assignee_id ? String(issue.assignee_id) : ''
+  const assignees = issue.assignees ?? []
 
   function stop(e: React.MouseEvent) {
     e.stopPropagation()
@@ -963,15 +974,13 @@ function IssueRowItem({
             <span className="truncate">{issue.project_name}</span>
           </span>
         ) : null}
-        {/* Assignee — inline editable, avatar-only */}
+        {/* Assignees — inline editable, avatar-only */}
         <div onClick={stop} className="shrink-0">
-          <PropertySelect
-            value={currentAssigneeId}
-            options={assigneeOptions}
-            onChange={(v) => patch.mutate({ assignee_id: v ? parseInt(v) : null })}
-            buttonClassName="flex items-center justify-center rounded p-0.5 hover:bg-secondary"
-            iconOnly
-            noSearch
+          <MultiAssigneeSelect
+            assignees={assignees}
+            members={members}
+            onChange={(ids) => patch.mutate({ assignee_ids: ids })}
+            compact
             align="right"
           />
         </div>

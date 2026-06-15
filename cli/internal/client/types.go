@@ -41,6 +41,13 @@ type Project struct {
 	CreatedAt   *string `json:"created_at" yaml:"created_at"`
 }
 
+type IssueAssignee struct {
+	ID        int     `json:"id" yaml:"id"`
+	Name      *string `json:"name" yaml:"name"`
+	Email     string  `json:"email" yaml:"email"`
+	AvatarURL *string `json:"avatar_url" yaml:"avatar_url"`
+}
+
 type Issue struct {
 	ID              int             `json:"id" yaml:"id"`
 	ProjectID       int             `json:"project_id" yaml:"project_id"`
@@ -49,13 +56,11 @@ type Issue struct {
 	Description     *string         `json:"description" yaml:"description"`
 	Status          string          `json:"status" yaml:"status"`
 	Priority        int             `json:"priority" yaml:"priority"`
-	AssigneeID      *int            `json:"assignee_id" yaml:"assignee_id"`
 	ReporterID      *int            `json:"reporter_id" yaml:"reporter_id"`
 	StartDate       *string         `json:"start_date" yaml:"start_date"`
 	DueDate         *string         `json:"due_date" yaml:"due_date"`
 	EstimatedHours  json.RawMessage `json:"estimated_hours,omitempty" yaml:"-"`
-	AssigneeName    *string         `json:"assignee_name,omitempty" yaml:"assignee_name,omitempty"`
-	AssigneeAvatar  *string         `json:"assignee_avatar,omitempty" yaml:"assignee_avatar,omitempty"`
+	Assignees       []IssueAssignee `json:"assignees" yaml:"assignees"`
 	MilestoneName   *string         `json:"milestone_name,omitempty" yaml:"milestone_name,omitempty"`
 	ProjectName     *string         `json:"project_name,omitempty" yaml:"project_name,omitempty"`
 	CommentCount    *int            `json:"comment_count,omitempty" yaml:"comment_count,omitempty"`
@@ -142,21 +147,22 @@ type CreateIssueRequest struct {
 	Description string          `json:"description,omitempty"`
 	Status      string          `json:"status,omitempty"`
 	Priority    int             `json:"priority,omitempty"`
-	AssigneeID  json.RawMessage `json:"assignee_id,omitempty"`
+	AssigneeIDs []int           `json:"assignee_ids,omitempty"`
 	MilestoneID json.RawMessage `json:"milestone_id,omitempty"`
 	StartDate   *string         `json:"start_date,omitempty"`
 	DueDate     *string         `json:"due_date,omitempty"`
 }
 
-// UpdateIssueRequest uses json.RawMessage for assignee_id, milestone_id,
-// start_date, due_date so they can be sent as null to clear, an int/string
-// to set, or omitted entirely to leave untouched.
+// UpdateIssueRequest uses json.RawMessage for milestone_id, start_date, due_date
+// so they can be sent as null to clear, a value to set, or omitted to leave
+// untouched. AssigneeIDs replaces the full assignee list when present (empty
+// array = clear all assignees).
 type UpdateIssueRequest struct {
 	Title       *string         `json:"title,omitempty"`
 	Description *string         `json:"description,omitempty"`
 	Status      *string         `json:"status,omitempty"`
 	Priority    *int            `json:"priority,omitempty"`
-	AssigneeID  json.RawMessage `json:"assignee_id,omitempty"`
+	AssigneeIDs json.RawMessage `json:"assignee_ids,omitempty"`
 	MilestoneID json.RawMessage `json:"milestone_id,omitempty"`
 	StartDate   json.RawMessage `json:"start_date,omitempty"`
 	DueDate     json.RawMessage `json:"due_date,omitempty"`

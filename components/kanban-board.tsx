@@ -60,9 +60,7 @@ interface Issue {
   description?: string
   status: string
   priority: number
-  assignee_id?: number
-  assignee_name?: string
-  assignee_avatar?: string
+  assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   milestone_id?: number
   milestone_name?: string
   labels?: string[]
@@ -195,7 +193,7 @@ export function KanbanBoard({
       description?: string
       status: string
       priority?: number
-      assignee_id?: number
+      assignee_ids?: number[]
       milestone_id?: number
     }) => {
       const res = await fetch('/api/issues', {
@@ -337,12 +335,12 @@ export function KanbanBoard({
       }
       
       // Assignee filter
-      if (assigneeFilter === 'unassigned' && issue.assignee_id) {
+      const issueAssigneeIds = (issue.assignees ?? []).map((a) => String(a.id))
+      if (assigneeFilter === 'unassigned' && issueAssigneeIds.length > 0) {
         return false
       }
       if (assigneeFilter !== 'all' && assigneeFilter !== 'unassigned') {
-        // Specific assignee selected
-        if (issue.assignee_id?.toString() !== assigneeFilter) {
+        if (!issueAssigneeIds.includes(assigneeFilter)) {
           return false
         }
       }
@@ -668,7 +666,7 @@ function Column({
     title: string
     description?: string
     priority?: number
-    assignee_id?: number
+    assignee_ids?: number[]
     milestone_id?: number
   }) => void
   isCreating: boolean
@@ -679,14 +677,14 @@ function Column({
   const [showExpanded, setShowExpanded] = useState(false)
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<number>(3)
-  const [assigneeId, setAssigneeId] = useState<number | undefined>(undefined)
+  const [assigneeIds, setAssigneeIds] = useState<number[]>([])
   const [milestoneId, setMilestoneId] = useState<number | undefined>(undefined)
 
   const resetForm = () => {
     setNewTitle('')
     setDescription('')
     setPriority(3)
-    setAssigneeId(undefined)
+    setAssigneeIds([])
     setMilestoneId(undefined)
     setShowExpanded(false)
   }
@@ -805,9 +803,9 @@ function Column({
                           </select>
 
                           <select
-                            value={assigneeId || ''}
+                            value={assigneeIds[0] ?? ''}
                             onChange={(e) =>
-                              setAssigneeId(e.target.value ? parseInt(e.target.value) : undefined)
+                              setAssigneeIds(e.target.value ? [parseInt(e.target.value)] : [])
                             }
                             className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                           >
@@ -873,7 +871,7 @@ function Column({
                                 title: newTitle.trim(),
                                 description: description.trim() || undefined,
                                 priority,
-                                assignee_id: assigneeId,
+                                assignee_ids: assigneeIds.length > 0 ? assigneeIds : undefined,
                                 milestone_id: milestoneId,
                               })
                               resetForm()
@@ -970,24 +968,20 @@ function IssueCard({
           )}
         </div>
 
-        {/* Assignee */}
-        {issue.assignee_avatar ? (
-          <Image
-            src={issue.assignee_avatar}
-            alt={issue.assignee_name || 'Assignee'}
-            width={20}
-            height={20}
-            className="rounded-full"
-            title={issue.assignee_name}
-          />
-        ) : issue.assignee_name ? (
-          <div
-            className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium"
-            title={issue.assignee_name}
-          >
-            {issue.assignee_name.charAt(0)}
-          </div>
-        ) : null}
+        {/* Assignees */}
+        <span className="flex items-center">
+          {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+            <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }} title={a.name ?? a.email}>
+              {a.avatar_url ? (
+                <Image src={a.avatar_url} alt={a.name ?? 'Assignee'} width={20} height={20} className="rounded-full" />
+              ) : (
+                <div className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium">
+                  {(a.name ?? a.email).charAt(0)}
+                </div>
+              )}
+            </span>
+          ))}
+        </span>
       </div>
     </motion.div>
   )
@@ -1009,7 +1003,7 @@ function IssueDetailModal({
   const [description, setDescription] = useState(issue.description || '')
   const [status, setStatus] = useState(issue.status)
   const [priority, setPriority] = useState(issue.priority)
-  const [assigneeId, setAssigneeId] = useState<number | undefined>(issue.assignee_id)
+  const [assigneeIds, setAssigneeIds] = useState<number[]>((issue.assignees ?? []).map((a) => a.id))
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle')
 
   // Fetch project members for assignee dropdown
@@ -1088,9 +1082,9 @@ function IssueDetailModal({
     updateIssue.mutate({ priority: newPriority })
   }
 
-  const handleAssigneeChange = (newAssigneeId: number | undefined) => {
-    setAssigneeId(newAssigneeId)
-    updateIssue.mutate({ assignee_id: newAssigneeId || null } as any)
+  const handleAssigneeChange = (newIds: number[]) => {
+    setAssigneeIds(newIds)
+    updateIssue.mutate({ assignee_ids: newIds } as any)
   }
 
   const handleOpenFullPage = () => {
@@ -1190,8 +1184,8 @@ function IssueDetailModal({
               </select>
 
               <select
-                value={assigneeId || ''}
-                onChange={(e) => handleAssigneeChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                value={assigneeIds[0] ?? ''}
+                onChange={(e) => handleAssigneeChange(e.target.value ? [parseInt(e.target.value)] : [])}
                 className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring"
               >
                 <option value="">Unassigned</option>

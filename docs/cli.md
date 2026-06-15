@@ -198,12 +198,12 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issue list [--project N] [--status S] [--assignee REF \| --mine] [--limit N] [--cursor ID]` | `GET /api/issues` | `--mine` = assigned to the current user. Status/assignee filters are client-side. |
+| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--limit N] [--cursor ID]` | `GET /api/issues` | `--mine` = assigned to the current user. `--assignee` is repeatable for multi-assignee filter. |
 | `bk issue view <id>` | `GET /api/issues/:id` | |
 | `bk issue create --project N --title T [...]` | `POST /api/issues` | Full flag list below. |
-| `bk issue edit <id> [...]` | `PATCH /api/issues/:id` | Pass `none`/`null`/`unset`/`clear` to null a field. |
-| `bk issue assign <id> <user>` | `PATCH /api/issues/:id` | Shortcut for setting the assignee. |
-| `bk issue unassign <id>` | `PATCH /api/issues/:id` | Clears the assignee. |
+| `bk issue edit <id> [...]` | `PATCH /api/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
+| `bk issue assign <id> <user> [<user> ...]` | `PATCH /api/issues/:id` | Adds one or more assignees (does not remove existing). |
+| `bk issue unassign <id> [<user>]` | `PATCH /api/issues/:id` | Removes a specific assignee, or clears all if no user given. |
 | `bk issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
 | `bk issue comment <id> --body "..." \| --body - \| --body-file F` | `POST /api/issues/:id/comments` | Body must be non-empty. |
 | `bk issue comments <id>` | `GET /api/issues/:id/comments` | |
@@ -221,7 +221,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 --description-file F     read description from file
 --priority 1-5          1 = urgent
 --status S              backlog | todo | in_progress | done | cancelled
---assignee REF          id, email, display name, or "me"
+--assignee REF [...]    id, email, display name, or "me" — repeatable for multiple assignees
 --milestone N           milestone id
 --start-date YYYY-MM-DD
 --due-date YYYY-MM-DD
@@ -230,7 +230,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 > `--status` is free-form on the CLI side and validated server-side. The canonical issue statuses are `backlog`, `todo`, `in_progress`, `done`, and `cancelled`.
 
-**`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee`, `--milestone`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--assignee`, `--milestone`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them.
+**`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--milestone`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--milestone`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
 
 ### Milestones
 
