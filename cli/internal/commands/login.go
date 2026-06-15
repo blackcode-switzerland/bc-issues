@@ -34,7 +34,7 @@ the minted token via a loopback HTTP server, and saves credentials to
 Use --token to paste a token manually instead (useful for headless/CI).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if server == "" {
-				server = "http://localhost:3000"
+				server = "https://bc-issues.vercel.app"
 			}
 
 			if pasteToken {
@@ -43,7 +43,7 @@ Use --token to paste a token manually instead (useful for headless/CI).`,
 			return runBrowserLogin(server)
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "Server base URL (default: http://localhost:3000)")
+	cmd.Flags().StringVar(&server, "server", "", "Server base URL (default: https://bc-issues.vercel.app)")
 	cmd.Flags().BoolVar(&pasteToken, "token", false, "Paste a pre-existing token from stdin instead of opening a browser")
 	return cmd
 }
