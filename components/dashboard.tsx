@@ -49,7 +49,7 @@ export function Dashboard({ user }: { user: User }) {
   })
 
   const createProject = useMutation({
-    mutationFn: async (data: { name: string; description: string }) => {
+    mutationFn: async (data: { name: string; summary: string }) => {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,11 +331,11 @@ function NewProjectModal({
   isLoading,
 }: {
   onClose: () => void
-  onCreate: (data: { name: string; description: string }) => void
+  onCreate: (data: { name: string; summary: string }) => void
   isLoading: boolean
 }) {
   const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const [summary, setSummary] = useState('')
   const [priority, setPriority] = useState('P2')
   const [visibility, setVisibility] = useState('team')
   const [color, setColor] = useState('#3B82F6')
@@ -370,7 +370,7 @@ function NewProjectModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
 
       {/* Modal */}
@@ -383,7 +383,7 @@ function NewProjectModal({
         <div className="bg-card rounded-2xl border border-border shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
           {/* Banner preview area */}
           <div
-            className="h-24 relative flex-shrink-0"
+            className="h-24 relative shrink-0"
             style={{
               background: bannerPreview
                 ? `url(${bannerPreview}) center/cover`
@@ -442,7 +442,7 @@ function NewProjectModal({
               onSubmit={(e) => {
                 e.preventDefault()
                 if (name.trim()) {
-                  onCreate({ name: name.trim(), description: description.trim() })
+                  onCreate({ name: name.trim(), summary: summary.trim() })
                 }
               }}
               className="space-y-5"
@@ -457,22 +457,22 @@ function NewProjectModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="My Awesome Project"
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   autoFocus
                 />
               </div>
 
-              {/* Description */}
+              {/* Summary */}
               <div>
                 <label className="block text-sm font-medium mb-1.5">
-                  Description
+                  Summary
                 </label>
                 <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What's this project about?"
-                  rows={3}
-                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  placeholder="A short plain-text summary of this project…"
+                  rows={2}
+                  className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
 
@@ -485,7 +485,7 @@ function NewProjectModal({
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     {PRIORITY_OPTIONS.map((p) => (
                       <option key={p.id} value={p.id}>

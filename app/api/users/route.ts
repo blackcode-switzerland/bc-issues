@@ -1,17 +1,15 @@
+// The user directory. Privacy guard: a caller only sees users they already
+// share a workspace with (plus themselves). Discovering brand-new people is
+// not possible here — invitations are sent blind, by email.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
-import { getUsers } from '@/lib/db'
+import { apiHandler, Errors } from '@/lib/api'
+import { getVisibleUsers } from '@/lib/db/queries/users'
 
-export async function GET(request: NextRequest) {
-  try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    const users = await getUsers()
-    return NextResponse.json(users)
-  } catch (error) {
-    console.error('Failed to fetch users:', error)
-    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
-  }
-}
+export const GET = apiHandler(async (request: NextRequest) => {
+  const user = await resolveUser(request)
+  if (!user) throw Errors.unauthorized()
+  const users = await getVisibleUsers(user.id)
+  return NextResponse.json(users)
+})

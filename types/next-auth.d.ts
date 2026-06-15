@@ -8,7 +8,11 @@ declare module 'next-auth' {
       name?: string | null
       email?: string | null
       image?: string | null
-      role?: string
+      // Snapshot of users.password_changed_at at sign-in time. Used to
+      // invalidate sessions when the password is reset.
+      pwStamp?: number
+      // True if this user's email is in the SUPER_ADMINS env list.
+      isSuperAdmin?: boolean
     } & DefaultSession['user']
   }
 
@@ -21,5 +25,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id?: string | number
     accessToken?: string
+    pwStamp?: number
+    isSuperAdmin?: boolean
   }
 }

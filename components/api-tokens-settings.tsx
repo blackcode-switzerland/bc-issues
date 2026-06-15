@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Copy, Key, Loader2, Plus, Trash2 } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface TokenSummary {
   id: number
@@ -44,6 +45,7 @@ export function ApiTokensSettings() {
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState('')
   const [minted, setMinted] = useState<MintedToken | null>(null)
+  const { confirm } = useConfirm()
 
   async function load() {
     setLoading(true)
@@ -89,7 +91,7 @@ export function ApiTokensSettings() {
   }
 
   async function handleRevoke(id: number) {
-    if (!confirm('Revoke this token? Any client using it will stop working immediately.')) return
+    if (!(await confirm({ title: 'Revoke this token?', description: 'Any client using it will stop working immediately.', destructive: true, confirmLabel: 'Revoke' }))) return
     try {
       const r = await fetch(`/api/tokens/${id}`, { method: 'DELETE' })
       if (!r.ok) throw new Error(await r.text())
@@ -167,7 +169,7 @@ export function ApiTokensSettings() {
               }}
               placeholder="e.g. macbook-cli"
               maxLength={100}
-              className="w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+              className="w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring text-sm"
             />
             <div className="mt-3 flex gap-2">
               <button
@@ -208,12 +210,12 @@ export function ApiTokensSettings() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
-                <th className="px-6 py-2 font-medium">Name</th>
-                <th className="px-6 py-2 font-medium">Prefix</th>
-                <th className="px-6 py-2 font-medium">Created</th>
-                <th className="px-6 py-2 font-medium">Last used</th>
-                <th className="px-6 py-2 font-medium">Expires</th>
+              <tr className="text-left text-[13px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                <th className="px-6 py-3 font-medium">Name</th>
+                <th className="px-6 py-3 font-medium">Prefix</th>
+                <th className="px-6 py-3 font-medium">Created</th>
+                <th className="px-6 py-3 font-medium">Last used</th>
+                <th className="px-6 py-3 font-medium">Expires</th>
                 <th className="px-6 py-2"></th>
               </tr>
             </thead>

@@ -52,7 +52,7 @@ export function CliAuthorizeForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={100}
-          className="w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
+          className="w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring text-sm font-mono"
         />
         <p className="text-xs text-muted-foreground mt-1">
           You can revoke this later from Settings → API Tokens.

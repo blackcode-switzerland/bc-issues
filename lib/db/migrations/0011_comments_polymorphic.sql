@@ -1,0 +1,1 @@
+ALTER TABLE "comments" ALTER COLUMN "issue_id" DROP NOT NULL;

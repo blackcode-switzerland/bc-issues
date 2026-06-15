@@ -38,9 +38,7 @@ interface Issue {
   description?: string
   status: string
   priority: number
-  assignee_id?: number
-  assignee_name?: string
-  assignee_avatar?: string
+  assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   project_id: number
   project_name?: string
   milestone_name?: string
@@ -70,14 +68,12 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
 
   // Get unique assignees for filter
   const assignees = useMemo(() => {
-    const map = new Map<number, { id: number; name: string; avatar?: string }>()
+    const map = new Map<number, { id: number; name: string; email: string; avatar?: string | null }>()
     for (const issue of issues) {
-      if (issue.assignee_id && issue.assignee_name) {
-        map.set(issue.assignee_id, {
-          id: issue.assignee_id,
-          name: issue.assignee_name,
-          avatar: issue.assignee_avatar,
-        })
+      for (const a of issue.assignees ?? []) {
+        if (!map.has(a.id)) {
+          map.set(a.id, { id: a.id, name: a.name ?? a.email, email: a.email, avatar: a.avatar_url })
+        }
       }
     }
     return Array.from(map.values())
@@ -92,7 +88,7 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
         // Priority filter
         if (priorityFilter && issue.priority !== priorityFilter) return false
         // Assignee filter
-        if (assigneeFilter && issue.assignee_id !== assigneeFilter) return false
+        if (assigneeFilter && !(issue.assignees ?? []).some((a) => a.id === assigneeFilter)) return false
         // Search query
         if (searchQuery) {
           const query = searchQuery.toLowerCase()
@@ -162,7 +158,7 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
             placeholder="Search issues..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         </div>
 
@@ -206,7 +202,7 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
               <select
                 value={statusFilter || ''}
                 onChange={(e) => setStatusFilter(e.target.value || null)}
-                className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="">All</option>
                 {STATUSES.map((s) => (
@@ -224,7 +220,7 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
                 onChange={(e) =>
                   setPriorityFilter(e.target.value ? parseInt(e.target.value) : null)
                 }
-                className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="">All</option>
                 <option value="1">Urgent</option>
@@ -241,7 +237,7 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
                 onChange={(e) =>
                   setAssigneeFilter(e.target.value ? parseInt(e.target.value) : null)
                 }
-                className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="">All</option>
                 {assignees.map((a) => (
@@ -393,25 +389,23 @@ export function IssueListView({ issues, showProjectColumn = false }: IssueListVi
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {issue.assignee_avatar ? (
-                          <Image
-                            src={issue.assignee_avatar}
-                            alt={issue.assignee_name || 'Assignee'}
-                            width={24}
-                            height={24}
-                            className="rounded-full"
-                            title={issue.assignee_name}
-                          />
-                        ) : issue.assignee_name ? (
-                          <div
-                            className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium"
-                            title={issue.assignee_name}
-                          >
-                            {issue.assignee_name.charAt(0)}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
+                        <span className="flex items-center">
+                          {(issue.assignees ?? []).length === 0 ? (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          ) : (
+                            (issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+                              <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }} title={a.name ?? a.email}>
+                                {a.avatar_url ? (
+                                  <Image src={a.avatar_url} alt={a.name ?? 'Assignee'} width={24} height={24} className="rounded-full" />
+                                ) : (
+                                  <div className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium">
+                                    {(a.name ?? a.email).charAt(0)}
+                                  </div>
+                                )}
+                              </span>
+                            ))
+                          )}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(issue.updated_at))} ago

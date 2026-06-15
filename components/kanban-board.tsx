@@ -60,9 +60,7 @@ interface Issue {
   description?: string
   status: string
   priority: number
-  assignee_id?: number
-  assignee_name?: string
-  assignee_avatar?: string
+  assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   milestone_id?: number
   milestone_name?: string
   labels?: string[]
@@ -177,14 +175,14 @@ export function KanbanBoard({
       return res.json()
     },
     onSuccess: () => {
-      // Invalidate caches to ensure persistence
-      queryClient.invalidateQueries({ queryKey: ['all-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
     },
     onError: (error) => {
       console.error('Mutation error:', error)
       toast.error('Failed to update issue')
-      // Revert optimistic update by refetching
       queryClient.invalidateQueries({ queryKey: ['project-issues', project.id] })
     },
   })
@@ -195,7 +193,7 @@ export function KanbanBoard({
       description?: string
       status: string
       priority?: number
-      assignee_id?: number
+      assignee_ids?: number[]
       milestone_id?: number
     }) => {
       const res = await fetch('/api/issues', {
@@ -337,12 +335,12 @@ export function KanbanBoard({
       }
       
       // Assignee filter
-      if (assigneeFilter === 'unassigned' && issue.assignee_id) {
+      const issueAssigneeIds = (issue.assignees ?? []).map((a) => String(a.id))
+      if (assigneeFilter === 'unassigned' && issueAssigneeIds.length > 0) {
         return false
       }
       if (assigneeFilter !== 'all' && assigneeFilter !== 'unassigned') {
-        // Specific assignee selected
-        if (issue.assignee_id?.toString() !== assigneeFilter) {
+        if (!issueAssigneeIds.includes(assigneeFilter)) {
           return false
         }
       }
@@ -356,7 +354,7 @@ export function KanbanBoard({
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -425,7 +423,7 @@ export function KanbanBoard({
                   placeholder="Search issues..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring sm:w-64"
                 />
               </div>
 
@@ -590,7 +588,7 @@ export function KanbanBoard({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMembersPanel(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
             />
 
             {/* Panel */}
@@ -601,7 +599,7 @@ export function KanbanBoard({
               className="fixed right-0 top-0 h-full w-full max-w-md bg-card border-l border-border shadow-2xl z-50 overflow-y-auto"
             >
               {/* Header */}
-              <div className="sticky top-0 bg-card/80 backdrop-blur border-b border-border px-6 py-4">
+              <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Team Members</h2>
                   <button
@@ -668,7 +666,7 @@ function Column({
     title: string
     description?: string
     priority?: number
-    assignee_id?: number
+    assignee_ids?: number[]
     milestone_id?: number
   }) => void
   isCreating: boolean
@@ -679,14 +677,14 @@ function Column({
   const [showExpanded, setShowExpanded] = useState(false)
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<number>(3)
-  const [assigneeId, setAssigneeId] = useState<number | undefined>(undefined)
+  const [assigneeIds, setAssigneeIds] = useState<number[]>([])
   const [milestoneId, setMilestoneId] = useState<number | undefined>(undefined)
 
   const resetForm = () => {
     setNewTitle('')
     setDescription('')
     setPriority(3)
-    setAssigneeId(undefined)
+    setAssigneeIds([])
     setMilestoneId(undefined)
     setShowExpanded(false)
   }
@@ -720,7 +718,7 @@ function Column({
   }
 
   return (
-    <div className="flex-shrink-0 w-80">
+    <div className="shrink-0 w-80">
       {/* Column header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -774,7 +772,7 @@ function Column({
                           onCancelNewIssue()
                         }
                       }}
-                      className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                     />
 
                     {showExpanded && (
@@ -788,7 +786,7 @@ function Column({
                           placeholder="Description (optional)..."
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
-                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring resize-none"
                           rows={3}
                         />
 
@@ -796,7 +794,7 @@ function Column({
                           <select
                             value={priority}
                             onChange={(e) => setPriority(parseInt(e.target.value))}
-                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                           >
                             <option value={1}>Urgent</option>
                             <option value={2}>High</option>
@@ -805,11 +803,11 @@ function Column({
                           </select>
 
                           <select
-                            value={assigneeId || ''}
+                            value={assigneeIds[0] ?? ''}
                             onChange={(e) =>
-                              setAssigneeId(e.target.value ? parseInt(e.target.value) : undefined)
+                              setAssigneeIds(e.target.value ? [parseInt(e.target.value)] : [])
                             }
-                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                           >
                             <option value="">Unassigned</option>
                             {members.map((m: any) => (
@@ -825,7 +823,7 @@ function Column({
                           onChange={(e) =>
                             setMilestoneId(e.target.value ? parseInt(e.target.value) : undefined)
                           }
-                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                         >
                           <option value="">No milestone</option>
                           {milestones.map((m: any) => (
@@ -873,7 +871,7 @@ function Column({
                                 title: newTitle.trim(),
                                 description: description.trim() || undefined,
                                 priority,
-                                assignee_id: assigneeId,
+                                assignee_ids: assigneeIds.length > 0 ? assigneeIds : undefined,
                                 milestone_id: milestoneId,
                               })
                               resetForm()
@@ -970,24 +968,20 @@ function IssueCard({
           )}
         </div>
 
-        {/* Assignee */}
-        {issue.assignee_avatar ? (
-          <Image
-            src={issue.assignee_avatar}
-            alt={issue.assignee_name || 'Assignee'}
-            width={20}
-            height={20}
-            className="rounded-full"
-            title={issue.assignee_name}
-          />
-        ) : issue.assignee_name ? (
-          <div
-            className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium"
-            title={issue.assignee_name}
-          >
-            {issue.assignee_name.charAt(0)}
-          </div>
-        ) : null}
+        {/* Assignees */}
+        <span className="flex items-center">
+          {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (
+            <span key={a.id} style={{ marginLeft: idx > 0 ? '-4px' : 0 }} title={a.name ?? a.email}>
+              {a.avatar_url ? (
+                <Image src={a.avatar_url} alt={a.name ?? 'Assignee'} width={20} height={20} className="rounded-full" />
+              ) : (
+                <div className="w-5 h-5 bg-primary/20 rounded-full flex items-center justify-center text-[10px] font-medium">
+                  {(a.name ?? a.email).charAt(0)}
+                </div>
+              )}
+            </span>
+          ))}
+        </span>
       </div>
     </motion.div>
   )
@@ -1009,7 +1003,7 @@ function IssueDetailModal({
   const [description, setDescription] = useState(issue.description || '')
   const [status, setStatus] = useState(issue.status)
   const [priority, setPriority] = useState(issue.priority)
-  const [assigneeId, setAssigneeId] = useState<number | undefined>(issue.assignee_id)
+  const [assigneeIds, setAssigneeIds] = useState<number[]>((issue.assignees ?? []).map((a) => a.id))
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle')
 
   // Fetch project members for assignee dropdown
@@ -1057,7 +1051,7 @@ function IssueDetailModal({
   }, [updateIssue])
 
   // Image upload handler
-  const handleImageUpload = async (file: File): Promise<string> => {
+  const handleFileUpload = async (file: File): Promise<string> => {
     const formData = new FormData()
     formData.append('file', file)
     const res = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -1088,9 +1082,9 @@ function IssueDetailModal({
     updateIssue.mutate({ priority: newPriority })
   }
 
-  const handleAssigneeChange = (newAssigneeId: number | undefined) => {
-    setAssigneeId(newAssigneeId)
-    updateIssue.mutate({ assignee_id: newAssigneeId || null } as any)
+  const handleAssigneeChange = (newIds: number[]) => {
+    setAssigneeIds(newIds)
+    updateIssue.mutate({ assignee_ids: newIds } as any)
   }
 
   const handleOpenFullPage = () => {
@@ -1128,7 +1122,7 @@ function IssueDetailModal({
         className="fixed inset-4 md:inset-8 lg:inset-12 bg-card rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col"
       >
         {/* Minimal Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-border/50">
+        <div className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-border/50">
           <div className="flex items-center gap-3">
             <span className="text-xs font-mono text-muted-foreground">#{issue.id}</span>
             {saveStatus === 'saving' && (
@@ -1163,7 +1157,7 @@ function IssueDetailModal({
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Issue title..."
-              className="w-full text-2xl md:text-3xl font-bold bg-transparent border-none focus:outline-none placeholder:text-muted-foreground/40 mb-6"
+              className="w-full text-2xl md:text-3xl font-bold bg-transparent border-none focus:outline-hidden placeholder:text-muted-foreground/40 mb-6"
             />
 
             {/* Properties Row - Compact, inline */}
@@ -1171,7 +1165,7 @@ function IssueDetailModal({
               <select
                 value={status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring"
               >
                 {STATUSES.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
@@ -1181,7 +1175,7 @@ function IssueDetailModal({
               <select
                 value={priority}
                 onChange={(e) => handlePriorityChange(parseInt(e.target.value))}
-                className={`bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring ${priorityConfig?.color || ''}`}
+                className={`bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring ${priorityConfig?.color || ''}`}
               >
                 <option value={1}>Urgent</option>
                 <option value={2}>High</option>
@@ -1190,9 +1184,9 @@ function IssueDetailModal({
               </select>
 
               <select
-                value={assigneeId || ''}
-                onChange={(e) => handleAssigneeChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+                value={assigneeIds[0] ?? ''}
+                onChange={(e) => handleAssigneeChange(e.target.value ? [parseInt(e.target.value)] : [])}
+                className="bg-secondary/50 hover:bg-secondary border-none rounded-md px-3 py-1.5 text-sm cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-ring"
               >
                 <option value="">Unassigned</option>
                 {members.map((m: any) => (
@@ -1211,7 +1205,7 @@ function IssueDetailModal({
                 content={description}
                 onChange={handleDescriptionChange}
                 placeholder="Add a description... Just start typing. Paste images with Ctrl+V."
-                onImageUpload={handleImageUpload}
+                onFileUpload={handleFileUpload}
                 hideToolbar={true}
                 minHeight="300px"
               />

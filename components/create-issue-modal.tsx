@@ -63,7 +63,7 @@ export function CreateIssueModal({
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState(defaultStatus)
   const [priority, setPriority] = useState<number>(3)
-  const [assigneeId, setAssigneeId] = useState<number | null>(null)
+  const [assigneeIds, setAssigneeIds] = useState<number[]>([])
   const [milestoneId, setMilestoneId] = useState<number | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(projectId || null)
   const [createMore, setCreateMore] = useState(false)
@@ -123,11 +123,11 @@ export function CreateIssueModal({
   const currentProject = projects.find(p => p.id === selectedProjectId)
   const currentStatus = STATUSES.find(s => s.id === status) || STATUSES[0]
   const currentPriority = PRIORITIES.find(p => p.id === priority) || PRIORITIES[2]
-  const currentAssignee = members.find((m: any) => m.user_id === assigneeId)
+  const currentAssignees = members.filter((m: any) => assigneeIds.includes(m.user_id))
   const currentMilestone = milestones.find((m: any) => m.id === milestoneId)
 
   // Image upload handler for rich text editor
-  const handleImageUpload = useCallback(async (file: File): Promise<string> => {
+  const handleFileUpload = useCallback(async (file: File): Promise<string> => {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -159,7 +159,7 @@ export function CreateIssueModal({
           description: description || undefined,
           status,
           priority,
-          assignee_id: assigneeId || undefined,
+          assignee_ids: assigneeIds.length > 0 ? assigneeIds : undefined,
           milestone_id: milestoneId || undefined,
         }),
       })
@@ -182,6 +182,7 @@ export function CreateIssueModal({
         setStatus(defaultStatus)
         setPriority(3)
         setMilestoneId(null)
+        // Keep assigneeIds and project so "create more" stays in context.
         titleInputRef.current?.focus()
       } else {
         onSuccess?.(newIssue)
@@ -224,7 +225,7 @@ export function CreateIssueModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
 
       {/* Modal */}
@@ -265,7 +266,7 @@ export function CreateIssueModal({
                           selected={selectedProjectId === p.id}
                           onClick={() => {
                             setSelectedProjectId(p.id)
-                            setAssigneeId(null)
+                            setAssigneeIds([])
                             setMilestoneId(null)
                             setShowProjectDropdown(false)
                           }}
@@ -306,7 +307,7 @@ export function CreateIssueModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Issue title"
-              className="w-full text-xl font-semibold bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-muted-foreground/50"
+              className="w-full text-xl font-semibold bg-transparent border-none focus:outline-hidden focus:ring-0 placeholder:text-muted-foreground/50"
               autoFocus
             />
 
@@ -315,9 +316,9 @@ export function CreateIssueModal({
               <RichTextEditor
                 content={description}
                 onChange={setDescription}
-                placeholder="Add description... Paste images directly or use the toolbar for formatting."
-                onImageUpload={handleImageUpload}
-                hideToolbar={false}
+                placeholder="Add description… type @ to mention someone"
+                onFileUpload={handleFileUpload}
+                hideToolbar
                 minHeight={isExpanded ? '350px' : '200px'}
               />
             </div>
@@ -398,7 +399,7 @@ export function CreateIssueModal({
                 </AnimatePresence>
               </div>
 
-              {/* Assignee button */}
+              {/* Assignee button — multi-select */}
               <div className="relative">
                 <ControlButton
                   onClick={() => {
@@ -408,41 +409,56 @@ export function CreateIssueModal({
                   active={showAssigneeDropdown}
                   disabled={!selectedProjectId}
                 >
-                  {currentAssignee?.avatar_url ? (
-                    <Image
-                      src={currentAssignee.avatar_url}
-                      alt=""
-                      width={16}
-                      height={16}
-                      className="rounded-full"
-                    />
+                  {currentAssignees.length === 0 ? (
+                    <>
+                      <User size={14} />
+                      <span className="hidden sm:inline">Assignees</span>
+                    </>
                   ) : (
-                    <User size={14} />
+                    <>
+                      <span className="flex items-center">
+                        {currentAssignees.slice(0, 2).map((m: any, i: number) => (
+                          <span key={m.user_id} style={{ marginLeft: i > 0 ? '-4px' : 0 }}>
+                            {m.avatar_url ? (
+                              <Image src={m.avatar_url} alt="" width={16} height={16} className="rounded-full" />
+                            ) : (
+                              <div className="w-4 h-4 bg-primary/20 rounded-full flex items-center justify-center text-[8px]">
+                                {(m.name || m.email)?.charAt(0)}
+                              </div>
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="hidden sm:inline">
+                        {currentAssignees.length === 1
+                          ? (currentAssignees[0] as any).name || (currentAssignees[0] as any).email
+                          : `${currentAssignees.length} assignees`}
+                      </span>
+                    </>
                   )}
-                  <span className="hidden sm:inline">
-                    {currentAssignee?.name || 'Assignee'}
-                  </span>
                 </ControlButton>
                 <AnimatePresence>
                   {showAssigneeDropdown && (
                     <DropdownMenu onClose={() => setShowAssigneeDropdown(false)} position="top">
-                      <DropdownItem
-                        selected={!assigneeId}
-                        onClick={() => {
-                          setAssigneeId(null)
-                          setShowAssigneeDropdown(false)
-                        }}
-                      >
-                        <User size={14} className="text-muted-foreground" />
-                        Unassigned
-                      </DropdownItem>
+                      {assigneeIds.length > 0 && (
+                        <DropdownItem
+                          selected={false}
+                          onClick={() => setAssigneeIds([])}
+                        >
+                          <User size={14} className="text-muted-foreground" />
+                          Clear assignees
+                        </DropdownItem>
+                      )}
                       {members.map((m: any) => (
                         <DropdownItem
                           key={m.user_id}
-                          selected={assigneeId === m.user_id}
+                          selected={assigneeIds.includes(m.user_id)}
                           onClick={() => {
-                            setAssigneeId(m.user_id)
-                            setShowAssigneeDropdown(false)
+                            setAssigneeIds((prev) =>
+                              prev.includes(m.user_id)
+                                ? prev.filter((id) => id !== m.user_id)
+                                : [...prev, m.user_id]
+                            )
                           }}
                         >
                           {m.avatar_url ? (
@@ -459,6 +475,9 @@ export function CreateIssueModal({
                             </div>
                           )}
                           {m.name || m.email}
+                          {assigneeIds.includes(m.user_id) && (
+                            <span className="ml-auto text-primary">✓</span>
+                          )}
                         </DropdownItem>
                       ))}
                     </DropdownMenu>

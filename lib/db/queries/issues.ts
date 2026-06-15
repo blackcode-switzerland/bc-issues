@@ -1,64 +1,530 @@
-import { eq, sql } from 'drizzle-orm'
+// Issue queries — workspace-scoped, with sequence allocation, automatic
+// watcher management, and granular event recording.
+//
+// Field-level events: a PATCH that changes multiple fields produces one
+// 'updated' diff event PLUS dedicated events for each high-signal change:
+//   - assignee_ids  → 'assigned' / 'unassigned' (one event per user added/removed)
+//   - status        → 'status_changed' (and sets completed_at / cancelled_at)
+//   - priority      → 'priority_changed'
+//   - milestone_id  → 'milestone_changed'
+//   - project_id    → 'project_changed'
+// This lets the activity feed and inbox surface meaningful events without
+// dredging through diff jsonb.
+
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { issues } from '../schema'
-import type { Issue } from '../schema'
+import { issueAssignees, issueLabels, issues, labels, type Issue } from '../schema'
+import { recordEvent } from './events'
+import { softDeleteIssue } from './deletion'
+import { allocateNextIssueSeq } from './workspaces'
+import { addWatcher, removeAutoWatcher } from './watchers'
+import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
 
-const issueWithRelations = sql`
-  i.*,
-  u.name as assignee_name,
-  u.avatar_url as assignee_avatar,
-  m.name as milestone_name,
-  (SELECT COUNT(*)::int FROM comments c WHERE c.issue_id = i.id) as comment_count,
-  (SELECT COUNT(*)::int FROM attachments a WHERE a.issue_id = i.id) as attachment_count
-`
+const TERMINAL_STATUSES = new Set(ISSUE_TERMINAL_STATUSES)
+const VALID_STATUSES = new Set(ISSUE_STATUS_VALUES)
 
-export type IssueRow = Issue & {
-  assignee_name?: string | null
-  assignee_avatar?: string | null
+export interface AssigneeInfo {
+  id: number
+  name: string | null
+  email: string
+  avatar_url: string | null
+}
+
+export interface IssueListRow extends Issue {
+  assignees: AssigneeInfo[]
   milestone_name?: string | null
+  project_name?: string | null
+  project_icon?: string | null
+  project_color?: string | null
   comment_count?: number
   attachment_count?: number
-  project_name?: string | null
+  labels?: Array<{ id: number; name: string; color: string }>
 }
 
-export async function getIssue(id: number): Promise<IssueRow | null> {
-  const result = await db.execute(sql`
-    SELECT ${issueWithRelations}
-    FROM issues i
-    LEFT JOIN users u ON u.id = i.assignee_id
-    LEFT JOIN milestones m ON m.id = i.milestone_id
-    WHERE i.id = ${id}
-  `)
-  return (result.rows[0] as IssueRow | undefined) ?? null
+const issueListSelect = sql`
+  i.*,
+  COALESCE((
+    SELECT json_agg(json_build_object('id', u2.id, 'name', u2.name, 'email', u2.email, 'avatar_url', u2.avatar_url) ORDER BY u2.name)
+    FROM issue_assignees ia
+    JOIN users u2 ON u2.id = ia.user_id
+    WHERE ia.issue_id = i.id
+  ), '[]'::json) AS assignees,
+  m.name AS milestone_name,
+  p.name AS project_name,
+  p.icon AS project_icon,
+  p.color AS project_color,
+  (SELECT COUNT(*)::int FROM comments c WHERE c.issue_id = i.id) AS comment_count,
+  (SELECT COUNT(*)::int FROM attachments a WHERE a.issue_id = i.id) AS attachment_count,
+  COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM issue_labels il JOIN labels lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
+`
+
+export interface ListIssuesOptions {
+  projectId?: number | null
+  milestoneId?: number | null
+  /** Filter by assignee(s). null = unassigned, array = any of these users. */
+  assigneeIds?: number[] | null
+  status?: string
+  priority?: number
+  search?: string
+  cursor?: number | null
+  limit?: number
 }
+
+export interface IssuesPage {
+  data: IssueListRow[]
+  next_cursor: number | null
+}
+
+const DEFAULT_LIMIT = 50
+const MAX_LIMIT = 200
+
+export async function listIssuesInWorkspace(
+  workspaceId: number,
+  opts: ListIssuesOptions = {}
+): Promise<IssuesPage> {
+  const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
+
+  const projectFilter =
+    opts.projectId === null
+      ? sql`AND i.project_id IS NULL`
+      : opts.projectId !== undefined
+        ? sql`AND i.project_id = ${opts.projectId}`
+        : sql``
+  const milestoneFilter =
+    opts.milestoneId === null
+      ? sql`AND i.milestone_id IS NULL`
+      : opts.milestoneId !== undefined
+        ? sql`AND i.milestone_id = ${opts.milestoneId}`
+        : sql``
+  const assigneeFilter =
+    opts.assigneeIds === null
+      ? sql`AND NOT EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id)`
+      : opts.assigneeIds !== undefined && opts.assigneeIds.length > 0
+        ? sql`AND EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.user_id IN (${sql.join(opts.assigneeIds.map((id) => sql`${id}`), sql`, `)}))`
+        : sql``
+
+  const result = await db.execute(sql`
+    SELECT ${issueListSelect}
+    FROM issues i
+    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN projects p ON p.id = i.project_id
+    WHERE i.workspace_id = ${workspaceId}
+      AND i.deleted_at IS NULL
+      ${projectFilter}
+      ${milestoneFilter}
+      ${assigneeFilter}
+      ${opts.status ? sql`AND i.status = ${opts.status}` : sql``}
+      ${opts.priority ? sql`AND i.priority = ${opts.priority}` : sql``}
+      ${
+        opts.search
+          ? sql`AND (i.title ILIKE ${'%' + opts.search + '%'} OR i.description ILIKE ${'%' + opts.search + '%'})`
+          : sql``
+      }
+      ${opts.cursor ? sql`AND i.id < ${opts.cursor}` : sql``}
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
+    LIMIT ${limit + 1}
+  `)
+
+  const rows = result.rows as unknown as IssueListRow[]
+  const hasMore = rows.length > limit
+  const data = hasMore ? rows.slice(0, limit) : rows
+  const next_cursor = hasMore ? data[data.length - 1].id : null
+  return { data, next_cursor }
+}
+
+export async function getIssueInWorkspace(
+  workspaceId: number,
+  id: number
+): Promise<IssueListRow | null> {
+  const result = await db.execute(sql`
+    SELECT ${issueListSelect}
+    FROM issues i
+    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN projects p ON p.id = i.project_id
+    WHERE i.id = ${id} AND i.workspace_id = ${workspaceId} AND i.deleted_at IS NULL
+  `)
+  return (result.rows[0] as unknown as IssueListRow | undefined) ?? null
+}
+
+// Legacy by-id lookup — used by /api/issues/[id] shim. Just bare row; workspace
+// gating happens at the route layer.
+export async function getIssue(id: number): Promise<Issue | null> {
+  const rows = await db
+    .select()
+    .from(issues)
+    .where(and(eq(issues.id, id), isNull(issues.deleted_at)))
+    .limit(1)
+  return rows[0] ?? null
+}
+
+export interface CreateIssueInput {
+  workspaceId: number
+  title: string
+  description?: string | null
+  status?: string
+  priority?: number
+  assigneeIds?: number[]
+  milestoneId?: number | null
+  projectId?: number | null
+  startDate?: string | null
+  dueDate?: string | null
+  estimatedHours?: number | null
+  labelIds?: number[]
+  reporterId: number
+  actorUserId: number
+}
+
+export async function createIssue(input: CreateIssueInput): Promise<Issue> {
+  if (input.status && !VALID_STATUSES.has(input.status)) {
+    throw new Error('invalid_status')
+  }
+  if (input.priority !== undefined && (input.priority < 1 || input.priority > 5)) {
+    throw new Error('invalid_priority')
+  }
+
+  return await db.transaction(async (tx) => {
+    const seq = await allocateNextIssueSeq(tx, input.workspaceId)
+
+    const status = input.status ?? 'backlog'
+    const now = new Date()
+    const completed_at = status === 'done' ? now : null
+    const cancelled_at = status === 'cancelled' ? now : null
+
+    const [row] = await tx
+      .insert(issues)
+      .values({
+        workspace_id: input.workspaceId,
+        seq,
+        title: input.title,
+        description: input.description ?? null,
+        status,
+        priority: input.priority ?? 3,
+        milestone_id: input.milestoneId ?? null,
+        project_id: input.projectId ?? null,
+        reporter_id: input.reporterId,
+        start_date: input.startDate ?? null,
+        due_date: input.dueDate ?? null,
+        estimated_hours: input.estimatedHours != null ? String(input.estimatedHours) : null,
+        completed_at,
+        cancelled_at,
+      })
+      .returning()
+    if (!row) throw new Error('issue insert returned nothing')
+
+    // Insert assignees into junction table.
+    const uniqueAssigneeIds = [...new Set(input.assigneeIds ?? [])]
+    if (uniqueAssigneeIds.length > 0) {
+      await tx
+        .insert(issueAssignees)
+        .values(uniqueAssigneeIds.map((uid) => ({ issue_id: row.id, user_id: uid })))
+        .onConflictDoNothing()
+    }
+
+    // Auto-watchers: reporter + all assignees.
+    await addWatcher(tx, row.id, input.reporterId, 'reporter')
+    for (const uid of uniqueAssigneeIds) {
+      if (uid !== input.reporterId) {
+        await addWatcher(tx, row.id, uid, 'assigned')
+      }
+    }
+
+    // Attach labels chosen at creation (validated against the workspace).
+    if (input.labelIds && input.labelIds.length > 0) {
+      const valid = await tx
+        .select({ id: labels.id })
+        .from(labels)
+        .where(and(eq(labels.workspace_id, input.workspaceId), inArray(labels.id, input.labelIds)))
+      if (valid.length > 0) {
+        await tx
+          .insert(issueLabels)
+          .values(valid.map((l) => ({ issue_id: row.id, label_id: l.id })))
+          .onConflictDoNothing()
+      }
+    }
+
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      entityType: 'issue',
+      entityId: row.id,
+      action: 'created',
+      diff: {
+        after: {
+          title: row.title,
+          status: row.status,
+          priority: row.priority,
+          project_id: row.project_id,
+          milestone_id: row.milestone_id,
+          assignee_ids: uniqueAssigneeIds,
+        },
+      },
+      meta: { seq: row.seq },
+    })
+
+    for (const uid of uniqueAssigneeIds) {
+      if (uid !== input.actorUserId) {
+        await recordEvent(tx, {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'issue',
+          entityId: row.id,
+          action: 'assigned',
+          meta: { assignee_id: uid, seq: row.seq, title: row.title },
+        })
+      }
+    }
+
+    return row
+  })
+}
+
+export interface UpdateIssueInput {
+  title?: string
+  description?: string | null
+  status?: string
+  priority?: number
+  /** Provide to replace the full assignee list. Empty array = unassign all. */
+  assignee_ids?: number[] | null
+  milestone_id?: number | null
+  project_id?: number | null
+  start_date?: string | null
+  due_date?: string | null
+  estimated_hours?: number | null
+}
+
+export async function updateIssue(
+  workspaceId: number,
+  id: number,
+  patch: UpdateIssueInput,
+  actorUserId: number
+): Promise<Issue | null> {
+  if (patch.status && !VALID_STATUSES.has(patch.status)) {
+    throw new Error('invalid_status')
+  }
+  if (patch.priority !== undefined && (patch.priority < 1 || patch.priority > 5)) {
+    throw new Error('invalid_priority')
+  }
+
+  return await db.transaction(async (tx) => {
+    const beforeRows = await tx
+      .select()
+      .from(issues)
+      .where(and(eq(issues.id, id), eq(issues.workspace_id, workspaceId)))
+      .limit(1)
+    const before = beforeRows[0]
+    if (!before) return null
+
+    const updates: Record<string, unknown> = {}
+    if (patch.title !== undefined) updates.title = patch.title
+    if (patch.description !== undefined) updates.description = patch.description
+    if (patch.priority !== undefined) updates.priority = patch.priority
+    if (patch.milestone_id !== undefined) updates.milestone_id = patch.milestone_id
+    if (patch.project_id !== undefined) updates.project_id = patch.project_id
+    if (patch.start_date !== undefined) updates.start_date = patch.start_date
+    if (patch.due_date !== undefined) updates.due_date = patch.due_date
+    if (patch.estimated_hours !== undefined)
+      updates.estimated_hours = patch.estimated_hours != null ? String(patch.estimated_hours) : null
+    if (patch.status !== undefined) {
+      updates.status = patch.status
+      const now = new Date()
+      if (patch.status === 'done' && before.status !== 'done') {
+        updates.completed_at = now
+        updates.cancelled_at = null
+      } else if (patch.status === 'cancelled' && before.status !== 'cancelled') {
+        updates.cancelled_at = now
+        updates.completed_at = null
+      } else if (TERMINAL_STATUSES.has(before.status ?? '') && !TERMINAL_STATUSES.has(patch.status)) {
+        updates.completed_at = null
+        updates.cancelled_at = null
+      }
+    }
+
+    let after: Issue
+    if (Object.keys(updates).length === 0 && patch.assignee_ids === undefined) return before
+    updates.updated_at = new Date()
+
+    if (Object.keys(updates).length > 0) {
+      const [updated] = await tx
+        .update(issues)
+        .set(updates)
+        .where(and(eq(issues.id, id), eq(issues.workspace_id, workspaceId)))
+        .returning()
+      if (!updated) return null
+      after = updated
+    } else {
+      after = before
+    }
+
+    // ---------- Assignee sync ----------
+    if (patch.assignee_ids !== undefined) {
+      const newIds = new Set([...new Set(patch.assignee_ids ?? [])])
+      const currentRows = await tx
+        .select({ user_id: issueAssignees.user_id })
+        .from(issueAssignees)
+        .where(eq(issueAssignees.issue_id, id))
+      const currentIds = new Set(currentRows.map((r) => r.user_id))
+
+      const added = [...newIds].filter((uid) => !currentIds.has(uid))
+      const removed = [...currentIds].filter((uid) => !newIds.has(uid))
+
+      if (removed.length > 0) {
+        await tx
+          .delete(issueAssignees)
+          .where(and(eq(issueAssignees.issue_id, id), inArray(issueAssignees.user_id, removed)))
+      }
+      if (added.length > 0) {
+        await tx
+          .insert(issueAssignees)
+          .values(added.map((uid) => ({ issue_id: id, user_id: uid })))
+          .onConflictDoNothing()
+      }
+
+      for (const uid of removed) {
+        await removeAutoWatcher(tx, id, uid, 'assigned')
+        await recordEvent(tx, {
+          workspaceId,
+          actorUserId,
+          entityType: 'issue',
+          entityId: id,
+          action: 'unassigned',
+          meta: { assignee_id: uid, seq: after.seq, title: after.title },
+        })
+      }
+      for (const uid of added) {
+        await addWatcher(tx, id, uid, 'assigned')
+        if (uid !== actorUserId) {
+          await recordEvent(tx, {
+            workspaceId,
+            actorUserId,
+            entityType: 'issue',
+            entityId: id,
+            action: 'assigned',
+            meta: { assignee_id: uid, seq: after.seq, title: after.title },
+          })
+        }
+      }
+    }
+
+    // ---------- Field-level events ----------
+    if (patch.status !== undefined && before.status !== after.status) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'status_changed',
+        meta: { from: before.status, to: after.status, seq: after.seq, title: after.title },
+      })
+    }
+    if (patch.priority !== undefined && before.priority !== after.priority) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'priority_changed',
+        meta: { from: before.priority, to: after.priority, seq: after.seq, title: after.title },
+      })
+    }
+    if (patch.milestone_id !== undefined && before.milestone_id !== after.milestone_id) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'milestone_changed',
+        meta: { from: before.milestone_id, to: after.milestone_id, seq: after.seq, title: after.title },
+      })
+    }
+    if (patch.project_id !== undefined && before.project_id !== after.project_id) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'project_changed',
+        meta: { from: before.project_id, to: after.project_id, seq: after.seq, title: after.title },
+      })
+    }
+    if (patch.due_date !== undefined && String(before.due_date) !== String(after.due_date)) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'due_date_changed',
+        meta: {
+          from: before.due_date ? String(before.due_date).slice(0, 10) : null,
+          to: after.due_date ? String(after.due_date).slice(0, 10) : null,
+          seq: after.seq,
+          title: after.title,
+        },
+      })
+    }
+
+    const generic: Record<string, [unknown, unknown]> = {}
+    if (patch.title !== undefined && before.title !== after.title) generic.title = [before.title, after.title]
+    if (patch.description !== undefined && before.description !== after.description) generic.description = [before.description, after.description]
+    if (patch.start_date !== undefined && String(before.start_date) !== String(after.start_date)) generic.start_date = [before.start_date, after.start_date]
+    if (Object.keys(generic).length > 0) {
+      const beforeSnap: Record<string, unknown> = {}
+      const afterSnap: Record<string, unknown> = {}
+      for (const [k, [b, a]] of Object.entries(generic)) {
+        beforeSnap[k] = b
+        afterSnap[k] = a
+      }
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'issue',
+        entityId: id,
+        action: 'updated',
+        diff: { before: beforeSnap, after: afterSnap },
+        meta: { seq: after.seq, title: after.title },
+      })
+    }
+
+    return after
+  })
+}
+
+// Delete now means soft-delete (move to the recycle bin). The row is kept and
+// hidden from active views; restore/purge live in lib/db/queries/deletion.ts.
+export async function deleteIssue(
+  workspaceId: number,
+  id: number,
+  actorUserId: number
+): Promise<boolean> {
+  return softDeleteIssue(workspaceId, id, actorUserId)
+}
+
+// --- Legacy compatibility ---
 
 export async function getIssuesByProject(projectId: number) {
   const result = await db.execute(sql`
-    SELECT ${issueWithRelations}
+    SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
-    WHERE i.project_id = ${projectId}
-    ORDER BY i.priority ASC, i.updated_at DESC
+    LEFT JOIN projects p ON p.id = i.project_id
+    WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows
 }
 
 export async function getAllIssuesWithProjects() {
   const result = await db.execute(sql`
-    SELECT
-      ${issueWithRelations},
-      p.name as project_name
+    SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
-    ORDER BY i.priority ASC, i.updated_at DESC
+    WHERE i.deleted_at IS NULL
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows
 }
 
-export interface IssuePage {
+export interface IssuePageLegacy {
   data: unknown[]
   next_cursor: number | null
 }
@@ -67,26 +533,23 @@ export async function getIssuesPage(opts: {
   project_id?: number
   limit: number
   cursor?: number | null
-}): Promise<IssuePage> {
+}): Promise<IssuePageLegacy> {
   const { project_id, limit, cursor } = opts
   const filterProject = project_id !== undefined
   const filterCursor = cursor !== undefined && cursor !== null
 
   const result = await db.execute(sql`
-    SELECT
-      ${issueWithRelations},
-      p.name as project_name
+    SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE 1=1
+      AND i.deleted_at IS NULL
       ${filterProject ? sql`AND i.project_id = ${project_id}` : sql``}
       ${filterCursor ? sql`AND i.id < ${cursor}` : sql``}
-    ORDER BY i.id DESC
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
     LIMIT ${limit + 1}
   `)
-
   const rows = result.rows as Array<{ id: number }>
   const has_more = rows.length > limit
   const data = has_more ? rows.slice(0, limit) : rows
@@ -96,77 +559,14 @@ export async function getIssuesPage(opts: {
 
 export async function getIssuesByMilestone(milestoneId: number) {
   const result = await db.execute(sql`
-    SELECT
-      ${issueWithRelations},
-      p.name as project_name
+    SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN users u ON u.id = i.assignee_id
     LEFT JOIN milestones m ON m.id = i.milestone_id
     LEFT JOIN projects p ON p.id = i.project_id
-    WHERE i.milestone_id = ${milestoneId}
-    ORDER BY i.priority ASC, i.updated_at DESC
+    WHERE i.milestone_id = ${milestoneId} AND i.deleted_at IS NULL
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows
-}
-
-export async function createIssue(data: {
-  project_id: number
-  title: string
-  description?: string
-  status?: string
-  priority?: number
-  assignee_id?: number
-  milestone_id?: number
-  reporter_id?: number
-}): Promise<Issue | null> {
-  const [created] = await db
-    .insert(issues)
-    .values({
-      project_id: data.project_id,
-      title: data.title,
-      description: data.description,
-      status: data.status ?? 'backlog',
-      priority: data.priority ?? 3,
-      assignee_id: data.assignee_id,
-      milestone_id: data.milestone_id,
-      reporter_id: data.reporter_id,
-    })
-    .returning()
-  return created ?? null
-}
-
-export async function updateIssue(
-  id: number,
-  data: Partial<{
-    title: string
-    description: string | null
-    status: string
-    priority: number
-    assignee_id: number | null
-    milestone_id: number | null
-    start_date: string | null
-    due_date: string | null
-  }>
-): Promise<Issue | null> {
-  const update: Record<string, unknown> = { updated_at: new Date() }
-  for (const key of [
-    'title',
-    'description',
-    'status',
-    'priority',
-    'assignee_id',
-    'milestone_id',
-    'start_date',
-    'due_date',
-  ] as const) {
-    if (data[key] !== undefined) update[key] = data[key]
-  }
-  const [updated] = await db.update(issues).set(update).where(eq(issues.id, id)).returning()
-  return updated ?? null
-}
-
-export async function deleteIssue(id: number) {
-  await db.delete(issues).where(eq(issues.id, id))
 }
 
 export async function getKanbanView(projectId: number) {
@@ -175,13 +575,38 @@ export async function getKanbanView(projectId: number) {
     backlog: [],
     todo: [],
     in_progress: [],
-    blocked: [],
-    in_review: [],
     done: [],
+    cancelled: [],
   }
   for (const r of rows as Array<{ status: string }>) {
     if (kanban[r.status]) kanban[r.status].push(r)
     else kanban.backlog.push(r)
   }
   return kanban
+}
+
+// Persist manual ordering for a status group. Assigns positions 1..N in the
+// given order. Only updates issues that belong to this workspace and have the
+// matching status, so cross-status positions don't collide.
+export async function reorderIssues(
+  workspaceId: number,
+  status: string,
+  orderedIds: number[]
+): Promise<void> {
+  if (orderedIds.length === 0) return
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(issues)
+        .set({ position: i + 1 })
+        .where(
+          and(
+            eq(issues.workspace_id, workspaceId),
+            eq(issues.id, orderedIds[i]),
+            eq(issues.status, status),
+            isNull(issues.deleted_at)
+          )
+        )
+    }
+  })
 }

@@ -222,6 +222,9 @@ func newWhoamiCmd() *cobra.Command {
 			}
 			fmt.Printf("id:    %d\nemail: %s\nname:  %s\nrole:  %s\nvia:   %s\n",
 				me.ID, me.Email, name, me.Role, me.Via)
+			if me.IsSuperAdmin {
+				fmt.Printf("super: yes (platform-wide admin — `bk super-admin --help`)\n")
+			}
 			return nil
 		},
 	}

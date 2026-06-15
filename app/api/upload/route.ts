@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
 import { put } from '@vercel/blob'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve, sep } from 'node:path'
+import { randomBytes } from 'node:crypto'
+
+const LOCAL_UPLOAD_DIR = 'public/uploads'
+
+async function saveLocally(file: File, baseName: string): Promise<{ url: string }> {
+  const uploadsDir = resolve(process.cwd(), LOCAL_UPLOAD_DIR)
+  await mkdir(uploadsDir, { recursive: true })
+
+  const finalName = `${baseName}-${randomBytes(4).toString('hex')}`
+  const destPath = resolve(uploadsDir, finalName)
+  // Defense-in-depth against path traversal even though baseName is sanitized upstream
+  if (!destPath.startsWith(uploadsDir + sep)) {
+    throw new Error('Resolved upload path escapes uploads directory')
+  }
+
+  await writeFile(destPath, Buffer.from(await file.arrayBuffer()))
+  return { url: `/uploads/${finalName}` }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,26 +39,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024
+    // Validate file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: 'File too large', suggestion: 'Maximum file size is 10MB' },
+        { error: 'File too large', suggestion: 'Maximum file size is 50MB' },
         { status: 400 }
       )
     }
 
-    // Validate file type for images (SVG excluded due to XSS risk)
-    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-    const allowedDocTypes = ['application/pdf', 'text/plain', 'application/json', 'text/markdown']
-    const allowedTypes = [...allowedImageTypes, ...allowedDocTypes]
-
-    if (!allowedTypes.includes(file.type)) {
+    // Block SVG due to XSS risk; allow everything else
+    if (file.type === 'image/svg+xml') {
       return NextResponse.json(
-        {
-          error: 'Invalid file type',
-          suggestion: `Allowed types: ${allowedTypes.join(', ')}`
-        },
+        { error: 'SVG files are not allowed for security reasons' },
         { status: 400 }
       )
     }
@@ -48,14 +61,31 @@ export async function POST(request: NextRequest) {
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
     const filename = `${timestamp}-${sanitizedName}`
 
-    // Upload to Vercel Blob
-    const blob = await put(filename, file, {
-      access: 'public',
-      addRandomSuffix: true,
-    })
+    const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN)
+
+    let url: string
+    if (hasBlobToken) {
+      const blob = await put(filename, file, {
+        access: 'public',
+        addRandomSuffix: true,
+      })
+      url = blob.url
+    } else if (process.env.NODE_ENV !== 'production') {
+      // Local-dev fallback: store under public/uploads and serve via Next.js static
+      const local = await saveLocally(file, filename)
+      url = local.url
+    } else {
+      return NextResponse.json(
+        {
+          error: 'Blob storage not configured',
+          suggestion: 'Set BLOB_READ_WRITE_TOKEN environment variable',
+        },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
-      url: blob.url,
+      url,
       filename: file.name,
       size: file.size,
       contentType: file.type,
@@ -63,7 +93,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to upload file:', error)
 
-    // Check for missing blob token
     if (error instanceof Error && error.message.includes('BLOB_READ_WRITE_TOKEN')) {
       return NextResponse.json(
         {

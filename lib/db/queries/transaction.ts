@@ -62,7 +62,6 @@ export async function undoLastOperations(userId: number, count = 1) {
             description: (old.description as string) ?? null,
             status: (old.status as string) ?? 'backlog',
             priority: (old.priority as number) ?? 3,
-            assignee_id: (old.assignee_id as number) ?? null,
             milestone_id: (old.milestone_id as number) ?? null,
             updated_at: new Date(),
           })

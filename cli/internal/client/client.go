@@ -314,9 +314,13 @@ func (c *Client) Activity(limit, offset int) ([]ActivityFeedItem, error) {
 	return items, nil
 }
 
-func (c *Client) AnalyticsRaw() (json.RawMessage, error) {
+func (c *Client) AnalyticsRaw(q url.Values) (json.RawMessage, error) {
+	path := "/api/analytics"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
 	var raw json.RawMessage
-	if err := c.get("/api/analytics", &raw); err != nil {
+	if err := c.get(path, &raw); err != nil {
 		return nil, err
 	}
 	return raw, nil
@@ -355,8 +359,14 @@ func (c *Client) UpdateProject(id int, req UpdateProjectRequest) (*Project, erro
 	return &p, nil
 }
 
-func (c *Client) DeleteProject(id int) error {
-	return c.deleteJSON(fmt.Sprintf("/api/projects/%d", id), nil, nil)
+// DeleteProject moves a project to the recycle bin. mode is "cascade" (also bin
+// the attached issues/milestones) or "detach"/"" (keep them, unlinked).
+func (c *Client) DeleteProject(id int, mode string) error {
+	path := fmt.Sprintf("/api/projects/%d", id)
+	if mode != "" {
+		path += "?mode=" + mode
+	}
+	return c.deleteJSON(path, nil, nil)
 }
 
 func (c *Client) AddProjectMember(projectID int, req AddMemberRequest) (*ProjectMember, error) {
@@ -405,8 +415,14 @@ func (c *Client) UpdateMilestone(id int, req UpdateMilestoneRequest) (*Milestone
 	return &m, nil
 }
 
-func (c *Client) DeleteMilestone(id int) error {
-	return c.deleteJSON(fmt.Sprintf("/api/milestones/%d", id), nil, nil)
+// DeleteMilestone moves a milestone to the recycle bin. mode is "cascade" (also
+// bin the attached issues) or "detach"/"" (keep them, unlinked).
+func (c *Client) DeleteMilestone(id int, mode string) error {
+	path := fmt.Sprintf("/api/milestones/%d", id)
+	if mode != "" {
+		path += "?mode=" + mode
+	}
+	return c.deleteJSON(path, nil, nil)
 }
 
 func (c *Client) Undo(count int) (*UndoResponse, error) {

@@ -1,8 +1,6 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getUserByEmail } from '@/lib/db/queries/users'
 import type { User } from '@/lib/db/schema'
 import { verifyToken } from './tokens'
+import { getValidatedSessionUser } from './session'
 
 export interface AuthSource {
   user: User
@@ -17,9 +15,8 @@ export async function resolveAuth(req: Request): Promise<AuthSource | null> {
     return user ? { user, via: 'token' } : null
   }
 
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) return null
-  const user = await getUserByEmail(session.user.email)
+  // Validates soft-delete + password-reset invalidation in one place.
+  const user = await getValidatedSessionUser()
   return user ? { user, via: 'session' } : null
 }
 

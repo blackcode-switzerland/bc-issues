@@ -1,161 +1,119 @@
+// Legacy /api/issues — resolves the user's active workspace for listings,
+// and forwards mutations to the workspace-aware queries.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
+import { apiHandler, Errors } from '@/lib/api'
+import { getUserById } from '@/lib/db/queries/users'
 import {
   createIssue,
-  getAllIssuesWithProjects,
-  getIssuesByProject,
-  getIssuesPage,
-  isProjectMember,
-} from '@/lib/db'
+  listIssuesInWorkspace,
+} from '@/lib/db/queries/issues'
+import { getMembership, getWorkspaceForUser } from '@/lib/db/queries/workspaces'
+import { getProjectInWorkspace } from '@/lib/db/queries/projects'
 
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
 
-function parsePagination(searchParams: URLSearchParams): { limit?: number; cursor?: number | null } {
-  const rawLimit = searchParams.get('limit')
-  const rawCursor = searchParams.get('cursor')
-  const paginated = rawLimit !== null || rawCursor !== null
-  if (!paginated) return {}
-
-  let limit = DEFAULT_LIMIT
-  if (rawLimit !== null) {
-    const n = parseInt(rawLimit)
-    if (Number.isNaN(n) || n < 1) limit = DEFAULT_LIMIT
-    else limit = Math.min(n, MAX_LIMIT)
-  }
-  let cursor: number | null = null
-  if (rawCursor !== null) {
-    const n = parseInt(rawCursor)
-    cursor = Number.isNaN(n) ? null : n
-  }
-  return { limit, cursor }
+async function resolveActiveWorkspace(userId: number) {
+  const u = await getUserById(userId)
+  if (!u?.active_workspace_id) return null
+  return await getWorkspaceForUser(String(u.active_workspace_id), userId)
 }
 
-const VALID_STATUSES = [
-  'backlog',
-  'todo',
-  'in_progress',
-  'blocked',
-  'in_review',
-  'done',
-  'cancelled',
-]
+export const GET = apiHandler(async (request: NextRequest) => {
+  const user = await resolveUser(request)
+  if (!user) throw Errors.unauthorized()
 
-export async function GET(request: NextRequest) {
-  try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const ws = await resolveActiveWorkspace(user.id)
+  if (!ws) return NextResponse.json([])
 
-    const searchParams = request.nextUrl.searchParams
-    const projectId = searchParams.get('project_id')
-    const page = parsePagination(searchParams)
-
-    let pid: number | undefined
-    if (projectId) {
-      const parsed = parseInt(projectId)
-      if (Number.isNaN(parsed)) {
-        return NextResponse.json({ error: 'Invalid project_id' }, { status: 400 })
-      }
-      if (!(await isProjectMember(parsed, user.id))) {
-        return NextResponse.json(
-          { error: 'Forbidden', suggestion: 'You are not a member of this project' },
-          { status: 403 }
-        )
-      }
-      pid = parsed
-    }
-
-    if (page.limit !== undefined) {
-      const result = await getIssuesPage({
-        project_id: pid,
-        limit: page.limit,
-        cursor: page.cursor ?? null,
-      })
-      return NextResponse.json(result)
-    }
-
-    if (pid !== undefined) {
-      return NextResponse.json(await getIssuesByProject(pid))
-    }
-    return NextResponse.json(await getAllIssuesWithProjects())
-  } catch (error) {
-    console.error('Failed to fetch issues:', error)
-    return NextResponse.json({ error: 'Failed to fetch issues' }, { status: 500 })
+  const sp = request.nextUrl.searchParams
+  const projectIdRaw = sp.get('project_id')
+  let projectId: number | undefined
+  if (projectIdRaw) {
+    const n = parseInt(projectIdRaw)
+    if (Number.isNaN(n)) throw Errors.badRequest('invalid_project_id', 'project_id must be an integer')
+    projectId = n
   }
-}
 
-export async function POST(request: NextRequest) {
+  const rawLimit = sp.get('limit')
+  const rawCursor = sp.get('cursor')
+  if (rawLimit !== null || rawCursor !== null) {
+    let limit = DEFAULT_LIMIT
+    if (rawLimit !== null) {
+      const n = parseInt(rawLimit)
+      if (!Number.isNaN(n) && n >= 1) limit = Math.min(n, MAX_LIMIT)
+    }
+    let cursor: number | null = null
+    if (rawCursor !== null) {
+      const n = parseInt(rawCursor)
+      cursor = Number.isNaN(n) ? null : n
+    }
+    const result = await listIssuesInWorkspace(ws.id, { projectId, limit, cursor })
+    return NextResponse.json(result)
+  }
+
+  const data = await listIssuesInWorkspace(ws.id, { projectId, limit: MAX_LIMIT })
+  return NextResponse.json(data.data)
+})
+
+export const POST = apiHandler(async (request: NextRequest) => {
+  const user = await resolveUser(request)
+  if (!user) throw Errors.unauthorized()
+
+  const ws = await resolveActiveWorkspace(user.id)
+  if (!ws) {
+    throw Errors.conflict(
+      'no_active_workspace',
+      'Set an active workspace first via POST /api/me/active-workspace'
+    )
+  }
+  const membership = await getMembership(ws.id, user.id)
+  if (!membership) throw Errors.forbidden('You are not a member of the active workspace')
+
+  const body = await request.json()
+  const { project_id, title, description, status, priority, assignee_id, assignee_ids, milestone_id } = body
+
+  if (!title || typeof title !== 'string') {
+    throw Errors.badRequest('invalid_title', 'title is required')
+  }
+  if (title.length > 200) {
+    throw Errors.badRequest('title_too_long', 'title max 200 chars')
+  }
+
+  let projectId: number | null = null
+  if (project_id != null) {
+    if (typeof project_id !== 'number') {
+      throw Errors.badRequest('invalid_project_id', 'project_id must be an integer or null')
+    }
+    const proj = await getProjectInWorkspace(ws.id, project_id)
+    if (!proj) throw Errors.notFound('project')
+    projectId = project_id
+  }
+
   try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { project_id, title, description, status, priority, assignee_id, milestone_id } = body
-
-    if (!project_id || typeof project_id !== 'number') {
-      return NextResponse.json(
-        {
-          error: 'Invalid project_id',
-          suggestion: 'project_id is required and must be an integer',
-        },
-        { status: 400 }
-      )
-    }
-
-    if (!(await isProjectMember(project_id, user.id))) {
-      return NextResponse.json(
-        { error: 'Forbidden', suggestion: 'You are not a member of this project' },
-        { status: 403 }
-      )
-    }
-
-    if (!title || typeof title !== 'string') {
-      return NextResponse.json(
-        { error: 'Invalid title', suggestion: 'title is required' },
-        { status: 400 }
-      )
-    }
-    if (title.length > 200) {
-      return NextResponse.json(
-        {
-          error: 'Title too long',
-          suggestion: `Max 200 chars. You sent ${title.length}. Truncate or split.`,
-        },
-        { status: 400 }
-      )
-    }
-
-    if (status && !VALID_STATUSES.includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status', suggestion: `Valid: ${VALID_STATUSES.join(', ')}` },
-        { status: 400 }
-      )
-    }
-    if (priority && (priority < 1 || priority > 5)) {
-      return NextResponse.json(
-        { error: 'Invalid priority', suggestion: 'Priority must be 1-5 (1=urgent, 5=low)' },
-        { status: 400 }
-      )
-    }
-
     const issue = await createIssue({
-      project_id,
+      workspaceId: ws.id,
+      projectId,
+      milestoneId: typeof milestone_id === 'number' ? milestone_id : null,
       title,
-      description,
-      status,
-      priority,
-      assignee_id,
-      milestone_id,
-      reporter_id: user.id,
+      description: description ?? null,
+      status: status ?? undefined,
+      priority: typeof priority === 'number' ? priority : undefined,
+      assigneeIds: Array.isArray(assignee_ids)
+        ? assignee_ids.filter((v: unknown): v is number => typeof v === 'number')
+        : typeof assignee_id === 'number'
+          ? [assignee_id]
+          : [],
+      reporterId: user.id,
+      actorUserId: user.id,
     })
-
     return NextResponse.json(issue, { status: 201 })
-  } catch (error) {
-    console.error('Failed to create issue:', error)
-    return NextResponse.json({ error: 'Failed to create issue' }, { status: 500 })
+  } catch (err) {
+    const m = (err as Error)?.message
+    if (m === 'invalid_status') throw Errors.badRequest('invalid_status', 'invalid status value')
+    if (m === 'invalid_priority') throw Errors.badRequest('invalid_priority', 'priority must be 1-5')
+    throw err
   }
-}
+})

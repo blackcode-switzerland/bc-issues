@@ -1,9 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings,
   LogOut,
@@ -14,148 +16,324 @@ import {
   Target,
   BarChart3,
   Clock,
+  Inbox,
+  Users,
+  Tag,
+  Trash2,
+  Menu,
+  X,
+  ShieldCheck,
+  type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { useQuery } from '@tanstack/react-query'
+import { WorkspaceSwitcher } from './workspace-switcher'
+import { InboxBadge } from './inbox-badge'
+import { useActiveWorkspace } from './listings/use-active-workspace'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
+
+const NAV_PRIMARY = [
+  { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, trailing: true, match: (p: string) => p === '/dashboard/inbox' },
+]
+
+const NAV_WORKSPACE = [
+  { href: '/dashboard', label: 'Projects', icon: LayoutGrid, match: (p: string) => p === '/dashboard' },
+  { href: '/dashboard/milestones', label: 'Milestones', icon: Target, match: (p: string) => p === '/dashboard/milestones' || p.startsWith('/dashboard/milestones/') },
+  { href: '/dashboard/issues', label: 'Issues', icon: List, match: (p: string) => p === '/dashboard/issues' || p.startsWith('/dashboard/issues/') },
+  { href: '/dashboard/labels', label: 'Labels', icon: Tag, match: (p: string) => p === '/dashboard/labels' },
+]
+
+const NAV_MANAGE = [
+  { href: '/dashboard/members', label: 'Members', icon: Users, match: (p: string) => p.startsWith('/dashboard/members') },
+  { href: '/dashboard/activity', label: 'Activity', icon: Clock, match: (p: string) => p === '/dashboard/activity' },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, match: (p: string) => p === '/dashboard/analytics' },
+  { href: '/dashboard/trash', label: 'Trash', icon: Trash2, match: (p: string) => p === '/dashboard/trash' },
+]
+
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
   const { data: session } = useSession()
   const user = session?.user
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const { confirm } = useConfirm()
+  const { data: ws } = useActiveWorkspace()
+
+  // Close the mobile drawer on route change.
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
+
+  // Pull the live profile so the avatar/name reflect edits immediately (the
+  // session JWT is only refreshed on re-login). Shares the ['me'] cache with
+  // the profile settings page, so an upload there updates the sidebar too.
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const res = await fetch('/api/me')
+      if (!res.ok) return null
+      return res.json() as Promise<{
+        name: string | null
+        email: string
+        avatar_url: string | null
+        is_super_admin: boolean
+      }>
+    },
+  })
+
+  const { data: counts } = useQuery({
+    queryKey: ['sidebar-counts', ws?.slug],
+    enabled: !!ws,
+    queryFn: async () => {
+      const slug = ws!.slug
+      const [p, m, i, l] = await Promise.all([
+        fetch(`/api/workspaces/${slug}/projects`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
+        fetch(`/api/workspaces/${slug}/milestones`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/issues`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/labels`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
+      ])
+      return { projects: p, milestones: m, issues: i, labels: l }
+    },
+  })
+
+  const displayName = me?.name ?? user?.name ?? ''
+  const displayEmail = me?.email ?? user?.email ?? ''
+  const avatarUrl = me?.avatar_url ?? user?.image ?? null
+
+  const sidebar = (
+    <div className="flex h-full flex-col">
+      {/* Brand */}
+      <div className="flex items-center gap-2 border-b border-sidebar-border px-3.5 py-3">
+        <Image src="/logo.png" alt="blackcode" width={22} height={22} className="rounded-md" />
+        <span className="text-[15px] font-semibold tracking-tight">blackcode</span>
+      </div>
+
+      {/* Workspace switcher / top */}
+      <div className="flex items-center gap-1 px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <WorkspaceSwitcher />
+        </div>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent lg:hidden"
+          aria-label="Close menu"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-2 pb-4">
+        <div className="space-y-0.5">
+          {NAV_PRIMARY.map((item) => (
+            <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
+          ))}
+        </div>
+
+        <SectionLabel>Workspace</SectionLabel>
+        <div className="space-y-0.5">
+          {NAV_WORKSPACE.map((item) => {
+            const countMap: Record<string, number | undefined> = {
+              '/dashboard': counts?.projects,
+              '/dashboard/milestones': counts?.milestones,
+              '/dashboard/issues': counts?.issues,
+              '/dashboard/labels': counts?.labels,
+            }
+            return (
+              <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} count={countMap[item.href]} />
+            )
+          })}
+        </div>
+
+        <SectionLabel>Manage</SectionLabel>
+        <div className="space-y-0.5">
+          {NAV_MANAGE.map((item) => (
+            <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
+          ))}
+        </div>
+
+        {me?.is_super_admin && (
+          <div className="mt-3 space-y-0.5">
+            <Link
+              href="/dashboard/super-admin"
+              className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                (pathname ?? '').startsWith('/dashboard/super-admin')
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-primary/70 hover:bg-primary/10 hover:text-primary'
+              }`}
+            >
+              <ShieldCheck size={17} />
+              <span className="flex-1 truncate">Super Admin</span>
+            </Link>
+          </div>
+        )}
+      </nav>
+
+      {/* User */}
+      <div className="border-t border-sidebar-border p-2.5">
+        <div className="mb-1 flex items-center gap-2.5 px-1.5 py-1">
+          <MemberAvatar
+            name={displayName || null}
+            email={displayEmail || null}
+            avatarUrl={avatarUrl}
+            size={30}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
+            <p className="truncate text-xs leading-tight text-muted-foreground">{displayEmail}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-1">
+          <IconButton title="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </IconButton>
+          <Link
+            href="/dashboard/settings"
+            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            title="Settings"
+          >
+            <Settings size={16} />
+          </Link>
+          <button
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: 'Sign out?',
+                  description: 'You will be redirected to the login page.',
+                  confirmLabel: 'Sign out',
+                }))
+              )
+                return
+              signOut()
+            }}
+            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            title="Sign out"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-64 bg-card border-r border-border flex flex-col z-30">
-        {/* Logo */}
-        <div className="p-4 border-b border-border">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <Image
-              src="/logo.png"
-              alt="blackcode issues"
-              width={32}
-              height={32}
-              className="rounded-lg"
-            />
-            <span className="font-bold">blackcode issues</span>
-          </Link>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          <Link href="/dashboard" className="block">
-            <NavItem 
-              icon={<LayoutGrid size={18} />} 
-              label="Projects" 
-              active={pathname === '/dashboard'} 
-            />
-          </Link>
-          <Link href="/dashboard/issues" className="block">
-            <NavItem 
-              icon={<List size={18} />} 
-              label="All Issues" 
-              active={pathname === '/dashboard/issues' || pathname?.startsWith('/dashboard/issues/')} 
-            />
-          </Link>
-          <Link href="/dashboard/milestones" className="block">
-            <NavItem 
-              icon={<Target size={18} />} 
-              label="Milestones" 
-              active={pathname === '/dashboard/milestones' || pathname?.startsWith('/dashboard/milestones/')} 
-            />
-          </Link>
-          <Link href="/dashboard/analytics" className="block">
-            <NavItem 
-              icon={<BarChart3 size={18} />} 
-              label="Analytics" 
-              active={pathname === '/dashboard/analytics'} 
-            />
-          </Link>
-          <Link href="/dashboard/activity" className="block">
-            <NavItem 
-              icon={<Clock size={18} />} 
-              label="Activity" 
-              active={pathname === '/dashboard/activity'} 
-            />
-          </Link>
-        </nav>
-
-        {/* User */}
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 mb-4">
-            {user?.image && (
-              <Image
-                src={user.image}
-                alt={user.name || 'User'}
-                width={32}
-                height={32}
-                className="rounded-full"
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {user?.email}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-              title="Toggle theme"
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-            <Link
-              href="/dashboard/settings"
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-              title="Settings"
-            >
-              <Settings size={18} />
-            </Link>
-            <button
-              onClick={() => signOut()}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors text-destructive"
-              title="Sign out"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </div>
+      {/* Desktop sidebar */}
+      <aside className="fixed left-0 top-0 z-30 hidden h-full w-60 border-r border-sidebar-border bg-sidebar lg:block">
+        {sidebar}
       </aside>
 
-      {/* Main content */}
-      <main className="ml-64">
+      {/* Mobile top bar (static so page-level sticky headers can take top-0) */}
+      <header className="dashboard-mobile-header flex h-12 items-center gap-2 border-b border-border bg-background px-3 lg:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+          aria-label="Open menu"
+        >
+          <Menu size={18} />
+        </button>
+        <span className="text-sm font-semibold">blackcode</span>
+      </header>
+
+      {/* Mobile drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            className="fixed inset-0 z-40 lg:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="absolute left-0 top-0 h-full w-64 border-r border-sidebar-border bg-sidebar shadow-xl"
+            >
+              {sidebar}
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main content — CSS-based page fade (avoids React 18 concurrent-mode flash) */}
+      <main key={pathname} className="page-fade-in lg:ml-60">
         {children}
       </main>
     </div>
   )
 }
 
-function NavItem({
-  icon,
-  label,
-  active = false,
+function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <p className={`px-2.5 pb-1 pt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 ${className ?? ''}`}>
+      {children}
+    </p>
+  )
+}
+
+function IconButton({
+  children,
+  title,
+  onClick,
 }: {
-  icon: React.ReactNode
-  label: string
-  active?: boolean
+  children: React.ReactNode
+  title: string
+  onClick: () => void
 }) {
   return (
-    <div
-      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+    <button
+      onClick={onClick}
+      title={title}
+      className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+    >
+      {children}
+    </button>
+  )
+}
+
+function NavItem({
+  item,
+  active,
+  count,
+}: {
+  item: { href: string; label: string; icon: LucideIcon; trailing?: boolean }
+  active: boolean
+  count?: number
+}) {
+  const Icon = item.icon
+  return (
+    <Link
+      href={item.href}
+      className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
         active
-          ? 'bg-primary/10 text-primary'
-          : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+          ? 'bg-sidebar-accent text-foreground'
+          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
       }`}
     >
-      {icon}
-      <span className="font-medium">{label}</span>
-    </div>
+      {active && (
+        <motion.span
+          layoutId="nav-active"
+          className="absolute inset-0 rounded-md bg-sidebar-accent"
+          transition={{ type: 'spring', damping: 30, stiffness: 350 }}
+          style={{ zIndex: -1 }}
+        />
+      )}
+      <Icon size={17} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.trailing ? <InboxBadge /> : null}
+      {count != null && !item.trailing ? (
+        <span className="text-xs tabular-nums text-muted-foreground/60">{count}</span>
+      ) : null}
+    </Link>
   )
 }

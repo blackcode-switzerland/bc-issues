@@ -5,13 +5,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const rootLong = `bk is the CLI for blackcode-issues. It reads and writes the entire
-platform — projects, issues, comments, milestones, attachments,
-members — bounded by the caller's token permissions.
+const rootLong = `bk is the CLI for blackcode-issues. Every feature on the website
+is available here: projects, issues, milestones, comments, labels,
+members, tokens, inbox, analytics, and more.
 
 First run:
   bk login --server URL    # opens browser, captures token
   bk whoami                # confirm identity
+  bk workspace use <slug>  # set active workspace
 
 Output formats (every read command):
   -o table|json|yaml|yml   default: table
@@ -32,8 +33,21 @@ Conventions for agents:
   • --assignee accepts: numeric id | email | display name | "me"
   • bk undo --count N rolls back your last N writes (max 10).
   • the surface is large — run "bk <group> --help" then
-    "bk <group> <cmd> --help" to discover flags before calling.`
+    "bk <group> <cmd> --help" to discover flags before calling.
 
+Command groups:
+  workspace   list, create, edit, transfer, use
+  project     list, view, create, edit, delete, members, updates, comment(s)
+  issue       list, view, create, edit, delete, assign, watch, comment(s),
+              edit-comment, delete-comment, attach, activity
+  milestone   list, view, create, edit, delete, comment(s)
+  label       list, create, delete, attach, detach
+  member      list, remove, leave
+  invite      send, list, accept, decline, revoke, pending
+  token       list, create, delete
+  profile     view, edit
+  inbox       list, read, archive, unarchive
+  super-admin users, whitelist, errors (super admins only; platform-wide)`
 
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{
@@ -48,13 +62,22 @@ func NewRoot() *cobra.Command {
 		newLoginCmd(),
 		newLogoutCmd(),
 		newWhoamiCmd(),
+		newProfileCmd(),
+		newWorkspaceCmd(),
 		newProjectCmd(),
 		newIssueCmd(),
 		newUserCmd(),
 		newMilestoneCmd(),
+		newLabelCmd(),
+		newMemberCmd(),
+		newInviteCmd(),
+		newInboxCmd(),
+		newTokenCmd(),
 		newActivityCmd(),
 		newAnalyticsCmd(),
+		newTrashCmd(),
 		newUndoCmd(),
+		newSuperAdminCmd(),
 		newVersionCmd(),
 	)
 	return root

@@ -14,7 +14,7 @@ func newMilestoneCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "milestone",
 		Aliases: []string{"milestones"},
-		Short:   "Read milestones",
+		Short:   "Manage milestones",
 	}
 	cmd.AddCommand(
 		newMilestoneListCmd(),
@@ -22,6 +22,8 @@ func newMilestoneCmd() *cobra.Command {
 		newMilestoneCreateCmd(),
 		newMilestoneEditCmd(),
 		newMilestoneDeleteCmd(),
+		newMilestoneCommentCmd(),
+		newMilestoneCommentsCmd(),
 	)
 	return cmd
 }
@@ -199,32 +201,127 @@ func newMilestoneEditCmd() *cobra.Command {
 }
 
 func newMilestoneDeleteCmd() *cobra.Command {
-	var yes bool
+	var yes, cascade, detach bool
 	cmd := &cobra.Command{
 		Use:   "delete <id>",
-		Short: "Delete a milestone",
-		Args:  cobra.ExactArgs(1),
+		Short: "Move a milestone to the Trash",
+		Long: "Move a milestone to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
+			"Attached issues: by default they stay active and are unlinked from the\n" +
+			"milestone (--detach). Pass --cascade to move them to the Trash too so they\n" +
+			"can be restored as a group.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid id: %w", err)
 			}
-			if !Confirm(fmt.Sprintf("Delete milestone #%d?", id), yes) {
+			if cascade && detach {
+				return fmt.Errorf("--cascade and --detach are mutually exclusive")
+			}
+			mode := ""
+			if cascade {
+				mode = "cascade"
+			} else if detach {
+				mode = "detach"
+			}
+			prompt := fmt.Sprintf("Move milestone #%d to Trash?", id)
+			if cascade {
+				prompt = fmt.Sprintf("Move milestone #%d and its issues to Trash?", id)
+			}
+			if !Confirm(prompt, yes) {
 				return fmt.Errorf("aborted")
 			}
 			c, err := newClient()
 			if err != nil {
 				return err
 			}
-			if err := c.DeleteMilestone(id); err != nil {
+			if err := c.DeleteMilestone(id, mode); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "deleted milestone #%d\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "moved milestone #%d to Trash\n", id)
 			return nil
 		},
 	}
 	AddYesFlag(cmd, &yes)
+	cmd.Flags().BoolVar(&cascade, "cascade", false, "Also move attached issues to Trash")
+	cmd.Flags().BoolVar(&detach, "detach", false, "Keep attached issues active, unlinked (default)")
 	return cmd
+}
+
+func newMilestoneCommentCmd() *cobra.Command {
+	var body, bodyFile string
+	cmd := &cobra.Command{
+		Use:   "comment <milestone-id>",
+		Short: "Post a comment on a milestone",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid milestone id: %w", err)
+			}
+			content, err := ReadBody(body, bodyFile)
+			if err != nil {
+				return err
+			}
+			if content == "" {
+				return fmt.Errorf("comment body is empty")
+			}
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			cm, err := c.CreateMilestoneComment(ws, id, content)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, cm, func(w io.Writer) error {
+				fmt.Fprintf(w, "comment #%d posted on milestone #%d\n", cm.ID, id)
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringVar(&body, "body", "", "Comment text (\"-\" for stdin)")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from file")
+	return cmd
+}
+
+func newMilestoneCommentsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "comments <milestone-id>",
+		Short: "List comments on a milestone",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid milestone id: %w", err)
+			}
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			comments, err := c.ListMilestoneComments(ws, id)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, comments, renderCommentList(comments, cmd.ErrOrStderr()))
+		},
+	}
 }
 
 func milestoneTable(ms []client.Milestone, stderr io.Writer) func(io.Writer) error {

@@ -1,146 +1,143 @@
-# 🔺 Blackcode Issues - Frontend
+# 🔺 Blackcode Issues
 
-AI-native issue tracking built on the Trinity Architecture.
+AI-native issue tracking with **three surfaces over one data model**: a web
+dashboard, an HTTP API, and the `bk` command-line tool. Everything is
+workspace-scoped and built so that humans and the agents working alongside them
+can drive the same system.
 
-## Quick Start
+- **Web** — Next.js 16 App Router dashboard (`/dashboard`)
+- **API** — workspace-scoped REST under `/api/*`
+- **CLI** — `bk`, a Go binary that talks to the same API (see [`docs/cli.md`](docs/cli.md))
 
-### 1. Setup Environment Variables
+## Stack
 
-Copy `.env.local.example` (see `ENV_TEMPLATE.md`) into `.env.local`. The default
-`DATABASE_URL` points at the Docker Postgres on port 5434 (see step 2).
+| Layer | Choice |
+|-------|--------|
+| Framework | Next.js 16 (App Router, React 18, TypeScript strict) |
+| Styling | Tailwind v4 (CSS-first, no `tailwind.config`), shadcn-style tokens in `app/globals.css` |
+| Data | PostgreSQL via Drizzle ORM (`pg` Pool) |
+| Auth | NextAuth (JWT) — email/password + optional Google OAuth; `bk_live_…` API tokens for the CLI/agents |
+| Client data | TanStack Query |
+| Rich text | TipTap (bubble + floating menus, `@mentions`) |
+| Email | Resend (optional — invitations + password-reset OTP) |
+| Uploads | Vercel Blob (optional — local `public/uploads` fallback in dev) |
 
-### 2. Start local Postgres
+There is **no separate MCP/companion server in this repo** — the API itself is
+the integration surface. See [`docs/architecture-rebuild.md`](docs/architecture-rebuild.md)
+for the historical design record.
+
+## Quick start
+
+### 1. Database
+
+A `docker-compose.yml` boots Postgres 16 on **`localhost:5434`** (db
+`blackcode_issues`, user `blackcode`, password `blackcode_dev`):
 
 ```bash
 docker compose up -d
 ```
 
-This boots Postgres 16 on `localhost:5434` (db `blackcode_issues`,
-user `blackcode`, password `blackcode_dev`).
+(Any reachable Postgres works — just point `DATABASE_URL` at it.)
 
-### 3. Install & Run
+### 2. Environment
+
+Create `.env.local` (see [`ENV_TEMPLATE.md`](ENV_TEMPLATE.md) for the full list).
+The minimum to boot:
+
+```env
+DATABASE_URL=postgres://blackcode:blackcode_dev@localhost:5434/blackcode_issues
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=$(openssl rand -base64 32)
+```
+
+Google OAuth, Resend email, and Vercel Blob are all **optional** — the app runs
+without them (email falls back to the in-app inbox + copyable links; uploads go
+to the local filesystem).
+
+### 3. Install, migrate, run
 
 ```bash
 npm install
+npm run db:migrate    # apply Drizzle migrations in lib/db/migrations/
 npm run dev
 ```
 
-Visit `http://localhost:3000`
+Visit **http://localhost:3000**. Sign up with email/password, and you'll be
+prompted to create your first workspace.
 
-## Deployment to Vercel
+> The `scripts/*.sql` files are legacy one-shot dumps. The source of truth for
+> the schema is `lib/db/schema.ts`; migrations are managed by `drizzle-kit`
+> (`npm run db:generate` to author one, `npm run db:migrate` to apply).
 
-### 1. Push to GitHub
+## What's in the box
 
-The frontend code should be in the `blackcode-issues` repo:
+- **Workspaces** — multi-tenant; every row is `workspace_id`-scoped. Owner +
+  member roles. Issue IDs are a per-workspace sequence.
+- **Projects** — status, priority, lead, members, labels, start/target dates,
+  icon, and a **status-update feed** (health: on-track / at-risk / off-track).
+- **Issues** — workspace sequence IDs, priority, status, assignee, labels,
+  milestone, due dates, watchers, rich-text description, comments with
+  `@mentions`, and attachments. Standalone issues (no project) are allowed.
+- **Milestones** — workspace- or project-scoped, with their own issues and
+  comments.
+- **Labels** — defined at the workspace level, applied to issues and projects.
+- **Activity & inbox** — every mutation writes to an append-only event spine
+  (`events`), which fans out into a per-user `inbox` and the activity feed.
+- **Analytics** — workspace / project / milestone / member views, with a
+  print-to-PDF page.
+- **Undo** — a transaction log backs `bk undo` and the `/api/undo` endpoint.
+- **Reliability** — server-side error tracking with a public `/status` page.
 
-```bash
-# Copy these files to Drew-source/blackcode-issues
-git clone https://github.com/Drew-source/blackcode-issues
-cp -r * /path/to/blackcode-issues/
-cd /path/to/blackcode-issues
-git add .
-git commit -m "Add Blackcode Issues frontend"
-git push
-```
+## API at a glance
 
-### 2. Set Environment Variables in Vercel
-
-In your Vercel Dashboard:
-
-1. Go to Project Settings → Environment Variables
-2. Add:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `NEXTAUTH_SECRET`
-   - `NEXTAUTH_URL` = `https://blackcode-issues.vercel.app`
-
-3. Vercel Postgres will auto-inject `POSTGRES_*` variables
-
-### 3. Run Database Migration
-
-In Vercel Dashboard:
-1. Go to Storage → Postgres
-2. Click "Query"
-3. Paste contents of `scripts/migrate.sql`
-4. Run
-
-### 4. Deploy
-
-Vercel will auto-deploy on push to main.
-
-## Architecture
+Workspace-scoped routes are canonical:
 
 ```
-┌─────────────────────────────────────────────┐
-│              FRONTEND                        │
-├─────────────────────────────────────────────┤
-│  Next.js 14 (App Router)                    │
-│  ├── Google OAuth via NextAuth              │
-│  ├── TanStack Query for data fetching       │
-│  ├── Framer Motion for animations           │
-│  ├── @hello-pangea/dnd for drag & drop      │
-│  └── Tailwind CSS for styling               │
-├─────────────────────────────────────────────┤
-│  API Routes                                  │
-│  ├── /api/auth/[...nextauth] - Auth         │
-│  ├── /api/projects - CRUD projects          │
-│  ├── /api/issues - CRUD issues              │
-│  └── /api/undo - Rollback operations        │
-├─────────────────────────────────────────────┤
-│  Vercel Postgres                            │
-│  └── Full schema in scripts/migrate.sql     │
-└─────────────────────────────────────────────┘
+/api/workspaces/{ws}/projects            GET, POST
+/api/workspaces/{ws}/projects/{id}       GET, PATCH, DELETE
+/api/workspaces/{ws}/projects/{id}/updates       GET, POST    # status updates
+/api/workspaces/{ws}/issues              GET, POST
+/api/workspaces/{ws}/issues/{id}         GET, PATCH, DELETE
+/api/workspaces/{ws}/milestones …        GET, POST, PATCH, DELETE
+/api/workspaces/{ws}/labels …            GET, POST, DELETE
+/api/workspaces/{ws}/members …           GET, DELETE
+/api/workspaces/{ws}/invitations …       GET, POST, DELETE
+/api/workspaces/{ws}/activity            GET
+/api/workspaces/{ws}/analytics           GET
 ```
 
-## Features
+Personal/auth routes live under `/api/me/*`, `/api/auth/*`, `/api/tokens/*`,
+`/api/cli/authorize`, `/api/upload`, `/api/undo`, and `/api/status`. A set of
+legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/milestones`,
+`/api/users`, `/api/activity`) remain for the CLI. Full detail in
+[`docs/backend.md`](docs/backend.md).
 
-- ✅ **Google OAuth** - Secure team authentication
-- ✅ **Kanban Board** - Drag-and-drop issue management
-- ✅ **Dark Mode** - Beautiful dark theme by default
-- ✅ **Rollback** - Undo operations with transaction logging
-- ✅ **Fast API** - 2-15ms response times
-- ✅ **Integer IDs** - No more UUID chaos
+`{ws}` accepts either a workspace **slug** or numeric **id**.
 
-## API Reference
+## Authentication
 
-### Projects
+- **Browser** — NextAuth session cookie. Email/password (bcrypt) by default;
+  Google OAuth if `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set.
+- **API tokens** — `Authorization: Bearer bk_live_…`, minted in
+  Settings → Tokens or via the `bk login` browser flow. Stored as a SHA-256
+  hash; shown once.
+- **Password reset** — OTP emailed via Resend; resetting a password invalidates
+  existing browser sessions (API tokens are unaffected).
 
-```
-GET    /api/projects           List all projects
-POST   /api/projects           Create project
-GET    /api/projects/:id       Get project
-PATCH  /api/projects/:id       Update project
-```
+## Documentation
 
-### Issues
+| Doc | What it covers |
+|-----|----------------|
+| [`docs/backend.md`](docs/backend.md) | Schema, auth, API surface, query layer, operations |
+| [`docs/frontend.md`](docs/frontend.md) | Routes, theme system, shared components, data fetching |
+| [`docs/cli.md`](docs/cli.md) | The `bk` CLI — full command reference |
+| [`docs/cli-sync.md`](docs/cli-sync.md) | Keeping the CLI in sync with API changes |
+| [`docs/marketing.md`](docs/marketing.md) | Positioning, feature catalog, voice |
+| `docs/architecture-rebuild.md`, `HANDOVER.md`, `docs/specs/*` | Historical design/planning records (point-in-time) |
 
-```
-GET    /api/issues             List issues (with filters)
-POST   /api/issues             Create issue
-GET    /api/issues/:id         Get issue
-PATCH  /api/issues/:id         Update issue
-DELETE /api/issues/:id         Delete issue
-```
+## Deployment
 
-### Undo
-
-```
-GET    /api/undo               Get transaction history
-POST   /api/undo               Undo last N operations
-```
-
-## The Trinity
-
-```
-PROMPT ←────────→ TOOLS ←────────→ SOFTWARE
-  │                 │                  │
-  │                 │                  │
-  ▼                 ▼                  ▼
-Micro-verbose    MCP Server      This Frontend
-specification    (companion)     + Vercel Postgres
-```
-
----
-
-Made with 💝 by Andrea David & AI
-
+Designed for Vercel. Set `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, and
+any optional integrations (`GOOGLE_*`, `RESEND_*`, `BLOB_READ_WRITE_TOKEN`) as
+environment variables, then run `npm run db:migrate` against the production
+database. Vercel auto-deploys on push.

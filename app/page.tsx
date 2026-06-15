@@ -1,15 +1,9 @@
-import { getServerSession } from 'next-auth'
-import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
 import { LandingPage } from '@/components/landing-page'
 
-export default async function Home() {
-  const session = await getServerSession(authOptions)
-
-  if (session) {
-    redirect('/dashboard')
-  }
-
+/**
+ * Public landing page. Visible to everyone, including authenticated users —
+ * they can still click "Sign in" / "Get started" to head into /dashboard.
+ */
+export default function Home() {
   return <LandingPage />
 }
-

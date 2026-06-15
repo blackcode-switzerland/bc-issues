@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveAuth } from '@/lib/auth/resolve'
+import { isSuperAdmin } from '@/lib/auth/whitelist'
 
 export async function GET(request: NextRequest) {
   const auth = await resolveAuth(request)
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     email: user.email,
     name: user.name,
     avatar_url: user.avatar_url,
-    role: user.role,
     via,
+    is_super_admin: isSuperAdmin(user.email),
   })
 }

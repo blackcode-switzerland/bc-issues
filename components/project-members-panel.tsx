@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { toast } from 'sonner'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   Users,
   UserPlus,
@@ -44,13 +45,14 @@ interface ProjectMembersPanelProps {
 const ROLE_CONFIG = {
   owner: { label: 'Owner', color: 'text-amber-500', bg: 'bg-amber-500/10', icon: Crown },
   admin: { label: 'Admin', color: 'text-purple-500', bg: 'bg-purple-500/10', icon: Shield },
-  member: { label: 'Member', color: 'text-blue-500', bg: 'bg-blue-500/10', icon: User2 },
+  member: { label: 'Member', color: 'text-indigo-400', bg: 'bg-indigo-500/10', icon: User2 },
   viewer: { label: 'Viewer', color: 'text-gray-500', bg: 'bg-gray-500/10', icon: User2 },
 } as const
 
 export function ProjectMembersPanel({ projectId, currentUserId }: ProjectMembersPanelProps) {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
 
   // Fetch project members
   const { data: members = [], isLoading } = useQuery({
@@ -89,16 +91,15 @@ export function ProjectMembersPanel({ projectId, currentUserId }: ProjectMembers
     },
   })
 
-  const handleRemoveMember = (member: Member) => {
+  const handleRemoveMember = async (member: Member) => {
     // Can't remove yourself
     if (member.user_id === currentUserId) {
       toast.error("You can't remove yourself from the project")
       return
     }
 
-    if (confirm(`Remove ${member.name || member.email} from this project?`)) {
-      removeMember.mutate(member.user_id)
-    }
+    if (!(await confirm({ title: `Remove ${member.name || member.email} from this project?`, destructive: true, confirmLabel: 'Remove' }))) return
+    removeMember.mutate(member.user_id)
   }
 
   return (
@@ -309,7 +310,7 @@ function InviteMemberModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
       />
 
       {/* Modal */}
@@ -352,7 +353,7 @@ function InviteMemberModal({
                 placeholder="Search users by name or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full pl-9 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                 autoFocus
               />
             </div>
