@@ -99,16 +99,22 @@ DATABASE_URL="your-neon-url" npm run db:migrate
 
 ## ✅ Step 8 — Distribute the CLI via GitHub Releases (DONE)
 
-The CLI is a Go binary — not an npm package. The Makefile handles cross-compilation:
+CLI is published to npm as `@blackcode_sa/bc-issues` and installed globally:
 
 ```bash
-cd cli
-make dist   # builds for mac/linux/windows → dist/ + SHA256SUMS
+npm install -g @blackcode_sa/bc-issues
+bk login --server https://bc-issues.vercel.app
 ```
 
-Then create a GitHub Release on your repo and upload the `dist/` files. Users download the binary for their platform and place it on their `$PATH`.
+For future CLI releases use the release script — it handles everything automatically:
 
-If you later want `npm install -g bk` to work, that requires a separate npm wrapper package — not needed for the first release.
+```bash
+./devops/release.sh cli patch   # bug fix
+./devops/release.sh cli minor   # new feature
+./devops/release.sh cli major   # breaking change
+```
+
+See `docs/devops.md` for the full release workflow.
 
 ---
 
@@ -147,5 +153,5 @@ After adding any env var, redeploy: `vercel --prod`
 
 ### CLI
 
-- [ ] **Future releases** — when releasing a new CLI version: bump version in `cli/npm/package.json` + update `VERSION` in `cli/npm/install.js`, tag git (`git tag vX.Y.Z`), run `make dist`, create GitHub release (`gh release create`), publish npm (`npm publish --access public --otp=<code`).
+- [ ] **Future releases** — use `./devops/release.sh cli patch|minor|major`. See `docs/devops.md`.
 - [ ] **`bk version`** shows `dev` for local builds — only shows the real version when built via `make dist` with a git tag.
