@@ -373,7 +373,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               <div className="mt-1 shrink-0">
                 <IconPicker
                   icon={data.icon}
-                  color={data.color ?? '#5e6ad2'}
+                  color={data.color ?? '#007bd3'}
                   name={data.name}
                   onChange={(v) => patch.mutate({ icon: v.icon, color: v.color })}
                 />
@@ -593,7 +593,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                         >
                           <span
                             className="size-2 shrink-0 rotate-45 rounded-[2px]"
-                            style={{ backgroundColor: data.color ?? '#5e6ad2' }}
+                            style={{ backgroundColor: data.color ?? '#007bd3' }}
                           />
                           <span className="flex-1 truncate">{m.name}</span>
                           {m.due_date ? (

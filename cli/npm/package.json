@@ -1,0 +1,23 @@
+{
+  "name": "@blackcode_sa/bc-issues",
+  "version": "1.0.0",
+  "description": "Blackcode Issues CLI — manage your bc-issues workspace from the terminal",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blackcode-switzerland/bc-issues"
+  },
+  "bin": {
+    "bk": "./bin/bk"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin/",
+    "install.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

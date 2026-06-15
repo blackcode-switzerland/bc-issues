@@ -14,7 +14,7 @@ export const ISSUE_STATUSES: Option[] = [
   { value: 'backlog', label: 'Backlog', color: '#71717a' },
   { value: 'todo', label: 'Todo', color: '#a1a1aa' },
   { value: 'in_progress', label: 'In progress', color: '#f2c94c' },
-  { value: 'done', label: 'Done', color: '#5e6ad2' },
+  { value: 'done', label: 'Done', color: '#007bd3' },
   { value: 'cancelled', label: 'Cancelled', color: '#71717a' },
 ]
 
@@ -55,7 +55,7 @@ export const PROJECT_STATUSES: Option[] = [
   { value: 'backlog', label: 'Backlog', color: '#71717a' },
   { value: 'planned', label: 'Planned', color: '#a1a1aa' },
   { value: 'in_progress', label: 'In progress', color: '#f2c94c' },
-  { value: 'completed', label: 'Completed', color: '#5e6ad2' },
+  { value: 'completed', label: 'Completed', color: '#007bd3' },
   { value: 'cancelled', label: 'Cancelled', color: '#71717a' },
 ]
 export const PROJECT_STATUS_VALUES = PROJECT_STATUSES.map((s) => s.value)

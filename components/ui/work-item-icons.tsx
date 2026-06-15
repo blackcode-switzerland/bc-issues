@@ -17,8 +17,8 @@ const STATUS_COLORS: Record<string, string> = {
   todo: '#8a8f98',
   planned: '#8a8f98',
   in_progress: '#f2c94c',
-  done: '#5e6ad2',
-  completed: '#5e6ad2',
+  done: '#007bd3',
+  completed: '#007bd3',
   cancelled: '#8a8f98',
 }
 
@@ -283,7 +283,7 @@ export function HealthIcon({
 export function ProgressRing({
   pct,
   size = 14,
-  color = '#5e6ad2',
+  color = '#007bd3',
   className,
 }: {
   pct: number

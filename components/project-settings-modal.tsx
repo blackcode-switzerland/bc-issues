@@ -73,7 +73,7 @@ export function ProjectSettingsModal({
   const [description, setDescription] = useState(project.description || '')
   const [priority, setPriority] = useState(project.priority || 'P2')
   const [visibility, setVisibility] = useState(project.visibility || 'team')
-  const [color, setColor] = useState(project.color || '#5E6AD2')
+  const [color, setColor] = useState(project.color || '#007bd3')
   const [ownerId, setOwnerId] = useState<number | null>(project.owner_id || null)
   const [startDate, setStartDate] = useState(project.start_date || '')
   const [endDate, setEndDate] = useState(project.end_date || '')
