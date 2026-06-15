@@ -656,7 +656,7 @@ function MenuButton({ onClick, isActive, disabled, children, title }: MenuButton
       title={title}
       aria-label={title}
       aria-pressed={isActive}
-      className={`rounded p-1 transition-colors hover:bg-secondary ${
+      className={`rounded p-1.5 transition-colors hover:bg-secondary ${
         isActive ? 'bg-secondary text-foreground' : 'text-muted-foreground'
       } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
     >
@@ -671,106 +671,106 @@ function SelectionMenu({ editor, onSetLink }: { editor: Editor; onSetLink: () =>
   return (
     <BubbleMenu
       editor={editor}
-      tippyOptions={{ duration: 120, placement: 'top' }}
+      tippyOptions={{ duration: 120, placement: 'top', maxWidth: 'none' }}
       shouldShow={({ editor: ed, from, to }) => from !== to && !ed.isActive('image')}
     >
-      <div className="flex items-center gap-0 rounded-lg border border-border bg-popover px-0.5 py-0.5 shadow-xl">
+      <div className="flex items-center gap-0 rounded-lg border border-border bg-popover px-1 py-1 shadow-xl">
         <MenuButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive('bold')}
           title="Bold"
         >
-          <Bold size={13} />
+          <Bold size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           isActive={editor.isActive('italic')}
           title="Italic"
         >
-          <Italic size={13} />
+          <Italic size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleStrike().run()}
           isActive={editor.isActive('strike')}
           title="Strikethrough"
         >
-          <Strikethrough size={13} />
+          <Strikethrough size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleUnderline().run()}
           isActive={editor.isActive('underline')}
           title="Underline"
         >
-          <UnderlineIcon size={13} />
+          <UnderlineIcon size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleCode().run()}
           isActive={editor.isActive('code')}
           title="Inline code"
         >
-          <Code size={13} />
+          <Code size={15} />
         </MenuButton>
-        <div className="mx-1 h-3.5 w-px bg-border" />
+        <div className="mx-1 h-4 w-px bg-border" />
         <MenuButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
           isActive={editor.isActive('heading', { level: 1 })}
           title="Heading 1"
         >
-          <Heading1 size={13} />
+          <Heading1 size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           isActive={editor.isActive('heading', { level: 2 })}
           title="Heading 2"
         >
-          <Heading2 size={13} />
+          <Heading2 size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
           isActive={editor.isActive('heading', { level: 3 })}
           title="Heading 3"
         >
-          <Heading3 size={13} />
+          <Heading3 size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
           isActive={editor.isActive('heading', { level: 4 })}
           title="Heading 4"
         >
-          <Heading4 size={13} />
+          <Heading4 size={15} />
         </MenuButton>
-        <div className="mx-1 h-3.5 w-px bg-border" />
+        <div className="mx-1 h-4 w-px bg-border" />
         <MenuButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           isActive={editor.isActive('bulletList')}
           title="Bullet list"
         >
-          <List size={13} />
+          <List size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           isActive={editor.isActive('orderedList')}
           title="Numbered list"
         >
-          <ListOrdered size={13} />
+          <ListOrdered size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleTaskList().run()}
           isActive={editor.isActive('taskList')}
           title="Checklist"
         >
-          <ListChecks size={13} />
+          <ListChecks size={15} />
         </MenuButton>
         <MenuButton
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           isActive={editor.isActive('blockquote')}
           title="Quote"
         >
-          <Quote size={13} />
+          <Quote size={15} />
         </MenuButton>
-        <div className="mx-1 h-3.5 w-px bg-border" />
+        <div className="mx-1 h-4 w-px bg-border" />
         <MenuButton onClick={onSetLink} isActive={editor.isActive('link')} title="Add link">
-          <LinkIcon size={13} />
+          <LinkIcon size={15} />
         </MenuButton>
       </div>
     </BubbleMenu>
@@ -803,7 +803,7 @@ interface RichTextEditorProps {
 export function RichTextEditor({
   content,
   onChange,
-  placeholder = 'Write something… or type / for commands',
+  placeholder = 'Add description… type / to format, @ to mention',
   editable = true,
   onFileUpload,
   hideToolbar = false,

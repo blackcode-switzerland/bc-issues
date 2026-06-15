@@ -1204,7 +1204,7 @@ function IssueDetailModal({
               <RichTextEditor
                 content={description}
                 onChange={handleDescriptionChange}
-                placeholder="Add a description... Just start typing. Paste images with Ctrl+V."
+                placeholder="Add description… type / to format"
                 onFileUpload={handleFileUpload}
                 hideToolbar={true}
                 minHeight="300px"

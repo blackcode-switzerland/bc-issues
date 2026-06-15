@@ -465,7 +465,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               content={data.description ?? ''}
               onChange={onDescriptionChange}
               onBlur={flushDescription}
-              placeholder="Add description… type @ to mention someone"
+              placeholder="Add description… type / to format, @ to mention"
               variant="seamless"
               mentionItems={mentionItems}
               minHeight="120px"

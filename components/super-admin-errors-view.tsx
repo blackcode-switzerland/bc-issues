@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Circle,
   RotateCcw,
-  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react'
@@ -209,12 +208,6 @@ export function SuperAdminErrorsView() {
 
   return (
     <div>
-      {/* Platform-wide note */}
-      <div className="flex items-center gap-2.5 border-b border-border bg-primary/5 px-6 py-2.5 text-sm text-primary/80">
-        <ShieldCheck size={14} className="shrink-0" />
-        Every error captured across the platform — server, client, and background jobs.
-      </div>
-
       {/* Stat cards */}
       {stats && (
         <div className="grid grid-cols-3 divide-x divide-border border-b border-border">

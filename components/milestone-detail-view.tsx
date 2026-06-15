@@ -310,7 +310,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                     descModifiedRef.current = false
                   }
                 }}
-                placeholder="Add description… type @ to mention someone"
+                placeholder="Add description… type / to format, @ to mention"
                 variant="seamless"
                 minHeight="100px"
                 mentionItems={mentionItems}

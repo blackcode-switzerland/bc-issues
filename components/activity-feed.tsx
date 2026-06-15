@@ -389,7 +389,7 @@ export function ActivityFeed({
           key={`root-${composerKey}`}
           content=""
           onChange={setDraft}
-          placeholder="Leave a comment… type @ to mention someone"
+          placeholder="Leave a comment… type / to format, @ to mention"
           variant="bordered"
           hideToolbar
           mentionItems={mentionItems}
@@ -823,7 +823,7 @@ function ReplyComposer({
           key={`reply-${parentCommentId}-${editorKey}`}
           content=""
           onChange={setDraft}
-          placeholder="Write a reply… type @ to mention"
+          placeholder="Write a reply… type / to format, @ to mention"
           variant="bordered"
           hideToolbar
           mentionItems={mentionItems}

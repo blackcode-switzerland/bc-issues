@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { Search, Building2, ShieldCheck } from 'lucide-react'
+import { Search, Building2 } from 'lucide-react'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface PlatformUser {
@@ -14,6 +14,7 @@ interface PlatformUser {
   created_at: string | null
   last_login: string | null
   workspace_count: number
+  is_super_admin: boolean
 }
 
 export function SuperAdminUsersView() {
@@ -40,12 +41,6 @@ export function SuperAdminUsersView() {
 
   return (
     <div>
-      {/* Platform-wide note */}
-      <div className="flex items-center gap-2.5 border-b border-border bg-primary/5 px-6 py-2.5 text-sm text-primary/80">
-        <ShieldCheck size={14} className="shrink-0" />
-        Changes here affect the entire platform, across all workspaces.
-      </div>
-
       {/* Search bar */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">
         <div className="relative flex-1 max-w-sm">
@@ -84,7 +79,14 @@ export function SuperAdminUsersView() {
               >
                 <MemberAvatar name={u.name} email={u.email} avatarUrl={u.avatar_url} size={32} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{u.name ?? u.email}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-medium">{u.name ?? u.email}</p>
+                    {u.is_super_admin && (
+                      <span className="shrink-0 rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        Super Admin
+                      </span>
+                    )}
+                  </div>
                   <p className="truncate text-xs text-muted-foreground sm:hidden">{u.email}</p>
                 </div>
                 <span className="hidden w-56 shrink-0 truncate text-sm text-muted-foreground md:block">
