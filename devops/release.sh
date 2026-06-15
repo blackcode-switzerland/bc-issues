@@ -80,14 +80,21 @@ usage() {
 ${BOLD}bc-issues release script${RESET}
 
 ${BOLD}USAGE${RESET}
-  $(basename "$0") web              Deploy web app to Vercel production
-  $(basename "$0") cli <version>    Release CLI to GitHub Releases + npm
-  $(basename "$0") --help           Show this help
+  $(basename "$0") web                Deploy web app to Vercel production
+  $(basename "$0") cli <bump>         Release CLI to GitHub Releases + npm
+  $(basename "$0") --help             Show this help
+
+${BOLD}BUMP OPTIONS${RESET}
+  patch      Bug fix          v1.0.0 → v1.0.1
+  minor      New feature      v1.0.0 → v1.1.0
+  major      Breaking change  v1.0.0 → v2.0.0
+  vX.Y.Z     Explicit version (e.g. v1.2.3)
 
 ${BOLD}EXAMPLES${RESET}
   $(basename "$0") web
-  $(basename "$0") cli v1.1.0
-  $(basename "$0") cli v2.0.0
+  $(basename "$0") cli patch
+  $(basename "$0") cli minor
+  $(basename "$0") cli major
 
 ${BOLD}PREREQUISITES${RESET}
   web   vercel CLI logged in (vercel login)
@@ -119,19 +126,51 @@ release_web() {
   info  "Vercel dashboard: https://vercel.com/balathanusans-projects-f76f8a7b/bc-issues"
 }
 
+# ── bump version ───────────────────────────────────────────────────────────
+resolve_version() {
+  local bump="${1:-}"
+
+  if [[ -z "$bump" ]]; then
+    die "Version bump required. Usage: $(basename "$0") cli <patch|minor|major|vX.Y.Z>"
+  fi
+
+  # explicit version tag passed (e.g. v1.2.3)
+  if [[ "$bump" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "$bump"
+    return
+  fi
+
+  if [[ "$bump" != "patch" && "$bump" != "minor" && "$bump" != "major" ]]; then
+    die "Invalid argument '${bump}'. Use: patch, minor, major, or vX.Y.Z"
+  fi
+
+  # find latest semver tag
+  local latest
+  latest=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+
+  if [[ -z "$latest" ]]; then
+    die "No existing version tags found. Create the first release manually: $(basename "$0") cli v1.0.0"
+  fi
+
+  local major minor patch
+  major=$(echo "$latest" | cut -d. -f1 | tr -d 'v')
+  minor=$(echo "$latest" | cut -d. -f2)
+  patch=$(echo "$latest" | cut -d. -f3)
+
+  case "$bump" in
+    major) major=$((major + 1)); minor=0; patch=0 ;;
+    minor) minor=$((minor + 1)); patch=0 ;;
+    patch) patch=$((patch + 1)) ;;
+  esac
+
+  echo "v${major}.${minor}.${patch}"
+}
+
 # ── cli release ────────────────────────────────────────────────────────────
 release_cli() {
-  local version="${1:-}"
-
-  if [[ -z "$version" ]]; then
-    die "Version required. Usage: $(basename "$0") cli v1.2.3"
-  fi
-
-  # validate semver format
-  if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    die "Invalid version format '${version}'. Expected format: v1.2.3"
-  fi
-
+  local bump="${1:-}"
+  local version
+  version=$(resolve_version "$bump")
   local version_number="${version#v}"   # strip leading 'v' for package.json
   local repo="blackcode-switzerland/bc-issues"
   local npm_package="@blackcode_sa/bc-issues"
@@ -142,7 +181,7 @@ release_cli() {
   local cli_dir="${root_dir}/cli"
   local npm_dir="${cli_dir}/npm"
 
-  header "📦  CLI release ${version} → GitHub + npm"
+  header "📦  CLI release ${version} (${bump}) → GitHub + npm"
 
   # preflight
   info "Running preflight checks..."

@@ -24,17 +24,23 @@ Runs preflight checks (Vercel auth, git branch, clean working tree), then deploy
 ### Release CLI to GitHub + npm
 
 ```bash
-./devops/release.sh cli v1.2.3
+./devops/release.sh cli patch    # bug fix:        v1.0.0 → v1.0.1
+./devops/release.sh cli minor    # new feature:    v1.0.0 → v1.1.0
+./devops/release.sh cli major    # breaking change: v1.0.0 → v2.0.0
+./devops/release.sh cli v1.2.3  # explicit version (optional)
 ```
+
+The version is auto-resolved from the latest git tag — you never need to type a version number manually.
 
 Full CLI release pipeline:
 1. Preflight — checks gh auth, npm auth, git branch, clean tree, no duplicate tag/version
-2. Bumps version in `cli/npm/package.json` and `cli/npm/install.js`
-3. Commits + pushes the version bump to `main`
-4. Creates and pushes the git tag
-5. Builds binaries for all 6 platforms via `make dist`
-6. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
-7. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP)
+2. Resolves the next version from the latest git tag + bump type
+3. Bumps version in `cli/npm/package.json` and `cli/npm/install.js`
+4. Commits + pushes the version bump to `main`
+5. Creates and pushes the git tag
+6. Builds binaries for all 6 platforms via `make dist`
+7. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
+8. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP)
 
 **Have your authenticator app ready** — npm requires a 2FA code during publish.
 
@@ -63,7 +69,7 @@ git push origin main
 ./devops/release.sh web
 
 # 3. If the CLI was also changed, cut a new CLI release
-./devops/release.sh cli v1.1.1
+./devops/release.sh cli patch
 ```
 
 ---
