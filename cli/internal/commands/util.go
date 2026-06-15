@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mustneerar7/blackcode-issues/cli/internal/client"
-	"github.com/mustneerar7/blackcode-issues/cli/internal/config"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mustneerar7/blackcode-issues/cli/internal/client"
-	"github.com/mustneerar7/blackcode-issues/cli/internal/commands"
-	"github.com/mustneerar7/blackcode-issues/cli/internal/config"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 )
 
 // Exit codes are stable so LLMs / scripts can branch on outcome:
