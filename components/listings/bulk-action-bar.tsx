@@ -85,12 +85,17 @@ export function BulkActionBar({ count, onClear, actions, onDelete, deleteLabel }
 function BulkActionMenu({ action }: { action: BulkAction }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState<{ left: number; bottom: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (!triggerRef.current?.contains(target) && !dropdownRef.current?.contains(target)) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
@@ -99,6 +104,11 @@ function BulkActionMenu({ action }: { action: BulkAction }) {
   useEffect(() => {
     if (open) {
       setQuery('')
+      // Calculate position from trigger button
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect()
+        setCoords({ left: rect.left, bottom: window.innerHeight - rect.top + 8 })
+      }
       if (action.searchable || action.options.length > 6) {
         requestAnimationFrame(() => inputRef.current?.focus())
       }
@@ -111,8 +121,9 @@ function BulkActionMenu({ action }: { action: BulkAction }) {
     : action.options
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
@@ -121,58 +132,63 @@ function BulkActionMenu({ action }: { action: BulkAction }) {
         {action.label}
         <ChevronDown size={13} className="text-muted-foreground/60" />
       </button>
-      <AnimatePresence>
-        {open ? (
-          <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            className="absolute bottom-full left-0 z-50 mb-2 w-52 overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
-          >
-            {showSearch ? (
-              <div className="relative border-b border-border">
-                <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  ref={inputRef}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search…"
-                  className="w-full bg-transparent py-2 pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground"
-                />
-              </div>
-            ) : null}
-            <ul className="max-h-60 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <li className="px-3 py-2 text-xs text-muted-foreground">No results</li>
-              ) : (
-                filtered.map((opt) => (
-                  <li key={String(opt.value)}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        action.onSelect(opt.value)
-                        setOpen(false)
-                      }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-secondary hover:text-foreground"
-                    >
-                      {opt.icon ? (
-                        <span className="flex size-4 shrink-0 items-center justify-center">{opt.icon}</span>
-                      ) : opt.color ? (
-                        <span
-                          className="inline-block size-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: opt.color }}
-                        />
-                      ) : null}
-                      <span className="flex-1 truncate">{opt.label}</span>
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {open && coords
+        ? createPortal(
+            <AnimatePresence>
+              <motion.div
+                ref={dropdownRef}
+                initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                style={{ left: coords.left, bottom: coords.bottom }}
+                className="fixed z-[200] w-52 overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+              >
+                {showSearch ? (
+                  <div className="relative border-b border-border">
+                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      ref={inputRef}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search…"
+                      className="w-full bg-transparent py-2 pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground"
+                    />
+                  </div>
+                ) : null}
+                <ul className="max-h-60 overflow-y-auto py-1">
+                  {filtered.length === 0 ? (
+                    <li className="px-3 py-2 text-xs text-muted-foreground">No results</li>
+                  ) : (
+                    filtered.map((opt) => (
+                      <li key={String(opt.value)}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            action.onSelect(opt.value)
+                            setOpen(false)
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-secondary hover:text-foreground"
+                        >
+                          {opt.icon ? (
+                            <span className="flex size-4 shrink-0 items-center justify-center">{opt.icon}</span>
+                          ) : opt.color ? (
+                            <span
+                              className="inline-block size-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: opt.color }}
+                            />
+                          ) : null}
+                          <span className="flex-1 truncate">{opt.label}</span>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </motion.div>
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
     </div>
   )
 }
