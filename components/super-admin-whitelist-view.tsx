@@ -69,6 +69,12 @@ export function SuperAdminWhitelistView() {
 
   return (
     <div>
+      {/* Platform-wide note */}
+      <div className="flex items-center gap-2.5 border-b border-border bg-primary/5 px-6 py-2.5 text-sm text-primary/80">
+        <ShieldCheck size={14} className="shrink-0" />
+        Changes here affect the entire platform, across all workspaces.
+      </div>
+
       {/* Info banner */}
       <div className="flex items-start gap-3 border-b border-border bg-secondary/30 px-6 py-4">
         <ShieldCheck size={16} className="mt-0.5 shrink-0 text-muted-foreground" />

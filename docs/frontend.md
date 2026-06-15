@@ -49,7 +49,9 @@ app/
 components/
   ui/                 primitives (buttons, modal, confirm dialog, date picker,
                       work-item icons, property select, member avatar, …)
-  listings/           list/kanban/timeline views + filter bar + active-ws hook
+  listings/           list/kanban/timeline views + filter bar + bulk actions + active-ws hook
+  analytics/          SVG chart kit (charts.tsx) — KpiCard, AreaLineChart, DonutChart,
+                      HorizontalBars, ColumnChart, BurndownChart; no external chart lib
   marketing/          public site chrome
   *.tsx               feature components (detail views, create modals, settings)
 lib/                  shared client/server helpers (work-items.ts lives here)
@@ -126,6 +128,7 @@ colors in components — use the token utilities.
 |------|---------|
 | `/` | Landing page (`LandingPage`) |
 | `/login` | Sign-in / sign-up tabs + password-reset flow |
+| `/blocked` | Shown when a non-whitelisted email tries Google OAuth; professional "not on the list" page |
 | `/privacy`, `/terms` | Legal pages (marketing layout) |
 | `/status` | Public health page (DB / blob / app probes + recent errors) |
 | `/status/errors/[id]` | Error detail (owner-gated) |
@@ -146,10 +149,19 @@ colors in components — use the token utilities.
 | `/dashboard/inbox` | Notifications |
 | `/dashboard/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
 | `/dashboard/settings/{profile,account,tokens,workspace}` | Settings (own sub-layout + nav) |
+| `/dashboard/super-admin/users` | All platform users across every workspace (super admin only) |
+| `/dashboard/super-admin/whitelist` | Manage allowed email addresses and domains |
+| `/dashboard/super-admin/errors` | Platform error log — triage, resolve, filter by status/level/date |
+| `/dashboard/workspaces` | Workspace manager (`WorkspacesView`) — list all workspaces + create |
+| `/dashboard/workspaces/[slug]` | Per-workspace settings (`WorkspaceSettingsView`) |
 
 `app/dashboard/layout.tsx` validates the session, shows
 `OnboardingCreateWorkspace` when the user has no workspace, and renders the
 sidebar shell (`DashboardLayout`). It is `force-dynamic`.
+
+`app/dashboard/super-admin/layout.tsx` additionally guards its sub-tree with a
+server-side `isSuperAdmin(user.email)` check and redirects non-admins to
+`/dashboard`.
 
 ## App shell & providers
 
@@ -178,19 +190,38 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
 ### `components/` — feature components (grouped)
 
 - **Shell:** `dashboard-layout`, `workspace-switcher`, `inbox-badge`,
-  `settings-nav`.
-- **Listings (`components/listings/`):** `projects-listing`, `issues-listing`,
-  `milestones-listing`, each with `*-kanban` / `*-timeline` siblings, plus
-  `filter-bar` (`MultiSelect`, `SearchInput`, `ViewToggle`), `labels-pill`, and
-  the `use-active-workspace` hook.
+  `settings-nav`, `super-admin-nav`.
+- **Listings (`components/listings/`):** `projects-listing` (+ `projects-kanban`,
+  `projects-timeline`), `issues-listing` (+ `issues-kanban`, `issues-timeline`),
+  `milestones-listing` (list-only — no kanban/timeline view), plus `filter-bar`
+  (`MultiSelect`, `SearchInput`, `ViewToggle`), `labels-pill`,
+  `bulk-action-bar` (multi-select toolbar for batch status/delete), and the
+  `use-active-workspace` hook.
 - **Detail views:** `project-detail-view`, `issue-detail-view`,
   `milestone-detail-view`.
-- **Create / edit modals:** `project-create-modal`, `issue-create-modal`,
-  `milestone-create-modal`, `project-settings-modal`, `workspace-create-modal`.
+- **Create / edit modals:** `issue-create-modal` (kanban flow only — all other
+  "new" buttons POST immediately then redirect to the detail page with `?new=1`),
+  `project-settings-modal`, `workspace-create-modal`.
 - **Management views:** `members-view`, `project-members-panel`, `labels-view`,
-  `activity-view`, `analytics-view`, `print-analytics-view`, `inbox-view`.
+  `activity-view` (full workspace feed page), `activity-feed` (reusable feed
+  component used by the activity page and issue/project detail sidebars),
+  `comment-section` (reusable polymorphic comment thread), `analytics-view`
+  (see Analytics dashboard below), `print-analytics-view`, `inbox-view`,
+  `trash-view` (recycle bin —
+  `/dashboard/trash`), `workspaces-view` (workspace manager at
+  `/dashboard/workspaces`).
 - **Settings:** `profile-settings-view`, `account-settings-view`,
   `api-tokens-settings`, `workspace-settings-view`.
+- **Super admin:** `super-admin-users-view` (platform-wide member table with workspace count),
+  `super-admin-whitelist-view` (add/remove allowed domains and emails),
+  `super-admin-errors-view` (error log with status/level/date filters, stat cards,
+  expandable rows showing stack + sanitized context, and a resolve/reopen toggle;
+  `useInfiniteQuery` cursor pagination).
+  All visible only when `me.is_super_admin === true` (from `/api/me`).
+- **Client error capture:** `app/error.tsx` (React error boundary, render errors) and
+  `global-error-listener` (mounted in `Providers`; catches `window.onerror` +
+  unhandled promise rejections, de-duped and capped per session) both POST to
+  `/api/errors/client`, feeding the super-admin Errors tab.
 - **Auth & marketing:** `landing-page`, `cli-authorize-form`,
   `password-reset-flow`, `onboarding-create-workspace`,
   `accept-invitation-button`, `components/marketing/*`.
@@ -202,6 +233,32 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
 > `issue-list-view.tsx`, `gantt-view.tsx`, `create-issue-modal.tsx` — plus
 > `timeline-view.tsx`. These predate the listings rewrite. (`dashboard.tsx` is
 > **not** dead — it's a shared utility module imported widely.)
+
+## Analytics dashboard (`analytics-view.tsx`)
+
+The `/dashboard/analytics` page is a multi-tab BI dashboard over the analytics
+payload (see `docs/backend.md` → *Analytics contract*). All chart primitives
+live in `components/analytics/charts.tsx` (hand-rolled themed SVG — **no chart
+library**; use `var(--primary)` and the `SERIES` palette, never hardcode the
+old `#5e6ad2`).
+
+- **Controls (sticky):** a scope segmented control (Workspace / Project /
+  Milestone / Member) with a searchable target picker; a granularity toggle
+  (Daily / Weekly); date-range presets (7D/30D/90D/12M/All) + a Custom range
+  built from two `DatePicker` chips; and a faceted **filter bar** (Status /
+  Priority / Assignee / Label multi-selects via `FilterMenu`, with an active
+  count badge and "Clear all"). Every control feeds the React Query key, so the
+  whole dashboard refetches as one.
+- **Tabs:** Overview (KPI grid + velocity + status/priority/project), Throughput
+  (velocity, cumulative flow, cycle-time + aging histograms), Workload (assignee
+  table, labels), Activity (event series + by-action + top members), and —
+  milestone scope only — Burndown.
+- **Export:** "PDF" opens `/dashboard/analytics/print` (the same payload,
+  forwarding **all** params incl. filters + interval + theme, then auto-prints).
+  "CSV" downloads a client-built summary + velocity table.
+- Chart kit: `KpiCard` (value + `TrendBadge` vs. previous period + sparkline),
+  `AreaLineChart` (multi-series, gradient fill, hover crosshair + tooltip),
+  `DonutChart`, `HorizontalBars`, `ColumnChart` (histograms), `BurndownChart`.
 
 ## Shared design primitives
 
@@ -233,10 +290,18 @@ kanban, detail pages, modals) rendering work-item state identically.
   `confirm(opts) → Promise<boolean>` and `prompt(opts) → Promise<string|null>`
   (supports `requireMatch` for type-to-confirm deletes). Use this instead of
   `window.confirm/alert/prompt`.
+- **`components/ui/delete-with-children-dialog.tsx`** — `DeleteDialogProvider` +
+  `useDeleteDialog()`: `confirmDelete(opts) → Promise<{mode:'cascade'|'detach'}|null>`.
+  Used when deleting a project or milestone — fetches live child counts from
+  `?preview=1` and shows a cascade-vs-detach toggle before confirming. Wrap the
+  app in `<DeleteDialogProvider>` (done in `app/providers.tsx`).
+- **`components/ui/restore-conflict-dialog.tsx`** — controlled dialog rendered by
+  `trash-view.tsx` when a dry-run restore returns conflicts. Shows per-item
+  `restore_parent` / `standalone` choice; calls `onConfirm(resolutions)`.
 - **`components/ui/modal.tsx`** — `Modal` overlay (backdrop blur, animate-in,
   ESC/overlay close, scroll lock).
 - **`components/rich-text-editor.tsx`** — TipTap.
-  - `RichTextEditor({ content, onChange, placeholder?, editable?, onImageUpload?,
+  - `RichTextEditor({ content, onChange, placeholder?, editable?, onFileUpload?,
     hideToolbar?, minHeight?, variant: 'bordered' | 'seamless', mentionItems?,
     onBlur? })`. `seamless` is for always-editable detail-page bodies; `bordered`
     for modals/composers. A **bubble menu** appears on selection and a **floating
@@ -265,6 +330,7 @@ Recurring query-key conventions:
 | `['project-updates', id, slug]`, `['project-members', id]`, `['*-comments', id]` | detail sub-resources |
 | `['inbox', unreadOnly]`, `['inbox-unread']` | inbox + badge |
 | `['ws-activity', …]`, `['ws-analytics', …]` | activity / analytics |
+| `['ws-trash', slug, type]` | trash (recycle bin) listing |
 | `['workspace-members', slug]`, `['workspace-invitations', slug]` | settings |
 
 After a mutation, invalidate both the detail key and the relevant listing key

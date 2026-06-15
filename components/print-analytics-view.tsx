@@ -1,72 +1,48 @@
 'use client'
 
+// Printable analytics report. Fetches the same payload as the on-screen
+// dashboard (forwarding every filter via `query`) and lays it out for paper:
+// a header, KPI grid, velocity + cumulative charts, distributions, cycle-time
+// and aging histograms, and an optional milestone burndown. Auto-prints once
+// the data resolves.
+
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import {
-  BurndownChart,
+  AreaLineChart,
+  ColumnChart,
+  DonutChart,
   HorizontalBars,
+  SERIES,
   SummaryCard,
-  VelocityChart,
 } from './analytics/charts'
+import {
+  issuePriorityColor,
+  issuePriorityLabel,
+  issueStatusColor,
+  issueStatusLabel,
+} from '@/lib/work-items'
+import type { AnalyticsPayload } from '@/lib/db/queries/analytics'
 
-interface AnalyticsPayload {
-  scope: { type: string; id: number | null; label: string }
-  period: { from: string | null; to: string | null }
-  summary: {
-    total_issues: number
-    open: number
-    in_progress: number
-    done: number
-    cancelled: number
-    created_in_period: number
-    completed_in_period: number
-    avg_cycle_time_hours: number | null
-    total_members: number
-    active_members_in_period: number
+function formatHours(h: number | null | undefined): string {
+  if (h == null) return '—'
+  if (h < 1) return '<1h'
+  if (h < 48) return `${Math.round(h)}h`
+  return `${(h / 24).toFixed(1)}d`
+}
+
+function fmtX(b: string): string {
+  try {
+    return format(parseISO(b), 'MMM d')
+  } catch {
+    return b.slice(5)
   }
-  by_status: Array<{ status: string; count: number }>
-  by_priority: Array<{ priority: number; count: number }>
-  by_assignee: Array<{ user_id: number; name: string | null; email: string; open: number; done: number }>
-  by_label: Array<{ label_id: number; name: string; color: string; count: number }>
-  velocity_series: Array<{ bucket: string; created: number; completed: number }>
-  burndown_series?: Array<{ date: string; remaining: number }>
-  top_active_members: Array<{ user_id: number; name: string | null; events: number }>
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  backlog: '#71717a',
-  todo: '#a1a1aa',
-  in_progress: '#f2c94c',
-  blocked: '#ef4444',
-  in_review: '#a855f7',
-  done: '#5e6ad2',
-  cancelled: '#71717a',
-}
-
-const PRIORITY_LABELS: Record<number, string> = {
-  1: 'Urgent',
-  2: 'High',
-  3: 'Medium',
-  4: 'Low',
-  5: 'None',
-}
-
-export function PrintAnalyticsView({
-  view,
-  id,
-  from,
-  to,
-  theme,
-}: {
-  view: 'workspace' | 'project' | 'milestone' | 'member'
-  id: number | null
-  from: string | null
-  to: string | null
-  theme: string | null
-}) {
+export function PrintAnalyticsView({ query, theme }: { query: string; theme: string | null }) {
   const { setTheme } = useTheme()
   const { data: ws } = useActiveWorkspace()
 
@@ -75,19 +51,14 @@ export function PrintAnalyticsView({
       setTheme(theme)
       document.documentElement.classList.toggle('dark', theme === 'dark')
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const analytics = useQuery({
-    queryKey: ['print-analytics', ws?.slug, view, id, from, to],
+    queryKey: ['print-analytics', ws?.slug, query],
     enabled: !!ws,
     queryFn: async (): Promise<AnalyticsPayload> => {
-      const params = new URLSearchParams()
-      params.set('view', view)
-      if (id !== null) params.set('id', String(id))
-      if (from) params.set('from', from)
-      if (to) params.set('to', to)
-      const res = await fetch(`/api/workspaces/${ws!.slug}/analytics?${params}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/analytics?${query}`)
       if (!res.ok) throw new Error('failed')
       return res.json()
     },
@@ -104,22 +75,32 @@ export function PrintAnalyticsView({
     return <div className="p-8 text-sm">Loading…</div>
   }
   const data = analytics.data
+  const s = data.summary
+
+  const cumulative = (() => {
+    let c = 0
+    let d = 0
+    return data.velocity_series.map((p) => {
+      c += p.created
+      d += p.completed
+      return { bucket: p.bucket, cum_created: c, cum_completed: d }
+    })
+  })()
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-10 text-foreground">
       <style>{`
-        html {
-          print-color-adjust: exact;
-          -webkit-print-color-adjust: exact;
-        }
+        html { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         @media print {
           .no-print { display: none !important; }
           aside { display: none !important; }
           .dashboard-mobile-header { display: none !important; }
           main { margin-left: 0 !important; }
+          .print-section { break-inside: avoid; }
         }
         @page { margin: 1cm; }
       `}</style>
+
       <div className="no-print mb-6 flex items-center justify-between rounded-md border border-border bg-card/30 px-4 py-2">
         <span className="text-xs text-muted-foreground">
           Print preview — your browser will open the print dialog automatically.
@@ -144,70 +125,113 @@ export function PrintAnalyticsView({
         </p>
       </header>
 
-      <section className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="Total" value={data.summary.total_issues} />
-        <SummaryCard label="Open" value={data.summary.open + data.summary.in_progress} />
-        <SummaryCard label="Created" value={data.summary.created_in_period} />
-        <SummaryCard
-          label="Avg cycle"
-          value={data.summary.avg_cycle_time_hours != null ? `${data.summary.avg_cycle_time_hours}h` : '—'}
+      <section className="print-section mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SummaryCard label="Total issues" value={s.total_issues} hint={`${s.open + s.in_progress} open`} />
+        <SummaryCard label="Completed" value={s.completed_in_period} hint="in period" />
+        <SummaryCard label="Created" value={s.created_in_period} hint="in period" />
+        <SummaryCard label="Completion" value={`${s.completion_rate}%`} />
+        <SummaryCard label="Avg cycle" value={formatHours(s.avg_cycle_time_hours)} hint={`median ${formatHours(s.median_cycle_time_hours)}`} />
+        <SummaryCard label="In progress" value={s.in_progress} />
+        <SummaryCard label="Overdue" value={s.overdue} hint={`${s.unassigned} unassigned`} />
+        <SummaryCard label="Active members" value={s.active_members_in_period} hint={`of ${s.total_members}`} />
+      </section>
+
+      <section className="print-section mb-8 rounded-lg border border-border p-4">
+        <h2 className="mb-3 text-sm font-medium">Velocity</h2>
+        <AreaLineChart
+          data={data.velocity_series}
+          series={[
+            { key: 'created', label: 'Created', color: SERIES.created, fill: true },
+            { key: 'completed', label: 'Completed', color: SERIES.completed, fill: true },
+          ]}
+          formatX={fmtX}
         />
       </section>
 
-      <section className="mb-8 rounded-lg border border-border p-4">
-        <h2 className="mb-3 text-sm font-medium">Velocity</h2>
-        <VelocityChart data={data.velocity_series} />
+      <section className="print-section mb-8 rounded-lg border border-border p-4">
+        <h2 className="mb-3 text-sm font-medium">Cumulative flow</h2>
+        <AreaLineChart
+          data={cumulative}
+          series={[
+            { key: 'cum_created', label: 'Cumulative created', color: SERIES.created, fill: true },
+            { key: 'cum_completed', label: 'Cumulative completed', color: SERIES.completed, fill: true },
+          ]}
+          formatX={fmtX}
+        />
       </section>
 
-      <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <section className="print-section mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-border p-4">
-          <h2 className="mb-3 text-sm font-medium">By status</h2>
-          <HorizontalBars
-            items={data.by_status.map((s) => ({
-              label: s.status.replace('_', ' '),
-              value: s.count,
-              color: STATUS_COLORS[s.status],
+          <h2 className="mb-3 text-sm font-medium">Status distribution</h2>
+          <DonutChart
+            data={data.by_status.map((st) => ({
+              label: issueStatusLabel(st.status),
+              value: st.count,
+              color: issueStatusColor(st.status),
             }))}
+            centerLabel="Issues"
+            size={148}
           />
         </div>
         <div className="rounded-lg border border-border p-4">
           <h2 className="mb-3 text-sm font-medium">By priority</h2>
           <HorizontalBars
+            showPercent
             items={data.by_priority.map((p) => ({
-              label: PRIORITY_LABELS[p.priority] ?? String(p.priority),
+              label: issuePriorityLabel(p.priority),
               value: p.count,
+              color: issuePriorityColor(p.priority),
             }))}
           />
         </div>
-        {data.by_assignee.length > 0 ? (
-          <div className="rounded-lg border border-border p-4">
-            <h2 className="mb-3 text-sm font-medium">By assignee</h2>
-            <HorizontalBars
-              items={data.by_assignee.map((a) => ({
-                label: `${a.name ?? a.email} (${a.done} done)`,
-                value: a.open,
-              }))}
-            />
-          </div>
-        ) : null}
-        {data.by_label.length > 0 ? (
-          <div className="rounded-lg border border-border p-4">
-            <h2 className="mb-3 text-sm font-medium">By label</h2>
-            <HorizontalBars
-              items={data.by_label.map((l) => ({
-                label: l.name,
-                value: l.count,
-                color: l.color,
-              }))}
-            />
-          </div>
-        ) : null}
+        <div className="rounded-lg border border-border p-4">
+          <h2 className="mb-3 text-sm font-medium">Cycle time</h2>
+          <ColumnChart data={data.cycle_time_buckets} color={SERIES.completed} height={150} />
+        </div>
+        <div className="rounded-lg border border-border p-4">
+          <h2 className="mb-3 text-sm font-medium">Aging of open work</h2>
+          <ColumnChart data={data.aging_buckets} color="#f59e0b" height={150} />
+        </div>
       </section>
 
+      {data.by_assignee.length > 0 ? (
+        <section className="print-section mb-8 rounded-lg border border-border p-4">
+          <h2 className="mb-3 text-sm font-medium">Workload by assignee</h2>
+          <HorizontalBars
+            items={data.by_assignee.map((a) => ({
+              label: a.name ?? a.email,
+              value: a.open,
+              sub: `${a.done} done`,
+            }))}
+          />
+        </section>
+      ) : null}
+
+      {data.by_project.length > 0 ? (
+        <section className="print-section mb-8 rounded-lg border border-border p-4">
+          <h2 className="mb-3 text-sm font-medium">By project</h2>
+          <HorizontalBars
+            items={data.by_project.map((p) => ({
+              label: p.name,
+              value: p.total,
+              color: p.color ?? 'var(--primary)',
+              sub: `${p.done} done`,
+            }))}
+          />
+        </section>
+      ) : null}
+
       {data.burndown_series && data.burndown_series.length > 0 ? (
-        <section className="mb-8 rounded-lg border border-border p-4">
+        <section className="print-section mb-8 rounded-lg border border-border p-4">
           <h2 className="mb-3 text-sm font-medium">Burndown</h2>
-          <BurndownChart data={data.burndown_series} />
+          <AreaLineChart
+            data={data.burndown_series.map((d) => ({ bucket: d.date, remaining: d.remaining, ideal: d.ideal }))}
+            series={[
+              { key: 'remaining', label: 'Remaining', color: 'var(--primary)', fill: true },
+              { key: 'ideal', label: 'Ideal', color: SERIES.ideal },
+            ]}
+            formatX={fmtX}
+          />
         </section>
       ) : null}
 

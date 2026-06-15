@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { Search, Building2 } from 'lucide-react'
+import { Search, Building2, ShieldCheck } from 'lucide-react'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface PlatformUser {
@@ -40,6 +40,12 @@ export function SuperAdminUsersView() {
 
   return (
     <div>
+      {/* Platform-wide note */}
+      <div className="flex items-center gap-2.5 border-b border-border bg-primary/5 px-6 py-2.5 text-sm text-primary/80">
+        <ShieldCheck size={14} className="shrink-0" />
+        Changes here affect the entire platform, across all workspaces.
+      </div>
+
       {/* Search bar */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">
         <div className="relative flex-1 max-w-sm">

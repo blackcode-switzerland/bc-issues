@@ -23,7 +23,6 @@ import {
   Menu,
   X,
   ShieldCheck,
-  ListChecks,
   type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -56,10 +55,6 @@ const NAV_MANAGE = [
   { href: '/dashboard/trash', label: 'Trash', icon: Trash2, match: (p: string) => p === '/dashboard/trash' },
 ]
 
-const NAV_SUPER_ADMIN = [
-  { href: '/dashboard/super-admin/users', label: 'All Members', icon: Users, match: (p: string) => p === '/dashboard/super-admin/users' },
-  { href: '/dashboard/super-admin/whitelist', label: 'Access Whitelist', icon: ListChecks, match: (p: string) => p === '/dashboard/super-admin/whitelist' },
-]
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme()
@@ -164,14 +159,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         {me?.is_super_admin && (
-          <>
-            <SectionLabel className="text-violet-500/80">Super Admin</SectionLabel>
-            <div className="space-y-0.5">
-              {NAV_SUPER_ADMIN.map((item) => (
-                <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
-              ))}
-            </div>
-          </>
+          <div className="mt-3 space-y-0.5">
+            <Link
+              href="/dashboard/super-admin"
+              className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                (pathname ?? '').startsWith('/dashboard/super-admin')
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-primary/70 hover:bg-primary/10 hover:text-primary'
+              }`}
+            >
+              <ShieldCheck size={17} />
+              <span className="flex-1 truncate">Super Admin</span>
+            </Link>
+          </div>
         )}
       </nav>
 

@@ -6,6 +6,7 @@ import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { ConfirmProvider } from '@/components/ui/confirm-dialog'
 import { DeleteDialogProvider } from '@/components/ui/delete-with-children-dialog'
+import { GlobalErrorListener } from '@/components/global-error-listener'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -25,7 +26,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <ConfirmProvider>
-            <DeleteDialogProvider>{children}</DeleteDialogProvider>
+            <DeleteDialogProvider>
+              <GlobalErrorListener />
+              {children}
+            </DeleteDialogProvider>
           </ConfirmProvider>
         </ThemeProvider>
       </QueryClientProvider>

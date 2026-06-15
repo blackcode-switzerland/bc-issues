@@ -109,7 +109,7 @@ checking in order:
     `GOOGLE_CLIENT_SECRET` are set.
 - **On first sign-in** the `signIn`/`jwt` callbacks upsert the user, ensure a
   default workspace, and materialize any pending email invitations.
-- The JWT carries `id` and `pwStamp` (a snapshot of `password_changed_at`).
+- The JWT carries `id`, `pwStamp` (a snapshot of `password_changed_at`), and `isSuperAdmin` (derived from the `SUPER_ADMINS` env var at sign-in time).
 
 **Session invalidation on password change:** `getValidatedSessionUser()`
 re-checks that the user still exists, is not soft-deleted, and that the token's
@@ -153,9 +153,14 @@ membership** in one step. If the workspace doesn't exist *or* the user isn't a
 member it throws `notFound` (404, not 403 — so we don't leak existence).
 `requireOwner(ctx)` throws `forbidden` unless `ctx.role === 'owner'`.
 
-> There is **no global admin/role concept.** The `users.role` column was dropped
-> in migration `0012`. All authority is workspace membership + the
-> `workspace_members.role` (`owner` | `member`).
+> **Super admin** is env-based, not DB-based. Set `SUPER_ADMINS=email1,email2` in
+> the environment. Super admins bypass the access whitelist and get a "Super Admin"
+> section in the sidebar with platform-wide views. Guard API routes with
+> `requireSuperAdminUser(req)` from `lib/api/super-admin-guard.ts`.
+>
+> All workspace-level authority is workspace membership +
+> `workspace_members.role` (`owner` | `member`). The old `users.role` column
+> was dropped in migration `0012`.
 
 ## Database schema
 
@@ -173,6 +178,7 @@ for exact column types, indexes, and check constraints.
 | `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at` |
 | `api_tokens` | `token_hash` (unique), `token_prefix`, `scopes` (default `['full']`), `expires_at`, `last_used_at` |
 | `password_reset_otps` | `email`, `otp_hash`, `expires_at`, `consumed_at`, `attempts` |
+| `email_whitelist` | Platform access control (migration `0023`). `type` ∈ `email` \| `domain`; `value` is the address or domain; `added_by` FK to users. Active only when `SUPER_ADMINS` env var is set. |
 
 ### Work items
 
@@ -196,7 +202,7 @@ for exact column types, indexes, and check constraints.
 | `events` | **append-only spine** (`bigserial`). `entity_type`, `entity_id`, `action`, `diff`, `meta`, `actor_user_id`/`actor_token_id`, `idempotency_key`. Indexed by workspace × (occurred_at / entity / actor / action) |
 | `inbox_messages` | per-user projection of events (`bigserial`). `type`, denormalized `payload` (JSON), `read_at`, `archived_at`. `event_id`/`workspace_id` nullable for synthetic rows |
 | `transaction_log` | legacy undo log: `operation_type`, `table_name`, `record_id`, `old_data`/`new_data`, `rolled_back` |
-| `error_events` | server error log: `level`, `code`, `message`, `stack`, `route`, `method`, `status_code`, sanitized `context` |
+| `error_events` | platform error log: `level`, `code`, `message`, `stack`, `route`, `method`, `status_code`, sanitized `context`, plus triage state `resolved` / `resolved_at` / `resolved_by`. Written by `apiHandler` (server 5xx), `/api/errors/client` (client boundary) and `lib/email` (job failures); triaged from the super-admin Errors tab |
 
 Status/priority **values** (the labels and colors the UI uses) are canonical in
 `lib/work-items.ts`, not the schema:
@@ -225,6 +231,34 @@ This single spine is read by:
 - **Activity feed** (`activity.ts`, `/api/workspaces/{ws}/activity`),
 - **Inbox** (`inbox.ts`, `/api/me/inbox`),
 - **Analytics** (`analytics.ts`).
+
+### Analytics contract (`analytics.ts`)
+
+`computeAnalytics(input)` returns one `AnalyticsPayload` for the requested
+**view** (`workspace` | `project` | `milestone` | `member`) + optional target
+`id` + date window + faceted filters. Everything is workspace-scoped (no
+cross-workspace leakage) and computed live (no materialized views) — fine up to
+~100k events/workspace.
+
+Query params on `GET /api/workspaces/{ws}/analytics`:
+
+- `view`, `id` — scope. `id` required for non-workspace views.
+- `from`, `to` — ISO timestamps. Omitted ⇒ all-time snapshot, with series/
+  throughput defaulting to the last 30 days.
+- `interval` — `day` (default) | `week`; controls time-series bucket width.
+- `status`, `priority`, `label`, `assignee` — **faceted filters**, repeatable
+  and/or CSV (`?status=todo&status=done` or `?status=todo,done`). Appended as
+  `AND` clauses to every issue query so all charts stay mutually consistent.
+  `priority` is 1–5; `label`/`assignee` are ids.
+
+Payload sections: `summary` (snapshot counts + overdue/unassigned/completion
+rate/avg+median cycle time/open estimate), `trends` (created/completed/cycle
+time/active members vs. the previous equal-length window — `null` for all-time),
+distributions (`by_status`, `by_priority`, `by_assignee` incl. per-assignee avg
+cycle, `by_label`, `by_project` for workspace/member views), time series
+(`velocity_series`, `activity_series`), histograms (`cycle_time_buckets`,
+`aging_buckets`), `activity_by_action`, `top_active_members`, and — milestone
+view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
 
 ## API reference
 
@@ -259,36 +293,62 @@ GET    /api/workspaces/{ws}/projects            list projects
 POST   /api/workspaces/{ws}/projects            create project
 GET    /api/workspaces/{ws}/projects/{id}       project detail (+ members, labels)
 PATCH  /api/workspaces/{ws}/projects/{id}       update (also member_ids/label_ids)
-DELETE /api/workspaces/{ws}/projects/{id}       delete
+GET    /api/workspaces/{ws}/projects/{id}?preview=1   child counts for delete dialog
+DELETE /api/workspaces/{ws}/projects/{id}?mode=cascade|detach   move to Trash (default: detach)
 GET    /api/workspaces/{ws}/projects/{id}/comments   list / POST comment
 GET    /api/workspaces/{ws}/projects/{id}/updates    list status updates
 POST   /api/workspaces/{ws}/projects/{id}/updates    post update (status + body)
 DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}   delete (author)
+POST   /api/workspaces/{ws}/projects/reorder    update display order (drag-and-drop)
 
 GET    /api/workspaces/{ws}/milestones          list / POST create
-GET    /api/workspaces/{ws}/milestones/{id}     detail / PATCH / DELETE
+GET    /api/workspaces/{ws}/milestones/{id}?preview=1   child counts for delete dialog
+PATCH  /api/workspaces/{ws}/milestones/{id}     update
+DELETE /api/workspaces/{ws}/milestones/{id}?mode=cascade|detach   move to Trash (default: detach)
 GET    /api/workspaces/{ws}/milestones/{id}/comments  list / POST
 
 GET    /api/workspaces/{ws}/issues              list (filters) / POST create
-GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH / DELETE
+GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH
+DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
 GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
 GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach
 DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid} detach
 POST   /api/workspaces/{ws}/issues/{id}/watch        watch / DELETE unwatch
+POST   /api/workspaces/{ws}/issues/reorder      update display order (drag-and-drop)
 
 GET    /api/workspaces/{ws}/labels              list / POST create
 PATCH  /api/workspaces/{ws}/labels/{id}         update / DELETE
 DELETE /api/workspaces/{ws}/comments/{id}       edit/delete a comment (author)
 
 GET    /api/workspaces/{ws}/activity            activity feed
-GET    /api/workspaces/{ws}/analytics           analytics (view/target/range)
+GET    /api/workspaces/{ws}/analytics           analytics (view/target/range/interval/filters)
+
+GET    /api/workspaces/{ws}/trash               list binned items (?type=issue|project|milestone)
+POST   /api/workspaces/{ws}/trash/restore       restore items ({items:[{type,id}]|batch_id, dry_run?, resolutions?})
+DELETE /api/workspaces/{ws}/trash/purge         permanent delete — owner only ({items|batch_id})
+POST   /api/workspaces/{ws}/trash/empty         hard-delete everything in the bin — owner only
 ```
+
+### Super admin (requires `SUPER_ADMINS` env var)
+
+```
+GET  /api/super-admin/users            all platform users (name, email, workspace count, last login)
+GET  /api/super-admin/whitelist        list whitelist entries
+POST /api/super-admin/whitelist        add entry ({ type: 'email'|'domain', value })
+DELETE /api/super-admin/whitelist/{id} remove entry
+GET  /api/super-admin/errors           error log (cursor-paginated). Filters: ?status=open|resolved, ?level=, ?from=&to= (ISO), ?cursor=&limit=, ?stats=1 (adds aggregate counts)
+GET  /api/super-admin/errors/{id}      full event detail incl. stack + context
+PATCH /api/super-admin/errors/{id}     toggle triage state ({ resolved: boolean })
+```
+
+All super-admin routes are guarded by `requireSuperAdminUser(req)` — 401 if
+unauthenticated, 403 if the caller's email is not in `SUPER_ADMINS`.
 
 ### Personal, auth & system
 
 ```
 GET/POST /api/auth/[...nextauth]                NextAuth
-POST     /api/auth/register                     email/password sign-up
+POST     /api/auth/register                     email/password sign-up (403 if not whitelisted)
 POST     /api/auth/password-reset/request       request OTP
 POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
@@ -298,6 +358,7 @@ POST     /api/me/active-workspace                set active workspace
 GET      /api/me/inbox                            list inbox  (?unread, ?limit)
 POST     /api/me/inbox/mark-read                  mark read (ids | all)
 POST     /api/me/inbox/archive                    archive ids
+POST     /api/me/inbox/unarchive                  unarchive ids
 GET      /api/me/pending-invitations             invitations for my email
 POST     /api/me/password/request-otp            in-app password change (OTP)
 POST     /api/me/password/confirm
@@ -348,10 +409,13 @@ these; they never write SQL inline.
 | `fanout.ts` | event → per-user inbox materialization |
 | `inbox.ts` | inbox writes (dedup window) + listing |
 | `activity.ts` | activity feed reads |
-| `analytics.ts` | workspace/project/milestone/member analytics |
+| `analytics.ts` | workspace/project/milestone/member analytics — see below |
+| `deletion.ts` | soft-delete engine — `softDelete*`, `previewDeletion`, `listTrash`, `previewRestore`, `restoreItems/Batch`, `purgeItems/Batch`, `emptyTrash` |
 | `transaction.ts` | transaction log + `undoLastOperations` |
 | `error-events.ts` | error log reads (public list redacts; detail is gated) |
 | `password-reset.ts` | OTP issue/verify/consume |
+| `whitelist.ts` | `isEmailAllowedByDb`, `listWhitelist`, `addWhitelistEntry`, `removeWhitelistEntry` |
+| `admin.ts` | `listAllPlatformUsers` — cross-workspace user listing for super admin view |
 
 ## Cross-cutting concerns
 
@@ -453,7 +517,25 @@ npm run db:studio     # browse data
 Migration files are numbered `0000_…` upward in `lib/db/migrations/`, with
 snapshots under `meta/`. Don't hand-edit applied migrations; add a new one.
 
+### Access whitelist (opt-in)
+
+When `SUPER_ADMINS` is set, the whitelist feature activates:
+
+- **Registration** (`POST /api/auth/register`) returns `403 not_in_whitelist` if
+  the email doesn't match an `email_whitelist` row or the `SUPER_ADMINS` list.
+- **Google OAuth sign-in** redirects to `/blocked` instead of creating an account.
+- **Invitations** (`POST /api/workspaces/{ws}/invitations`): if the invitee is not
+  whitelisted, non-super-admins get a 403; super admins auto-add the email and proceed.
+
+When `SUPER_ADMINS` is not set (or empty), all emails are allowed and the
+whitelist table is ignored entirely.
+
+Helper utilities: `lib/auth/whitelist.ts` (`isSuperAdmin`, `isEmailAllowed`,
+`isWhitelistEnabled`) and `lib/api/super-admin-guard.ts` (`requireSuperAdminUser`).
+
 ### Bootstrapping
 
-There is no admin bootstrap step. The first user to sign up creates their
-account and a default workspace; workspace owners invite the rest of the team.
+Set `SUPER_ADMINS=your@email.com` in the environment before the first user signs
+up. Super admins can then add domains (`blackcode.ch`) or individual emails to
+the whitelist via `/dashboard/super-admin/whitelist`, unlocking registration for
+the rest of the team. Without `SUPER_ADMINS`, any email can sign up.

@@ -190,7 +190,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk project milestones <id>` | `GET /api/milestones?project_id=:id` | |
 | `bk project create --name N [--description D \| --description-file F]` | `POST /api/projects` | |
 | `bk project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/projects/:id` | |
-| `bk project delete <id> [--yes]` | `DELETE /api/projects/:id` | Owner only. Prompts to confirm. |
+| `bk project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached milestones/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
 | `bk project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
 | `bk project remove-member <id> --user REF [--yes]` | `DELETE /api/projects/:id/members` | `REF` = id, email, or display name. Prompts to confirm. |
 
@@ -204,7 +204,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk issue edit <id> [...]` | `PATCH /api/issues/:id` | Pass `none`/`null`/`unset`/`clear` to null a field. |
 | `bk issue assign <id> <user>` | `PATCH /api/issues/:id` | Shortcut for setting the assignee. |
 | `bk issue unassign <id>` | `PATCH /api/issues/:id` | Clears the assignee. |
-| `bk issue delete <id> [--yes]` | `DELETE /api/issues/:id` | Project owners/admins only. Prompts to confirm. |
+| `bk issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
 | `bk issue comment <id> --body "..." \| --body - \| --body-file F` | `POST /api/issues/:id/comments` | Body must be non-empty. |
 | `bk issue comments <id>` | `GET /api/issues/:id/comments` | |
 | `bk issue activity <id>` | `GET /api/issues/:id/activity` | Merged comments + change log. |
@@ -242,7 +242,22 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk milestone view <id> [--include-issues]` | `GET /api/milestones/:id[?includeIssues=true]` |
 | `bk milestone create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD]` | `POST /api/milestones` |
 | `bk milestone edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/milestones/:id` |
-| `bk milestone delete <id> [--yes]` | `DELETE /api/milestones/:id` |
+| `bk milestone delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/milestones/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
+
+### Trash (recycle bin, workspace-scoped)
+
+All deletes (issues, projects, milestones) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk trash` to inspect and manage the bin.
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk trash list [--type issue\|project\|milestone]` | `GET /api/workspaces/:ws/trash` | Shows binned items grouped by deletion batch. |
+| `bk trash restore <type:id> [<type:id> …]` | `POST /api/workspaces/:ws/trash/restore` | e.g. `bk trash restore issue:42 project:3`. Detects and reports conflicts. |
+| `bk trash restore --batch <id> [--restore-parents\|--standalone]` | same | Restore a whole cascade-delete group at once. |
+| `bk trash purge <type:id> [--yes]` | `DELETE /api/workspaces/:ws/trash/purge` | Permanent hard-delete. **Owner only.** |
+| `bk trash purge --batch <id> [--yes]` | same | Purge a whole batch. |
+| `bk trash empty [--yes]` | `POST /api/workspaces/:ws/trash/empty` | Hard-delete everything in the bin. **Owner only.** |
+
+Restore conflict flags: `--restore-parents` (also restore the parent when a child's parent is still binned) and `--standalone` (restore the child with the parent link cleared). If neither is passed and conflicts exist, the command reports them and exits non-zero.
 
 ### Labels (workspace-scoped)
 

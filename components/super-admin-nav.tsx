@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 const TABS = [
   { href: '/dashboard/super-admin/users', label: 'All Members' },
   { href: '/dashboard/super-admin/whitelist', label: 'Access Whitelist' },
+  { href: '/dashboard/super-admin/errors', label: 'Error Logs' },
 ]
 
 export function SuperAdminNav() {

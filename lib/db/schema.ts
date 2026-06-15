@@ -585,6 +585,10 @@ export const errorEvents = pgTable(
     method: varchar('method', { length: 10 }),
     status_code: integer('status_code'),
     context: jsonb('context'),
+    // Triage state, managed from the super-admin Errors tab.
+    resolved: boolean('resolved').notNull().default(false),
+    resolved_at: timestamp('resolved_at', { withTimezone: true }),
+    resolved_by: integer('resolved_by').references(() => users.id, { onDelete: 'set null' }),
     occurred_at: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
@@ -592,6 +596,7 @@ export const errorEvents = pgTable(
     levelIdx: index('idx_error_events_level').on(t.level),
     codeIdx: index('idx_error_events_code').on(t.code),
     routeIdx: index('idx_error_events_route').on(t.route),
+    resolvedIdx: index('idx_error_events_resolved').on(t.resolved),
   })
 )
 
