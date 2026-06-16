@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Crown, Search, UserPlus, X, Clock, Copy } from 'lucide-react'
+import { Crown, Search, UserPlus, X, Clock, Copy, Info } from 'lucide-react'
 import { format } from 'date-fns'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { MemberAvatar } from '@/components/ui/member-avatar'
@@ -141,6 +141,15 @@ export function MembersView() {
           </Link>
         ) : null}
       </header>
+
+      {/* Scope notice */}
+      <div className="flex items-start gap-2 border-b border-border bg-secondary/30 px-6 py-2.5 text-xs text-muted-foreground">
+        <Info size={14} className="mt-px shrink-0 text-muted-foreground" />
+        <p>
+          These are the members of <span className="font-medium text-foreground">{ws.name}</span> only.
+          People in other workspaces aren&apos;t shown here.
+        </p>
+      </div>
 
       {/* Search bar */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">
