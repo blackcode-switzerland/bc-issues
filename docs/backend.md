@@ -289,6 +289,7 @@ DELETE /api/workspaces/{ws}/members/{userId}    remove member (owner)
 GET    /api/workspaces/{ws}/invitations         list (owner)
 POST   /api/workspaces/{ws}/invitations         invite by email (owner)
 DELETE /api/workspaces/{ws}/invitations/{id}    revoke (owner)
+GET    /api/workspaces/{ws}/invite-candidates    suggested people to invite (owner)
 
 GET    /api/workspaces/{ws}/projects            list projects
 POST   /api/workspaces/{ws}/projects            create project
@@ -410,6 +411,7 @@ these; they never write SQL inline.
 | `workspaces.ts` | workspace CRUD, membership, `getWorkspaceForUser`, issue-seq allocation |
 | `members.ts` | project member listing |
 | `invitations.ts` | invite CRUD, token mint, accept/decline, pre-signup materialization |
+| `invite-candidates.ts` | suggested invitees — members of the owner's other workspaces (with shared-workspace context), plus all platform users for super admins; flags `already_member` / `invited` |
 | `users.ts` | user CRUD, `getVisibleUsers` (workspace-mates only — privacy guard), OAuth upsert, password sign-up |
 | `projects.ts` | project CRUD; list joins lead + latest update health |
 | `project-relations.ts` | project ↔ member and project ↔ label sets |

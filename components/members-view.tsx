@@ -1,9 +1,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Crown, Mail, Search, UserPlus, X, Clock, Copy } from 'lucide-react'
+import { Crown, Search, UserPlus, X, Clock, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { MemberAvatar } from '@/components/ui/member-avatar'
@@ -51,7 +52,6 @@ async function fetchActiveWorkspace(): Promise<Workspace | null> {
 export function MembersView() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
-  const [inviteEmail, setInviteEmail] = useState('')
   const [search, setSearch] = useState('')
 
   const { data: ws } = useQuery({ queryKey: ['active-workspace'], queryFn: fetchActiveWorkspace })
@@ -75,47 +75,6 @@ export function MembersView() {
       if (!res.ok) throw new Error('failed')
       const j = await res.json()
       return j.data as Invitation[]
-    },
-  })
-
-  const invite = useMutation({
-    mutationFn: async (email: string) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/invitations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'failed')
-      }
-      return res.json()
-    },
-    onSuccess: (r) => {
-      if (r.email_sent) {
-        toast.success(
-          r.invitee_has_account
-            ? 'Invitation emailed — also in their inbox'
-            : 'Invitation email sent'
-        )
-      } else {
-        toast.success(
-          r.invitee_has_account
-            ? 'Invitation sent — appears in their inbox'
-            : 'Invitation created — share the link below'
-        )
-      }
-      setInviteEmail('')
-      queryClient.invalidateQueries({ queryKey: ['workspace-invitations'] })
-    },
-    onError: (e: Error) => {
-      if (e.message.includes('approved list')) {
-        toast.error('Email not in the approved list — contact a super admin to add it first.', {
-          duration: 6000,
-        })
-      } else {
-        toast.error(e.message)
-      }
     },
   })
 
@@ -173,32 +132,13 @@ export function MembersView() {
         <h1 className="text-[15px] font-semibold">Members</h1>
         <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">{members?.length ?? 0}</span>
         {isOwner ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (inviteEmail.trim()) invite.mutate(inviteEmail.trim())
-            }}
-            className="ml-auto flex items-center gap-2"
+          <Link
+            href="/dashboard/members/invite"
+            className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
-            <div className="relative">
-              <Mail size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="Invite by email…"
-                className="h-9 w-40 rounded-md border border-border bg-transparent pl-8 pr-2.5 text-sm outline-none focus:ring-1 focus:ring-primary sm:w-56"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={invite.isPending}
-              className="flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <UserPlus size={15} />
-              Invite
-            </button>
-          </form>
+            <UserPlus size={15} />
+            Invite members
+          </Link>
         ) : null}
       </header>
 
