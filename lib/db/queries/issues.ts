@@ -73,6 +73,7 @@ export interface ListIssuesOptions {
 export interface IssuesPage {
   data: IssueListRow[]
   next_cursor: number | null
+  total: number
 }
 
 const DEFAULT_LIMIT = 50
@@ -103,11 +104,7 @@ export async function listIssuesInWorkspace(
         ? sql`AND EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.user_id IN (${sql.join(opts.assigneeIds.map((id) => sql`${id}`), sql`, `)}))`
         : sql``
 
-  const result = await db.execute(sql`
-    SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN milestones m ON m.id = i.milestone_id
-    LEFT JOIN projects p ON p.id = i.project_id
+  const whereClause = sql`
     WHERE i.workspace_id = ${workspaceId}
       AND i.deleted_at IS NULL
       ${projectFilter}
@@ -120,16 +117,32 @@ export async function listIssuesInWorkspace(
           ? sql`AND (i.title ILIKE ${'%' + opts.search + '%'} OR i.description ILIKE ${'%' + opts.search + '%'})`
           : sql``
       }
+  `
+
+  const [result, countResult] = await Promise.all([
+    db.execute(sql`
+      SELECT ${issueListSelect}
+      FROM issues i
+      LEFT JOIN milestones m ON m.id = i.milestone_id
+      LEFT JOIN projects p ON p.id = i.project_id
+      ${whereClause}
       ${opts.cursor ? sql`AND i.id < ${opts.cursor}` : sql``}
-    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
-    LIMIT ${limit + 1}
-  `)
+      ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
+      LIMIT ${limit + 1}
+    `),
+    db.execute(sql`
+      SELECT COUNT(*)::int AS total
+      FROM issues i
+      ${whereClause}
+    `),
+  ])
 
   const rows = result.rows as unknown as IssueListRow[]
   const hasMore = rows.length > limit
   const data = hasMore ? rows.slice(0, limit) : rows
   const next_cursor = hasMore ? data[data.length - 1].id : null
-  return { data, next_cursor }
+  const total = Number((countResult.rows[0] as { total: number } | undefined)?.total ?? 0)
+  return { data, next_cursor, total }
 }
 
 export async function getIssueInWorkspace(
