@@ -87,34 +87,43 @@ Versions are stamped into the binary via `-ldflags` (into the `internal/version`
 A release is cut with the repo's release script (from the repo root):
 
 ```bash
-./devops/release.sh cli <patch|minor|major|vX.Y.Z>
+./devops/release.sh cli            # interactive — prompts for everything
+./devops/release.sh cli minor      # or pass the bump to skip the first prompt
 ```
 
-It runs preflight (gh/npm/git auth, clean tree, version not already used), then:
+It is **interactive** and asks three things up front, then shows a plan and a
+final "Proceed?" confirm before doing anything irreversible:
 
-1. Bumps `cli/npm/package.json` **and** `cli/npm/install.js` (the install.js
-   `VERSION` is derived from `package.json`, so they can't drift).
-2. Commits + pushes the bump, creates and pushes the `vX.Y.Z` git tag.
-3. `make dist` cross-compiles all targets; `version.Version` is stamped from the
-   tag via `-ldflags`.
-4. Publishes the binaries to a GitHub Release and the npm package
-   `@blackcode_sa/bc-issues`.
+1. **Bump** — patch / minor / major / explicit `vX.Y.Z` (skipped if passed as an arg).
+2. **Upgrade policy** — *normal* or *forced* (see below).
+3. **Deploy web?** — whether to push the web app to production at the end.
 
-### Required server-side step (don't skip)
+On confirm it: preflights (gh/npm/git auth, clean tree, version unused — plus
+Vercel auth if deploying web); edits `cli/npm/package.json` + `install.js`
+(install.js derives its version from package.json, so they can't drift) **and**
+`lib/cli-version.ts`, then makes **one** commit + push for all three; creates and
+pushes the `vX.Y.Z` tag; `make dist` cross-compiles (version stamped via
+`-ldflags`); publishes the GitHub Release + npm package; and finally deploys web
+if you said yes. (One commit, near the start — the tag and the published binary
+are built from it, so it can't be deferred to after publish.)
+
+### Upgrade policy: normal vs forced
 
 The "update available" notice and the hard min-version block (see
-[Updates](#updates)) are driven by **server** headers, not the CLI alone. After a
-release, update `lib/cli-version.ts` (or the `BK_CLI_LATEST` / `BK_CLI_MIN` env
-vars) and redeploy the web app:
+[Updates](#updates)) are driven by **server** constants in `lib/cli-version.ts`,
+which the script now edits for you:
 
-- **`CLI_LATEST_VERSION`** → set to the version you just published. Drives the
-  soft "a new bk version is available" notice.
-- **`CLI_MIN_VERSION`** → raise this **only** when a server change is incompatible
-  with older CLIs (e.g. a breaking route/field rename). Clients below it get a
-  hard "please upgrade" and exit code `8`.
+- **normal** → sets `CLI_LATEST_VERSION` to the new version (soft "a new bk version
+  is available" notice).
+- **forced** → also raises `CLI_MIN_VERSION`, so clients below it are hard-blocked
+  with "please upgrade" and exit code `8`. Choose this when a server change is
+  incompatible with older CLIs (e.g. a breaking route/field rename).
 
-The release script prints this reminder on completion. This keeps the four
-surfaces in sync per the contract in `CLAUDE.md` / `AGENTS.md`.
+Because the gate lives in the web app, it only takes effect once the web is
+deployed — so if you answer **no** to "Deploy web?", the script reminds you to run
+`./devops/release.sh web` later. (`BK_CLI_LATEST` / `BK_CLI_MIN` env vars still
+override at runtime without a redeploy.) This keeps the four surfaces in sync per
+the contract in `CLAUDE.md` / `AGENTS.md`.
 
 ---
 

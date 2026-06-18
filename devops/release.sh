@@ -81,7 +81,10 @@ ${BOLD}bc-issues release script${RESET}
 
 ${BOLD}USAGE${RESET}
   $(basename "$0") web                Deploy web app to Vercel production
-  $(basename "$0") cli <bump>         Release CLI to GitHub Releases + npm
+  $(basename "$0") cli [bump]         Release CLI to GitHub Releases + npm.
+                                      Omit [bump] to be prompted; also asks
+                                      force-vs-normal upgrade and whether to
+                                      deploy web, then updates lib/cli-version.ts.
   $(basename "$0") --help             Show this help
 
 ${BOLD}BUMP OPTIONS${RESET}
@@ -169,9 +172,61 @@ resolve_version() {
 # ── cli release ────────────────────────────────────────────────────────────
 release_cli() {
   local bump="${1:-}"
+
+  # Interactive bump selection if not passed as an argument.
+  if [[ -z "$bump" ]]; then
+    echo
+    header "Version bump"
+    echo "  1) patch     bug fix          (v1.0.0 → v1.0.1)"
+    echo "  2) minor     new feature      (v1.0.0 → v1.1.0)"
+    echo "  3) major     breaking change  (v1.0.0 → v2.0.0)"
+    echo "  4) explicit  type an exact vX.Y.Z"
+    local choice
+    read -r -p "Select [1-4]: " choice
+    case "$choice" in
+      1) bump="patch" ;;
+      2) bump="minor" ;;
+      3) bump="major" ;;
+      4) read -r -p "Version (vX.Y.Z): " bump ;;
+      *) die "Invalid selection '${choice}'." ;;
+    esac
+  fi
+
   local version
   version=$(resolve_version "$bump")
   local version_number="${version#v}"   # strip leading 'v' for package.json
+
+  # Upgrade policy — drives the server version gate (lib/cli-version.ts):
+  #   normal → CLI_LATEST advertises the new version (soft "update available").
+  #   forced → also raise CLI_MIN so older CLIs are hard-blocked (exit code 8).
+  echo
+  header "Upgrade policy"
+  echo "  normal — advertise ${version} as latest; older CLIs get a soft update notice."
+  echo "  forced — also raise CLI_MIN to ${version}; older CLIs are blocked until they upgrade."
+  local force_ans forced=false
+  read -r -p "Force upgrade? [y/N] " force_ans
+  if [[ "$force_ans" =~ ^[Yy]$ ]]; then forced=true; fi
+
+  # The version gate lives in the web app, so it only takes effect once web is
+  # redeployed — offer to do that at the end.
+  echo
+  local web_ans deploy_web=false
+  read -r -p "Deploy web to production after the release? [y/N] " web_ans
+  if [[ "$web_ans" =~ ^[Yy]$ ]]; then deploy_web=true; fi
+
+  # Confirm before anything irreversible (commit / tag / publish).
+  echo
+  header "Release plan"
+  echo -e "  CLI version:  ${BOLD}${version}${RESET}"
+  if [[ "$forced" == true ]]; then
+    echo -e "  Policy:       ${BOLD}FORCED${RESET} — sets CLI_LATEST and CLI_MIN to ${version}"
+  else
+    echo -e "  Policy:       normal — sets CLI_LATEST to ${version} (CLI_MIN unchanged)"
+  fi
+  echo -e "  Deploy web:   $([[ "$deploy_web" == true ]] && echo yes || echo no)"
+  local go
+  read -r -p "Proceed? [y/N] " go
+  [[ "$go" =~ ^[Yy]$ ]] || die "Aborted."
   local repo="blackcode-switzerland/bc-issues"
   local npm_package="@blackcode_sa/bc-issues"
   local script_dir
@@ -189,6 +244,8 @@ release_cli() {
   check_npm_auth
   check_git_branch
   check_git_clean
+  # Fail fast on Vercel auth now if we'll deploy web at the end.
+  if [[ "$deploy_web" == true ]]; then check_vercel_auth; fi
 
   # check tag doesn't already exist
   if git tag --list | grep -q "^${version}$"; then
@@ -214,12 +271,23 @@ release_cli() {
   success "Updated ${pkg_json}"
   success "Updated ${install_js}"
 
-  # commit version bump
-  info "Committing version bump..."
-  git add "$pkg_json" "$install_js"
-  git commit -m "chore: bump CLI npm package to ${version}"
+  # Update the server-side version gate now so it lands in the SAME commit as the
+  # bump (one commit, then the tag/build/publish come from it). CLI_LATEST always;
+  # CLI_MIN only when forced.
+  local cli_version_ts="${root_dir}/lib/cli-version.ts"
+  sed -i '' -E "s/(CLI_LATEST_VERSION = process\.env\.BK_CLI_LATEST \?\? ')[^']*'/\1${version_number}'/" "$cli_version_ts"
+  success "CLI_LATEST_VERSION → ${version_number}"
+  if [[ "$forced" == true ]]; then
+    sed -i '' -E "s/(CLI_MIN_VERSION = process\.env\.BK_CLI_MIN \?\? ')[^']*'/\1${version_number}'/" "$cli_version_ts"
+    success "CLI_MIN_VERSION → ${version_number} (forced)"
+  fi
+
+  # Single release commit: package bump + install.js + version gate.
+  info "Committing release ${version}..."
+  git add "$pkg_json" "$install_js" "$cli_version_ts"
+  git commit -m "chore: release CLI ${version}$([[ "$forced" == true ]] && echo ' (forced min)')"
   git push origin main
-  success "Pushed version bump commit."
+  success "Pushed release commit."
 
   # tag
   info "Creating git tag ${version}..."
@@ -280,6 +348,13 @@ bk whoami
   echo
   success "npm package published: ${npm_package}@${version_number}"
 
+  # deploy web if requested, so the version gate (already committed above) goes live
+  if [[ "$deploy_web" == true ]]; then
+    release_web
+  else
+    warn "Web NOT deployed — the version gate takes effect only after: $(basename "$0") web"
+  fi
+
   # summary
   echo
   echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
@@ -289,12 +364,14 @@ bk whoami
   echo -e "  npm:     https://www.npmjs.com/package/${npm_package}"
   echo -e "  Install: npm install -g ${npm_package}"
   echo
-  warn "Server side — required for the in-CLI update prompts to work:"
-  echo -e "    • Set ${BOLD}CLI_LATEST_VERSION = '${version_number}'${RESET} in lib/cli-version.ts"
-  echo -e "      (or the ${BOLD}BK_CLI_LATEST${RESET} env) → drives the 'update available' notice."
-  echo -e "    • Raise ${BOLD}CLI_MIN_VERSION${RESET} only if this release drops support for older"
-  echo -e "      CLIs → forces an upgrade (exit code 8) on clients below it."
-  echo -e "    • Deploy the web app (./devops/release.sh web) for it to take effect."
+  if [[ "$forced" == true ]]; then
+    echo -e "  Version gate: CLI_LATEST=${version_number} · CLI_MIN=${version_number} (committed)"
+  else
+    echo -e "  Version gate: CLI_LATEST=${version_number} (committed)"
+  fi
+  if [[ "$deploy_web" != true ]]; then
+    warn "Run '$(basename "$0") web' to make the version gate live."
+  fi
   echo
 }
 
