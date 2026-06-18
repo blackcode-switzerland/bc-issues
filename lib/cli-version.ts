@@ -11,5 +11,5 @@
 // so stale clients get a clear "please upgrade" instead of cryptic 404s.
 // Both are overridable via env without a redeploy.
 
-export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '1.3.0'
-export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '1.3.0'
+export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '1.4.0'
+export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '1.4.0'
