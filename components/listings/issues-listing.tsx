@@ -499,7 +499,6 @@ export function IssuesListing() {
       {view === 'list' ? (
         <IssueListView
           issues={filtered}
-          workspaceKey={ws?.key ?? ''}
           workspaceSlug={ws?.slug ?? ''}
           members={members ?? []}
           loading={issuesQuery.isLoading}
@@ -512,11 +511,11 @@ export function IssuesListing() {
         />
       ) : view === 'kanban' ? (
         <div className="p-4">
-          <IssuesKanban issues={filtered} workspaceKey={ws?.key ?? ''} wsSlug={ws?.slug ?? ''} />
+          <IssuesKanban issues={filtered} wsSlug={ws?.slug ?? ''} />
         </div>
       ) : (
         <div className="p-4">
-          <IssuesTimeline issues={filtered} workspaceKey={ws?.key ?? ''} />
+          <IssuesTimeline issues={filtered} />
         </div>
       )}
 
@@ -603,7 +602,6 @@ const STATUS_ORDER = ['in_progress', 'todo', 'backlog', 'done', 'cancelled']
 
 function IssueListView({
   issues,
-  workspaceKey,
   workspaceSlug,
   members,
   loading,
@@ -615,7 +613,6 @@ function IssueListView({
   onSelectionChange,
 }: {
   issues: IssueRow[]
-  workspaceKey: string
   workspaceSlug: string
   members: Member[]
   loading: boolean
@@ -773,7 +770,6 @@ function IssueListView({
                         {(p, s) => (
                           <IssueRowItem
                             issue={i}
-                            workspaceKey={workspaceKey}
                             workspaceSlug={workspaceSlug}
                             members={members}
                             selected={selectedIds.has(i.id)}
@@ -814,7 +810,6 @@ const PRIORITY_OPTIONS = ISSUE_PRIORITIES.map((p) => ({
 
 function IssueRowItem({
   issue,
-  workspaceKey,
   workspaceSlug,
   members,
   selected,
@@ -826,7 +821,6 @@ function IssueRowItem({
   isDragging,
 }: {
   issue: IssueRow
-  workspaceKey: string
   workspaceSlug: string
   members: Member[]
   selected: boolean
@@ -936,7 +930,7 @@ function IssueRowItem({
           />
         </div>
         <span className="hidden w-[4.5rem] shrink-0 font-mono text-xs tabular-nums text-muted-foreground/70 sm:block">
-          {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
+          {issue.seq != null ? `#${issue.seq}` : `#${issue.id}`}
         </span>
         {/* Status — inline editable, icon-only */}
         <div onClick={stop} className="shrink-0">

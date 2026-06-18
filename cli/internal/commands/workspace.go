@@ -50,14 +50,14 @@ func newWorkspaceListCmd() *cobra.Command {
 
 			return output.Render(format, workspaces, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "\tID\tNAME\tKEY\tSLUG\tROLE")
+				fmt.Fprintln(tw, "\tID\tNAME\tSLUG\tROLE")
 				for _, ws := range workspaces {
 					mark := " "
 					if ws.ID == activeID {
 						mark = "*"
 					}
-					fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n",
-						mark, ws.ID, ws.Name, ws.Key, ws.Slug, ws.MemberRole)
+					fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\n",
+						mark, ws.ID, ws.Name, ws.Slug, ws.MemberRole)
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -96,7 +96,6 @@ func newWorkspaceShowCmd() *cobra.Command {
 
 			return output.Render(format, detail, func(w io.Writer) error {
 				fmt.Fprintf(w, "Name:    %s\n", detail.Workspace.Name)
-				fmt.Fprintf(w, "Key:     %s\n", detail.Workspace.Key)
 				fmt.Fprintf(w, "Slug:    %s\n", detail.Workspace.Slug)
 				fmt.Fprintf(w, "Role:    %s\n", detail.Role)
 				fmt.Fprintf(w, "Members: %d\n", len(detail.Members))
@@ -124,14 +123,13 @@ func newWorkspaceCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Created %s (key: %s, slug: %s)\n", ws.Name, ws.Key, ws.Slug)
+			fmt.Fprintf(cmd.OutOrStdout(), "Created %s (slug: %s)\n", ws.Name, ws.Slug)
 			if useAfter {
 				if _, err := c.SetActiveWorkspace(ws.ID); err != nil {
 					return err
 				}
 				cfg.ActiveWorkspaceID = ws.ID
 				cfg.ActiveWorkspaceSlug = ws.Slug
-				cfg.ActiveWorkspaceKey = ws.Key
 				if err := config.Save(cfg); err != nil {
 					return err
 				}
@@ -165,22 +163,21 @@ func newWorkspaceUseCmd() *cobra.Command {
 			}
 			cfg.ActiveWorkspaceID = detail.Workspace.ID
 			cfg.ActiveWorkspaceSlug = detail.Workspace.Slug
-			cfg.ActiveWorkspaceKey = detail.Workspace.Key
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Active workspace: %s (%s)\n",
-				detail.Workspace.Name, detail.Workspace.Key)
+				detail.Workspace.Name, detail.Workspace.Slug)
 			return nil
 		},
 	}
 }
 
 func newWorkspaceEditCmd() *cobra.Command {
-	var name, slug, key string
+	var name, slug string
 	cmd := &cobra.Command{
 		Use:   "edit [slug|id]",
-		Short: "Edit workspace settings (name, slug, key)",
+		Short: "Edit workspace settings (name, slug)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
@@ -198,19 +195,15 @@ func newWorkspaceEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("slug") {
 				req.Slug = &slug
 			}
-			if cmd.Flags().Changed("key") {
-				req.Key = &key
-			}
 			ws, err := c.UpdateWorkspace(ref, req)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "updated workspace %q (slug: %s, key: %s)\n",
-				ws.Name, ws.Slug, ws.Key)
+			fmt.Fprintf(cmd.OutOrStdout(), "updated workspace %q (slug: %s)\n",
+				ws.Name, ws.Slug)
 			// Refresh config if the active workspace was edited
 			if cfg.ActiveWorkspaceSlug == ref || fmt.Sprint(cfg.ActiveWorkspaceID) == ref {
 				cfg.ActiveWorkspaceSlug = ws.Slug
-				cfg.ActiveWorkspaceKey = ws.Key
 				_ = config.Save(cfg)
 			}
 			return nil
@@ -218,7 +211,6 @@ func newWorkspaceEditCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "New workspace name")
 	cmd.Flags().StringVar(&slug, "slug", "", "New URL slug (lowercase, no spaces)")
-	cmd.Flags().StringVar(&key, "key", "", "New short key (2-10 uppercase chars)")
 	return cmd
 }
 

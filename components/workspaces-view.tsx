@@ -13,7 +13,6 @@ interface WorkspaceItem {
   id: number
   name: string
   slug: string
-  key: string
   logo_url: string | null
   member_role: 'owner' | 'member'
 }
@@ -137,7 +136,7 @@ export function WorkspacesView() {
                       ) : null}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {w.key} · {w.member_role}
+                      {w.member_role}
                     </p>
                   </div>
                 </button>

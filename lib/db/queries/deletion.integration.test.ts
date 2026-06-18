@@ -41,7 +41,7 @@ run('deletion engine (integration)', () => {
     userId = u.id
     const [w] = await db
       .insert(schema.workspaces)
-      .values({ name: 'Trash WS', slug: `trash-${suffix}`.slice(0, 40), key: suffix.slice(-6), owner_id: userId })
+      .values({ name: 'Trash WS', slug: `trash-${suffix}`.slice(0, 40), owner_id: userId })
       .returning({ id: schema.workspaces.id })
     wsId = w.id
     await db.insert(schema.workspaceMembers).values({ workspace_id: wsId, user_id: userId, role: 'owner' })

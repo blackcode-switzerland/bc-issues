@@ -27,5 +27,5 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (!ws) throw Errors.notFound('workspace')
 
   await setActiveWorkspace(user.id, ws.id)
-  return NextResponse.json({ active_workspace_id: ws.id, slug: ws.slug, key: ws.key })
+  return NextResponse.json({ active_workspace_id: ws.id, slug: ws.slug })
 })

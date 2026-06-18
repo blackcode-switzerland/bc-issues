@@ -63,7 +63,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
           id: workspace.id,
           name: workspace.name,
           slug: workspace.slug,
-          key: workspace.key,
           role: workspace.member_role,
         }
       : null,

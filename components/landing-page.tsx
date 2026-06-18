@@ -50,7 +50,7 @@ const FEATURES: Feature[] = [
     icon: Hash,
     title: 'Integer IDs',
     description:
-      '"Issue 42" is easier to dictate, easier to grep, and easier for a model to keep in working memory than a 36-character UUID. Every workspace also gets a short issue key prefix.',
+      '"Issue 42" is easier to dictate, easier to grep, and easier for a model to keep in working memory than a 36-character UUID. Each workspace numbers its issues from #1.',
     status: 'live',
   },
   {

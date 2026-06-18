@@ -394,7 +394,6 @@ export async function materializePendingInvitationsForUser(
         workspace_id: workspaceInvitations.workspace_id,
         invited_by: workspaceInvitations.invited_by,
         workspace_name: workspaces.name,
-        workspace_key: workspaces.key,
       })
       .from(workspaceInvitations)
       .leftJoin(workspaces, eq(workspaces.id, workspaceInvitations.workspace_id))
@@ -432,7 +431,6 @@ export async function materializePendingInvitationsForUser(
            ${JSON.stringify({
              workspace_id: inv.workspace_id,
              workspace_name: inv.workspace_name ?? '',
-             workspace_key: inv.workspace_key ?? '',
              invitation_id: inv.id,
              materialized_on_signup: true,
            })}::jsonb)

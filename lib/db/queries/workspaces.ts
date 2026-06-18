@@ -89,13 +89,11 @@ export interface CreateWorkspaceInput {
   name: string
   ownerId: number
   slug?: string
-  key?: string
   logo_url?: string
 }
 
 export async function createWorkspace(input: CreateWorkspaceInput): Promise<Workspace> {
   const slug = await pickAvailableSlug(input.slug ?? slugify(input.name))
-  const key = await pickAvailableKey(input.key ?? keyify(input.name))
 
   return await db.transaction(async (tx) => {
     const [ws] = await tx
@@ -103,7 +101,6 @@ export async function createWorkspace(input: CreateWorkspaceInput): Promise<Work
       .values({
         name: input.name,
         slug,
-        key,
         logo_url: input.logo_url,
         owner_id: input.ownerId,
       })
@@ -127,7 +124,7 @@ export async function createWorkspace(input: CreateWorkspaceInput): Promise<Work
       entityType: 'workspace',
       entityId: ws.id,
       action: 'created',
-      diff: { after: { name: ws.name, slug: ws.slug, key: ws.key } },
+      diff: { after: { name: ws.name, slug: ws.slug } },
     })
     await recordEvent(tx, {
       workspaceId: ws.id,
@@ -173,7 +170,6 @@ export async function ensureDefaultWorkspace(
 export interface UpdateWorkspaceInput {
   name?: string
   slug?: string
-  key?: string
   logo_url?: string | null
 }
 
@@ -189,7 +185,6 @@ export async function updateWorkspace(
   if (patch.name !== undefined) updates.name = patch.name
   if (patch.logo_url !== undefined) updates.logo_url = patch.logo_url
   if (patch.slug !== undefined) updates.slug = await pickAvailableSlug(slugify(patch.slug), id)
-  if (patch.key !== undefined) updates.key = await pickAvailableKey(keyify(patch.key), id)
 
   if (Object.keys(updates).length === 0) {
     return before
@@ -221,7 +216,7 @@ export async function updateWorkspace(
 }
 
 function pickWorkspaceDiff(w: Workspace) {
-  return { name: w.name, slug: w.slug, key: w.key, logo_url: w.logo_url }
+  return { name: w.name, slug: w.slug, logo_url: w.logo_url }
 }
 
 export async function deleteWorkspace(id: number): Promise<boolean> {
@@ -407,7 +402,6 @@ export async function setActiveWorkspace(userId: number, workspaceId: number | n
 // ----- slug/key generation -----
 
 const SLUG_MAX = 40
-const KEY_MAX = 6
 
 export function slugify(input: string): string {
   const base = input
@@ -417,11 +411,6 @@ export function slugify(input: string): string {
     .replace(/^-|-$/g, '')
     .slice(0, SLUG_MAX)
   return base || 'workspace'
-}
-
-export function keyify(input: string): string {
-  const cleaned = input.toUpperCase().replace(/[^A-Z0-9]/g, '')
-  return (cleaned.slice(0, KEY_MAX) || 'WS').slice(0, KEY_MAX)
 }
 
 async function pickAvailableSlug(desired: string, excludeId?: number): Promise<string> {
@@ -435,19 +424,6 @@ async function pickAvailableSlug(desired: string, excludeId?: number): Promise<s
     if (!rows[0]) return true
     return excludeId !== undefined && rows[0].id === excludeId
   }, SLUG_MAX)
-}
-
-async function pickAvailableKey(desired: string, excludeId?: number): Promise<string> {
-  const base = keyify(desired)
-  return await pickAvailable(base, async (candidate) => {
-    const rows = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(eq(workspaces.key, candidate))
-      .limit(1)
-    if (!rows[0]) return true
-    return excludeId !== undefined && rows[0].id === excludeId
-  }, KEY_MAX)
 }
 
 async function pickAvailable(

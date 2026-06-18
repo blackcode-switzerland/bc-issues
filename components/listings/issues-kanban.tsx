@@ -37,11 +37,9 @@ const COLUMNS = ISSUE_STATUSES.map((s) => ({ status: s.value, label: s.label }))
 
 export function IssuesKanban({
   issues,
-  workspaceKey,
   wsSlug,
 }: {
   issues: IssueRow[]
-  workspaceKey: string
   wsSlug: string
 }) {
   const queryClient = useQueryClient()
@@ -154,7 +152,7 @@ export function IssuesKanban({
                             {/* Header row: seq + assignee */}
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                                {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
+                                {issue.seq != null ? `#${issue.seq}` : `#${issue.id}`}
                               </span>
                               <span className="flex items-center">
                                 {(issue.assignees ?? []).slice(0, 2).map((a, idx) => (

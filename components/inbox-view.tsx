@@ -422,7 +422,7 @@ function InboxSkeletonRow({ i }: { i: number }) {
 function renderMessage(m: InboxMessage): React.ReactNode {
   const p = m.payload as Record<string, string | number | null>
   const wsName = (p.workspace_name as string) || ''
-  const issueLabel = p.issue_seq ? `${p.workspace_key}-${p.issue_seq}` : `#${p.issue_id ?? ''}`
+  const issueLabel = p.issue_seq ? `#${p.issue_seq}` : `#${p.issue_id ?? ''}`
   switch (m.type) {
     case 'invitation':
       return <>You were invited to <strong>{wsName}</strong></>

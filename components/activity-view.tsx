@@ -208,7 +208,7 @@ export function ActivityView() {
                       <span className="text-sm font-medium">
                         {e.actor_name ?? e.actor_email ?? 'system'}
                       </span>{' '}
-                      <span className="text-sm text-muted-foreground">{describe(e, ws?.key)}</span>
+                      <span className="text-sm text-muted-foreground">{describe(e)}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
                       {formatDistanceToNow(new Date(e.occurred_at), { addSuffix: true })}
@@ -244,14 +244,10 @@ function statusName(value: unknown): string {
   return asIssue !== v ? asIssue : projectStatusLabel(v)
 }
 
-function describe(e: EventRow, wsKey?: string): string {
+function describe(e: EventRow): string {
   const meta = (e.meta ?? {}) as Record<string, string | number | null | undefined>
   const entityRef =
-    e.entity_type === 'issue' && meta.seq
-      ? wsKey
-        ? `${wsKey}-${meta.seq}`
-        : `issue ${meta.seq}`
-      : e.entity_type
+    e.entity_type === 'issue' && meta.seq ? `#${meta.seq}` : e.entity_type
   const titled = meta.title ? `${entityRef} "${meta.title}"` : entityRef
   switch (e.action) {
     case 'created':

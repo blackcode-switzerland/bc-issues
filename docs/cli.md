@@ -153,7 +153,7 @@ bk workspace use acme             # set the active workspace by slug or numeric 
 bk workspace show                 # details of the active workspace
 ```
 
-The active workspace (id, slug, key) is stored in the config file and is also set server-side via `POST /api/me/active-workspace`. Workspace-scoped command groups (`label`, `member`, `invite`) require an active workspace and fail with a clear message if none is set. Workspace API paths accept either the **slug** or the **numeric id**.
+The active workspace (id, slug) is stored in the config file and is also set server-side via `POST /api/me/active-workspace`. Workspace-scoped command groups (`label`, `member`, `invite`) require an active workspace and fail with a clear message if none is set. Workspace API paths accept either the **slug** or the **numeric id**.
 
 ---
 
@@ -420,8 +420,7 @@ Non-numeric refs trigger a `GET /api/users` lookup the first time they're resolv
   "user_id": 7,
   "email":  "alice@example.com",
   "active_workspace_id": 3,
-  "active_workspace_slug": "acme",
-  "active_workspace_key": "ACME"
+  "active_workspace_slug": "acme"
 }
 ```
 

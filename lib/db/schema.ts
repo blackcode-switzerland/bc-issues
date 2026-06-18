@@ -46,7 +46,6 @@ export const workspaces = pgTable(
     id: serial('id').primaryKey(),
     name: varchar('name', { length: 80 }).notNull(),
     slug: varchar('slug', { length: 40 }).notNull(),
-    key: varchar('key', { length: 6 }).notNull(),
     logo_url: text('logo_url'),
     owner_id: integer('owner_id')
       .notNull()
@@ -57,7 +56,6 @@ export const workspaces = pgTable(
   },
   (t) => ({
     slugUniq: uniqueIndex('uq_workspaces_slug').on(t.slug),
-    keyUniq: uniqueIndex('uq_workspaces_key').on(t.key),
     ownerIdx: index('idx_workspaces_owner').on(t.owner_id),
   })
 )

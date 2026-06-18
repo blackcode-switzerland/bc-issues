@@ -15,7 +15,6 @@ type Workspace struct {
 	ID         int     `json:"id" yaml:"id"`
 	Name       string  `json:"name" yaml:"name"`
 	Slug       string  `json:"slug" yaml:"slug"`
-	Key        string  `json:"key" yaml:"key"`
 	LogoURL    *string `json:"logo_url" yaml:"logo_url"`
 	OwnerID    int     `json:"owner_id" yaml:"owner_id"`
 	MemberRole string  `json:"member_role,omitempty" yaml:"member_role,omitempty"`
@@ -29,7 +28,6 @@ type CreateWorkspaceRequest struct {
 type UpdateWorkspaceRequest struct {
 	Name    *string `json:"name,omitempty"`
 	Slug    *string `json:"slug,omitempty"`
-	Key     *string `json:"key,omitempty"`
 	LogoURL *string `json:"logo_url,omitempty"`
 }
 

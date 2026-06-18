@@ -65,7 +65,7 @@ async function fanOutInvitationCreated(tx: Tx, event: Event): Promise<void> {
   if (!user[0]) return // pre-signup invitation, materialized on signup
 
   const ws = await tx
-    .select({ name: workspaces.name, key: workspaces.key })
+    .select({ name: workspaces.name })
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
@@ -81,7 +81,6 @@ async function fanOutInvitationCreated(tx: Tx, event: Event): Promise<void> {
     payload: {
       workspace_id: event.workspace_id,
       workspace_name: ws[0]?.name ?? '',
-      workspace_key: ws[0]?.key ?? '',
       invitation_id: event.entity_id,
     },
   })
@@ -216,7 +215,7 @@ async function fanOutAssigned(tx: Tx, event: Event): Promise<void> {
   if (meta.assignee_id === event.actor_user_id) return // self-assign, no notification
 
   const ws = await tx
-    .select({ name: workspaces.name, key: workspaces.key })
+    .select({ name: workspaces.name })
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
@@ -231,7 +230,6 @@ async function fanOutAssigned(tx: Tx, event: Event): Promise<void> {
     actorUserId: event.actor_user_id,
     payload: {
       workspace_id: event.workspace_id,
-      workspace_key: ws[0]?.key ?? '',
       workspace_name: ws[0]?.name ?? '',
       issue_id: event.entity_id,
       issue_seq: meta.seq ?? null,
@@ -249,7 +247,7 @@ async function fanOutUnassigned(tx: Tx, event: Event): Promise<void> {
   if (meta.previous_assignee_id === event.actor_user_id) return
 
   const ws = await tx
-    .select({ name: workspaces.name, key: workspaces.key })
+    .select({ name: workspaces.name })
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
@@ -264,7 +262,6 @@ async function fanOutUnassigned(tx: Tx, event: Event): Promise<void> {
     actorUserId: event.actor_user_id,
     payload: {
       workspace_id: event.workspace_id,
-      workspace_key: ws[0]?.key ?? '',
       workspace_name: ws[0]?.name ?? '',
       issue_id: event.entity_id,
       issue_seq: meta.seq ?? null,
@@ -296,7 +293,7 @@ async function fanOutStatusChanged(tx: Tx, event: Event): Promise<void> {
   if (recipients.size === 0) return
 
   const ws = await tx
-    .select({ name: workspaces.name, key: workspaces.key })
+    .select({ name: workspaces.name })
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
@@ -312,7 +309,6 @@ async function fanOutStatusChanged(tx: Tx, event: Event): Promise<void> {
       actorUserId: event.actor_user_id,
       payload: {
         workspace_id: event.workspace_id,
-        workspace_key: ws[0]?.key ?? '',
         workspace_name: ws[0]?.name ?? '',
         issue_id: event.entity_id,
         issue_seq: meta?.seq ?? null,
@@ -359,7 +355,7 @@ async function fanOutCommented(tx: Tx, event: Event): Promise<void> {
   if (recipients.size === 0) return
 
   const ws = await tx
-    .select({ name: workspaces.name, key: workspaces.key })
+    .select({ name: workspaces.name })
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
@@ -375,7 +371,6 @@ async function fanOutCommented(tx: Tx, event: Event): Promise<void> {
       actorUserId: event.actor_user_id,
       payload: {
         workspace_id: event.workspace_id,
-        workspace_key: ws[0]?.key ?? '',
         workspace_name: ws[0]?.name ?? '',
         issue_id: event.entity_id,
         issue_seq: issueRow[0]?.seq ?? null,
@@ -394,7 +389,7 @@ async function fanOutMentioned(tx: Tx, event: Event): Promise<void> {
   if (!meta?.mentioned_user_id) return
 
   const ws = await tx
-    .select({ name: workspaces.name, key: workspaces.key })
+    .select({ name: workspaces.name })
     .from(workspaces)
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
@@ -421,7 +416,6 @@ async function fanOutMentioned(tx: Tx, event: Event): Promise<void> {
     actorUserId: event.actor_user_id,
     payload: {
       workspace_id: event.workspace_id,
-      workspace_key: ws[0]?.key ?? '',
       workspace_name: ws[0]?.name ?? '',
       issue_id: event.entity_type === 'issue' ? event.entity_id : null,
       issue_seq: issueSeq,

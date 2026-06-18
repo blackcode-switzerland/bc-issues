@@ -214,7 +214,6 @@ export const openApiSpec = {
           id: { type: 'integer' },
           name: { type: 'string' },
           slug: { type: 'string' },
-          key: { type: 'string', description: 'Short issue-key prefix.' },
           member_role: { type: 'string', enum: ['owner', 'member'] },
         },
         'A workspace (tenant).'

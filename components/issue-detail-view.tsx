@@ -365,7 +365,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   }
 
   const data = issue.data
-  const issueIdLabel = data.seq != null && ws ? `${ws.key}-${data.seq}` : `#${data.id}`
+  const issueIdLabel = data.seq != null ? `#${data.seq}` : `#${data.id}`
   const issueLabelIds = new Set((labels.data ?? []).map((l) => l.id))
   const availableLabels = (wsLabels.data ?? []).filter((l) => !issueLabelIds.has(l.id))
   const assignedIds = new Set((data.assignees ?? []).map((a) => a.id))

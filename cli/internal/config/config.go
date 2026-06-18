@@ -15,7 +15,6 @@ type Config struct {
 	Email               string `json:"email,omitempty"`
 	ActiveWorkspaceID   int    `json:"active_workspace_id,omitempty"`
 	ActiveWorkspaceSlug string `json:"active_workspace_slug,omitempty"`
-	ActiveWorkspaceKey  string `json:"active_workspace_key,omitempty"`
 }
 
 func dir() (string, error) {

@@ -656,7 +656,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                       >
                         <StatusIcon status={i.status} className="shrink-0" />
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                          {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
+                          {i.seq != null ? `#${i.seq}` : `#${i.id}`}
                         </span>
                         <span className="flex-1 truncate">{i.title}</span>
                         {(i.assignees ?? []).slice(0, 2).map((a, idx) => (

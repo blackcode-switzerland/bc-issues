@@ -31,7 +31,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     throw Errors.badRequest('invalid_body', 'expected JSON object')
   }
 
-  const patch: { name?: string; slug?: string; key?: string; logo_url?: string | null } = {}
+  const patch: { name?: string; slug?: string; logo_url?: string | null } = {}
   if ('name' in body) {
     if (typeof body.name !== 'string') throw Errors.badRequest('invalid_name', 'name must be a string')
     const n = body.name.trim()
@@ -42,10 +42,6 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   if ('slug' in body) {
     if (typeof body.slug !== 'string') throw Errors.badRequest('invalid_slug', 'slug must be a string')
     patch.slug = body.slug.trim()
-  }
-  if ('key' in body) {
-    if (typeof body.key !== 'string') throw Errors.badRequest('invalid_key', 'key must be a string')
-    patch.key = body.key.trim()
   }
   if ('logo_url' in body) {
     if (body.logo_url !== null && typeof body.logo_url !== 'string') {

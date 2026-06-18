@@ -6,7 +6,6 @@ export interface ActiveWorkspace {
   id: number
   name: string
   slug: string
-  key: string
   member_role: 'owner' | 'member'
 }
 

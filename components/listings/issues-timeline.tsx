@@ -26,10 +26,8 @@ const LABEL_WIDTH = 260
 
 export function IssuesTimeline({
   issues,
-  workspaceKey,
 }: {
   issues: IssueRow[]
-  workspaceKey: string
 }) {
   if (issues.length === 0) {
     return (
@@ -93,7 +91,7 @@ export function IssuesTimeline({
               <StatusIcon status={issue.status} size={13} className="shrink-0" />
               <PriorityIcon priority={issuePriorityKey(issue.priority)} size={12} className="shrink-0 text-muted-foreground" />
               <span className="font-mono text-[10px] shrink-0 tabular-nums text-muted-foreground">
-                {issue.seq != null ? `${workspaceKey}-${issue.seq}` : `#${issue.id}`}
+                {issue.seq != null ? `#${issue.seq}` : `#${issue.id}`}
               </span>
               <span className="flex-1 truncate text-[13px] font-medium">{issue.title}</span>
               {(issue.assignees ?? []).length > 0 ? (

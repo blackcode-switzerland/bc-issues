@@ -172,7 +172,7 @@ for exact column types, indexes, and check constraints.
 | Table | Purpose / notable columns |
 |-------|---------------------------|
 | `users` | `email` (unique), `password_hash`, `google_id`, `avatar_url`, `tagline`, `active_workspace_id` (soft FK), `password_changed_at`, `deleted_at` (soft delete — email can be reused) |
-| `workspaces` | `name`, `slug` (unique), `key` (unique, 6-char issue prefix), `owner_id`, `logo_url`, `deleted_at` |
+| `workspaces` | `name`, `slug` (unique), `owner_id`, `logo_url`, `deleted_at` |
 | `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
 | `workspace_counters` | `last_issue_seq` — per-workspace issue sequence allocator |
 | `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at` |

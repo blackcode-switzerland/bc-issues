@@ -16,7 +16,6 @@ interface Workspace {
   id: number
   name: string
   slug: string
-  key: string
   logo_url: string | null
   owner_id: number
   member_role: 'owner' | 'member'
@@ -56,23 +55,19 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
   const logoFileRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState('')
-  const [key, setKey] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [savedName, setSavedName] = useState('')
-  const [savedKey, setSavedKey] = useState('')
 
   useEffect(() => {
     if (ws) {
       setName(ws.name)
-      setKey(ws.key)
       setLogoUrl(ws.logo_url ?? '')
       setSavedName(ws.name)
-      setSavedKey(ws.key)
     }
   }, [ws])
 
-  const isDirty = name !== savedName || key !== savedKey
+  const isDirty = name !== savedName
 
   const { data: members } = useQuery({
     queryKey: ['workspace-members', ws?.slug],
@@ -101,7 +96,6 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
     onSuccess: () => {
       toast.success('Workspace updated')
       setSavedName(name)
-      setSavedKey(key)
       queryClient.invalidateQueries({ queryKey: ['active-workspace'] })
       if (slug) queryClient.invalidateQueries({ queryKey: ['workspace', slug] })
       queryClient.invalidateQueries({ queryKey: ['me-workspaces'] })
@@ -167,7 +161,7 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
       const j = await res.json().catch(() => ({}))
       if (!res.ok || !j.url) throw new Error(j.error ?? 'Upload failed')
       setLogoUrl(j.url)
-      save.mutate({ name, key, logo_url: j.url })
+      save.mutate({ name, logo_url: j.url })
       toast.success('Logo updated')
     } catch (err) {
       toast.error((err as Error).message)
@@ -244,7 +238,7 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
                       type="button"
                       onClick={() => {
                         setLogoUrl('')
-                        save.mutate({ name, key, logo_url: null })
+                        save.mutate({ name, logo_url: null })
                       }}
                       disabled={save.isPending}
                       className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
@@ -265,35 +259,13 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
             />
           </Field>
-          <Field
-            label="Key"
-            hint="3–6 letters, used as the prefix on issue ids (e.g. ACME-42)."
-            disabled={!isOwner}
-          >
-            <input
-              value={key}
-              onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
-              maxLength={6}
-              disabled={!isOwner}
-              className="w-32 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
-            />
-          </Field>
           {isOwner && isDirty ? (
             <div className="flex justify-end">
               <button
                 type="button"
                 disabled={save.isPending}
-                onClick={async () => {
-                  if (key !== savedKey) {
-                    const ok = await confirm({
-                      title: `Rename workspace key to "${key}"?`,
-                      description: `All issue IDs will change from ${savedKey}-N to ${key}-N across the app and CLI. This cannot be undone.`,
-                      confirmLabel: 'Yes, rename key',
-                      destructive: true,
-                    })
-                    if (!ok) return
-                  }
-                  save.mutate({ name, key, logo_url: logoUrl || null })
+                onClick={() => {
+                  save.mutate({ name, logo_url: logoUrl || null })
                 }}
                 className="cursor-pointer flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >

@@ -361,7 +361,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                       >
                         <StatusIcon status={i.status} size={14} />
                         <span className="font-mono text-xs text-muted-foreground">
-                          {i.seq != null && ws ? `${ws.key}-${i.seq}` : `#${i.id}`}
+                          {i.seq != null ? `#${i.seq}` : `#${i.id}`}
                         </span>
                         <span className="flex-1 truncate text-[13px]">{i.title}</span>
                         {i.project_name ? (
