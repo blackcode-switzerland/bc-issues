@@ -289,6 +289,13 @@ bk whoami
   echo -e "  npm:     https://www.npmjs.com/package/${npm_package}"
   echo -e "  Install: npm install -g ${npm_package}"
   echo
+  warn "Server side — required for the in-CLI update prompts to work:"
+  echo -e "    • Set ${BOLD}CLI_LATEST_VERSION = '${version_number}'${RESET} in lib/cli-version.ts"
+  echo -e "      (or the ${BOLD}BK_CLI_LATEST${RESET} env) → drives the 'update available' notice."
+  echo -e "    • Raise ${BOLD}CLI_MIN_VERSION${RESET} only if this release drops support for older"
+  echo -e "      CLIs → forces an upgrade (exit code 8) on clients below it."
+  echo -e "    • Deploy the web app (./devops/release.sh web) for it to take effect."
+  echo
 }
 
 # ── entrypoint ─────────────────────────────────────────────────────────────

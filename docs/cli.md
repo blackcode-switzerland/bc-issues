@@ -82,6 +82,42 @@ Versions are stamped into the binary via `-ldflags` (into the `internal/version`
 
 ---
 
+## Releasing & version management
+
+A release is cut with the repo's release script (from the repo root):
+
+```bash
+./devops/release.sh cli <patch|minor|major|vX.Y.Z>
+```
+
+It runs preflight (gh/npm/git auth, clean tree, version not already used), then:
+
+1. Bumps `cli/npm/package.json` **and** `cli/npm/install.js` (the install.js
+   `VERSION` is derived from `package.json`, so they can't drift).
+2. Commits + pushes the bump, creates and pushes the `vX.Y.Z` git tag.
+3. `make dist` cross-compiles all targets; `version.Version` is stamped from the
+   tag via `-ldflags`.
+4. Publishes the binaries to a GitHub Release and the npm package
+   `@blackcode_sa/bc-issues`.
+
+### Required server-side step (don't skip)
+
+The "update available" notice and the hard min-version block (see
+[Updates](#updates)) are driven by **server** headers, not the CLI alone. After a
+release, update `lib/cli-version.ts` (or the `BK_CLI_LATEST` / `BK_CLI_MIN` env
+vars) and redeploy the web app:
+
+- **`CLI_LATEST_VERSION`** → set to the version you just published. Drives the
+  soft "a new bk version is available" notice.
+- **`CLI_MIN_VERSION`** → raise this **only** when a server change is incompatible
+  with older CLIs (e.g. a breaking route/field rename). Clients below it get a
+  hard "please upgrade" and exit code `8`.
+
+The release script prints this reminder on completion. This keeps the four
+surfaces in sync per the contract in `CLAUDE.md` / `AGENTS.md`.
+
+---
+
 ## Project layout
 
 ```
