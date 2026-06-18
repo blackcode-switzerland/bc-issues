@@ -19,6 +19,7 @@ import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
 import { resolveOrCreateLabels } from './labels'
+import { toRichTextHtml } from '@/lib/rich-text'
 import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
 
 const TERMINAL_STATUSES = new Set(ISSUE_TERMINAL_STATUSES)
@@ -211,7 +212,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
         workspace_id: input.workspaceId,
         seq,
         title: input.title,
-        description: input.description ?? null,
+        description: toRichTextHtml(input.description) ?? null,
         status,
         priority: input.priority ?? 3,
         task_id: input.taskId ?? null,
@@ -338,7 +339,7 @@ export async function updateIssue(
 
     const updates: Record<string, unknown> = {}
     if (patch.title !== undefined) updates.title = patch.title
-    if (patch.description !== undefined) updates.description = patch.description
+    if (patch.description !== undefined) updates.description = toRichTextHtml(patch.description)
     if (patch.priority !== undefined) updates.priority = patch.priority
     if (patch.task_id !== undefined) updates.task_id = patch.task_id
     if (patch.project_id !== undefined) updates.project_id = patch.project_id

@@ -16,6 +16,7 @@ import {
   type Comment,
 } from '../schema'
 import { recordEvent } from './events'
+import { toRichTextHtml } from '@/lib/rich-text'
 
 const MENTION_RE = /@([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g
 
@@ -165,7 +166,7 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
         // queries that join on issue_id keep working until Phase 13 drops it.
         issue_id: input.parentType === 'issue' ? input.parentId : null,
         user_id: input.userId,
-        content: input.content,
+        content: toRichTextHtml(input.content),
         mentions: mentionedUserIds.length > 0 ? mentionedUserIds : null,
         parent_comment_id: input.parentCommentId ?? null,
       })
@@ -241,7 +242,7 @@ export async function updateComment(
     }
     const [after] = await tx
       .update(comments)
-      .set({ content, edited_at: new Date(), updated_at: new Date() })
+      .set({ content: toRichTextHtml(content), edited_at: new Date(), updated_at: new Date() })
       .where(and(eq(comments.id, id), eq(comments.workspace_id, workspaceId)))
       .returning()
     if (!after) return null

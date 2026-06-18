@@ -5,6 +5,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '../client'
 import { projectUpdates, projects, users, type ProjectUpdate } from '../schema'
 import { recordEvent } from './events'
+import { toRichTextHtml } from '@/lib/rich-text'
 
 export const PROJECT_UPDATE_STATUSES = ['on_track', 'at_risk', 'off_track'] as const
 export type ProjectUpdateStatus = (typeof PROJECT_UPDATE_STATUSES)[number]
@@ -71,7 +72,7 @@ export async function createProjectUpdate(
         project_id: input.projectId,
         author_id: input.userId,
         status: input.status,
-        body: input.body,
+        body: toRichTextHtml(input.body),
       })
       .returning()
     if (!row) throw new Error('project update insert returned nothing')

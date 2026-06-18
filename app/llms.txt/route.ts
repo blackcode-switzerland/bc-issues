@@ -17,6 +17,7 @@ function buildLlmsTxt(): string {
     `- API base: ${m.programmatic_access.api_base} — tenant data is workspace-scoped under ${m.programmatic_access.workspace_scoped_routes}`,
     `- Lists return ${m.programmatic_access.list_envelope}; pagination is ${m.programmatic_access.pagination}`,
     `- Errors return ${m.programmatic_access.error_envelope}`,
+    `- Rich text: ${m.programmatic_access.rich_text}`,
     '',
     '## Discovery',
     `- [Context](${m.discovery.context}): current user, active workspace, and the valid status/priority vocabulary — call this first`,

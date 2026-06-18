@@ -18,6 +18,7 @@ export const AGENT_MANIFEST = {
     list_envelope: '{ data: [...], next_cursor: number | null }',
     error_envelope: '{ error, code, suggestion?, details? }',
     pagination: 'cursor-based via ?limit= and ?cursor=',
+    rich_text: 'Description/comment/body fields accept Markdown or HTML (stored as sanitized HTML); send real newlines, not literal \\n.',
   },
   discovery: {
     context: '/api/meta',
@@ -44,6 +45,7 @@ This is a rendered web page, but everything here is also available over an HTTP 
 - Full spec: GET /api/openapi.json  (OpenAPI 3.1; human-browsable at /api/docs)
 - CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
 - Lists return { data, next_cursor }; errors return { error, code, suggestion?, details? }
+- Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n
 - Developer/agent guide: /AGENTS.md
 A structured version of this note is in the <script type="application/json" id="agent-manifest"> element on this page.
 `.trim()

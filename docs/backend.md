@@ -277,6 +277,12 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
 - **Mutations:** create → `201` + the created entity; update → `200` + the
   updated entity; delete → `200` + `{ deleted: true }` (plus `mode` where the
   resource cascades, e.g. projects/tasks).
+- **Rich-text fields** (issue/project descriptions, comments, project-update
+  bodies) accept **Markdown or HTML** and are normalized to **sanitized HTML** on
+  write via `lib/rich-text.ts` (`toRichTextHtml`), applied in the query layer so
+  every surface benefits. Markdown is converted (and a common agent mistake —
+  literal `\n` instead of real newlines — is tolerated); existing HTML (web
+  editor) is passed through and sanitized again at render by the display layer.
 
 ### Discovery (for agents & tooling)
 

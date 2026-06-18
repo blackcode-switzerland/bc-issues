@@ -144,7 +144,9 @@ export const openApiSpec = {
       '(slug or id) and operate under /api/workspaces/{ws}/…. Authenticate with a ' +
       '`bk_live_…` bearer token (create one in Settings → API Tokens or via `bk login`). ' +
       'Lists return { data, next_cursor }; errors return { error, code, suggestion?, details? }. ' +
-      'Call GET /api/meta first to discover the active workspace and the valid status/priority vocabulary.',
+      'Call GET /api/meta first to discover the active workspace and the valid status/priority vocabulary. ' +
+      'Rich-text fields (issue/project descriptions, comments, project updates) accept **Markdown or HTML** ' +
+      'and are stored as sanitized HTML — send real newlines, not the literal characters "\\n".',
   },
   servers: [{ url: '/', description: 'Same origin' }],
   security: [{ bearerAuth: [] }],
@@ -254,7 +256,7 @@ export const openApiSpec = {
         additionalProperties: false,
         properties: {
           title: { type: 'string', maxLength: 200 },
-          description: { type: 'string' },
+          description: { type: 'string', description: 'Markdown or HTML; stored as sanitized HTML. Use real newlines, not literal "\\n".' },
           status: { type: 'string', enum: ISSUE_STATUS_VALUES },
           priority: { type: 'integer', enum: ISSUE_PRIORITY_VALUES },
           project_id: { type: ['integer', 'null'] },
@@ -359,7 +361,7 @@ export const openApiSpec = {
         required: ['content'],
         additionalProperties: false,
         properties: {
-          content: { type: 'string', description: 'Rich-text/HTML body; non-empty.' },
+          content: { type: 'string', description: 'Non-empty. Markdown or HTML; stored as sanitized HTML. Use real newlines, not literal "\\n".' },
           parent_comment_id: { type: 'integer', description: 'Set to reply to another comment.' },
         },
       },

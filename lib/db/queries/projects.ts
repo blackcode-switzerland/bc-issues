@@ -12,6 +12,7 @@ import { projects, type Project } from '../schema'
 import { recordEvent } from './events'
 import { softDeleteProject, type DeleteMode } from './deletion'
 import { setProjectMembers } from './project-relations'
+import { toRichTextHtml } from '@/lib/rich-text'
 
 export interface ProjectListItem extends Project {
   issue_count: number
@@ -157,7 +158,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
         workspace_id: input.workspaceId,
         name: input.name,
         summary: input.summary ?? null,
-        description: input.description ?? null,
+        description: toRichTextHtml(input.description) ?? null,
         color: input.color ?? '#3B82F6',
         icon: input.icon ?? null,
         priority: input.priority ?? 'P2',
@@ -230,7 +231,7 @@ export async function updateProject(
     const updates: Record<string, unknown> = {}
     if (patch.name !== undefined) updates.name = patch.name
     if (patch.summary !== undefined) updates.summary = patch.summary
-    if (patch.description !== undefined) updates.description = patch.description
+    if (patch.description !== undefined) updates.description = toRichTextHtml(patch.description)
     if (patch.status !== undefined) updates.status = patch.status
     if (patch.color !== undefined) updates.color = patch.color
     if (patch.icon !== undefined) updates.icon = patch.icon

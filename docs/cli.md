@@ -428,6 +428,11 @@ For any `--description` / `--body` flag, three forms work, and the `*-file` vari
 --description-file path/to.md     # read from file
 ```
 
+**Format:** description/body content may be **Markdown or HTML** — the server
+stores it as sanitized HTML. Send **real newlines** (use `--description-file` or
+`-`/stdin for multi-line); don't hand-build a JSON body with the literal
+characters `\n`, or the line breaks won't render.
+
 ### Nullable field convention
 
 For `edit` commands on nullable fields (`--assignee`, `--task`, `--start-date`, `--due-date`; `--due-date` on tasks):

@@ -321,8 +321,8 @@ func newIssueCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVar(&projectID, "project", 0, "Project id (required)")
 	cmd.Flags().StringVar(&title, "title", "", "Issue title (required)")
-	cmd.Flags().StringVar(&description, "description", "", "Description (use \"-\" for stdin)")
-	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
+	cmd.Flags().StringVar(&description, "description", "", "Description — Markdown or HTML (use \"-\" for stdin; --description-file for multi-line to avoid escaping newlines)")
+	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
 	cmd.Flags().StringVar(&status, "status", "", "Status (backlog/todo/in_progress/blocked/in_review/done/cancelled)")
 	cmd.Flags().IntVar(&priority, "priority", 0, "Priority 1-5 (1=urgent)")
 	cmd.Flags().StringVar(&attach, "attach", "", "Path to a file to attach")
@@ -410,8 +410,8 @@ func newIssueEditCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&status, "status", "", "New status")
 	cmd.Flags().StringVar(&title, "title", "", "New title")
-	cmd.Flags().StringVar(&description, "description", "", "New description (\"-\" for stdin)")
-	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
+	cmd.Flags().StringVar(&description, "description", "", "New description — Markdown or HTML (\"-\" for stdin; --description-file for multi-line)")
+	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
 	cmd.Flags().IntVar(&priority, "priority", 0, "New priority (1-5)")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, 'me', or 'none' to clear)")
 	cmd.Flags().StringVar(&task, "task", "", "Task id (or 'none' to clear)")
