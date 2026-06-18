@@ -465,7 +465,7 @@ func newProjectRemoveMemberCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token)
+			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
 			uid, err := ResolveUserRef(c, cfg, userRef)
 			if err != nil {
 				return err
@@ -712,7 +712,7 @@ func newClient() (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return client.New(cfg.Server, cfg.Token), nil
+	return client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug), nil
 }
 
 func derefOr(s *string, fallback string) string {

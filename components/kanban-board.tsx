@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { ProjectMembersPanel } from './project-members-panel'
 import { CreateIssueModal } from './create-issue-modal'
+import { useActiveWorkspace } from './listings/use-active-workspace'
 import { RichTextEditor, RichTextDisplay } from './rich-text-editor'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -123,25 +124,30 @@ export function KanbanBoard({
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const isUndoing = useRef(false)
   const queryClient = useQueryClient()
-  
+  const { data: ws } = useActiveWorkspace()
+
   // Fetch project members for filter dropdown
   const { data: members = [] } = useQuery({
-    queryKey: ['project-members', project.id],
+    queryKey: ['project-members', project.id, ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${project.id}/members`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${project.id}/members`)
       if (!res.ok) return []
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
   })
 
   // Fetch fresh data to keep kanban in sync
   useQuery({
-    queryKey: ['project-issues', project.id],
+    queryKey: ['project-issues', project.id, ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/issues?project_id=${project.id}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues?project_id=${project.id}`)
       if (!res.ok) throw new Error('Failed to fetch issues')
-      const issues: Issue[] = await res.json()
-      
+      const json = await res.json()
+      const issues: Issue[] = json.data
+
       // Group issues by status
       const grouped: KanbanData = {}
       for (const issue of issues) {
@@ -162,7 +168,7 @@ export function KanbanBoard({
 
   const updateIssueStatus = useMutation({
     mutationFn: async ({ issueId, status }: { issueId: number; status: string }) => {
-      const res = await fetch(`/api/issues/${issueId}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -196,7 +202,7 @@ export function KanbanBoard({
       assignee_ids?: number[]
       milestone_id?: number
     }) => {
-      const res = await fetch('/api/issues', {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -673,6 +679,7 @@ function Column({
   onSelectIssue: (issue: Issue) => void
   onOpenRichCreate: () => void
 }) {
+  const { data: ws } = useActiveWorkspace()
   const [newTitle, setNewTitle] = useState('')
   const [showExpanded, setShowExpanded] = useState(false)
   const [description, setDescription] = useState('')
@@ -691,20 +698,24 @@ function Column({
 
   // Fetch project members and milestones
   const { data: members = [] } = useQuery({
-    queryKey: ['project-members', projectId],
+    queryKey: ['project-members', projectId, ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/members`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/members`)
       if (!res.ok) return []
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
   })
 
   const { data: milestones = [] } = useQuery({
-    queryKey: ['milestones', projectId],
+    queryKey: ['milestones', projectId, ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/milestones?project_id=${projectId}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones?project_id=${projectId}`)
       if (!res.ok) return []
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
   })
 
@@ -996,6 +1007,7 @@ function IssueDetailModal({
 }) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { data: ws } = useActiveWorkspace()
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Local state for editing
@@ -1019,7 +1031,7 @@ function IssueDetailModal({
   // Update issue mutation
   const updateIssue = useMutation({
     mutationFn: async (data: Partial<Issue>) => {
-      const res = await fetch(`/api/issues/${issue.id}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issue.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

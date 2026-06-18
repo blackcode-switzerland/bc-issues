@@ -159,8 +159,8 @@ export async function getIssueInWorkspace(
   return (result.rows[0] as unknown as IssueListRow | undefined) ?? null
 }
 
-// Legacy by-id lookup — used by /api/issues/[id] shim. Just bare row; workspace
-// gating happens at the route layer.
+// Bare by-id lookup (no workspace gating) — used by tests and internal helpers.
+// Route handlers should prefer getIssueInWorkspace, which enforces tenancy.
 export async function getIssue(id: number): Promise<Issue | null> {
   const rows = await db
     .select()

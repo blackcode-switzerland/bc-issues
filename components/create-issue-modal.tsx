@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useActiveWorkspace } from './listings/use-active-workspace'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import Image from 'next/image'
@@ -56,6 +57,7 @@ export function CreateIssueModal({
   onSuccess,
 }: CreateIssueModalProps) {
   const queryClient = useQueryClient()
+  const { data: ws } = useActiveWorkspace()
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   // Form state
@@ -87,36 +89,40 @@ export function CreateIssueModal({
 
   // Fetch projects for dropdown (if no projectId provided)
   const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['projects'],
+    queryKey: ['projects', ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch('/api/projects')
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects`)
       if (!res.ok) throw new Error('Failed to fetch projects')
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
   })
 
   // Fetch project members for assignee dropdown
   const { data: members = [] } = useQuery({
-    queryKey: ['project-members', selectedProjectId],
+    queryKey: ['project-members', selectedProjectId, ws?.slug],
     queryFn: async () => {
       if (!selectedProjectId) return []
-      const res = await fetch(`/api/projects/${selectedProjectId}/members`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${selectedProjectId}/members`)
       if (!res.ok) return []
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
-    enabled: !!selectedProjectId,
+    enabled: !!selectedProjectId && !!ws?.slug,
   })
 
   // Fetch milestones for dropdown
   const { data: milestones = [] } = useQuery({
-    queryKey: ['milestones', selectedProjectId],
+    queryKey: ['milestones', selectedProjectId, ws?.slug],
     queryFn: async () => {
       if (!selectedProjectId) return []
-      const res = await fetch(`/api/milestones?project_id=${selectedProjectId}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones?project_id=${selectedProjectId}`)
       if (!res.ok) return []
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
-    enabled: !!selectedProjectId,
+    enabled: !!selectedProjectId && !!ws?.slug,
   })
 
   // Get current project name
@@ -150,7 +156,7 @@ export function CreateIssueModal({
       if (!selectedProjectId) throw new Error('No project selected')
       if (!title.trim()) throw new Error('Title is required')
 
-      const res = await fetch('/api/issues', {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

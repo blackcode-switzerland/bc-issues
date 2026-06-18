@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useActiveWorkspace } from './listings/use-active-workspace'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -38,19 +39,22 @@ interface Project {
 export function Dashboard({ user }: { user: User }) {
   const [showNewProject, setShowNewProject] = useState(false)
   const queryClient = useQueryClient()
+  const { data: ws } = useActiveWorkspace()
 
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch('/api/projects')
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects`)
       if (!res.ok) throw new Error('Failed to fetch projects')
-      return res.json() as Promise<Project[]>
+      const json = await res.json()
+      return json.data as Project[]
     },
   })
 
   const createProject = useMutation({
     mutationFn: async (data: { name: string; summary: string }) => {
-      const res = await fetch('/api/projects', {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -60,6 +64,7 @@ export function Dashboard({ user }: { user: User }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
       setShowNewProject(false)
       toast.success('Project created!')
     },

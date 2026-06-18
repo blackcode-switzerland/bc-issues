@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
 import { createLabel, listLabelsInWorkspace } from '@/lib/db/queries/labels'
 
 interface Params {
@@ -12,7 +12,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
   const ctx = await resolveWorkspace(req, ws)
   const data = await listLabelsInWorkspace(ctx.workspace.id)
-  return NextResponse.json({ data })
+  return jsonList(data)
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {

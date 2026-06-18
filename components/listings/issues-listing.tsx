@@ -222,7 +222,7 @@ export function IssuesListing() {
     const ids = Array.from(selectedIds)
     await Promise.all(
       ids.map((id) =>
-        fetch(`/api/issues/${id}`, {
+        fetch(`/api/workspaces/${ws!.slug}/issues/${id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patch),
@@ -270,7 +270,7 @@ export function IssuesListing() {
     )
     setSelectedIds(new Set())
     try {
-      await Promise.all(ids.map((id) => fetch(`/api/issues/${id}`, { method: 'DELETE' })))
+      await Promise.all(ids.map((id) => fetch(`/api/workspaces/${ws!.slug}/issues/${id}`, { method: 'DELETE' })))
       toast.success(`Moved ${ids.length} ${ids.length === 1 ? 'issue' : 'issues'} to Trash`)
       queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
@@ -842,7 +842,7 @@ function IssueRowItem({
 
   const patch = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const res = await fetch(`/api/issues/${issue.id}`, {
+      const res = await fetch(`/api/workspaces/${workspaceSlug}/issues/${issue.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

@@ -269,8 +269,14 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   `Errors.badRequest(...)` on bad shapes.
 - Workspace-scoped routes resolve `{ ws }` (slug **or** numeric id) via
   `resolveWorkspace`.
-- List endpoints that paginate return `{ data, next_cursor }`; simple lists
-  return `{ data }`.
+- **All list endpoints return `{ data, next_cursor }`** — `next_cursor` is a
+  numeric cursor to pass back as `?cursor=`, or `null` when there are no further
+  pages (including inherently unpaginated lists). Some lists also include
+  `total`. Build the body with `jsonList()` (`lib/api/responses.ts`) so the
+  envelope can't drift. Single resources return the bare entity object.
+- **Mutations:** create → `201` + the created entity; update → `200` + the
+  updated entity; delete → `200` + `{ deleted: true }` (plus `mode` where the
+  resource cascades, e.g. projects/milestones).
 
 ### Workspace-scoped (canonical)
 
@@ -295,6 +301,7 @@ GET    /api/workspaces/{ws}/projects            list projects
 POST   /api/workspaces/{ws}/projects            create project
 GET    /api/workspaces/{ws}/projects/{id}       project detail (+ members, labels)
 PATCH  /api/workspaces/{ws}/projects/{id}       update (also member_ids/label_ids)
+GET    /api/workspaces/{ws}/projects/{id}/members  list members / POST add (owner|admin) / DELETE remove ({user_id})
 GET    /api/workspaces/{ws}/projects/{id}?preview=1   child counts for delete dialog
 DELETE /api/workspaces/{ws}/projects/{id}?mode=cascade|detach   move to Trash (default: detach)
 GET    /api/workspaces/{ws}/projects/{id}/comments   list / POST comment
@@ -315,6 +322,9 @@ DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
 GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
 GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach
 DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid} detach
+GET    /api/workspaces/{ws}/issues/{id}/activity      activity feed for the issue
+GET    /api/workspaces/{ws}/issues/{id}/attachments   list / POST attach
+DELETE /api/workspaces/{ws}/issues/{id}/attachments/{attachmentId}  remove attachment
 POST   /api/workspaces/{ws}/issues/{id}/watch        watch / DELETE unwatch
 POST   /api/workspaces/{ws}/issues/reorder      update display order (drag-and-drop)
 
@@ -388,11 +398,17 @@ POST     /api/errors/client                       client error beacon
 
 ### Legacy non-workspace shims
 
-`/api/projects`, `/api/issues`, `/api/milestones`, `/api/users`,
-`/api/activity`, `/api/analytics` (and their `/{id}` children) remain for the
-`bk` CLI, which still uses several of them. They resolve the workspace
-server-side from the caller. New web code should prefer the workspace-scoped
-routes.
+The implicit-active-workspace duplicates of the core entities —
+`/api/projects`, `/api/issues`, `/api/milestones` and all their `/{id}`
+children (incl. `/api/issues/{id}/comments`, `/attachments`, `/activity` and
+`/api/projects/{id}/members`) — have been **removed**. Both the web app and the
+`bk` CLI now call the canonical `/api/workspaces/{ws}/...` routes exclusively.
+The scoped routes for issue attachments, issue activity, and project members
+were added as part of that consolidation.
+
+A few non-entity legacy routes still resolve the workspace server-side from the
+caller and remain for `bk` CLI parity, **pending migration**: `/api/users`,
+`/api/activity`, and `/api/analytics`. New code should not use them.
 
 `/api/analytics` accepts the **same** query params as the canonical
 `/api/workspaces/{ws}/analytics` (both share `parseAnalyticsParams`): `view`,

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useActiveWorkspace } from './listings/use-active-workspace'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -66,6 +67,7 @@ export function ProjectSettingsModal({
 }: ProjectSettingsModalProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { data: ws } = useActiveWorkspace()
 
   // Form state initialized from project
   const [name, setName] = useState(project.name)
@@ -87,11 +89,13 @@ export function ProjectSettingsModal({
 
   // Fetch project members for owner dropdown
   const { data: members = [] } = useQuery({
-    queryKey: ['project-members', project.id],
+    queryKey: ['project-members', project.id, ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${project.id}/members`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${project.id}/members`)
       if (!res.ok) return []
-      return res.json()
+      const json = await res.json()
+      return json.data
     },
   })
 
@@ -152,7 +156,7 @@ export function ProjectSettingsModal({
   // Update project mutation
   const updateProject = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/projects/${project.id}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${project.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -191,7 +195,7 @@ export function ProjectSettingsModal({
   // Delete project mutation
   const deleteProjectMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/projects/${project.id}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${project.id}`, {
         method: 'DELETE',
       })
 

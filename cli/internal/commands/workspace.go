@@ -267,7 +267,7 @@ func newClientAndConfig() (*client.Client, *config.Config, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return client.New(cfg.Server, cfg.Token), cfg, nil
+	return client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug), cfg, nil
 }
 
 // resolveWorkspaceRef returns either the slug/id explicitly given as the

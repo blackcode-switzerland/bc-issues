@@ -183,34 +183,34 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk project list [--limit N] [--cursor ID]` | `GET /api/projects` | Cursor-paged when `--limit`/`--cursor` set; otherwise a flat list. |
-| `bk project view <id>` | `GET /api/projects/:id` | |
-| `bk project members <id>` | `GET /api/projects/:id/members` | |
-| `bk project issues <id> [--status S] [--assignee REF] [--limit N] [--cursor ID]` | `GET /api/issues?project_id=:id` | Status/assignee filters applied client-side. |
-| `bk project milestones <id>` | `GET /api/milestones?project_id=:id` | |
-| `bk project create --name N [--description D \| --description-file F]` | `POST /api/projects` | |
-| `bk project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/projects/:id` | |
+| `bk project list [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/projects` | Cursor-paged when `--limit`/`--cursor` set; otherwise a flat list. |
+| `bk project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
+| `bk project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
+| `bk project issues <id> [--status S] [--assignee REF] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
+| `bk project milestones <id>` | `GET /api/workspaces/:ws/milestones?project_id=:id` | |
+| `bk project create --name N [--description D \| --description-file F]` | `POST /api/workspaces/:ws/projects` | |
+| `bk project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/workspaces/:ws/projects/:id` | |
 | `bk project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached milestones/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
-| `bk project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
-| `bk project remove-member <id> --user REF [--yes]` | `DELETE /api/projects/:id/members` | `REF` = id, email, or display name. Prompts to confirm. |
+| `bk project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/workspaces/:ws/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
+| `bk project remove-member <id> --user REF [--yes]` | `DELETE /api/workspaces/:ws/projects/:id/members` | `REF` = id, email, or display name. Prompts to confirm. |
 
 ### Issues
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--limit N] [--cursor ID]` | `GET /api/issues` | `--mine` = assigned to the current user. `--assignee` is repeatable for multi-assignee filter. |
-| `bk issue view <id>` | `GET /api/issues/:id` | |
-| `bk issue create --project N --title T [...]` | `POST /api/issues` | Full flag list below. |
-| `bk issue edit <id> [...]` | `PATCH /api/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
-| `bk issue assign <id> <user> [<user> ...]` | `PATCH /api/issues/:id` | Adds one or more assignees (does not remove existing). |
-| `bk issue unassign <id> [<user>]` | `PATCH /api/issues/:id` | Removes a specific assignee, or clears all if no user given. |
+| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues` | `--mine` = assigned to the current user. `--assignee` is repeatable for multi-assignee filter. |
+| `bk issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | |
+| `bk issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
+| `bk issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
+| `bk issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
+| `bk issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
 | `bk issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
-| `bk issue comment <id> --body "..." \| --body - \| --body-file F` | `POST /api/issues/:id/comments` | Body must be non-empty. |
-| `bk issue comments <id>` | `GET /api/issues/:id/comments` | |
-| `bk issue activity <id>` | `GET /api/issues/:id/activity` | Merged comments + change log. |
-| `bk issue attach <id> --file F` | `POST /api/upload` then `POST /api/issues/:id/attachments` | Two-step upload + attach. |
-| `bk issue attachments <id>` | `GET /api/issues/:id/attachments` | |
-| `bk issue detach <issue-id> <attachment-id> [--yes]` | `DELETE /api/issues/:id/attachments?attachmentId=N` | Prompts to confirm. |
+| `bk issue comment <id> --body "..." \| --body - \| --body-file F` | `POST /api/workspaces/:ws/issues/:id/comments` | Body must be non-empty. |
+| `bk issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
+| `bk issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
+| `bk issue attach <id> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Two-step upload + attach. |
+| `bk issue attachments <id>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
+| `bk issue detach <issue-id> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
 
 **`issue create` flags**:
 
@@ -238,10 +238,10 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call |
 |---|---|
-| `bk milestone list [--project N]` | `GET /api/milestones[?project_id=N]` |
-| `bk milestone view <id> [--include-issues]` | `GET /api/milestones/:id[?includeIssues=true]` |
-| `bk milestone create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD]` | `POST /api/milestones` |
-| `bk milestone edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/milestones/:id` |
+| `bk milestone list [--project N]` | `GET /api/workspaces/:ws/milestones[?project_id=N]` |
+| `bk milestone view <id> [--include-issues]` | `GET /api/workspaces/:ws/milestones/:id[?includeIssues=true]` |
+| `bk milestone create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD]` | `POST /api/workspaces/:ws/milestones` |
+| `bk milestone edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/milestones/:id` |
 | `bk milestone delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/milestones/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
 
 ### Trash (recycle bin, workspace-scoped)
@@ -550,7 +550,7 @@ Built around a small `Client` struct:
 - 30-second timeout.
 - Non-2xx responses decode into `APIError { Status, ErrorMsg, Suggestion, Details }`; the `main.go` translator maps `Status` to an exit code.
 
-DTO types live in `internal/client/types.go` (`Me`, `User`, `Project`, `Issue`, `Milestone`, `Comment`, `Attachment`, `ProjectMember`, the page wrappers, etc.) and `internal/client/workspace.go` (`Workspace`, `WorkspaceMember`, `WorkspaceInvitation`, `InboxMessage`, `Label`, and their request/response shapes). Some endpoints use the legacy non-workspace paths (`/api/projects`, `/api/issues`, `/api/milestones`) while the newer workspace-scoped features (labels, members, invitations) use `/api/workspaces/{slug|id}/…`.
+DTO types live in `internal/client/types.go` (`Me`, `User`, `Project`, `Issue`, `Milestone`, `Comment`, `Attachment`, `ProjectMember`, the page wrappers, etc.) and `internal/client/workspace.go` (`Workspace`, `WorkspaceMember`, `WorkspaceInvitation`, `InboxMessage`, `Label`, and their request/response shapes). Some endpoints use the legacy non-workspace paths (`/api/workspaces/:ws/projects`, `/api/workspaces/:ws/issues`, `/api/workspaces/:ws/milestones`) while the newer workspace-scoped features (labels, members, invitations) use `/api/workspaces/{slug|id}/…`.
 
 ### Auth flow (`internal/commands/login.go`)
 

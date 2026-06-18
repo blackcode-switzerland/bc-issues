@@ -36,15 +36,34 @@ func (e *APIError) Error() string {
 type Client struct {
 	BaseURL string
 	Token   string
-	HTTP    *http.Client
+	// WorkspaceSlug is the active workspace slug from config, used to build
+	// canonical /api/workspaces/{slug}/... routes.
+	WorkspaceSlug string
+	HTTP          *http.Client
 }
 
-func New(baseURL, token string) *Client {
+func New(baseURL, token, workspaceSlug string) *Client {
 	return &Client{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		Token:   token,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		BaseURL:       strings.TrimRight(baseURL, "/"),
+		Token:         token,
+		WorkspaceSlug: workspaceSlug,
+		HTTP:          &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// wsPath builds a workspace-scoped path of the form
+// /api/workspaces/{slug}/{suffix}. The suffix should NOT include a leading
+// slash for the workspace segment; e.g. wsPath("issues") ->
+// /api/workspaces/acme/issues. Returns an error if no active workspace is set.
+func (c *Client) wsPath(suffix string) (string, error) {
+	if c.WorkspaceSlug == "" {
+		return "", fmt.Errorf("no active workspace; run `bk workspace use <slug>`")
+	}
+	suffix = strings.TrimPrefix(suffix, "/")
+	if suffix == "" {
+		return "/api/workspaces/" + c.WorkspaceSlug, nil
+	}
+	return "/api/workspaces/" + c.WorkspaceSlug + "/" + suffix, nil
 }
 
 func (c *Client) do(req *http.Request, out any) error {
@@ -146,16 +165,24 @@ func (c *Client) Whoami() (*Me, error) {
 }
 
 func (c *Client) ListProjects() ([]Project, error) {
-	var projects []Project
-	if err := c.get("/api/projects", &projects); err != nil {
+	path, err := c.wsPath("projects")
+	if err != nil {
 		return nil, err
 	}
-	return projects, nil
+	var page ProjectsPage
+	if err := c.get(path, &page); err != nil {
+		return nil, err
+	}
+	return page.Data, nil
 }
 
 func (c *Client) GetProject(id int) (*Project, error) {
+	path, err := c.wsPath(fmt.Sprintf("projects/%d", id))
+	if err != nil {
+		return nil, err
+	}
 	var p Project
-	if err := c.get(fmt.Sprintf("/api/projects/%d", id), &p); err != nil {
+	if err := c.get(path, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -173,24 +200,19 @@ func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
 		q.Set("cursor", fmt.Sprint(*opts.Cursor))
 	}
 
-	path := "/api/issues"
+	path, err := c.wsPath("issues")
+	if err != nil {
+		return nil, err
+	}
 	if len(q) > 0 {
 		path += "?" + q.Encode()
 	}
 
-	if opts.Limit > 0 || opts.Cursor != nil {
-		var page IssuesPage
-		if err := c.get(path, &page); err != nil {
-			return nil, err
-		}
-		return &page, nil
-	}
-
-	var issues []Issue
-	if err := c.get(path, &issues); err != nil {
+	var page IssuesPage
+	if err := c.get(path, &page); err != nil {
 		return nil, err
 	}
-	return &IssuesPage{Data: issues, NextCursor: nil}, nil
+	return &page, nil
 }
 
 type ListIssuesOpts struct {
@@ -213,22 +235,18 @@ func (c *Client) ListProjectsPage(opts ListProjectsOpts) (*ProjectsPage, error) 
 	if opts.Cursor != nil {
 		q.Set("cursor", fmt.Sprint(*opts.Cursor))
 	}
-	path := "/api/projects"
+	path, err := c.wsPath("projects")
+	if err != nil {
+		return nil, err
+	}
 	if len(q) > 0 {
 		path += "?" + q.Encode()
 	}
-	if opts.Limit > 0 || opts.Cursor != nil {
-		var page ProjectsPage
-		if err := c.get(path, &page); err != nil {
-			return nil, err
-		}
-		return &page, nil
-	}
-	var projects []Project
-	if err := c.get(path, &projects); err != nil {
+	var page ProjectsPage
+	if err := c.get(path, &page); err != nil {
 		return nil, err
 	}
-	return &ProjectsPage{Data: projects, NextCursor: nil}, nil
+	return &page, nil
 }
 
 func (c *Client) ListUsers() ([]User, error) {
@@ -240,51 +258,73 @@ func (c *Client) ListUsers() ([]User, error) {
 }
 
 func (c *Client) ListProjectMembers(projectID int) ([]ProjectMember, error) {
-	var members []ProjectMember
-	if err := c.get(fmt.Sprintf("/api/projects/%d/members", projectID), &members); err != nil {
+	path, err := c.wsPath(fmt.Sprintf("projects/%d/members", projectID))
+	if err != nil {
 		return nil, err
 	}
-	return members, nil
+	var env projectMembersEnvelope
+	if err := c.get(path, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
 }
 
 func (c *Client) ListIssueComments(issueID int) ([]Comment, error) {
-	var comments []Comment
-	if err := c.get(fmt.Sprintf("/api/issues/%d/comments", issueID), &comments); err != nil {
+	path, err := c.wsPath(fmt.Sprintf("issues/%d/comments", issueID))
+	if err != nil {
 		return nil, err
 	}
-	return comments, nil
+	var env commentsEnvelope
+	if err := c.get(path, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
 }
 
 func (c *Client) ListIssueActivity(issueID int) ([]ActivityItem, error) {
-	var items []ActivityItem
-	if err := c.get(fmt.Sprintf("/api/issues/%d/activity", issueID), &items); err != nil {
+	path, err := c.wsPath(fmt.Sprintf("issues/%d/activity", issueID))
+	if err != nil {
 		return nil, err
 	}
-	return items, nil
+	var env activityEnvelope
+	if err := c.get(path, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
 }
 
 func (c *Client) ListIssueAttachments(issueID int) ([]Attachment, error) {
-	var atts []Attachment
-	if err := c.get(fmt.Sprintf("/api/issues/%d/attachments", issueID), &atts); err != nil {
+	path, err := c.wsPath(fmt.Sprintf("issues/%d/attachments", issueID))
+	if err != nil {
 		return nil, err
 	}
-	return atts, nil
+	var env attachmentsEnvelope
+	if err := c.get(path, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
 }
 
 func (c *Client) ListMilestones(projectID int) ([]Milestone, error) {
-	path := "/api/milestones"
+	path, err := c.wsPath("milestones")
+	if err != nil {
+		return nil, err
+	}
 	if projectID > 0 {
 		path += "?project_id=" + fmt.Sprint(projectID)
 	}
-	var milestones []Milestone
-	if err := c.get(path, &milestones); err != nil {
+	var env milestonesEnvelope
+	if err := c.get(path, &env); err != nil {
 		return nil, err
 	}
-	return milestones, nil
+	return env.Data, nil
 }
 
 func (c *Client) GetMilestone(id int, includeIssues bool) (*Milestone, error) {
-	path := fmt.Sprintf("/api/milestones/%d", id)
+	path, err := c.wsPath(fmt.Sprintf("milestones/%d", id))
+	if err != nil {
+		return nil, err
+	}
 	if includeIssues {
 		path += "?includeIssues=true"
 	}
@@ -344,16 +384,24 @@ func (c *Client) deleteJSON(path string, body any, out any) error {
 }
 
 func (c *Client) CreateProject(req CreateProjectRequest) (*Project, error) {
+	path, err := c.wsPath("projects")
+	if err != nil {
+		return nil, err
+	}
 	var p Project
-	if err := c.postJSON("/api/projects", req, &p); err != nil {
+	if err := c.postJSON(path, req, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
 }
 
 func (c *Client) UpdateProject(id int, req UpdateProjectRequest) (*Project, error) {
+	path, err := c.wsPath(fmt.Sprintf("projects/%d", id))
+	if err != nil {
+		return nil, err
+	}
 	var p Project
-	if err := c.patchJSON(fmt.Sprintf("/api/projects/%d", id), req, &p); err != nil {
+	if err := c.patchJSON(path, req, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -362,7 +410,10 @@ func (c *Client) UpdateProject(id int, req UpdateProjectRequest) (*Project, erro
 // DeleteProject moves a project to the recycle bin. mode is "cascade" (also bin
 // the attached issues/milestones) or "detach"/"" (keep them, unlinked).
 func (c *Client) DeleteProject(id int, mode string) error {
-	path := fmt.Sprintf("/api/projects/%d", id)
+	path, err := c.wsPath(fmt.Sprintf("projects/%d", id))
+	if err != nil {
+		return err
+	}
 	if mode != "" {
 		path += "?mode=" + mode
 	}
@@ -370,46 +421,73 @@ func (c *Client) DeleteProject(id int, mode string) error {
 }
 
 func (c *Client) AddProjectMember(projectID int, req AddMemberRequest) (*ProjectMember, error) {
+	path, err := c.wsPath(fmt.Sprintf("projects/%d/members", projectID))
+	if err != nil {
+		return nil, err
+	}
 	var m ProjectMember
-	if err := c.postJSON(fmt.Sprintf("/api/projects/%d/members", projectID), req, &m); err != nil {
+	if err := c.postJSON(path, req, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
 }
 
 func (c *Client) RemoveProjectMember(projectID, userID int) error {
+	path, err := c.wsPath(fmt.Sprintf("projects/%d/members", projectID))
+	if err != nil {
+		return err
+	}
 	body := map[string]any{"user_id": userID}
-	return c.deleteJSON(fmt.Sprintf("/api/projects/%d/members", projectID), body, nil)
+	return c.deleteJSON(path, body, nil)
 }
 
 func (c *Client) DeleteIssue(id int) error {
-	return c.deleteJSON(fmt.Sprintf("/api/issues/%d", id), nil, nil)
+	path, err := c.wsPath(fmt.Sprintf("issues/%d", id))
+	if err != nil {
+		return err
+	}
+	return c.deleteJSON(path, nil, nil)
 }
 
 func (c *Client) CreateComment(issueID int, req CreateCommentRequest) (*Comment, error) {
+	path, err := c.wsPath(fmt.Sprintf("issues/%d/comments", issueID))
+	if err != nil {
+		return nil, err
+	}
 	var cm Comment
-	if err := c.postJSON(fmt.Sprintf("/api/issues/%d/comments", issueID), req, &cm); err != nil {
+	if err := c.postJSON(path, req, &cm); err != nil {
 		return nil, err
 	}
 	return &cm, nil
 }
 
 func (c *Client) DeleteAttachment(issueID, attachmentID int) error {
-	path := fmt.Sprintf("/api/issues/%d/attachments?attachmentId=%d", issueID, attachmentID)
+	path, err := c.wsPath(fmt.Sprintf("issues/%d/attachments/%d", issueID, attachmentID))
+	if err != nil {
+		return err
+	}
 	return c.deleteJSON(path, nil, nil)
 }
 
 func (c *Client) CreateMilestone(req CreateMilestoneRequest) (*Milestone, error) {
+	path, err := c.wsPath("milestones")
+	if err != nil {
+		return nil, err
+	}
 	var m Milestone
-	if err := c.postJSON("/api/milestones", req, &m); err != nil {
+	if err := c.postJSON(path, req, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
 }
 
 func (c *Client) UpdateMilestone(id int, req UpdateMilestoneRequest) (*Milestone, error) {
+	path, err := c.wsPath(fmt.Sprintf("milestones/%d", id))
+	if err != nil {
+		return nil, err
+	}
 	var m Milestone
-	if err := c.patchJSON(fmt.Sprintf("/api/milestones/%d", id), req, &m); err != nil {
+	if err := c.patchJSON(path, req, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
@@ -418,7 +496,10 @@ func (c *Client) UpdateMilestone(id int, req UpdateMilestoneRequest) (*Milestone
 // DeleteMilestone moves a milestone to the recycle bin. mode is "cascade" (also
 // bin the attached issues) or "detach"/"" (keep them, unlinked).
 func (c *Client) DeleteMilestone(id int, mode string) error {
-	path := fmt.Sprintf("/api/milestones/%d", id)
+	path, err := c.wsPath(fmt.Sprintf("milestones/%d", id))
+	if err != nil {
+		return err
+	}
 	if mode != "" {
 		path += "?mode=" + mode
 	}
@@ -439,24 +520,36 @@ func (c *Client) AttachExisting(issueID int, up *UploadResponse) (*Attachment, e
 }
 
 func (c *Client) GetIssue(id int) (*Issue, error) {
+	path, err := c.wsPath(fmt.Sprintf("issues/%d", id))
+	if err != nil {
+		return nil, err
+	}
 	var iss Issue
-	if err := c.get(fmt.Sprintf("/api/issues/%d", id), &iss); err != nil {
+	if err := c.get(path, &iss); err != nil {
 		return nil, err
 	}
 	return &iss, nil
 }
 
 func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
+	path, err := c.wsPath("issues")
+	if err != nil {
+		return nil, err
+	}
 	var iss Issue
-	if err := c.postJSON("/api/issues", req, &iss); err != nil {
+	if err := c.postJSON(path, req, &iss); err != nil {
 		return nil, err
 	}
 	return &iss, nil
 }
 
 func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) (*Issue, error) {
+	path, err := c.wsPath(fmt.Sprintf("issues/%d", id))
+	if err != nil {
+		return nil, err
+	}
 	var iss Issue
-	if err := c.patchJSON(fmt.Sprintf("/api/issues/%d", id), req, &iss); err != nil {
+	if err := c.patchJSON(path, req, &iss); err != nil {
 		return nil, err
 	}
 	return &iss, nil
@@ -514,8 +607,12 @@ func (c *Client) AttachToIssue(issueID int, up *UploadResponse) (*Attachment, er
 		"file_size": up.Size,
 		"mime_type": up.ContentType,
 	}
+	path, err := c.wsPath(fmt.Sprintf("issues/%d/attachments", issueID))
+	if err != nil {
+		return nil, err
+	}
 	var att Attachment
-	if err := c.postJSON(fmt.Sprintf("/api/issues/%d/attachments", issueID), body, &att); err != nil {
+	if err := c.postJSON(path, body, &att); err != nil {
 		return nil, err
 	}
 	return &att, nil

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useActiveWorkspace } from './listings/use-active-workspace'
 import { KanbanBoard } from './kanban-board'
 import { GanttView } from './gantt-view'
 import { IssueListView } from './issue-list-view'
@@ -107,6 +108,7 @@ export function ProjectView({
   initialKanban: KanbanData
   user: User
 }) {
+  const { data: ws } = useActiveWorkspace()
   const [project, setProject] = useState(initialProject)
   const [view, setView] = useState<ViewMode>('kanban')
   const [showSettings, setShowSettings] = useState(false)
@@ -121,20 +123,15 @@ export function ProjectView({
 
   // Fetch all issues for List and Gantt views
   const { data: issues = allIssues } = useQuery({
-    queryKey: ['project-issues', project.id],
+    queryKey: ['project-issues', project.id, ws?.slug],
     queryFn: async () => {
-      const res = await fetch(`/api/issues?project_id=${project.id}&includeProject=true`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues?project_id=${project.id}`)
       if (!res.ok) return allIssues
-      const data = await res.json()
-      // Ensure we always return an array
-      if (Array.isArray(data)) return data
-      // If it's kanban format, flatten it
-      if (data && typeof data === 'object') {
-        return Object.values(data).flat()
-      }
-      return allIssues
+      const json = await res.json()
+      // Scoped endpoint returns an envelope { data: [...] }
+      return Array.isArray(json.data) ? json.data : allIssues
     },
-    enabled: view === 'timeline' || view === 'list',
+    enabled: !!ws?.slug && (view === 'timeline' || view === 'list'),
     initialData: allIssues,
   })
 

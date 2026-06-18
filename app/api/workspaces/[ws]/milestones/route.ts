@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
 import {
   createMilestone,
   listMilestonesInWorkspace,
@@ -28,7 +28,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     projectId,
     search: sp.get('search') ?? undefined,
   })
-  return NextResponse.json({ data })
+  return jsonList(data)
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {

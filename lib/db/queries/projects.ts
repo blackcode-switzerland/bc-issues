@@ -133,18 +133,6 @@ export async function getProjectInWorkspace(
   return rows[0] ?? null
 }
 
-// Legacy compatibility — used by the old /api/projects/[id] endpoint while the
-// dashboard UI still calls it. Just fetches by id; workspace gating happens at
-// the route layer.
-export async function getProject(id: number): Promise<Project | null> {
-  const rows = await db
-    .select()
-    .from(projects)
-    .where(and(eq(projects.id, id), isNull(projects.deleted_at)))
-    .limit(1)
-  return rows[0] ?? null
-}
-
 export interface CreateProjectInput {
   workspaceId: number
   name: string

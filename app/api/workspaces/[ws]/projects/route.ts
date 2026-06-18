@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
 import {
   createProject,
   listProjectsInWorkspace,
@@ -42,7 +42,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const status = sp.get('status') ?? undefined
   const search = sp.get('search') ?? undefined
   const data = await listProjectsInWorkspace(ctx.workspace.id, { status, search })
-  return NextResponse.json({ data })
+  return jsonList(data)
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {

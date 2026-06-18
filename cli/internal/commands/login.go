@@ -162,7 +162,7 @@ p{margin:0;color:#a1a1aa;font-size:14px}</style></head><body><div class="box">
 }
 
 func finishLogin(server, token string) error {
-	c := client.New(server, token)
+	c := client.New(server, token, "")
 	me, err := c.Whoami()
 	if err != nil {
 		return fmt.Errorf("token validation failed: %w", err)
@@ -211,7 +211,7 @@ func newWhoamiCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token)
+			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
 			me, err := c.Whoami()
 			if err != nil {
 				return err

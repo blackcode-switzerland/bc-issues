@@ -83,17 +83,6 @@ export async function getMilestoneInWorkspace(
   return (result.rows[0] as unknown as MilestoneListItem) ?? null
 }
 
-// Legacy by-id lookup — used by the old /api/milestones/[id] endpoint while
-// the dashboard UI still calls it. Workspace gating happens at the route layer.
-export async function getMilestone(id: number): Promise<Milestone | null> {
-  const rows = await db
-    .select()
-    .from(milestones)
-    .where(and(eq(milestones.id, id), isNull(milestones.deleted_at)))
-    .limit(1)
-  return rows[0] ?? null
-}
-
 export interface CreateMilestoneInput {
   workspaceId: number
   name: string

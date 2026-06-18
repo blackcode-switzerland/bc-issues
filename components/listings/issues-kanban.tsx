@@ -53,7 +53,7 @@ export function IssuesKanban({
 
   const updateStatus = useMutation({
     mutationFn: async (input: { id: number; status: string }) => {
-      const res = await fetch(`/api/issues/${input.id}`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${input.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: input.status }),

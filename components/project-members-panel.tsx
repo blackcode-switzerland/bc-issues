@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useActiveWorkspace } from './listings/use-active-workspace'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { toast } from 'sonner'
@@ -53,14 +54,17 @@ export function ProjectMembersPanel({ projectId, currentUserId }: ProjectMembers
   const [showInviteModal, setShowInviteModal] = useState(false)
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
+  const { data: ws } = useActiveWorkspace()
 
   // Fetch project members
   const { data: members = [], isLoading } = useQuery({
-    queryKey: ['project-members', projectId],
+    queryKey: ['project-members', projectId, ws?.slug],
+    enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/members`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/members`)
       if (!res.ok) throw new Error('Failed to fetch members')
-      return res.json() as Promise<Member[]>
+      const json = await res.json()
+      return json.data as Member[]
     },
   })
 
@@ -71,7 +75,7 @@ export function ProjectMembersPanel({ projectId, currentUserId }: ProjectMembers
   // Remove member mutation
   const removeMember = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await fetch(`/api/projects/${projectId}/members`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/members`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
@@ -245,6 +249,7 @@ function InviteMemberModal({
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState<string>('member')
   const queryClient = useQueryClient()
+  const { data: ws } = useActiveWorkspace()
 
   // Fetch all users
   const { data: users = [], isLoading: loadingUsers } = useQuery({
@@ -273,7 +278,7 @@ function InviteMemberModal({
   // Add member mutation
   const addMember = useMutation({
     mutationFn: async ({ email, role }: { email: string; role: string }) => {
-      const res = await fetch(`/api/projects/${projectId}/members`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, role }),

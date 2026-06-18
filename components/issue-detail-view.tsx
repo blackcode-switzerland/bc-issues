@@ -96,11 +96,11 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   const validId = Number.isFinite(issueId) && issueId > 0
 
   const issue = useQuery({
-    queryKey: ['issue', issueId],
-    enabled: validId,
+    queryKey: ['issue', issueId, ws?.slug],
+    enabled: validId && !!ws?.slug,
     retry: false,
     queryFn: async (): Promise<IssueDetail> => {
-      const res = await fetch(`/api/issues/${issueId}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`)
       if (!res.ok) throw new Error('failed')
       return res.json()
     },
@@ -186,7 +186,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   // feedback); errors always toast.
   const patchIssue = useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
-      const res = await fetch(`/api/issues/${issueId}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -323,7 +323,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const deleteIssue = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/issues/${issueId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
@@ -489,7 +489,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
                 entityType="issue"
                 entityId={issueId}
                 wsSlug={ws?.slug ?? ''}
-                commentsUrl={`/api/issues/${issueId}/comments`}
+                commentsUrl={`/api/workspaces/${ws?.slug}/issues/${issueId}/comments`}
                 commentsQueryKey={['issue-comments', issueId]}
                 mentionItems={mentionItems}
                 members={members.data}

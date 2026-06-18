@@ -92,11 +92,6 @@ export async function listComments(
   }))
 }
 
-// Legacy helper still called by /api/issues/[id]/comments via the old name.
-export async function getComments(issueId: number) {
-  return await listComments('issue', issueId)
-}
-
 // Verify a polymorphic parent exists in the given workspace. Used by the
 // comment routes before insert.
 export async function verifyCommentParent(

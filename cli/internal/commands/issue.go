@@ -79,7 +79,7 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 	if err != nil {
 		return err
 	}
-	c := client.New(cfg.Server, cfg.Token)
+	c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
 
 	opts := client.ListIssuesOpts{ProjectID: f.projectID, Limit: f.limit}
 	if f.cursorSet {
@@ -261,7 +261,7 @@ func newIssueCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token)
+			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
 
 			req := client.CreateIssueRequest{
 				ProjectID:   projectID,
@@ -367,7 +367,7 @@ func newIssueEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token)
+			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
 			if cmd.Flags().Changed("assignee") {
 				if strings.EqualFold(assignee, "none") || strings.EqualFold(assignee, "null") || strings.EqualFold(assignee, "clear") || strings.EqualFold(assignee, "unset") {
 					req.AssigneeIDs = []byte("[]")
@@ -462,7 +462,7 @@ func newIssueAssignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token)
+			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
 			uid, err := ResolveUserID(args[1], c, cfg)
 			if err != nil {
 				return err

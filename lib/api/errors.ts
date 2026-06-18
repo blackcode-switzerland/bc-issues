@@ -1,8 +1,12 @@
 // Canonical error model for API routes.
 //
 // Throw an ApiError from anywhere inside an apiHandler-wrapped route. The
-// wrapper turns it into a JSON response of shape:
-//   { error: { code: string, message: string, details?: unknown } }
+// wrapper (lib/api/handler.ts → buildResponseBody) flattens it into a JSON
+// response of shape:
+//   { error: string, code: string, suggestion?: string, details?: unknown }
+// where `error` is the human-readable message, `code` is the machine-readable
+// identifier, `suggestion` is set when `details` is a string (the CLI hint),
+// and `details` carries structured context otherwise.
 //
 // 4xx errors are not written to error_events (they are normal client errors).
 // 5xx errors and any non-ApiError throwable are recorded.

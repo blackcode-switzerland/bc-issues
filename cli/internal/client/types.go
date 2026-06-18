@@ -72,6 +72,30 @@ type Issue struct {
 type IssuesPage struct {
 	Data       []Issue `json:"data" yaml:"data"`
 	NextCursor *int    `json:"next_cursor" yaml:"next_cursor"`
+	Total      *int    `json:"total,omitempty" yaml:"total,omitempty"`
+}
+
+// dataEnvelope is the generic { "data": [...] } wrapper returned by
+// workspace-scoped list endpoints (members, comments, activity, attachments,
+// milestones).
+type projectMembersEnvelope struct {
+	Data []ProjectMember `json:"data" yaml:"data"`
+}
+
+type commentsEnvelope struct {
+	Data []Comment `json:"data" yaml:"data"`
+}
+
+type activityEnvelope struct {
+	Data []ActivityItem `json:"data" yaml:"data"`
+}
+
+type attachmentsEnvelope struct {
+	Data []Attachment `json:"data" yaml:"data"`
+}
+
+type milestonesEnvelope struct {
+	Data []Milestone `json:"data" yaml:"data"`
 }
 
 type ProjectsPage struct {
