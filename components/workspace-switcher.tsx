@@ -16,7 +16,7 @@ interface WorkspaceItem {
 }
 
 async function fetchWorkspaces(): Promise<WorkspaceItem[]> {
-  const res = await fetch('/api/me/workspaces')
+  const res = await fetch('/api/workspaces')
   if (!res.ok) throw new Error('failed')
   const j = await res.json()
   return j.data

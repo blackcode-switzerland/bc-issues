@@ -1,7 +1,7 @@
-// Shared parser for analytics query params. Used by both the canonical
-// workspace-scoped route (/api/workspaces/[ws]/analytics) and the legacy
-// active-workspace shim (/api/analytics) the `bk` CLI calls — so both surfaces
-// expose the exact same views, date window, granularity and faceted filters.
+// Shared parser for analytics query params, used by the canonical
+// workspace-scoped route (/api/workspaces/[ws]/analytics) — which both the web
+// dashboard and the `bk analytics` CLI command now call — so every surface
+// exposes the exact same views, date window, granularity and faceted filters.
 
 import { Errors } from './errors'
 import type {

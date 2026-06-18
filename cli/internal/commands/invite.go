@@ -22,8 +22,58 @@ func newInviteCmd() *cobra.Command {
 		newInviteAcceptCmd(),
 		newInviteDeclineCmd(),
 		newInvitePendingCmd(),
+		newInviteCandidatesCmd(),
 	)
 	return cmd
+}
+
+func newInviteCandidatesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "candidates",
+		Short: "List people you can invite to the active workspace (owner only)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			if _, err := requireActiveWorkspace(cfg); err != nil {
+				return err
+			}
+			rows, err := c.ListInviteCandidates()
+			if err != nil {
+				return err
+			}
+			return output.Render(format, rows, func(w io.Writer) error {
+				tw := output.Tabwriter(w)
+				fmt.Fprintln(tw, "ID\tNAME\tEMAIL\tSTATUS")
+				for _, cand := range rows {
+					name := ""
+					if cand.Name != nil {
+						name = *cand.Name
+					}
+					status := "—"
+					if cand.AlreadyMember {
+						status = "member"
+					} else if cand.Invited {
+						status = "invited"
+					}
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\n",
+						cand.ID, name, cand.Email, status)
+				}
+				if err := tw.Flush(); err != nil {
+					return err
+				}
+				if len(rows) == 0 {
+					fmt.Fprintln(cmd.ErrOrStderr(), "(no invite candidates)")
+				}
+				return nil
+			})
+		},
+	}
 }
 
 func newInviteSendCmd() *cobra.Command {

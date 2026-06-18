@@ -18,6 +18,7 @@ import { recordEvent } from './events'
 import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
+import { resolveOrCreateLabels } from './labels'
 import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
 
 const TERMINAL_STATUSES = new Set(ISSUE_TERMINAL_STATUSES)
@@ -183,6 +184,7 @@ export interface CreateIssueInput {
   dueDate?: string | null
   estimatedHours?: number | null
   labelIds?: number[]
+  labelNames?: string[]
   reporterId: number
   actorUserId: number
 }
@@ -241,18 +243,25 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       }
     }
 
-    // Attach labels chosen at creation (validated against the workspace).
+    // Attach labels chosen at creation: existing ids (validated against the
+    // workspace) plus any names (matched case-insensitively, created on the fly).
+    const labelIdSet = new Set<number>()
     if (input.labelIds && input.labelIds.length > 0) {
       const valid = await tx
         .select({ id: labels.id })
         .from(labels)
         .where(and(eq(labels.workspace_id, input.workspaceId), inArray(labels.id, input.labelIds)))
-      if (valid.length > 0) {
-        await tx
-          .insert(issueLabels)
-          .values(valid.map((l) => ({ issue_id: row.id, label_id: l.id })))
-          .onConflictDoNothing()
-      }
+      valid.forEach((l) => labelIdSet.add(l.id))
+    }
+    if (input.labelNames && input.labelNames.length > 0) {
+      const resolved = await resolveOrCreateLabels(tx, input.workspaceId, input.labelNames, input.actorUserId)
+      resolved.forEach((id) => labelIdSet.add(id))
+    }
+    if (labelIdSet.size > 0) {
+      await tx
+        .insert(issueLabels)
+        .values([...labelIdSet].map((label_id) => ({ issue_id: row.id, label_id })))
+        .onConflictDoNothing()
     }
 
     await recordEvent(tx, {

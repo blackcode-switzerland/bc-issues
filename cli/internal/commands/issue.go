@@ -242,6 +242,7 @@ func newIssueCreateCmd() *cobra.Command {
 	var projectID, priority int
 	var title, description, descriptionFile, status, attach string
 	var assignee, milestone, startDate, dueDate string
+	var labels []string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create an issue",
@@ -292,6 +293,9 @@ func newIssueCreateCmd() *cobra.Command {
 			if dueDate != "" {
 				req.DueDate = &dueDate
 			}
+			if len(labels) > 0 {
+				req.Labels = labels
+			}
 
 			iss, err := c.CreateIssue(req)
 			if err != nil {
@@ -326,6 +330,7 @@ func newIssueCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&milestone, "milestone", "", "Milestone id")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
+	cmd.Flags().StringArrayVar(&labels, "label", nil, "Label name (repeatable); existing labels matched, unknown ones created")
 	return cmd
 }
 

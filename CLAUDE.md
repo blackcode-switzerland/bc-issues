@@ -61,6 +61,40 @@ TanStack Query throughout. See memory file `sync-architecture.md` for query key 
 
 Controlled via `SUPER_ADMINS` env var (comma-separated emails) + `email_whitelist` DB table. Pages at `/dashboard/super-admin`. See memory file `super-admin.md`.
 
+## API multi-surface sync contract (MANDATORY)
+
+The product is consumed through **four surfaces that must always agree**: the REST
+API, the OpenAPI spec, the `bk` CLI, and the docs. Any change to an API route or a
+user-facing feature MUST be propagated to all of them in the **same** change. This
+is not optional — a dedicated test fails the build if the spec drifts.
+
+When you add / change / remove a route or feature, update every applicable item:
+
+1. **REST route** — `app/api/**`. Follow the conventions: workspace-scoped under
+   `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`
+   (`lib/api`); lists return `{ data, next_cursor }` via `jsonList()`; single
+   resources return the bare entity; create → `201`, delete → `{ deleted: true }`.
+   Never reintroduce implicit-active-workspace ("legacy") routes.
+2. **OpenAPI spec** — `lib/openapi/spec.ts` (served at `/api/openapi.json`,
+   rendered at `/api/docs`). Add/adjust the path + schema. Enum values must come
+   from `lib/work-items.ts` imports, never hardcoded. **`lib/openapi/parity.test.ts`
+   (run by `npm test`) fails if any route+method is missing from the spec or the
+   spec references a route that doesn't exist.**
+3. **CLI** — `cli/`. Add/adjust the `bk` command + the client method in
+   `cli/internal/client/`. Reuse `wsPath()` for workspace-scoped calls and unwrap
+   the `{ data, next_cursor }` envelope. Keep JSON/YAML output + stable exit codes.
+4. **`/api/meta`** — if you add or change an enum/vocabulary (statuses,
+   priorities, health), update `lib/work-items.ts`; `/api/meta` and the spec both
+   read from it, so they stay in sync automatically.
+5. **Docs** — see the Docs sync rule below (`docs/backend.md`, `docs/cli.md`,
+   `docs/frontend.md`).
+6. **Per-page agent manifest** — `lib/agent-manifest.ts` (embedded on every page
+   via `components/agent-manifest.tsx`) states the auth header, envelope shapes,
+   and discovery endpoints. If any of those change, update it too.
+
+Before finishing any API/feature change, run: `npx tsc --noEmit`, `npm test`
+(parity), and `cd cli && go build ./...`. See `AGENTS.md` for the short version.
+
 ## Docs sync rule
 
 **After every code change, check whether any file in `docs/` is now outdated or incomplete, and update it before finishing.** This is mandatory, not optional.

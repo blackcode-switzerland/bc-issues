@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Providers } from './providers'
 import { Toaster } from 'sonner'
+import { AgentManifest } from '@/components/agent-manifest'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -41,6 +42,8 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
+        {/* Machine-readable access note for agents fetching any page. Renders nothing visible. */}
+        <AgentManifest />
         <Providers>
           {children}
           <Toaster

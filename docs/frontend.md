@@ -319,7 +319,7 @@ kanban, detail pages, modals) rendering work-item state identically.
 Configured in `providers.tsx` with `staleTime: 60s` and
 `refetchOnWindowFocus: false`. The active workspace is resolved by
 `components/listings/use-active-workspace.ts` (`['active-workspace']`), which
-reads `/api/me` then `/api/me/workspaces`.
+reads `/api/me` then `/api/workspaces`.
 
 Recurring query-key conventions:
 

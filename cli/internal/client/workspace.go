@@ -37,7 +37,7 @@ func (c *Client) ListMyWorkspaces() ([]Workspace, error) {
 	var resp struct {
 		Data []Workspace `json:"data"`
 	}
-	if err := c.get("/api/me/workspaces", &resp); err != nil {
+	if err := c.get("/api/workspaces", &resp); err != nil {
 		return nil, err
 	}
 	return resp.Data, nil
@@ -188,6 +188,24 @@ func (c *Client) ListPendingInvitationsForMe() ([]WorkspaceInvitation, error) {
 		Data []WorkspaceInvitation `json:"data"`
 	}
 	if err := c.get("/api/me/pending-invitations", &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// ListInviteCandidates returns people the active workspace owner can invite
+// without retyping an email. Owner-only. The endpoint returns
+// { "data": [...], "is_super_admin": bool }; we return just the data slice.
+func (c *Client) ListInviteCandidates() ([]InviteCandidate, error) {
+	path, err := c.wsPath("invite-candidates")
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data         []InviteCandidate `json:"data"`
+		IsSuperAdmin bool              `json:"is_super_admin"`
+	}
+	if err := c.get(path, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Data, nil

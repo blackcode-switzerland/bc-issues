@@ -95,6 +95,64 @@ export async function createLabel(input: CreateLabelInput): Promise<Label> {
   })
 }
 
+// Transaction-scoped: resolve a list of label NAMES to ids, creating any that
+// don't already exist in the workspace (case-insensitive match). Lets issues be
+// created or labeled with new labels on the fly. Names are assumed pre-trimmed
+// and length-validated by the caller.
+type Tx = Pick<typeof db, 'insert' | 'select' | 'update' | 'delete' | 'execute'>
+
+export async function resolveOrCreateLabels(
+  tx: Tx,
+  workspaceId: number,
+  names: string[],
+  actorUserId: number
+): Promise<number[]> {
+  const ids: number[] = []
+  const seen = new Set<string>()
+  for (const raw of names) {
+    const name = raw.trim()
+    if (!name) continue
+    const key = name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const existing = await tx
+      .select({ id: labels.id })
+      .from(labels)
+      .where(and(eq(labels.workspace_id, workspaceId), sql`lower(${labels.name}) = ${key}`))
+      .limit(1)
+    if (existing[0]) {
+      ids.push(existing[0].id)
+      continue
+    }
+
+    const [created] = await tx
+      .insert(labels)
+      .values({ workspace_id: workspaceId, name, color: '#6b7280', created_by: actorUserId })
+      .returning({ id: labels.id, name: labels.name, color: labels.color })
+    if (!created) continue
+    ids.push(created.id)
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId,
+      entityType: 'label',
+      entityId: created.id,
+      action: 'created',
+      diff: { after: { name: created.name, color: created.color } },
+    })
+  }
+  return ids
+}
+
+// Non-transactional wrapper for callers that aren't already inside one.
+export async function getOrCreateLabels(
+  workspaceId: number,
+  names: string[],
+  actorUserId: number
+): Promise<number[]> {
+  return await db.transaction((tx) => resolveOrCreateLabels(tx, workspaceId, names, actorUserId))
+}
+
 export interface UpdateLabelInput {
   name?: string
   color?: string

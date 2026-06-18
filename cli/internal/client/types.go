@@ -153,6 +153,13 @@ type ActivityItem struct {
 	CreatedAt     *string         `json:"created_at" yaml:"created_at"`
 }
 
+// activityFeedEnvelope is the keyset-paginated envelope returned by the
+// workspace-scoped activity feed route: { "data": [...], "next_cursor": <id|null> }.
+type activityFeedEnvelope struct {
+	Data       []ActivityFeedItem `json:"data" yaml:"data"`
+	NextCursor *int               `json:"next_cursor" yaml:"next_cursor"`
+}
+
 type ActivityFeedItem struct {
 	ID            int             `json:"id" yaml:"id"`
 	OperationType string          `json:"operation_type" yaml:"operation_type"`
@@ -175,6 +182,7 @@ type CreateIssueRequest struct {
 	MilestoneID json.RawMessage `json:"milestone_id,omitempty"`
 	StartDate   *string         `json:"start_date,omitempty"`
 	DueDate     *string         `json:"due_date,omitempty"`
+	Labels      []string        `json:"labels,omitempty"`
 }
 
 // UpdateIssueRequest uses json.RawMessage for milestone_id, start_date, due_date
@@ -363,6 +371,19 @@ type WorkspaceComment struct {
 	AuthorAvatar    *string `json:"author_avatar,omitempty" yaml:"author_avatar,omitempty"`
 	CreatedAt       *string `json:"created_at" yaml:"created_at"`
 	UpdatedAt       *string `json:"updated_at" yaml:"updated_at"`
+}
+
+// InviteCandidate is a person the active workspace's owner can invite without
+// retyping an email (e.g. someone they already share another workspace with).
+// Fields are treated permissively; extra fields from the server are ignored.
+type InviteCandidate struct {
+	ID            int     `json:"id" yaml:"id"`
+	Name          *string `json:"name" yaml:"name"`
+	Email         string  `json:"email" yaml:"email"`
+	AvatarURL     *string `json:"avatar_url" yaml:"avatar_url"`
+	AlreadyMember bool    `json:"already_member" yaml:"already_member"`
+	Invited       bool    `json:"invited" yaml:"invited"`
+	SharedWorkspaceName *string `json:"shared_workspace_name,omitempty" yaml:"shared_workspace_name,omitempty"`
 }
 
 type UpdateProfileRequest struct {

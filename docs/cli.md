@@ -120,14 +120,14 @@ bk login --server https://issues.example.com
    ```
 4. You sign in (if needed) and approve. The web app's `/cli/authorize` route mints an API token and redirects the browser to the loopback `callback` with `?token=…&state=…` appended.
 5. The CLI's listener accepts the request, validates `state` (exact compare), pulls the token from the query string, serves a small "you can close this tab" page, and shuts the listener down. It waits up to 5 minutes for approval.
-6. The CLI validates the token by calling `GET /api/users/me` with `Authorization: Bearer …`.
+6. The CLI validates the token by calling `GET /api/me` with `Authorization: Bearer …`.
 7. The token + user info land in the config file (mode `0600`).
 
 If `--server` is omitted, the default is `http://localhost:3000`.
 
 ### `bk login --token` — headless flow
 
-For CI or environments without a browser. The CLI reads the token from stdin (hidden if a TTY, plain if piped), then validates it the same way (`GET /api/users/me`) before saving. Mint a token from **Settings → API Tokens** and paste it:
+For CI or environments without a browser. The CLI reads the token from stdin (hidden if a TTY, plain if piped), then validates it the same way (`GET /api/me`) before saving. Mint a token from **Settings → API Tokens** and paste it:
 
 ```bash
 echo "$MY_TOKEN" | bk login --token --server https://issues.example.com
@@ -139,7 +139,7 @@ Deletes the local config file. The corresponding token row remains in the databa
 
 ### `bk whoami`
 
-Hits `GET /api/users/me`. Prints the authenticated user's id, email, name, role, and how the auth was resolved (`via`: `session` vs `token`). If the token belongs to a super admin it also prints `super: yes`.
+Hits `GET /api/me`. Prints the authenticated user's id, email, name, role, and how the auth was resolved (`via`: `session` vs `token`). If the token belongs to a super admin it also prints `super: yes`.
 
 ---
 
@@ -174,7 +174,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk workspace list` | `GET /api/me/workspaces` | Active row marked with `*`. |
+| `bk workspace list` | `GET /api/workspaces` | Active row marked with `*`. |
 | `bk workspace show [slug\|id]` | `GET /api/workspaces/:ref` | Defaults to the active workspace. |
 | `bk workspace create --name N [--use]` | `POST /api/workspaces` | `--use` (default `true`) sets it active after creation. |
 | `bk workspace use <slug\|id>` | `GET /api/workspaces/:ref` + `POST /api/me/active-workspace` | Sets the active workspace. |
@@ -225,6 +225,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 --milestone N           milestone id
 --start-date YYYY-MM-DD
 --due-date YYYY-MM-DD
+--label NAME            label name; repeatable — existing labels matched, unknown ones created on the fly
 --attach FILE           uploads + attaches in one step after the issue is created
 ```
 
@@ -289,6 +290,7 @@ Operate on the active workspace; paths are `…/workspaces/{ws}/…`.
 | `bk invite accept <token>` | `POST /api/invitations/accept` | Accept by token. |
 | `bk invite decline <token>` | `POST /api/invitations/decline` | Decline by token. |
 | `bk invite pending` | `GET /api/me/pending-invitations` | Invitations pending for your email, across workspaces. |
+| `bk invite candidates` | `GET /api/workspaces/:ws/invite-candidates` | Owner only. People you can invite without retyping an email; status column shows `member`/`invited`/`—`. |
 
 ### Inbox
 
@@ -313,8 +315,8 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk activity [--limit N] [--offset N]` | `GET /api/activity` | Global change feed. `--limit` defaults to 50. |
-| `bk analytics [flags]` | `GET /api/analytics` | Workspace analytics with full web-dashboard parity (see below). Any member; not admin-only. |
+| `bk activity [--limit N] [--cursor N]` | `GET /api/workspaces/:ws/activity` | Active-workspace change feed (keyset-paginated). `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. |
+| `bk analytics [flags]` | `GET /api/workspaces/:ws/analytics` | Workspace analytics with full web-dashboard parity (see below). `--ws <slug\|id>` targets another workspace via the path. Any member; not admin-only. |
 | `bk undo [--count N] [--yes]` | `POST /api/undo` | Rolls back your last N operations (clamped to 1–10). Prompts to confirm. |
 
 **`bk analytics` flags** — all optional; defaults to the active workspace,
@@ -564,7 +566,7 @@ The state machine:
    - Reads `token` from the query string.
    - Serves a small "you can close this window" HTML page.
    - Signals completion; the listener shuts down (5-minute overall timeout).
-5. Validate the token (`GET /api/users/me`).
+5. Validate the token (`GET /api/me`).
 6. Save config.
 
 ### Helpers (`internal/commands/util.go`)

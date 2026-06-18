@@ -110,9 +110,31 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     if (!member) throw Errors.badRequest('assignee_not_member', `User ${uid} is not a workspace member`)
   }
 
-  const labelIds = Array.isArray(body.label_ids)
-    ? body.label_ids.filter((n: unknown): n is number => typeof n === 'number')
-    : undefined
+  // Labels: existing ids via label_ids, and/or names via labels (existing matched
+  // case-insensitively, unknown ones created on the fly). Reject bad shapes loudly
+  // instead of silently dropping them — agents that send names in label_ids used to
+  // get an issue with no labels and no error.
+  let labelIds: number[] | undefined
+  if (body.label_ids !== undefined) {
+    if (!Array.isArray(body.label_ids) || !body.label_ids.every((n: unknown) => typeof n === 'number')) {
+      throw Errors.badRequest(
+        'invalid_label_ids',
+        'label_ids must be an array of integers; pass label names via "labels" to use or create them by name'
+      )
+    }
+    labelIds = body.label_ids
+  }
+  let labelNames: string[] | undefined
+  if (body.labels !== undefined) {
+    if (!Array.isArray(body.labels) || !body.labels.every((s: unknown) => typeof s === 'string')) {
+      throw Errors.badRequest('invalid_labels', 'labels must be an array of label-name strings')
+    }
+    const names = (body.labels as string[]).map((s) => s.trim()).filter(Boolean)
+    for (const n of names) {
+      if (n.length > 50) throw Errors.badRequest('label_name_too_long', 'label names are max 50 chars')
+    }
+    labelNames = names
+  }
 
   try {
     const issue = await createIssue({
@@ -128,6 +150,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       dueDate: typeof body.due_date === 'string' ? body.due_date : null,
       estimatedHours: typeof body.estimated_hours === 'number' ? body.estimated_hours : null,
       labelIds,
+      labelNames,
       reporterId: ctx.user.id,
       actorUserId: ctx.user.id,
     })

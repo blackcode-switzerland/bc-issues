@@ -24,7 +24,7 @@ cross-compile into `dist/`.
 ```
 
 `bk login` opens your browser to `/cli/authorize`, captures the minted token via
-a loopback HTTP server, validates it against `/api/users/me`, and saves
+a loopback HTTP server, validates it against `/api/me`, and saves
 credentials to `~/.config/bk/config.json` (mode 0600). Revoke any time from
 **Settings → API Tokens**.
 

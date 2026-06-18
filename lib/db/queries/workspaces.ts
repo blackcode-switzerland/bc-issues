@@ -465,7 +465,7 @@ async function pickAvailable(
   throw new Error(`could not find available identifier from base ${base}`)
 }
 
-// Bulk lookup of memberships used by /api/me/workspaces and similar.
+// Bulk lookup of memberships used across the workspace queries.
 export async function userIsMemberOf(userId: number, workspaceIds: number[]): Promise<Set<number>> {
   if (workspaceIds.length === 0) return new Set()
   const rows = await db

@@ -13,10 +13,10 @@ import (
 )
 
 func newActivityCmd() *cobra.Command {
-	var limit, offset int
+	var limit, cursor int
 	cmd := &cobra.Command{
 		Use:   "activity",
-		Short: "Show the global activity feed",
+		Short: "Show the workspace activity feed",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -26,11 +26,21 @@ func newActivityCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			items, err := c.Activity(limit, offset)
+			var cur *int
+			if cmd.Flags().Changed("cursor") {
+				cur = &cursor
+			}
+			items, nextCursor, err := c.Activity(limit, cur)
 			if err != nil {
 				return err
 			}
-			return output.Render(format, items, func(w io.Writer) error {
+
+			data := any(items)
+			if format != output.FormatTable && nextCursor != nil {
+				data = map[string]any{"data": items, "next_cursor": nextCursor}
+			}
+
+			return output.Render(format, data, func(w io.Writer) error {
 				if len(items) == 0 {
 					fmt.Fprintln(cmd.ErrOrStderr(), "(no activity)")
 					return nil
@@ -46,12 +56,18 @@ func newActivityCmd() *cobra.Command {
 						derefOr(a.CreatedAt, ""), derefOr(a.UserName, "—"),
 						a.OperationType, a.TableName, recID)
 				}
-				return tw.Flush()
+				if err := tw.Flush(); err != nil {
+					return err
+				}
+				if nextCursor != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "next page: --cursor=%d\n", *nextCursor)
+				}
+				return nil
 			})
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 50, "Max items to return")
-	cmd.Flags().IntVar(&offset, "offset", 0, "Offset for pagination")
+	cmd.Flags().IntVar(&cursor, "cursor", 0, "Cursor (last event id seen) for pagination")
 	return cmd
 }
 

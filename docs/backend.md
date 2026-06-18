@@ -278,6 +278,32 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   updated entity; delete → `200` + `{ deleted: true }` (plus `mode` where the
   resource cascades, e.g. projects/milestones).
 
+### Discovery (for agents & tooling)
+
+Three unauthenticated-friendly entry points make the API self-describing:
+
+```
+GET /api/openapi.json   OpenAPI 3.1 document (public). Source: lib/openapi/spec.ts.
+GET /api/docs           Human-readable API reference (Scalar, renders the spec above).
+GET /api/meta           Authenticated bootstrap: { user, active_workspace, vocabulary,
+                        labels, projects, members }. ?ws=<slug|id> targets a workspace.
+```
+
+`GET /api/meta` is the call an agent should make first: it returns the active
+workspace plus the canonical issue/project **vocabulary** (statuses, priorities,
+project-update health — value/label/color, from `lib/work-items.ts`) so the agent
+never guesses an enum value. The OpenAPI spec is hand-authored and covers the
+**entire feature surface** — every route under `app/api/**` except true internals
+(the NextAuth handler, the `/api/errors/client` beacon, and the `/api/docs` +
+`/api/openapi.json` discovery routes themselves). It imports the enums from
+`lib/work-items.ts` so valid status/priority values can't drift.
+
+**Parity is enforced by a test** (`lib/openapi/parity.test.ts`, run by `npm
+test`): it walks `app/api/**` and fails if any route+method is missing from
+`lib/openapi/spec.ts` or if the spec describes a route that doesn't exist. So
+when you add, remove, or change a route, update `lib/openapi/spec.ts` in the same
+change or the build breaks.
+
 ### Workspace-scoped (canonical)
 
 ```
@@ -317,10 +343,12 @@ DELETE /api/workspaces/{ws}/milestones/{id}?mode=cascade|detach   move to Trash 
 GET    /api/workspaces/{ws}/milestones/{id}/comments  list / POST
 
 GET    /api/workspaces/{ws}/issues              list (filters) / POST create
+                                               (create accepts label_ids (existing) and labels: string[] —
+                                                names matched case-insensitively, unknown ones created on the fly)
 GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH
 DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
 GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
-GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach
+GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach ({label_id} or {name} — name created on the fly)
 DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid} detach
 GET    /api/workspaces/{ws}/issues/{id}/activity      activity feed for the issue
 GET    /api/workspaces/{ws}/issues/{id}/attachments   list / POST attach
@@ -371,8 +399,7 @@ POST     /api/auth/register                     email/password sign-up (403 if n
 POST     /api/auth/password-reset/request       request OTP
 POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
-GET      /api/me                                current user (+ active_workspace_id)
-GET      /api/me/workspaces                      my workspaces
+GET      /api/me                                current user (+ active_workspace_id, via, is_super_admin)
 POST     /api/me/active-workspace                set active workspace
 GET      /api/me/inbox                            list inbox  (?unread, ?limit)
 POST     /api/me/inbox/mark-read                  mark read (ids | all)
@@ -406,16 +433,17 @@ children (incl. `/api/issues/{id}/comments`, `/attachments`, `/activity` and
 The scoped routes for issue attachments, issue activity, and project members
 were added as part of that consolidation.
 
-A few non-entity legacy routes still resolve the workspace server-side from the
-caller and remain for `bk` CLI parity, **pending migration**: `/api/users`,
-`/api/activity`, and `/api/analytics`. New code should not use them.
+The non-entity legacy duplicates `/api/activity` and `/api/analytics` have also
+been **removed** — both the web app and the `bk` CLI now use
+`/api/workspaces/{ws}/activity` and `/api/workspaces/{ws}/analytics`. The former
+`/api/users/me` auth-probe was folded into `GET /api/me`, which now also returns
+`via` (`session` | `token`). `/api/users` (the visible-users list behind
+`bk user list`) is **not** a duplicate of any scoped route and remains.
 
-`/api/analytics` accepts the **same** query params as the canonical
-`/api/workspaces/{ws}/analytics` (both share `parseAnalyticsParams`): `view`,
-`id`, `from`, `to`, `interval`, and the `status`/`priority`/`label`/`assignee`
-filters — so the CLI (`bk analytics`) has full dashboard parity. It defaults to
-the caller's active workspace; pass `?ws=<slug|id>` (or `?workspace=`) to target
-another workspace the caller belongs to.
+`bk analytics` keeps full web-dashboard parity through the scoped route: pass the
+workspace in the path (`/api/workspaces/{ws}/analytics`) and the same `view`,
+`id`, `from`, `to`, `interval`, and `status`/`priority`/`label`/`assignee`
+filters (all via `parseAnalyticsParams`).
 
 ## Query layer
 
@@ -476,8 +504,8 @@ separate from the event spine.
 
 Requires an authenticated user. If `BLOB_READ_WRITE_TOKEN` is set, stores via
 **Vercel Blob**; otherwise writes to `public/uploads/` for local dev. Validates
-size (≤10 MB) and MIME type (common images minus SVG, plus pdf/text/json/md).
-Returns `{ url, filename, size, contentType }`.
+size (≤50 MB) and accepts any content type **except** `image/svg+xml` (blocked
+for XSS safety). Returns `{ url, filename, size, contentType }`.
 
 ### Email (`lib/email/`)
 

@@ -1,21 +1,22 @@
 import Link from 'next/link'
 import {
   ArrowRight,
+  BookOpen,
   Boxes,
   CheckCircle2,
-  Code2,
+  Download,
   Files,
   Hash,
-  Keyboard,
+  Inbox,
+  KeyRound,
   Layers,
-  Lock,
   Moon,
-  Palette,
-  PlayCircle,
-  Rocket,
   Sparkles,
+  Tag,
   Terminal,
+  Trash2,
   Undo2,
+  Users,
   Workflow,
   Zap,
 } from 'lucide-react'
@@ -42,104 +43,106 @@ interface Feature {
   status: FeatureStatus
 }
 
+// Every card here describes something that ships today (or is tagged "in
+// preview"). Speculative / not-yet-built work is intentionally left off.
 const FEATURES: Feature[] = [
   {
     icon: Hash,
     title: 'Integer IDs',
     description:
-      '"Issue 42" is easier to dictate, easier to grep, and easier for a model to keep in working memory than a 36-character UUID.',
+      '"Issue 42" is easier to dictate, easier to grep, and easier for a model to keep in working memory than a 36-character UUID. Every workspace also gets a short issue key prefix.',
     status: 'live',
   },
   {
     icon: Layers,
     title: 'Kanban board',
     description:
-      'Drag-and-drop columns per status — backlog, todo, in progress, blocked, in review, done. Moves persist instantly.',
+      'Drag-and-drop columns per status — backlog, todo, in progress, done, cancelled. Moves persist instantly with optimistic updates.',
     status: 'live',
   },
   {
     icon: Workflow,
-    title: 'Timeline view',
+    title: 'Timeline & list views',
     description:
-      'Gantt-style chart placing issues on a date axis using start and due dates. Plan a milestone at a glance.',
+      'A Gantt-style timeline places issues and projects on a date axis from their start and due dates. Switch to a dense list when you just want rows.',
     status: 'live',
   },
   {
     icon: Files,
-    title: 'Rich-text issues',
+    title: 'Rich-text issues & comments',
     description:
-      'TipTap editor with bold, italic, lists, blockquotes, code blocks, links, and inline images. Sanitized before save.',
+      'A TipTap editor with a slash menu, bubble toolbar, headings, lists, checklists, code blocks, links, @mentions and inline media. Sanitized before save.',
     status: 'live',
   },
   {
     icon: Boxes,
     title: 'File attachments',
     description:
-      'Drag and drop. Stored on Vercel Blob in production, local files in development. 10 MB cap, common formats.',
+      'Paste, drag, or attach any file type (SVG excluded for safety) up to 50 MB. Stored on Vercel Blob in production, on the local disk in development.',
     status: 'live',
   },
   {
-    icon: Lock,
-    title: 'Role-based access',
+    icon: Tag,
+    title: 'Labels & milestones',
     description:
-      'Owner, admin, member, viewer. Roles are enforced end to end — destructive operations are gated, not just hidden.',
+      'Workspace-wide labels with colors, and milestones that stand alone or belong to a project — each with its own issues, comments and progress.',
     status: 'live',
   },
   {
-    icon: Keyboard,
+    icon: Users,
+    title: 'Teams & roles',
+    description:
+      'Invite by email. Workspaces have owners and members, with owner-only gates on destructive actions; projects add their own roles (owner, admin, member, viewer).',
+    status: 'live',
+  },
+  {
+    icon: Inbox,
+    title: 'Activity feed & inbox',
+    description:
+      'Every mutation is recorded on an append-only event spine that powers a workspace activity feed and a per-user inbox of mentions, assignments and changes.',
+    status: 'live',
+  },
+  {
+    icon: Sparkles,
+    title: 'Workspace analytics',
+    description:
+      'Snapshot counts, completion rate, cycle time, velocity and aging — sliced by status, priority, assignee, label and project, plus per-milestone burndown.',
+    status: 'live',
+  },
+  {
+    icon: KeyRound,
     title: 'API tokens for scripts',
     description:
-      'Mint a bk_live_… token. Stored as a SHA-256 hash with an 8-char visible prefix so you know which one is which.',
+      'Mint a bk_live_… token in settings. Stored as a SHA-256 hash with a short visible prefix so you know which one is which; optional expiry and one-click revoke.',
+    status: 'live',
+  },
+  {
+    icon: BookOpen,
+    title: 'Self-describing API',
+    description:
+      'Every route is published as an OpenAPI 3.1 document at /api/openapi.json (browsable at /api/docs). GET /api/meta returns your context and the valid vocabulary in one call.',
+    status: 'live',
+  },
+  {
+    icon: Trash2,
+    title: 'Trash & restore',
+    description:
+      'Deleting an issue, project or milestone moves it to a recoverable Trash. Restore brings items back as a group; owners can purge or empty the bin.',
     status: 'live',
   },
   {
     icon: Moon,
     title: 'Dark mode by default',
     description:
-      'Token-driven theming via OKLCH. Flip the entire app’s accent by changing one CSS variable.',
+      'Token-driven theming with next-themes. Dark out of the box; flip the entire app’s accent by changing one CSS variable.',
     status: 'live',
   },
   {
     icon: Undo2,
-    title: 'Reversible by design',
+    title: 'Reversible edits',
     description:
-      'Issue updates are journaled. `bk undo` reverses your last N operations. Coverage today is issue updates only — broader undo on the roadmap.',
+      'Issue updates are journaled with full before/after snapshots. `bk undo` (or POST /api/undo) reverses your last few changes. Coverage today is issue updates — broader undo is planned.',
     status: 'preview',
-  },
-  {
-    icon: Sparkles,
-    title: 'Workspace analytics',
-    description:
-      'Issues by status, top projects, top assignees, 30-day creation trend. Data is real and live; visuals still warming up.',
-    status: 'preview',
-  },
-  {
-    icon: PlayCircle,
-    title: 'Native agent tools (MCP)',
-    description:
-      'A first-class MCP server so agents can create_issue, add_comment, etc. as native tools with rich JSON schemas.',
-    status: 'soon',
-  },
-  {
-    icon: Zap,
-    title: 'Ask in plain English',
-    description:
-      '"Show blocked issues from Q4 assigned to Andrea." A thin parser that returns the same shape /api/issues does.',
-    status: 'soon',
-  },
-  {
-    icon: Rocket,
-    title: 'Batch operations',
-    description:
-      'Move 50 issues at once. Create 100 comments. Atomic and undoable. The data model supports it; the routes don’t yet.',
-    status: 'soon',
-  },
-  {
-    icon: Palette,
-    title: 'Sub-15 ms responses',
-    description:
-      'Integer keys, indexed Postgres, single round-trip routes. We’ll publish benchmarks before re-asserting the number.',
-    status: 'soon',
   },
 ]
 
@@ -182,9 +185,9 @@ export function LandingPage() {
       <Hero />
       <ThreeSurfaces />
       <Features />
+      <CommandLine />
       <HowItWorks />
       <ForAgents />
-      <Roadmap />
       <FAQ />
       <FinalCTA />
     </MarketingLayout>
@@ -220,8 +223,8 @@ function Hero() {
           <span className="text-gradient-brand">AI working</span> alongside them.
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
-          Integer IDs. A stable HTTP API. A CLI built like Go. A web UI built like Linear.
-          One data model behind all three.
+          Integer IDs. A stable, self-describing HTTP API. A CLI written in Go.
+          A web UI built like Linear. One data model behind all three.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">
@@ -231,9 +234,9 @@ function Hero() {
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link href="#how">
-              <Code2 />
-              See how it works
+            <Link href="#cli">
+              <Terminal />
+              Try the CLI
             </Link>
           </Button>
         </div>
@@ -259,7 +262,7 @@ function ThreeSurfaces() {
       icon: Boxes,
       title: 'Web UI',
       copy:
-        'Kanban, timeline, list, issue detail with rich text. The clicky surface, polished with Tailwind v4 and shadcn/ui.',
+        'Kanban, timeline, list, and issue detail with rich text. The clicky surface, polished with Tailwind v4 and shadcn/ui.',
       meta: '→ /dashboard',
     },
     {
@@ -270,15 +273,15 @@ function ThreeSurfaces() {
         </>
       ),
       copy:
-        'A Go binary. Table, JSON, or YAML output. Stable exit codes. bk login opens a browser; you’re authed in seconds.',
+        'A single Go binary on npm. Table, JSON, or YAML output. Stable exit codes. bk login opens a browser; you’re authed in seconds.',
       meta: '→ bk issue list --json',
     },
     {
       icon: Zap,
       title: 'HTTP API',
       copy:
-        'JSON in, JSON out. Bearer tokens or session cookies. Predictable error shapes. Cursor pagination across the board.',
-      meta: '→ POST /api/issues',
+        'JSON in, JSON out. Bearer tokens or session cookies. Predictable error shapes, cursor pagination, and a published OpenAPI spec.',
+      meta: '→ POST /api/workspaces/{ws}/issues',
     },
   ]
   return (
@@ -287,7 +290,7 @@ function ThreeSurfaces() {
         <SectionHead
           eyebrow="Three surfaces"
           title="Web, CLI, or HTTP. Same auth. Same data."
-          sub="Most issue trackers privilege the web. We treat all three as equal citizens — anything you do in one, you can do in the others."
+          sub="Most issue trackers privilege the web. We treat all three as equal citizens — anything you do in one, you can do in the others, and an automated parity test keeps them honest."
         />
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {surfaces.map((s, i) => (
@@ -317,7 +320,7 @@ function Features() {
         <SectionHead
           eyebrow="Feature catalog"
           title="The boring stuff, done well."
-          sub="Status is labeled on every card so you know what’s shipped today and what’s still on the way."
+          sub="Status is labeled on every card so you know what’s shipped today and what’s still warming up."
         />
         <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
@@ -343,31 +346,108 @@ function Features() {
   )
 }
 
+function CommandLine() {
+  const points = [
+    {
+      title: 'One binary, every platform',
+      copy:
+        'The npm package ships a tiny installer that downloads the right prebuilt Go binary for your OS and architecture (macOS, Linux, Windows · amd64/arm64).',
+    },
+    {
+      title: 'Browser login, token storage',
+      copy:
+        'bk login runs a loopback OAuth handshake — approve in the browser and a bk_live_… token is saved to ~/.config/bk/config.json (mode 0600).',
+    },
+    {
+      title: 'Built for scripts and agents',
+      copy:
+        '--json / -o yaml for machine-readable output, cursor pagination, and stable exit codes (0 ok … 7 aborted). Set BK_NO_PROMPT=1 to skip confirmations.',
+    },
+    {
+      title: 'Everything the UI can do',
+      copy:
+        'issues, projects, milestones, comments, labels, members, invites, inbox, trash, analytics, and undo — all from the terminal.',
+    },
+  ]
+  return (
+    <section id="cli" className="border-t border-border/60">
+      <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
+        <SectionHead
+          eyebrow="Command line"
+          title="Install the CLI in one line."
+          sub="bk is a single Go binary distributed on npm. Same features as the web app — scriptable, pipeable, and ready for agents."
+        />
+        <div className="mt-12 grid gap-5 lg:grid-cols-2 lg:items-start">
+          <CodeBlock
+            label="Quickstart"
+            lang="bash"
+            code={`# 1. install (npm fetches the prebuilt binary for your platform)
+$ npm install -g @blackcode_sa/bc-issues
+
+# 2. authenticate — opens your browser, done in seconds
+$ bk login --server https://your-deployment.app
+
+# 3. pick a workspace
+$ bk workspace use my-team
+
+# 4. work
+$ bk issue list --status todo
+$ bk issue create --project 1 --title "Fix signup bug" --priority 1
+$ bk issue list --json | jq '.data[].title'`}
+          />
+          <div className="flex flex-col gap-4">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
+              <Download className="size-3.5" />
+              npm i -g @blackcode_sa/bc-issues
+            </div>
+            <ul className="space-y-4">
+              {points.map((p) => (
+                <li key={p.title} className="flex gap-3">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary/70" />
+                  <div>
+                    <h4 className="text-sm font-semibold">{p.title}</h4>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{p.copy}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground/80">
+              Tip: run <span className="font-mono">bk --help</span> for the full
+              command tree, or <span className="font-mono">bk whoami</span> to
+              confirm you’re signed in.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function HowItWorks() {
   const bullets = [
     {
       title: 'Same auth everywhere',
       copy:
-        'Bearer token or session cookie — pick one per request. resolveUser() on the backend doesn’t care which surface you came from.',
+        'Bearer token or session cookie — pick one per request. The backend resolves the user the same way regardless of which surface you came from.',
     },
     {
       title: 'One data model',
       copy:
-        'Postgres 16 with Drizzle ORM. Integer primary keys, indexed where they matter, single round-trip per route.',
+        'Postgres with Drizzle ORM. Integer primary keys, indexed where they matter, single round-trip per route. Every tenant lives under a workspace.',
     },
     {
       title: 'Reversible by design',
       copy:
-        'Issue updates are journaled with full old and new snapshots. Undo is a real API endpoint, not a UI trick.',
+        'Issue updates are journaled with full old and new snapshots, and deletes soft-delete to a recoverable Trash. Undo is a real API endpoint, not a UI trick.',
     },
     {
       title: 'Predictable failures',
       copy:
-        'Every error is { error, suggestion?, details? }. The CLI maps HTTP statuses to stable exit codes for scripts.',
+        'Every error is { error, code, suggestion?, details? }. The CLI maps HTTP statuses to stable exit codes for scripts.',
     },
   ]
   return (
-    <section id="how" className="border-t border-border/60">
+    <section id="how" className="border-t border-border/60 bg-muted/30">
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="How it works"
@@ -394,7 +474,7 @@ function HowItWorks() {
               {[
                 { label: 'Web', tag: 'cookie' },
                 { label: 'CLI / bk', tag: 'bearer' },
-                { label: 'Agent / MCP', tag: 'bearer' },
+                { label: 'Agent / API', tag: 'bearer' },
               ].map((n) => (
                 <div
                   key={n.label}
@@ -416,14 +496,14 @@ function HowItWorks() {
             >
               <span className="font-medium">Next.js — /api/*</span>
               <div className="mt-0.5 font-mono text-[11px] text-white/75">
-                route handlers · resolveUser() · validation
+                route handlers · resolveAuth() · validation
               </div>
             </div>
             <div className="my-3 flex justify-center text-muted-foreground/70">↓</div>
             <div className="rounded-lg border border-border bg-muted/60 px-4 py-3 text-center text-sm">
-              <span className="font-medium">Postgres 16 + Drizzle</span>
+              <span className="font-medium">Postgres + Drizzle</span>
               <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                integer PKs · transaction log · cursor pagination
+                integer PKs · event spine · cursor pagination
               </div>
             </div>
           </div>
@@ -435,120 +515,64 @@ function HowItWorks() {
 
 function ForAgents() {
   return (
-    <section className="border-t border-border/60 bg-muted/30">
+    <section className="border-t border-border/60">
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="For agents"
           title="Built so an agent can do the work."
-          sub="Mint a token. Drop it in the config. Read, write, comment — using the same data you see in the web UI."
+          sub="Mint a token, then read, write and comment using the same data you see in the web UI. Start with GET /api/meta to learn the workspace and the valid vocabulary."
         />
         <div className="mt-12 grid gap-5 lg:grid-cols-2">
           <CodeBlock
             label="Create an issue with the CLI"
             lang="bash"
-            code={`# bk picks up your token from ~/.config/bk/config.json
+            code={`# bk reads your token from ~/.config/bk/config.json
 $ bk issue create \\
     --project 1 \\
-    --title "Add cursor pagination to /api/issues" \\
-    --priority 2 \\
+    --title "Triage onboarding bug" \\
+    --priority 1 \\
     --json
 
 {
   "id": 152,
-  "title": "Add cursor pagination to /api/issues",
+  "seq": 87,
+  "title": "Triage onboarding bug",
   "status": "backlog",
-  "priority": 2,
+  "priority": 1,
   "project_id": 1
 }`}
           />
           <CodeBlock
             label="Or hit the HTTP endpoint directly"
             lang="http"
-            code={`POST /api/issues HTTP/1.1
-Host: app.issues.dev
+            code={`POST /api/workspaces/my-team/issues HTTP/1.1
+Host: your-deployment.app
 Authorization: Bearer bk_live_a3f9…
 Content-Type: application/json
 
 {
   "project_id": 1,
-  "title": "Add cursor pagination to /api/issues",
-  "priority": 2
+  "title": "Triage onboarding bug",
+  "priority": 1
 }
 
-// 201 Created → { id: 152, ... }`}
+// 201 Created → { "id": 152, "seq": 87, ... }`}
           />
         </div>
 
         <div className="mt-6 flex flex-col items-start justify-between gap-3 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center">
           <div>
-            <div className="text-sm font-semibold">
-              What MCP integration will look like
-            </div>
+            <div className="text-sm font-semibold">A self-describing API</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              A first-class mcp/ server exposes these endpoints as native tools —
-              create_issue, update_issue, add_comment — with full JSON schemas.
+              The full surface is published as OpenAPI 3.1 at{' '}
+              <span className="font-mono">/api/openapi.json</span>, browsable at{' '}
+              <span className="font-mono">/api/docs</span>. One call to{' '}
+              <span className="font-mono">/api/meta</span> returns the active
+              workspace plus the exact status and priority values to use — so an
+              agent never has to guess.
             </p>
           </div>
-          <StatusPill status="soon" />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function Roadmap() {
-  const groups = [
-    {
-      title: 'Reliability',
-      items: [
-        'Broader undo (creates, deletes, non-issue resources)',
-        'Batch operations + batched undo',
-        'CI with contract tests',
-        'Performance benchmarks',
-      ],
-    },
-    {
-      title: 'Agent ergonomics',
-      items: [
-        'MCP server with native tool definitions',
-        'Natural-language query endpoint',
-        'Per-scope API tokens (read-only, per-project)',
-      ],
-    },
-    {
-      title: 'Product polish',
-      items: [
-        'Labels (UI to a backend that’s already there)',
-        'Saved filters and views',
-        'Notifications and search',
-        'Mobile-friendly layouts',
-      ],
-    },
-  ]
-  return (
-    <section className="border-t border-border/60">
-      <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
-        <SectionHead
-          eyebrow="Roadmap"
-          title="What we’re shipping next."
-          sub="Groupings, not dates. We label honestly on the page when each piece lands."
-        />
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {groups.map((g) => (
-            <Card key={g.title}>
-              <CardContent className="p-6">
-                <h3 className="mb-4 text-base font-semibold">{g.title}</h3>
-                <ul className="space-y-2.5 text-sm text-muted-foreground">
-                  {g.items.map((it) => (
-                    <li key={it} className="flex items-start gap-2">
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary/70" />
-                      <span>{it}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ))}
+          <StatusPill status="live" />
         </div>
       </div>
     </section>
@@ -558,36 +582,40 @@ function Roadmap() {
 function FAQ() {
   const items: { q: string; a: string }[] = [
     {
-      q: 'What is the Trinity Architecture?',
-      a: 'A three-part design: a prompt (the agent’s instructions), the tools (an MCP server exposing this API), and the software (this app, which is the memory). The MCP layer is on the roadmap; the software half ships today.',
+      q: 'How do agents discover and call the API?',
+      a: 'Every route is published as an OpenAPI 3.1 document at /api/openapi.json (rendered at /api/docs), and a parity test keeps it in lock-step with the code. GET /api/meta returns your context — the active workspace and the valid status/priority vocabulary — so an agent never guesses an enum value. Or just drive the bk CLI.',
     },
     {
-      q: 'Can I self-host?',
-      a: 'Yes. The app runs against a Postgres database — Docker Compose provides one locally; managed Postgres (Vercel, Neon, Supabase, RDS) works in production.',
+      q: 'How do I install and use the CLI?',
+      a: 'npm install -g @blackcode_sa/bc-issues, then bk login (it opens a browser and stores a token in ~/.config/bk/config.json), bk workspace use <slug>, and you’re working: bk issue list, bk issue create --project 1 --title "…". Run bk --help for the full command tree.',
     },
     {
-      q: 'How do I sign up?',
-      a: 'By email and password on the sign-in page, or with Google if your deployment has OAuth configured.',
+      q: 'How do agents and scripts authenticate?',
+      a: 'Mint an API token at /dashboard/settings/tokens (or via bk login), then send it as Authorization: Bearer bk_live_…. The same token works across the CLI and raw HTTP. Tokens carry optional expiry and can be revoked from the same page.',
     },
     {
-      q: 'Is there a free tier?',
-      a: 'For self-hosting, the whole thing is free. There’s no hosted SaaS today.',
+      q: 'Is the CLI scriptable for automation and CI?',
+      a: 'Yes. Add --json or -o yaml for machine-readable output, pipe it through jq, and branch on stable exit codes (0 ok, 3 unauthenticated, 4 forbidden, 5 not found, 6 validation, 7 aborted). Set BK_NO_PROMPT=1 to skip confirmations in unattended runs.',
     },
     {
-      q: 'How do agents authenticate?',
-      a: 'Mint an API token at /dashboard/settings. Pass it in Authorization: Bearer bk_live_…. Tokens carry optional expiry and can be revoked from the same page.',
+      q: 'How does pagination work?',
+      a: 'Every list endpoint returns { data, next_cursor }. When next_cursor is non-null, pass it back as ?cursor= to fetch the next page; null means you’ve reached the end. The CLI exposes this as --limit / --cursor.',
     },
     {
-      q: 'How does undo work?',
-      a: 'Issue updates are journaled with previous and new field values. POST /api/undo (or bk undo) reverses your most recent changes, up to 10 at a time. Broader coverage is on the roadmap.',
+      q: 'What happens when I delete something?',
+      a: 'Issues, projects and milestones soft-delete into a recoverable Trash rather than vanishing. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with bk undo (POST /api/undo), up to 10 at a time.',
+    },
+    {
+      q: 'Can a team and its agents share a workspace?',
+      a: 'Yes. Everything is workspace-scoped with members and roles; every change lands on a shared activity feed and a per-user inbox of mentions and assignments — so humans and agents working the same board stay in sync.',
     },
     {
       q: 'What stack does the project use?',
-      a: 'Next.js + TypeScript + Tailwind v4 + shadcn/ui + Postgres + drizzle on the server. Go for the CLI.',
+      a: 'Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui, NextAuth, TanStack Query and Framer Motion on the front; Postgres + Drizzle ORM on the server; Go for the CLI.',
     },
   ]
   return (
-    <section className="border-t border-border/60 bg-muted/30">
+    <section className="border-t border-border/60">
       <div className="mx-auto max-w-3xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="FAQ"

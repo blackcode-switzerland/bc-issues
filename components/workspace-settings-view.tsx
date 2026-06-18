@@ -33,7 +33,7 @@ interface Member {
 // workspace up (so any workspace can be managed from /dashboard/workspaces/[slug]);
 // otherwise we fall back to the user's active workspace.
 async function fetchWorkspace(slug?: string): Promise<Workspace | null> {
-  const wsRes = await fetch('/api/me/workspaces')
+  const wsRes = await fetch('/api/workspaces')
   if (!wsRes.ok) return null
   const { data } = await wsRes.json()
   const all = data as Workspace[]

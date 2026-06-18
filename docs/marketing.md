@@ -1,13 +1,13 @@
 # Marketing content
 
-Source-of-truth content for the landing page and other marketing surfaces. Lists every feature, who it's for, what tone to write in, and which claims are real today vs. on the roadmap. Use this as the brief — the page itself is built on top.
+Source-of-truth content for the landing page and other marketing surfaces. Lists every feature, who it's for, what tone to write in, and which claims are real today vs. on the roadmap. The live page is `components/landing-page.tsx`; keep this brief and that page in agreement.
 
 > **Honesty rule.** Every feature listed below carries a status tag:
 > - **Live** — shipped, working in production today.
 > - **In preview** — exists but with caveats; the caveats are spelled out.
 > - **Coming soon** — not yet built; marketing may reference but must label clearly.
 >
-> The previous landing page over-claimed in places. We're keeping every original feature on the page but labeling honestly.
+> Nothing on the page may be aspirational-presented-as-factual. If a claim isn't true today, it's either removed or tagged.
 
 ---
 
@@ -24,8 +24,9 @@ Source-of-truth content for the landing page and other marketing surfaces. Lists
 9. [Roadmap (Coming soon, grouped)](#roadmap-coming-soon-grouped)
 10. [Brand assets](#brand-assets)
 11. [Voice & tone](#voice--tone)
-12. [Sample landing-page outline](#sample-landing-page-outline)
+12. [Landing-page outline (as built)](#landing-page-outline-as-built)
 13. [FAQ seed](#faq-seed)
+14. [Status quick-reference](#status-quick-reference)
 
 ---
 
@@ -33,7 +34,7 @@ Source-of-truth content for the landing page and other marketing surfaces. Lists
 
 - **Product name**: **blackcode issues**
 - **Tagline (current)**: *AI-Native Issue Tracking*
-- **One-line pitch**: An issue tracker designed for AI agents and the humans who direct them — clean integer IDs, a typed HTTP API, a first-class CLI, and a polished web UI.
+- **One-line pitch**: An issue tracker designed for AI agents and the humans who direct them — clean integer IDs, a self-describing HTTP API, a first-class CLI, and a polished web UI, all over one data model.
 - **Category**: Project / issue management. Adjacent to Linear, Jira, GitHub Issues.
 - **License**: Internal (see repo for definitive terms).
 - **Status**: Working alpha — usable end-to-end, with documented gaps the roadmap is closing.
@@ -42,15 +43,15 @@ Source-of-truth content for the landing page and other marketing surfaces. Lists
 
 ## Positioning
 
-Most issue trackers were built for humans clicking through forms. blackcode issues was built so an AI agent (or a power user at a terminal) can do the same work without losing context: integer IDs you can remember, a stable HTTP API, a Go CLI with predictable exit codes and machine-readable output, and a web UI for everyone else.
+Most issue trackers were built for humans clicking through forms. blackcode issues was built so an AI agent (or a power user at a terminal) can do the same work without losing context: integer IDs you can remember, a stable HTTP API documented as OpenAPI, a Go CLI with predictable exit codes and machine-readable output, and a web UI for everyone else.
 
 It's the **memory layer** of an AI-augmented workflow. The agent does the work; this is where the work lives.
 
 ### Three things that make it different
 
-1. **Integer IDs everywhere.** No UUID hell. Agents (and humans) can refer to "issue 42" instead of `c47ad9b3-...`.
-2. **Three equal interfaces.** Web UI, HTTP API, and a Go CLI — all driven by the same auth model and the same data. Pick whichever fits the moment.
-3. **Undoable mutations.** Issue edits are journaled to a transaction log and can be reversed with one command. (Today this covers issue updates; broader coverage is on the roadmap.)
+1. **Integer IDs everywhere.** No UUID hell. Agents (and humans) can refer to "issue 42" instead of `c47ad9b3-…`.
+2. **Three equal interfaces.** Web UI, HTTP API, and a Go CLI — all driven by the same auth model and the same data, and kept honest by an automated parity test between the routes and the published OpenAPI spec.
+3. **Reversible & recoverable.** Issue edits are journaled to a transaction log and reversible with one command; deletes soft-delete to a recoverable Trash.
 
 ---
 
@@ -59,7 +60,7 @@ It's the **memory layer** of an AI-augmented workflow. The agent does the work; 
 ### Primary
 
 - **Solo developers and small teams** who want issue tracking without Jira-grade ceremony.
-- **AI/agent builders** who need a place for the agent to read, write, and remember work — with an interface that's actually scriptable.
+- **AI/agent builders** who need a place for the agent to read, write, and remember work — with an interface that's actually scriptable and self-describing.
 - **Terminal-first developers** who'd rather type `bk issue create --title "..."` than open a tab.
 
 ### Secondary
@@ -73,249 +74,171 @@ It's the **memory layer** of an AI-augmented workflow. The agent does the work; 
 
 Pick one set; vary tone to match the chosen design direction.
 
-### Option A — confident technical
+### Option A — confident technical (in use on the page)
 - **H1**: Issue tracking for humans and the AI working alongside them.
-- **Sub**: Integer IDs. A stable HTTP API. A CLI built like Go. A web UI built like Linear. One data model behind all three.
+- **Sub**: Integer IDs. A stable, self-describing HTTP API. A CLI written in Go. A web UI built like Linear. One data model behind all three.
 
 ### Option B — agent-forward
 - **H1**: An issue tracker your agents can actually use.
-- **Sub**: Memorable IDs, a typed API, a Go CLI with stable exit codes, and an undo button for the times your agent (or you) gets it wrong.
+- **Sub**: Memorable IDs, an OpenAPI-documented API, a Go CLI with stable exit codes, and an undo button for the times your agent (or you) gets it wrong.
 
 ### Option C — pragmatic
 - **H1**: A focused issue tracker. Three ways to use it.
 - **Sub**: Web, CLI, or HTTP. Same auth, same data, same workflows. Built for teams that move fast and the agents that help them.
 
-### Existing taglines that still work
-
-- "AI-Native Issue Tracking"
-- "Prompt → Tools → Software"
-
 ---
 
 ## Feature catalog
 
-The feature set the landing page can credibly draw from. Each card or section should pick from this list and label the status honestly.
+The feature set the landing page can credibly draw from. Each card picks from this list and labels the status honestly.
 
 ### 🟢 Live — Identity & access
 
 **Sign in your way**
 Email + password (bcrypt-hashed, 8+ chars) or Google OAuth. The OAuth button only appears if you've configured the credentials, so self-hosters aren't pushed into Google.
-*Status: Live*
 
 **API tokens for scripts and agents**
-Mint a `bk_live_…` token from your settings, paste it into a CLI, agent, or curl. Stored as a SHA-256 hash with an 8-char visible prefix so you can see "which token did what" without ever exposing the secret again.
-*Status: Live*
+Mint a `bk_live_…` token from settings (`/dashboard/settings/tokens`) or via `bk login`. Stored as a SHA-256 hash with a short visible prefix so you can see "which token did what" without ever exposing the secret again. Optional expiry; one-click revoke.
 
-**Role-based access on projects**
-Owner, admin, member, viewer. Owners control deletion and ownership transfer; admins manage members and destructive operations; members read/write everything else; viewers are read-only.
-*Status: Live*
+**Workspaces, teams & roles**
+Everything lives under a workspace. Invite members by email; workspaces have **owners** and **members**, with owner-only gates on destructive actions (delete, transfer, etc.). Projects additionally carry their own member roles — **owner, admin, member, viewer**.
 
-**Admin bootstrap**
-The first user can promote themselves to system admin once, so a fresh deployment has a real admin without anybody touching the database.
-*Status: Live*
+**Super admin (self-host)**
+Platform administration is opt-in via the `SUPER_ADMINS` environment variable (comma-separated emails) plus an email-whitelist table — no "promote yourself" button, no database surgery. Super admins get platform-wide user/whitelist/error views.
 
 ### 🟢 Live — Project management
 
 **Projects with rich metadata**
-Name, description, status, priority bucket, visibility, color, icon, banner, start/end dates. All fields are server-validated. Each project gets its own member roster and its own Kanban.
-*Status: Live*
-
-**Team membership**
-Invite by email, set role, remove. Membership and project deletion are role-checked end to end.
-*Status: Live*
+Name, summary, description, status, priority, color, icon, lead, start/end dates — all server-validated. Each project gets its own member roster, its own Kanban, and posted **health updates** (on track / at risk / off track).
 
 **Milestones**
-Group issues into time-boxed milestones with optional due dates. Each milestone surfaces its open/total issue counts.
-*Status: Live*
+Group issues into milestones with optional due dates. A milestone can stand alone or belong to a project, and surfaces its issue counts and its own comment thread.
+
+**Labels**
+Workspace-wide labels with colors, attachable to issues — managed from a dedicated labels view.
 
 ### 🟢 Live — Issue workflows
 
 **Issues with the fields that matter**
-Title, description (rich text), status (`backlog` / `todo` / `in_progress` / `blocked` / `in_review` / `done` / `cancelled`), priority (1–5), assignee, reporter, milestone, start date, due date, estimated hours.
-*Status: Live*
+Title, rich-text description, status (`backlog` / `todo` / `in_progress` / `done` / `cancelled`), priority (1 Urgent … 4 Low, 5 None), one or more assignees, reporter, project, milestone, start date, due date, estimated hours, labels, watchers.
 
 **Three views, one dataset**
-- **Kanban board** — drag-and-drop columns per status, with persisted moves.
-- **Gantt / timeline** — issues placed on a date axis using their start/due dates.
-- **All-issues list** — flat, filterable view across all your projects with status, priority, assignee and project filters.
-
-*Status: Live*
+- **Kanban board** — drag-and-drop columns per status, with optimistic, persisted moves.
+- **Gantt / timeline** — issues and projects placed on a date axis from their start/due dates.
+- **List** — dense, filterable rows across projects (status, priority, assignee, project filters).
 
 **Rich-text descriptions and comments**
-TipTap editor with bold, italic, lists, blockquotes, code blocks, links, and inline images. HTML is sanitized via DOMPurify before save.
-*Status: Live*
+A TipTap editor with a slash menu, a selection bubble toolbar, headings, lists, checklists, code blocks, links, `@mentions`, and inline media (paste / drag / attach). HTML is sanitized before save. Comments work the same way on issues, projects, and milestones.
 
 **File attachments**
-Drag-and-drop or pick a file. Stored on Vercel Blob in production; in local development without a Blob token, files are served from `public/uploads/` so you can iterate fully offline. Max 10 MB, common image/text/PDF types.
-*Status: Live*
+Paste, drag, or attach **any file type except SVG** (blocked for XSS safety), up to **50 MB**. Stored on Vercel Blob in production; served from `public/uploads/` in local development so you can iterate offline.
 
-**Comments**
-Per-issue conversation thread with author avatars and timestamps.
-*Status: Live*
+**Activity feed & inbox**
+Every mutation is recorded on an append-only **event spine**. That powers a per-issue history, a workspace-wide activity feed, and a per-user **inbox** of mentions, assignments, and changes.
 
-**Activity feed**
-Two scopes:
-- Per-issue: merged comments + the issue's change history.
-- Global: a chronological feed of every mutation logged across the workspace.
-
-*Status: Live*
-
-### 🟢 Live — Identity & memory for agents
+### 🟢 Live — For agents & automation
 
 **Integer IDs**
-Every record — projects, issues, milestones, comments, attachments, members, tokens — uses a plain integer primary key. "Issue 42" is easier to dictate, easier to grep, and easier for a model to keep in working memory than a 36-character UUID.
-*Status: Live. Matches the original landing-page claim.*
+Every record — projects, issues, milestones, comments, attachments, members, tokens — uses a plain integer primary key. "Issue 42" is easier to dictate, grep, and keep in a model's working memory than a UUID.
 
 **Three equally-supported interfaces**
 - **Web UI** at `/dashboard` — for humans.
 - **HTTP API** under `/api/*` — JSON in, JSON out, documented in [`docs/backend.md`](./backend.md).
 - **Go CLI** `bk` — documented in [`docs/cli.md`](./cli.md), with table/JSON/YAML output and stable exit codes.
 
-All three share the same auth and the same data model. Anything you can do in one, you can do in the others.
-*Status: Live*
+All three share the same auth and data model. Anything you can do in one, you can do in the others — and a parity test fails the build if they drift.
+
+**Self-describing API**
+The full surface is published as an **OpenAPI 3.1** document at `/api/openapi.json` (browsable at `/api/docs`). `GET /api/meta` returns the caller's context — active workspace plus the valid status/priority **vocabulary** — so an agent never has to guess an enum value.
 
 **Predictable JSON errors**
-Every error response is `{ error, suggestion?, details? }`. The CLI maps HTTP statuses to stable exit codes (401→3, 403→4, 404→5, 400/422→6) so scripts and agents can branch reliably.
-*Status: Live*
+Every error response is `{ error, code, suggestion?, details? }`. The CLI maps HTTP statuses to stable exit codes (401→3, 403→4, 404→5, 400/422→6) so scripts and agents can branch reliably.
 
-### 🟡 In preview — Reliability features
+### 🟢 Live — Recovery
+
+**Trash & restore**
+Deleting an issue, project, or milestone moves it to a recoverable Trash. Items deleted together restore as a group; owners can purge selected items or empty the bin.
+
+### 🟢 Live — Analytics
+
+**Workspace analytics**
+Snapshot counts, completion rate, cycle time, velocity, and aging — sliced by status, priority, assignee, label, and project, with per-milestone burndown. Available for workspace / project / milestone / member views with date-range and faceted filters, and reachable from the CLI (`bk analytics`).
+
+### 🟡 In preview — Reliability
 
 **Instant rollback (undo)**
-Issue updates are journaled to a transaction log with full `old_data`/`new_data` JSON snapshots. `POST /api/undo` or `bk undo --count N` reverses your most recent operations (up to 10 per call) and marks them rolled back so they can't double-undo.
+Issue updates are journaled to a transaction log with full `old_data`/`new_data` snapshots. `POST /api/undo` or `bk undo --count N` reverses your most recent operations (up to 10 per call) and marks them rolled back.
 
 **Caveats** (be transparent on the page):
-- Coverage today is **issue updates only**. Issue **creates** can be undone (the row is deleted); issue **deletes**, comments, attachments, project/member/milestone mutations are not yet journaled.
+- Coverage today is **issue updates** (creates can be undone by deleting the row). Deletes are recovered via **Trash** instead; comments, attachments, and project/member/milestone mutations are not yet journaled for undo.
 - Broader coverage is on the roadmap.
-
-*Status: In preview. Card copy should soften the previous "every operation is reversible" claim.*
 
 ### 🟢 Live — Polish
 
 **Dark mode, by default**
-Theme controlled by `next-themes`; flips a `.dark` class on the html element. All color tokens live in `app/globals.css` and use OKLCH for perceptually uniform lightness.
-*Status: Live*
+Theme controlled by `next-themes` (class strategy, dark default). Color tokens live in `app/globals.css` and use OKLCH for perceptually uniform neutrals.
 
 **Designed around a single brand color**
-Re-theming the entire app — buttons, gradients, focus rings, hover states — takes one edit: change `--primary` in `app/globals.css`.
-*Status: Live*
+Re-theming the whole app — buttons, gradients, focus rings, hover states — is one edit: change `--primary` in `app/globals.css`.
 
 **Built on Tailwind v4 + shadcn/ui**
-Polished defaults, accessible primitives (Radix under the hood), full ownership of every component file in `components/ui/` for easy customization.
-*Status: Live*
-
-### 🟡 In preview — Analytics
-
-**Workspace analytics**
-Admin-only dashboard with:
-- issues by status,
-- top projects by issue count,
-- top assignees by issue count,
-- 30-day issue creation trend.
-
-The data is real and live. The visual presentation is functional but not yet polished.
-*Status: In preview*
-
-### 🔵 Coming soon — Performance & contracts
-
-**Sub-15-millisecond responses**
-The original landing page advertised "2-15ms latency." The architecture is set up to deliver in that range (Postgres with appropriate indexes, integer keys, drizzle's prepared queries, single round-trip per route), but the project doesn't ship benchmarks or perf tests yet.
-
-**Plan**: add a perf harness, publish numbers, and back them with CI guards before re-asserting the claim.
-*Status: Coming soon — the claim, not the speed.*
-
-### 🔵 Coming soon — Batch operations
-
-**Move 50 issues at once. Create 100 comments. Atomic, undoable.**
-The original landing page advertised this. It isn't built — there are no bulk endpoints yet. The data model supports it; the routes and CLI verbs don't exist.
-
-**Plan**: ship `POST /api/issues/bulk`, `PATCH /api/issues/bulk`, etc., wire `bk` verbs (`bk issue bulk-move`, etc.), and tie every batch into the transaction log so a single `undo` rolls the entire batch.
-*Status: Coming soon*
-
-### 🔵 Coming soon — Natural language queries
-
-**"Show blocked issues from Q4 assigned to Andrea."**
-The original landing page advertised this. It isn't built — there's no NL parser, no LLM client, no `/api/query` route.
-
-**Plan**: a thin `/api/query` endpoint that parses plain English into the typed filter set the issues route already supports. Returns the same shape `/api/issues` does so existing consumers don't need to change.
-*Status: Coming soon*
-
-### 🔵 Coming soon — Trinity-bound CI
-
-**Prompt, Tools, Software — tested together.**
-The original page promised "CI fails if they drift apart." There is no CI in this repo today, no test suite, no contract tests.
-
-**Plan**: GitHub Actions, lint+typecheck+contract tests on every PR; a separate suite that verifies the Companion (MCP) → API contract once the MCP layer ships.
-*Status: Coming soon*
-
-### 🔵 Coming soon — MCP server / agent tools
-
-**A first-class MCP server**
-So agents (including Claude, custom agents, etc.) can `create_issue`, `update_issue`, `add_comment`, etc. as native tools.
-
-**Plan**: ship `mcp/` server in this repo, exposing the API as MCP tools with rich JSON schemas. The code sample on the current landing page (`tool: create_issue …`) describes what those tool definitions should look like.
-*Status: Coming soon (companion repo / future this-repo work).*
-
-### 🔵 Coming soon — Polish bets
-
-The kind of items that will make the product feel done:
-
-- **Labels** — schema is in place, UI is not.
-- **Saved filters / views** — the all-issues page has filters; persisting them is the missing step.
-- **Notifications** — in-app + email for `@mentions`, assignments, due dates.
-- **Mobile UI** — current pages are desktop-first.
-- **Per-scope API tokens** — the `scopes` column exists; enforcement doesn't.
-- **Per-project Gantt with critical-path** — current Gantt is render-only.
-- **Search** — keyword search across issues; currently filters only.
+Polished defaults, accessible Radix primitives, and full ownership of every component file in `components/ui/`.
 
 ---
 
 ## Surface areas
 
-The landing page should make it obvious that there are **three** ways to use the product. This is unusual — most issue trackers privilege the web. Lean into it.
+The landing page should make it obvious there are **three** equal ways to use the product. Lean into it.
 
 ### Web (`/dashboard`)
-For humans. Kanban, Gantt, list, issue detail with rich text, comments, attachments.
+For humans. Kanban, Gantt/timeline, list, issue detail with rich text, comments, attachments, analytics.
 
 ### HTTP API (`/api/*`)
-JSON in, JSON out. Two auth modes — session cookie (for the web) or `Authorization: Bearer bk_live_…` (for everything else). Documented in `docs/backend.md`. Pagination is cursor-based.
+JSON in, JSON out. Two auth modes — session cookie (web) or `Authorization: Bearer bk_live_…` (everything else). Workspace-scoped under `/api/workspaces/{ws}/…`; lists are cursor-paginated (`{ data, next_cursor }`). Published as OpenAPI at `/api/openapi.json`.
 
 ### CLI (`bk`)
-Go binary. `bk login` opens a browser to authenticate, drops the token in `~/.config/bk/config.json`, and you're off. Commands for everything the web does, plus `bk undo`. Output as table / JSON / YAML. Stable exit codes for shell scripts and agents.
+A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` opens a browser to authenticate and drops the token in `~/.config/bk/config.json`. Commands for everything the web does, plus `bk undo`. Output as table / JSON / YAML, with stable exit codes for scripts and agents.
+
+```bash
+npm install -g @blackcode_sa/bc-issues
+bk login --server https://your-deployment.app
+bk workspace use my-team
+bk issue list --status todo --json
+```
 
 ---
 
 ## Architecture summary (for the "How it works" section)
 
-For the "Architecture" / "Under the hood" landing-page section. Show that this isn't a black box.
+For the "How it works" landing-page section. Show that this isn't a black box.
 
 ```
 ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│   Web (you)  │   │  CLI / bk    │   │  Agent / MCP │
+│   Web (you)  │   │  CLI / bk    │   │  Agent / API │
 └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
        │ cookie           │ Bearer token     │  Bearer token
        └─────────┬────────┴───────┬──────────┘
                  │                │
                  ▼                ▼
         ┌─────────────────────────────────┐
-        │   Next.js 16 — /api/*           │
+        │   Next.js — /api/*              │
         │   Route handlers · validation   │
-        │   resolveUser() unifies auth    │
+        │   resolveAuth() unifies auth    │
         └─────────────────┬───────────────┘
                           │
                           ▼
             ┌─────────────────────────┐
-            │   Postgres 16           │
-            │   Drizzle ORM           │
+            │   Postgres + Drizzle    │
             │   Integer PKs, indexed  │
-            │   Transaction log       │
+            │   Event spine · Trash   │
             └─────────────────────────┘
 ```
 
 Three call-out facts the page can use:
 
-- **Same auth everywhere.** Bearer token or session cookie — pick one per request. The backend doesn't care.
-- **One data model.** Every interface reads and writes the same Postgres tables.
-- **Reversible by design.** Issue updates are journaled. Broader undo is coming.
+- **Same auth everywhere.** Bearer token or session cookie — pick one per request. The backend resolves the user the same way.
+- **One data model.** Every interface reads and writes the same Postgres tables, all workspace-scoped.
+- **Reversible by design.** Issue updates are journaled; deletes recover from Trash. Broader undo is coming.
 
 ---
 
@@ -324,20 +247,19 @@ Three call-out facts the page can use:
 Concrete scenarios to ground the abstract claims:
 
 ### "I'm a solo developer with three side-projects"
-Spin it up locally with Docker, sign in with a password, organize work into projects, use Kanban when you're triaging and the list view when you're executing.
+Spin it up locally with Docker, sign in with a password, organize work into projects, use Kanban when triaging and the list view when executing.
 
 ### "My agent should manage issues for me"
-Mint an API token. Drop it in the agent's config. The agent now reads, writes, comments, and (when MCP ships) executes tools — using the same data you see in the web UI.
+Mint an API token, drop it in the agent's config, and point the agent at `/api/openapi.json` (or `/api/meta`). It now reads, writes, and comments using the same data you see in the web UI.
 
 ### "I scripted a release process"
-`bk issue list --status in_review --json | jq '.data[].id' | xargs -I{} bk issue edit {} --status done`
-Use stable exit codes to fail-fast in CI.
+`bk issue list --status in_progress --json | jq '.data[].id' | xargs -I{} bk issue edit {} --status done` — and use stable exit codes to fail-fast in CI.
 
-### "I made a mistake during a bulk update"
-`bk undo --count 5`. The five issues you edited are restored to their previous state.
+### "I made a mistake during an update"
+`bk undo --count 5` restores your last five issue edits; an accidental delete comes back from `bk trash restore`.
 
 ### "I'm comparing this to Linear/Jira"
-You won't find sprint planning, custom fields, or advanced permissions yet. You will find a clean API, an honest data model, integer IDs you can dictate, and a CLI that doesn't suck.
+You won't find sprint planning, custom fields, or advanced permissions yet. You will find a clean, documented API, an honest data model, integer IDs you can dictate, and a CLI that doesn't suck.
 
 ---
 
@@ -345,47 +267,46 @@ You won't find sprint planning, custom fields, or advanced permissions yet. You 
 
 For a public "What's next" section. Groupings, not specific dates.
 
-### Reliability
+### Reliability & safety
 - Broader undo (creates, deletes, non-issue resources)
 - Batch operations + batched undo
-- CI with contract tests
-- Performance benchmarks
+- Per-scope API tokens (read-only / per-project)
+- Rate limiting for the public API
 
-### Agent ergonomics
-- MCP server with native tool definitions
-- Natural-language query endpoint
-- Per-scope API tokens (read-only / per-project / etc.)
+### Realtime & integration
+- Webhooks / event stream over the existing event spine
+- Saved filters and views
+- Full-text search
 
 ### Product polish
-- Labels (UI to a backend that's already there)
-- Saved filters / views
-- Notifications
-- Search
+- Notifications beyond the in-app inbox
 - Mobile-friendly layouts
+- Published performance benchmarks
+
+> Note: contract testing partially shipped — an OpenAPI↔routes parity test runs in `npm test`.
 
 ---
 
 ## Brand assets
 
 ### Color
-- **Primary**: `#0ea5e9` (Tailwind sky-500).
+- **Primary**: `#007bd3` (a blue), defined as `--primary` in `app/globals.css`.
   - Used for: primary buttons, focus rings, gradients, accent strokes, brand mark.
-  - Stays identical in light and dark mode.
-- **Neutrals**: Tailwind slate-derived OKLCH (defined in `app/globals.css`).
+  - Identical in light and dark mode.
+- **Neutrals**: OKLCH-based, defined in `app/globals.css`.
 - **Destructive**: red (OKLCH).
-- **Charts**: five OKLCH values designed to read in both light and dark.
+- **Charts**: OKLCH values designed to read in both light and dark.
 
 ### Typography
-- **Family**: Google Sans. Loaded via Google's CSS API.
-  - Note for marketing surfaces with public reach: Google Sans is technically not in the public Google Fonts directory; for any commercial deployment that may attract licensing scrutiny, swap to Inter or DM Sans (both open-licensed and visually similar) — see `docs/frontend.md`.
-- **Weights in use**: 400 (body), 500 (mid-emphasis), 700 (display).
+- **Family**: Google Sans (`--font-sans`), served via Google's CSS API.
+  - Note: Google Sans isn't in the public Google Fonts directory; for a commercial deployment that may attract licensing scrutiny, swap to Inter or DM Sans (open-licensed, visually similar) — see `docs/frontend.md` and `app/layout.tsx`.
+- **Mono**: `ui-monospace, "SF Mono", "JetBrains Mono", Menlo`.
 
 ### Logo
 - File: `public/logo.png`. Used in the header and as favicon.
-- Visual: a stylized monochrome mark on a flat surface (current page uses it at 32×32 in the header).
 
 ### Voice marks
-- `blackcode issues` — always lowercase. Avoid title-case "Blackcode Issues" unless required by a parent context.
+- `blackcode issues` — lowercase. Avoid title-case unless required by a parent context.
 - `bk` — the CLI's binary name. Lowercase, mono font.
 - `bk_live_…` — token prefix, mono font.
 
@@ -397,91 +318,74 @@ For a public "What's next" section. Groupings, not specific dates.
 
 - **Direct.** "We log every issue update so you can undo it" beats "leverage advanced audit trails."
 - **Specific.** Numbers, formats, examples. `bk login` over "easy CLI authentication."
-- **Confident without overclaim.** If a feature is in preview, say so. The product earns more trust by being honest about gaps than by pretending they don't exist.
+- **Confident without overclaim.** If a feature is in preview, say so. Honesty about gaps earns more trust than pretending they don't exist.
 - **A little dry-witty.** "No more UUID chaos. Just speed." is fine. "Revolutionary AI-powered" is not.
 
 ### What we don't sound like
 
 - ❌ Buzzword soup ("synergistic," "next-generation," "leverage")
 - ❌ Vague superlatives ("the best," "world-class") with nothing behind them
-- ❌ Defensive ("simple and easy" without showing it)
 - ❌ Aspirational copy presented as factual
 
 ### Phrases we like
 
 - "Three equal interfaces."
 - "Integer IDs. No UUID hell."
+- "A self-describing API."
 - "Built for terminals, agents, and people."
-- "Coming soon" — used unembarrassed, with a roadmap link.
 
 ---
 
-## Sample landing-page outline
+## Landing-page outline (as built)
 
-A possible structure once the page is rewritten. Each section maps to features above.
+The live page (`components/landing-page.tsx`) is structured as:
 
-1. **Hero**
-   - Logo + product name.
-   - H1 from one of the [options above](#headline--sub-headline-options).
-   - Two CTAs: "Get started" (→ `/login`) and "View on GitHub" or "Read the docs".
+1. **Hero** — H1/sub (Option A), CTAs: "Get started" (→ `/login?tab=signup`) and "Try the CLI" (→ `#cli`), product screenshot.
+2. **Three surfaces** — Web · CLI · HTTP, one card each, with a real example route on each.
+3. **Feature catalog** — status-pilled cards drawn from the Live/In-preview features above.
+4. **Command line** — one-line install, a copy-paste quickstart, and how the CLI works.
+5. **How it works** — the architecture diagram + four bullets (same auth, one data model, reversible, predictable failures).
+6. **For agents** — a CLI snippet and the equivalent `POST /api/workspaces/{ws}/issues`, plus the self-describing-API callout (`/api/openapi.json`, `/api/docs`, `/api/meta`).
+7. **FAQ** — from the seed below.
+8. **Final CTA** — sign up / sign in.
 
-2. **Three surfaces** (highlight differentiator)
-   - Web · CLI · API — three cards, one sentence each.
-
-3. **Feature grid** (current → new)
-   - Mix of Live and In preview cards. Each card carries a small status pill.
-   - Suggested initial set: Integer IDs · Three Surfaces · Kanban · Gantt · Rich-text Issues · File Attachments · Undo · Role-based Access · API Tokens · Dark Mode.
-
-4. **How it works**
-   - The architecture diagram from above.
-   - Three bullets: "Same auth everywhere." "One data model." "Reversible by design."
-
-5. **For agents**
-   - A snippet showing `bk issue create --project 1 --title "..." --priority 2 --json`.
-   - A second snippet showing the equivalent HTTP `POST /api/issues`.
-   - The "coming soon" code sample (`tool: create_issue …`) re-framed as "What MCP integration will look like — coming soon."
-
-6. **Roadmap teaser**
-   - 3–5 items from the [Roadmap section](#roadmap-coming-soon-grouped).
-
-7. **Founder / made-with footer**
-   - Keep the existing "by minds — carbon and silicon" line if you want; it's distinctive without overpromising.
+> The page does **not** currently render a Roadmap section. The [Roadmap](#roadmap-coming-soon-grouped) section above is an internal planning reference only; don't describe it as live page content.
 
 ---
 
 ## FAQ seed
 
-For an FAQ section or a "Learn more" page.
+The seed mirrors the live page's FAQ (focused on the API, CLI, and automation).
 
-### What is the Trinity Architecture?
-A three-part design: a *prompt* (the agent's instructions), the *tools* (an MCP server exposing this API), and the *software* (this app, which is the memory). The page may reference all three; today only the software half is in this repo. The MCP layer is on the roadmap.
+### How do agents discover and call the API?
+Every route is published as an OpenAPI 3.1 document at `/api/openapi.json` (rendered at `/api/docs`), and a parity test keeps it in lock-step with the code. `GET /api/meta` returns your context — the active workspace and the valid status/priority vocabulary — so an agent never guesses an enum value. Or just drive the `bk` CLI.
 
-### Can I self-host?
-Yes. The app runs against a Postgres database — Docker Compose provides one locally; managed Postgres (Vercel, Neon, Supabase, RDS) works in production. See `README.md`.
+### How do I install and use the CLI?
+`npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk workspace use <slug>`, and you're working: `bk issue list`, `bk issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
 
-### How do I sign up?
-By email + password on `/login`, or with Google if the deployment has OAuth configured.
+### How do agents and scripts authenticate?
+Mint an API token at `/dashboard/settings/tokens` (or via `bk login`), then send it as `Authorization: Bearer bk_live_…`. The same token works across the CLI and raw HTTP. Tokens carry optional expiry and can be revoked from the same page.
 
-### Is there a free tier?
-For self-hosting, the whole thing is free. There's no hosted SaaS today.
+### Is the CLI scriptable for automation and CI?
+Yes. Add `--json` or `-o yaml` for machine-readable output, pipe through `jq`, and branch on stable exit codes (0 ok, 3 unauthenticated, 4 forbidden, 5 not found, 6 validation, 7 aborted). Set `BK_NO_PROMPT=1` to skip confirmations in unattended runs.
 
-### How do agents authenticate?
-Mint an API token at `/dashboard/settings`. Pass it in `Authorization: Bearer bk_live_…`. Tokens carry an optional expiry; tokens can be revoked from the same page.
+### How does pagination work?
+Every list endpoint returns `{ data, next_cursor }`. When `next_cursor` is non-null, pass it back as `?cursor=` to fetch the next page; null means the end. The CLI exposes this as `--limit` / `--cursor`.
 
-### How does undo work?
-Issue updates are journaled with the previous and new field values. Hitting `POST /api/undo` (or `bk undo`) reverses your most recent changes, up to 10 at a time. Broader coverage is on the roadmap.
+### What happens when I delete something?
+Issues, projects and milestones soft-delete into a recoverable Trash. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with `bk undo` (`POST /api/undo`), up to 10 at a time.
+
+### Can a team and its agents share a workspace?
+Yes. Everything is workspace-scoped with members and roles; every change lands on a shared activity feed and a per-user inbox of mentions and assignments, so humans and agents on the same board stay in sync.
 
 ### What languages and stacks does the project use?
-Next.js 16 + TypeScript + Tailwind v4 + shadcn/ui + Postgres + drizzle on the server. Go for the CLI. See `docs/frontend.md`, `docs/backend.md`, `docs/cli.md`.
-
-### Is it open source?
-See the repository for the definitive license. (If contributing publicly, clarify the license on the page itself; this doc deliberately doesn't make a legal claim.)
+Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui, NextAuth, TanStack Query, and Framer Motion on the front; Postgres + Drizzle ORM on the server; Go for the CLI. See `docs/frontend.md`, `docs/backend.md`, `docs/cli.md`.
 
 ---
 
 ## Status quick-reference
 
-A compact table for when you're laying out a feature grid and need to decide which pill to put on each card.
+A compact table for laying out a feature grid.
 
 | Feature | Card title | Status pill |
 |---|---|---|
@@ -489,26 +393,24 @@ A compact table for when you're laying out a feature grid and need to decide whi
 | Web + CLI + API parity | "Three surfaces" | Live |
 | Google OAuth + email | "Sign in your way" | Live |
 | API tokens | "API tokens for scripts" | Live |
-| Project roles | "Role-based access" | Live |
-| Project CRUD | "Project management" | Live |
-| Milestones | "Milestones" | Live |
-| Issue CRUD + workflows | "Full issue workflow" | Live |
+| Workspace + project roles | "Teams & roles" | Live |
+| Project CRUD + health updates | "Project management" | Live |
+| Milestones | "Labels & milestones" | Live |
+| Labels | "Labels & milestones" | Live |
+| Issue CRUD + workflows | "Issue workflows" | Live |
 | Kanban | "Kanban board" | Live |
-| Gantt / timeline | "Timeline view" | Live |
-| All-issues list with filters | "All issues, filtered" | Live |
-| Rich-text descriptions | "Rich-text editor" | Live |
-| Comments | "Conversations on every issue" | Live |
-| File attachments | "Attachments" | Live |
-| Activity feed | "Activity feed" | Live |
+| Gantt / timeline + list | "Timeline & list views" | Live |
+| Rich-text issues & comments | "Rich-text issues & comments" | Live |
+| File attachments (50 MB) | "File attachments" | Live |
+| Activity feed & inbox | "Activity feed & inbox" | Live |
+| Self-describing API (OpenAPI/meta) | "Self-describing API" | Live |
+| Trash & restore | "Trash & restore" | Live |
+| Workspace analytics | "Workspace analytics" | Live |
 | Dark mode | "Dark mode by default" | Live |
-| Undo / rollback (issue updates) | "Reversible by design" | **In preview** |
-| Analytics dashboard | "Workspace analytics" | **In preview** |
-| 2–15 ms latency claim | "Built for speed" | **Coming soon** |
+| Undo / rollback (issue updates) | "Reversible edits" | **In preview** |
 | Batch operations | "Batch operations" | **Coming soon** |
-| Natural-language queries | "Ask in plain English" | **Coming soon** |
-| Trinity-bound CI | "Tested together" | **Coming soon** |
-| MCP server | "Native agent tools" | **Coming soon** |
-| Labels | "Labels" | **Coming soon** |
+| Webhooks / event stream | "Webhooks" | **Coming soon** |
+| Per-scope API tokens | "Scoped tokens" | **Coming soon** |
 | Notifications | "Notifications" | **Coming soon** |
 | Saved filters | "Saved views" | **Coming soon** |
 | Search | "Search" | **Coming soon** |
@@ -520,4 +422,4 @@ A compact table for when you're laying out a feature grid and need to decide whi
 
 - [Frontend documentation](./frontend.md) — for build-time facts when wiring the page.
 - [Backend documentation](./backend.md) — for accurate technical claims.
-- [CLI documentation](./cli.md) — for CLI screenshots and snippets.
+- [CLI documentation](./cli.md) — for CLI commands and snippets.

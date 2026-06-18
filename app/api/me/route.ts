@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveUser } from '@/lib/auth/resolve'
+import { resolveAuth, resolveUser } from '@/lib/auth/resolve'
 import { apiHandler, Errors } from '@/lib/api'
 import {
   deleteAccountReport,
@@ -10,9 +10,11 @@ import {
 import { isSuperAdmin } from '@/lib/auth/whitelist'
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const user = await resolveUser(request)
-  if (!user) throw Errors.unauthorized()
-  const fresh = await getUserById(user.id)
+  // resolveAuth (not resolveUser) so we can report `via` — this route absorbed
+  // the former /api/users/me auth-probe used by the bk CLI.
+  const auth = await resolveAuth(request)
+  if (!auth) throw Errors.unauthorized()
+  const fresh = await getUserById(auth.user.id)
   if (!fresh) throw Errors.notFound('user')
   return NextResponse.json({
     id: fresh.id,
@@ -26,6 +28,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // it here — it re-syncs on each Google sign-in.
     connected_google: !!fresh.google_id,
     avatar_editable: !fresh.google_id,
+    via: auth.via,
     is_super_admin: isSuperAdmin(fresh.email),
   })
 })

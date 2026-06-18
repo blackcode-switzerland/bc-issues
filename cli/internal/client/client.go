@@ -158,7 +158,7 @@ func (c *Client) patchJSON(path string, body any, out any) error {
 
 func (c *Client) Whoami() (*Me, error) {
 	var me Me
-	if err := c.get("/api/users/me", &me); err != nil {
+	if err := c.get("/api/me", &me); err != nil {
 		return nil, err
 	}
 	return &me, nil
@@ -335,27 +335,55 @@ func (c *Client) GetMilestone(id int, includeIssues bool) (*Milestone, error) {
 	return &m, nil
 }
 
-func (c *Client) Activity(limit, offset int) ([]ActivityFeedItem, error) {
+// Activity returns the workspace-scoped activity feed. The scoped route is
+// keyset-paginated (cursor = last event id seen); pass cursor=nil for the first
+// page. It returns the page of items plus the next cursor (nil when exhausted).
+func (c *Client) Activity(limit int, cursor *int) ([]ActivityFeedItem, *int, error) {
 	q := url.Values{}
 	if limit > 0 {
 		q.Set("limit", fmt.Sprint(limit))
 	}
-	if offset > 0 {
-		q.Set("offset", fmt.Sprint(offset))
+	if cursor != nil {
+		q.Set("cursor", fmt.Sprint(*cursor))
 	}
-	path := "/api/activity"
+	path, err := c.wsPath("activity")
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(q) > 0 {
 		path += "?" + q.Encode()
 	}
-	var items []ActivityFeedItem
-	if err := c.get(path, &items); err != nil {
-		return nil, err
+	var env activityFeedEnvelope
+	if err := c.get(path, &env); err != nil {
+		return nil, nil, err
 	}
-	return items, nil
+	return env.Data, env.NextCursor, nil
 }
 
+// AnalyticsRaw fetches the workspace-scoped analytics payload as raw JSON. The
+// scoped route reads the workspace from the path, so any `ws`/`workspace` value
+// in q is consumed as the target slug (and removed from the query); otherwise
+// the active workspace is used.
 func (c *Client) AnalyticsRaw(q url.Values) (json.RawMessage, error) {
-	path := "/api/analytics"
+	slug := ""
+	if v := q.Get("ws"); v != "" {
+		slug = v
+	} else if v := q.Get("workspace"); v != "" {
+		slug = v
+	}
+	q.Del("ws")
+	q.Del("workspace")
+
+	var path string
+	var err error
+	if slug != "" {
+		path = "/api/workspaces/" + slug + "/analytics"
+	} else {
+		path, err = c.wsPath("analytics")
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(q) > 0 {
 		path += "?" + q.Encode()
 	}

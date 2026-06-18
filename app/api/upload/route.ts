@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
+import { apiHandler, Errors } from '@/lib/api'
 import { put } from '@vercel/blob'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 
 const LOCAL_UPLOAD_DIR = 'public/uploads'
+const MAX_SIZE = 50 * 1024 * 1024 // 50MB
 
 async function saveLocally(file: File, baseName: string): Promise<{ url: string }> {
   const uploadsDir = resolve(process.cwd(), LOCAL_UPLOAD_DIR)
@@ -22,107 +24,54 @@ async function saveLocally(file: File, baseName: string): Promise<{ url: string 
   return { url: `/uploads/${finalName}` }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const user = await resolveUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const formData = await request.formData()
-    const file = formData.get('file') as File | null
-
-    if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided', suggestion: 'Include a file in the form data' },
-        { status: 400 }
-      )
-    }
-
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024
-    if (file.size > maxSize) {
-      return NextResponse.json(
-        { error: 'File too large', suggestion: 'Maximum file size is 50MB' },
-        { status: 400 }
-      )
-    }
-
-    // Block SVG due to XSS risk; allow everything else
-    if (file.type === 'image/svg+xml') {
-      return NextResponse.json(
-        { error: 'SVG files are not allowed for security reasons' },
-        { status: 400 }
-      )
-    }
-
-    // Generate unique filename with timestamp
-    const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const filename = `${timestamp}-${sanitizedName}`
-
-    const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN)
-
-    let url: string
-    if (hasBlobToken) {
-      const blob = await put(filename, file, {
-        access: 'public',
-        addRandomSuffix: true,
-      })
-      url = blob.url
-    } else if (process.env.NODE_ENV !== 'production') {
-      // Local-dev fallback: store under public/uploads and serve via Next.js static
-      const local = await saveLocally(file, filename)
-      url = local.url
-    } else {
-      return NextResponse.json(
-        {
-          error: 'Blob storage not configured',
-          suggestion: 'Set BLOB_READ_WRITE_TOKEN environment variable',
-        },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({
-      url,
-      filename: file.name,
-      size: file.size,
-      contentType: file.type,
-    })
-  } catch (error) {
-    console.error('Failed to upload file:', error)
-
-    if (error instanceof Error && error.message.includes('BLOB_READ_WRITE_TOKEN')) {
-      return NextResponse.json(
-        {
-          error: 'Blob storage not configured',
-          suggestion: 'Set BLOB_READ_WRITE_TOKEN environment variable'
-        },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json(
-      { error: 'Failed to upload file' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function GET(request: NextRequest) {
+export const POST = apiHandler(async (request: NextRequest) => {
   const user = await resolveUser(request)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) throw Errors.unauthorized()
+
+  const formData = await request.formData()
+  const file = formData.get('file') as File | null
+
+  if (!file) throw Errors.badRequest('no_file', 'Include a file in the form data under the "file" field')
+  if (file.size > MAX_SIZE) throw Errors.badRequest('file_too_large', 'Maximum file size is 50MB')
+  // Block SVG due to XSS risk; allow everything else.
+  if (file.type === 'image/svg+xml') {
+    throw Errors.badRequest('file_type_not_allowed', 'SVG files are not allowed for security reasons')
   }
+
+  const timestamp = Date.now()
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+  const filename = `${timestamp}-${sanitizedName}`
+
+  const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN)
+
+  let url: string
+  if (hasBlobToken) {
+    const blob = await put(filename, file, { access: 'public', addRandomSuffix: true })
+    url = blob.url
+  } else if (process.env.NODE_ENV !== 'production') {
+    // Local-dev fallback: store under public/uploads and serve via Next.js static.
+    const local = await saveLocally(file, filename)
+    url = local.url
+  } else {
+    throw Errors.internal('Blob storage is not configured (set BLOB_READ_WRITE_TOKEN)')
+  }
+
+  return NextResponse.json({
+    url,
+    filename: file.name,
+    size: file.size,
+    contentType: file.type,
+  })
+})
+
+export const GET = apiHandler(async (request: NextRequest) => {
+  const user = await resolveUser(request)
+  if (!user) throw Errors.unauthorized()
 
   return NextResponse.json({
     message: 'Upload API endpoint',
     usage: 'POST with multipart/form-data containing a "file" field',
-    maxSize: '10MB',
-    allowedTypes: [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-      'application/pdf', 'text/plain', 'application/json', 'text/markdown'
-    ],
+    maxSize: '50MB',
+    note: 'All content types accepted except image/svg+xml (blocked for XSS safety)',
   })
-}
+})
