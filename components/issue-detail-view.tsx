@@ -631,6 +631,15 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
             />
 
             <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Start date</p>
+            <DatePicker
+              variant="inline"
+              value={data.start_date ?? null}
+              onChange={(v) => patchIssue.mutate({ start_date: v })}
+              placeholder="Set start date"
+            />
+
+            <div className="my-4 h-px bg-border" />
             <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Due date</p>
             <DatePicker
               variant="inline"

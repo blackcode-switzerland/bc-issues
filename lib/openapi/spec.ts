@@ -297,7 +297,7 @@ export const openApiSpec = {
           icon: { type: ['string', 'null'] },
           lead_user_id: { type: ['integer', 'null'] },
           start_date: { type: ['string', 'null'], format: 'date' },
-          end_date: { type: ['string', 'null'], format: 'date' },
+          due_date: { type: ['string', 'null'], format: 'date' },
         },
         'A project.'
       ),
@@ -315,7 +315,7 @@ export const openApiSpec = {
           icon: { type: 'string' },
           lead_user_id: { type: 'integer' },
           start_date: { type: 'string', format: 'date' },
-          end_date: { type: 'string', format: 'date' },
+          due_date: { type: 'string', format: 'date' },
           member_ids: { type: 'array', items: { type: 'integer' } },
         },
       },

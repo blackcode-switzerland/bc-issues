@@ -34,7 +34,7 @@ interface Project {
   icon_url?: string | null
   banner_url?: string | null
   start_date?: string | null
-  end_date?: string | null
+  due_date?: string | null
   owner_id?: number | null
   status?: string | null
 }

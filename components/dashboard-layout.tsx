@@ -314,20 +314,12 @@ function NavItem({
   return (
     <Link
       href={item.href}
-      className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
+      className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${
         active
           ? 'bg-sidebar-accent text-foreground'
           : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
       }`}
     >
-      {active && (
-        <motion.span
-          layoutId="nav-active"
-          className="absolute inset-0 rounded-md bg-sidebar-accent"
-          transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-          style={{ zIndex: -1 }}
-        />
-      )}
       <Icon size={17} />
       <span className="flex-1 truncate">{item.label}</span>
       {item.trailing ? <InboxBadge /> : null}

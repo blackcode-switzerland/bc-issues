@@ -224,7 +224,7 @@ func newProjectTasksCmd() *cobra.Command {
 
 func newProjectCreateCmd() *cobra.Command {
 	var name, summary, description, descriptionFile string
-	var priority, visibility, color, startDate, endDate string
+	var priority, visibility, color, startDate, dueDate string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new project",
@@ -261,8 +261,8 @@ func newProjectCreateCmd() *cobra.Command {
 			if cmd.Flags().Changed("start-date") {
 				req.StartDate = &startDate
 			}
-			if cmd.Flags().Changed("end-date") {
-				req.EndDate = &endDate
+			if cmd.Flags().Changed("due-date") {
+				req.DueDate = &dueDate
 			}
 			p, err := c.CreateProject(req)
 			if err != nil {
@@ -282,13 +282,13 @@ func newProjectCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Visibility (public/private/secret)")
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
-	cmd.Flags().StringVar(&endDate, "end-date", "", "End/target date YYYY-MM-DD")
+	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	return cmd
 }
 
 func newProjectEditCmd() *cobra.Command {
 	var name, summary, description, descriptionFile, status string
-	var priority, visibility, color, startDate, endDate string
+	var priority, visibility, color, startDate, dueDate string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
 		Short: "Edit a project (name, description, status, priority, visibility, color, dates)",
@@ -331,8 +331,8 @@ func newProjectEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("start-date") {
 				req.StartDate = &startDate
 			}
-			if cmd.Flags().Changed("end-date") {
-				req.EndDate = &endDate
+			if cmd.Flags().Changed("due-date") {
+				req.DueDate = &dueDate
 			}
 			c, err := newClient()
 			if err != nil {
@@ -357,7 +357,7 @@ func newProjectEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Visibility (public/private/secret)")
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
-	cmd.Flags().StringVar(&endDate, "end-date", "", "End/target date YYYY-MM-DD")
+	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	return cmd
 }
 

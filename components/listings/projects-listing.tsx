@@ -45,7 +45,7 @@ interface ProjectRow {
   icon: string | null
   priority: string | null
   start_date: string | null
-  end_date: string | null
+  due_date: string | null
   created_at: string
   issue_count: number
   open_issues: number
@@ -312,14 +312,16 @@ export function ProjectsListing() {
         <DragDropContext onDragEnd={onProjectListDragEnd}>
           <div>
             {/* Column header */}
-            <div className="flex items-center gap-3 border-b border-border px-6 py-2.5 text-[13px] font-medium text-muted-foreground">
-              <span className="w-8 shrink-0" />
+            <div className="flex items-center gap-3 border-b border-border px-3 pl-2 py-2.5 text-[13px] font-medium text-muted-foreground">
+              {/* Leading spacers mirror the row's drag handle (~22px) + checkbox (16px) so columns line up */}
+              <span className="w-[22px] shrink-0" />
+              <span className="w-4 shrink-0" />
               <span className="flex-1">Name</span>
               <span className="hidden w-28 shrink-0 sm:flex">Health</span>
               <span className="w-28 shrink-0">Status</span>
               <span className="hidden w-20 shrink-0 lg:flex">Priority</span>
               <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
-              <span className="hidden w-24 shrink-0 lg:block">Target</span>
+              <span className="hidden w-24 shrink-0 lg:block">Due</span>
               <span className="hidden w-12 shrink-0 sm:block">Issues</span>
               <span className="w-20 shrink-0">Progress</span>
             </div>
@@ -526,11 +528,11 @@ function ProjectRowItem({
           />
         </div>
 
-        {/* Target date — inline editable */}
+        {/* Due date — inline editable */}
         <div onClick={stop} className="hidden w-24 shrink-0 lg:block">
           <DatePicker
-            value={p.end_date}
-            onChange={(v) => patch.mutate({ end_date: v })}
+            value={p.due_date}
+            onChange={(v) => patch.mutate({ due_date: v })}
             placeholder="—"
             variant="chip"
             align="right"

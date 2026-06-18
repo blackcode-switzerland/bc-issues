@@ -28,7 +28,7 @@ interface ProjectRow {
   priority: string | null
   issue_count: number
   open_issues: number
-  end_date: string | null
+  due_date: string | null
   lead_name: string | null
   lead_email: string | null
   lead_avatar: string | null
@@ -169,10 +169,10 @@ export function ProjectsKanban({
                               <div className="mb-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                                 <PriorityIcon priority={projectPriorityKey(p.priority)} size={12} />
                                 {p.health ? <HealthIcon status={p.health} size={12} /> : null}
-                                {p.end_date ? (
+                                {p.due_date ? (
                                   <span className="flex items-center gap-1">
                                     <Calendar size={10} />
-                                    {format(new Date(p.end_date), 'MMM d')}
+                                    {format(new Date(p.due_date), 'MMM d')}
                                   </span>
                                 ) : null}
                                 {/* lead avatar pushes right */}

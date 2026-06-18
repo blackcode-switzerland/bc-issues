@@ -71,7 +71,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     priority: typeof body.priority === 'string' ? body.priority : undefined,
     lead_user_id: typeof body.lead_user_id === 'number' ? body.lead_user_id : ctx.user.id,
     start_date: typeof body.start_date === 'string' ? body.start_date : null,
-    end_date: typeof body.end_date === 'string' ? body.end_date : null,
+    due_date: typeof body.due_date === 'string' ? body.due_date : null,
     status: typeof body.status === 'string' ? body.status : undefined,
     member_ids: memberIds,
     actorUserId: ctx.user.id,

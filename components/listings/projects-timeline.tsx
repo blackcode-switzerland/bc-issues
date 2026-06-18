@@ -14,7 +14,7 @@ interface ProjectRow {
   color: string | null
   icon: string | null
   start_date: string | null
-  end_date: string | null
+  due_date: string | null
   created_at: string
   health: string | null
   lead_name: string | null
@@ -252,6 +252,6 @@ function range(p: ProjectRow, today: Date): { start: Date; end: Date } {
   const start = p.start_date
     ? startOfDay(new Date(p.start_date))
     : startOfDay(new Date(p.created_at))
-  const end = p.end_date ? startOfDay(new Date(p.end_date)) : addDays(start, 14)
+  const end = p.due_date ? startOfDay(new Date(p.due_date)) : addDays(start, 14)
   return { start, end: end.getTime() < start.getTime() ? start : end }
 }

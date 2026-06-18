@@ -143,7 +143,7 @@ export interface CreateProjectInput {
   priority?: string
   lead_user_id?: number | null
   start_date?: string | null
-  end_date?: string | null
+  due_date?: string | null
   status?: string
   member_ids?: number[]
   actorUserId: number
@@ -164,7 +164,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
         owner_id: input.lead_user_id ?? input.actorUserId,
         status: input.status ?? 'backlog',
         start_date: input.start_date ?? null,
-        end_date: input.end_date ?? null,
+        due_date: input.due_date ?? null,
       })
       .returning()
     if (!row) throw new Error('project insert returned nothing')
@@ -198,7 +198,7 @@ export interface UpdateProjectInput {
   priority?: string
   lead_user_id?: number | null
   start_date?: string | null
-  end_date?: string | null
+  due_date?: string | null
 }
 
 const PROJECT_DIFF_KEYS = [
@@ -209,7 +209,7 @@ const PROJECT_DIFF_KEYS = [
   'icon',
   'priority',
   'start_date',
-  'end_date',
+  'due_date',
 ] as const
 
 export async function updateProject(
@@ -237,7 +237,7 @@ export async function updateProject(
     if (patch.priority !== undefined) updates.priority = patch.priority
     if (patch.lead_user_id !== undefined) updates.owner_id = patch.lead_user_id
     if (patch.start_date !== undefined) updates.start_date = patch.start_date
-    if (patch.end_date !== undefined) updates.end_date = patch.end_date
+    if (patch.due_date !== undefined) updates.due_date = patch.due_date
 
     if (Object.keys(updates).length === 0) return before
     updates.updated_at = new Date()
@@ -283,7 +283,7 @@ export async function updateProject(
         },
       })
     }
-    if (patch.end_date !== undefined && String(before.end_date) !== String(after.end_date)) {
+    if (patch.due_date !== undefined && String(before.due_date) !== String(after.due_date)) {
       await recordEvent(tx, {
         workspaceId,
         actorUserId,
@@ -291,8 +291,8 @@ export async function updateProject(
         entityId: id,
         action: 'due_date_changed',
         meta: {
-          from: before.end_date ? String(before.end_date).slice(0, 10) : null,
-          to: after.end_date ? String(after.end_date).slice(0, 10) : null,
+          from: before.due_date ? String(before.due_date).slice(0, 10) : null,
+          to: after.due_date ? String(after.due_date).slice(0, 10) : null,
           title: after.name,
         },
       })
@@ -308,7 +308,7 @@ export async function updateProject(
       }
     }
     const remainingKeys = Object.keys(beforeSnap).filter(
-      (k) => !['status', 'priority', 'end_date'].includes(k)
+      (k) => !['status', 'priority', 'due_date'].includes(k)
     )
     if (remainingKeys.length > 0) {
       await recordEvent(tx, {

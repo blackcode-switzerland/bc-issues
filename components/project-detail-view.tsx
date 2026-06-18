@@ -50,7 +50,7 @@ interface ProjectDetail {
   icon: string | null
   owner_id: number | null
   start_date: string | null
-  end_date: string | null
+  due_date: string | null
   created_at: string
   members: ProjectMember[]
 }
@@ -811,12 +811,12 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               placeholder="Set start date"
             />
             <div className="my-4 h-px bg-border" />
-            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Target date</p>
+            <p className="mb-2 px-2 text-[13px] font-medium text-muted-foreground">Due date</p>
             <DatePicker
               variant="inline"
-              value={data.end_date ?? null}
-              onChange={(v) => patch.mutate({ end_date: v })}
-              placeholder="Set target date"
+              value={data.due_date ?? null}
+              onChange={(v) => patch.mutate({ due_date: v })}
+              placeholder="Set due date"
             />
 
             <div className="my-4 h-px bg-border" />

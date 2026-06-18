@@ -139,7 +139,7 @@ export const projects = pgTable(
   icon_url: text('icon_url'),
   banner_url: text('banner_url'),
   start_date: date('start_date'),
-  end_date: date('end_date'),
+  due_date: date('due_date'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   position: integer('position'),

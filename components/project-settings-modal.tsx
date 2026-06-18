@@ -33,7 +33,7 @@ interface Project {
   icon_url?: string | null
   banner_url?: string | null
   start_date?: string | null
-  end_date?: string | null
+  due_date?: string | null
 }
 
 interface ProjectSettingsModalProps {
@@ -78,7 +78,7 @@ export function ProjectSettingsModal({
   const [color, setColor] = useState(project.color || '#007bd3')
   const [ownerId, setOwnerId] = useState<number | null>(project.owner_id || null)
   const [startDate, setStartDate] = useState(project.start_date || '')
-  const [endDate, setEndDate] = useState(project.end_date || '')
+  const [dueDate, setDueDate] = useState(project.due_date || '')
   const [iconPreview, setIconPreview] = useState<string | null>(project.icon_url || null)
   const [bannerPreview, setBannerPreview] = useState<string | null>(project.banner_url || null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -168,7 +168,7 @@ export function ProjectSettingsModal({
           color,
           owner_id: ownerId,
           start_date: startDate || null,
-          end_date: endDate || null,
+          due_date: dueDate || null,
           icon_url: iconPreview,
           banner_url: bannerPreview,
         }),
@@ -471,8 +471,8 @@ export function ProjectSettingsModal({
                   </label>
                   <DatePicker
                     variant="inline"
-                    value={endDate || null}
-                    onChange={(v) => setEndDate(v ?? '')}
+                    value={dueDate || null}
+                    onChange={(v) => setDueDate(v ?? '')}
                     placeholder="Set end date"
                     buttonClassName="flex w-full items-center gap-2 rounded-lg border border-input bg-background px-4 py-2 text-left text-sm hover:bg-secondary/40"
                   />

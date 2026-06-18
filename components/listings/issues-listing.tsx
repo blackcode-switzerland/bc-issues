@@ -171,18 +171,32 @@ export function IssuesListing() {
     enabled: !!ws,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const params = new URLSearchParams()
-      if (search) params.set('search', search)
-      if (status.length === 1) params.set('status', String(status[0]))
-      if (priority.length === 1) params.set('priority', String(priority[0]))
-      if (assignees.length === 1) params.set('assignee_ids', String(assignees[0]))
-      if (projects.length === 1 && projects[0] !== 'null') params.set('project_id', String(projects[0]))
-      if (tasks.length === 1 && tasks[0] !== 'null') params.set('task_id', String(tasks[0]))
-      params.set('limit', '200')
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues?${params}`)
-      if (!res.ok) throw new Error('failed')
-      const j = await res.json()
-      return j.data as IssueRow[]
+      // This view filters/groups client-side, so it needs every matching issue,
+      // not just the first page. The API caps a page at 200, so walk the cursor
+      // until exhausted (bounded for safety). Counting j.data of one page is what
+      // caused the header (200) to disagree with the sidebar total (e.g. 233).
+      const base = new URLSearchParams()
+      if (search) base.set('search', search)
+      if (status.length === 1) base.set('status', String(status[0]))
+      if (priority.length === 1) base.set('priority', String(priority[0]))
+      if (assignees.length === 1) base.set('assignee_ids', String(assignees[0]))
+      if (projects.length === 1 && projects[0] !== 'null') base.set('project_id', String(projects[0]))
+      if (tasks.length === 1 && tasks[0] !== 'null') base.set('task_id', String(tasks[0]))
+      base.set('limit', '200')
+
+      const all: IssueRow[] = []
+      let cursor: number | null = null
+      for (let page = 0; page < 100; page++) {
+        const params = new URLSearchParams(base)
+        if (cursor != null) params.set('cursor', String(cursor))
+        const res = await fetch(`/api/workspaces/${ws!.slug}/issues?${params}`)
+        if (!res.ok) throw new Error('failed')
+        const j = await res.json()
+        all.push(...((j.data ?? []) as IssueRow[]))
+        if (j.next_cursor == null) break
+        cursor = j.next_cursor as number
+      }
+      return all
     },
   })
 

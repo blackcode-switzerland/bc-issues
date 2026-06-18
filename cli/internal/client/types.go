@@ -33,7 +33,7 @@ type Project struct {
 	Visibility  *string `json:"visibility" yaml:"visibility"`
 	Color       *string `json:"color" yaml:"color"`
 	StartDate   *string `json:"start_date" yaml:"start_date"`
-	EndDate     *string `json:"end_date" yaml:"end_date"`
+	DueDate     *string `json:"due_date" yaml:"due_date"`
 	OwnerID     *int    `json:"owner_id" yaml:"owner_id"`
 	IssueCount  *int    `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
 	OpenIssues  *int    `json:"open_issues,omitempty" yaml:"open_issues,omitempty"`
@@ -208,7 +208,7 @@ type CreateProjectRequest struct {
 	Visibility  *string `json:"visibility,omitempty"`
 	Color       *string `json:"color,omitempty"`
 	StartDate   *string `json:"start_date,omitempty"`
-	EndDate     *string `json:"end_date,omitempty"`
+	DueDate     *string `json:"due_date,omitempty"`
 }
 
 type UpdateProjectRequest struct {
@@ -220,7 +220,7 @@ type UpdateProjectRequest struct {
 	Visibility  *string `json:"visibility,omitempty"`
 	Color       *string `json:"color,omitempty"`
 	StartDate   *string `json:"start_date,omitempty"`
-	EndDate     *string `json:"end_date,omitempty"`
+	DueDate     *string `json:"due_date,omitempty"`
 }
 
 type AddMemberRequest struct {
