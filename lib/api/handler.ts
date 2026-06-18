@@ -21,6 +21,16 @@ import { db } from '@/lib/db/client'
 import { errorEvents, type NewErrorEvent } from '@/lib/db/schema'
 import { ApiError } from './errors'
 import { sanitize, truncate } from './sanitize'
+import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@/lib/cli-version'
+
+// Advertise the supported bk CLI versions on every API response. The CLI reads
+// these to show a soft "update available" notice and to hard-block when it is
+// below the minimum supported version.
+function withCliVersionHeaders<T extends NextResponse | Response>(res: T): T {
+  res.headers.set('X-BK-CLI-Latest', CLI_LATEST_VERSION)
+  res.headers.set('X-BK-CLI-Min', CLI_MIN_VERSION)
+  return res
+}
 
 type RouteContext = unknown
 
@@ -34,9 +44,9 @@ export function apiHandler<TCtx extends RouteContext = RouteContext>(
 ): (req: NextRequest, ctx: TCtx) => Promise<NextResponse | Response> {
   return async (req, ctx) => {
     try {
-      return await handler(req, ctx)
+      return withCliVersionHeaders(await handler(req, ctx))
     } catch (err) {
-      return await handleError(err, req)
+      return withCliVersionHeaders(await handleError(err, req))
     }
   }
 }

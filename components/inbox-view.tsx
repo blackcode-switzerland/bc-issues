@@ -35,7 +35,7 @@ function statusName(value: unknown): string {
 }
 import { IssueDetailView } from './issue-detail-view'
 import { ProjectDetailView } from './project-detail-view'
-import { MilestoneDetailView } from './milestone-detail-view'
+import { TaskDetailView } from './task-detail-view'
 
 // Comment excerpts arrive as raw TipTap HTML — render them as plain text.
 function stripHtml(html: string, max = 90): string {
@@ -374,8 +374,8 @@ export function InboxView() {
                 <IssueDetailView issueId={selectedMessage.entity_id} />
               ) : selectedMessage.entity_type === 'project' && selectedMessage.entity_id ? (
                 <ProjectDetailView projectId={selectedMessage.entity_id} />
-              ) : selectedMessage.entity_type === 'milestone' && selectedMessage.entity_id ? (
-                <MilestoneDetailView milestoneId={selectedMessage.entity_id} />
+              ) : selectedMessage.entity_type === 'task' && selectedMessage.entity_id ? (
+                <TaskDetailView taskId={selectedMessage.entity_id} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   <InboxIcon size={28} className="mb-3 text-muted-foreground" />

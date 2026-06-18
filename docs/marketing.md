@@ -66,7 +66,7 @@ It's the **memory layer** of an AI-augmented workflow. The agent does the work; 
 ### Secondary
 
 - **Indie product teams** that want one tool covering Kanban + timeline + lists.
-- **Operations / lightweight project owners** who need milestones and member roles without enterprise overhead.
+- **Operations / lightweight project owners** who need tasks and member roles without enterprise overhead.
 
 ---
 
@@ -111,8 +111,8 @@ Platform administration is opt-in via the `SUPER_ADMINS` environment variable (c
 **Projects with rich metadata**
 Name, summary, description, status, priority, color, icon, lead, start/end dates — all server-validated. Each project gets its own member roster, its own Kanban, and posted **health updates** (on track / at risk / off track).
 
-**Milestones**
-Group issues into milestones with optional due dates. A milestone can stand alone or belong to a project, and surfaces its issue counts and its own comment thread.
+**Tasks**
+Group issues into tasks with optional due dates. A task can stand alone or belong to a project, and surfaces its issue counts and its own comment thread.
 
 **Labels**
 Workspace-wide labels with colors, attachable to issues — managed from a dedicated labels view.
@@ -120,7 +120,7 @@ Workspace-wide labels with colors, attachable to issues — managed from a dedic
 ### 🟢 Live — Issue workflows
 
 **Issues with the fields that matter**
-Title, rich-text description, status (`backlog` / `todo` / `in_progress` / `done` / `cancelled`), priority (1 Urgent … 4 Low, 5 None), one or more assignees, reporter, project, milestone, start date, due date, estimated hours, labels, watchers.
+Title, rich-text description, status (`backlog` / `todo` / `in_progress` / `done` / `cancelled`), priority (1 Urgent … 4 Low, 5 None), one or more assignees, reporter, project, task, start date, due date, estimated hours, labels, watchers.
 
 **Three views, one dataset**
 - **Kanban board** — drag-and-drop columns per status, with optimistic, persisted moves.
@@ -128,7 +128,7 @@ Title, rich-text description, status (`backlog` / `todo` / `in_progress` / `done
 - **List** — dense, filterable rows across projects (status, priority, assignee, project filters).
 
 **Rich-text descriptions and comments**
-A TipTap editor with a slash menu, a selection bubble toolbar, headings, lists, checklists, code blocks, links, `@mentions`, and inline media (paste / drag / attach). HTML is sanitized before save. Comments work the same way on issues, projects, and milestones.
+A TipTap editor with a slash menu, a selection bubble toolbar, headings, lists, checklists, code blocks, links, `@mentions`, and inline media (paste / drag / attach). HTML is sanitized before save. Comments work the same way on issues, projects, and tasks.
 
 **File attachments**
 Paste, drag, or attach **any file type except SVG** (blocked for XSS safety), up to **50 MB**. Stored on Vercel Blob in production; served from `public/uploads/` in local development so you can iterate offline.
@@ -139,7 +139,7 @@ Every mutation is recorded on an append-only **event spine**. That powers a per-
 ### 🟢 Live — For agents & automation
 
 **Integer IDs**
-Every record — projects, issues, milestones, comments, attachments, members, tokens — uses a plain integer primary key. "Issue 42" is easier to dictate, grep, and keep in a model's working memory than a UUID.
+Every record — projects, issues, tasks, comments, attachments, members, tokens — uses a plain integer primary key. "Issue 42" is easier to dictate, grep, and keep in a model's working memory than a UUID.
 
 **Three equally-supported interfaces**
 - **Web UI** at `/dashboard` — for humans.
@@ -157,12 +157,12 @@ Every error response is `{ error, code, suggestion?, details? }`. The CLI maps H
 ### 🟢 Live — Recovery
 
 **Trash & restore**
-Deleting an issue, project, or milestone moves it to a recoverable Trash. Items deleted together restore as a group; owners can purge selected items or empty the bin.
+Deleting an issue, project, or task moves it to a recoverable Trash. Items deleted together restore as a group; owners can purge selected items or empty the bin.
 
 ### 🟢 Live — Analytics
 
 **Workspace analytics**
-Snapshot counts, completion rate, cycle time, velocity, and aging — sliced by status, priority, assignee, label, and project, with per-milestone burndown. Available for workspace / project / milestone / member views with date-range and faceted filters, and reachable from the CLI (`bk analytics`).
+Snapshot counts, completion rate, cycle time, velocity, and aging — sliced by status, priority, assignee, label, and project, with per-task burndown. Available for workspace / project / task / member views with date-range and faceted filters, and reachable from the CLI (`bk analytics`).
 
 ### 🟡 In preview — Reliability
 
@@ -170,7 +170,7 @@ Snapshot counts, completion rate, cycle time, velocity, and aging — sliced by 
 Issue updates are journaled to a transaction log with full `old_data`/`new_data` snapshots. `POST /api/undo` or `bk undo --count N` reverses your most recent operations (up to 10 per call) and marks them rolled back.
 
 **Caveats** (be transparent on the page):
-- Coverage today is **issue updates** (creates can be undone by deleting the row). Deletes are recovered via **Trash** instead; comments, attachments, and project/member/milestone mutations are not yet journaled for undo.
+- Coverage today is **issue updates** (creates can be undone by deleting the row). Deletes are recovered via **Trash** instead; comments, attachments, and project/member/task mutations are not yet journaled for undo.
 - Broader coverage is on the roadmap.
 
 ### 🟢 Live — Polish
@@ -373,7 +373,7 @@ Yes. Add `--json` or `-o yaml` for machine-readable output, pipe through `jq`, a
 Every list endpoint returns `{ data, next_cursor }`. When `next_cursor` is non-null, pass it back as `?cursor=` to fetch the next page; null means the end. The CLI exposes this as `--limit` / `--cursor`.
 
 ### What happens when I delete something?
-Issues, projects and milestones soft-delete into a recoverable Trash. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with `bk undo` (`POST /api/undo`), up to 10 at a time.
+Issues, projects and tasks soft-delete into a recoverable Trash. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with `bk undo` (`POST /api/undo`), up to 10 at a time.
 
 ### Can a team and its agents share a workspace?
 Yes. Everything is workspace-scoped with members and roles; every change lands on a shared activity feed and a per-user inbox of mentions and assignments, so humans and agents on the same board stay in sync.
@@ -395,8 +395,8 @@ A compact table for laying out a feature grid.
 | API tokens | "API tokens for scripts" | Live |
 | Workspace + project roles | "Teams & roles" | Live |
 | Project CRUD + health updates | "Project management" | Live |
-| Milestones | "Labels & milestones" | Live |
-| Labels | "Labels & milestones" | Live |
+| Tasks | "Labels & tasks" | Live |
+| Labels | "Labels & tasks" | Live |
 | Issue CRUD + workflows | "Issue workflows" | Live |
 | Kanban | "Kanban board" | Live |
 | Gantt / timeline + list | "Timeline & list views" | Live |

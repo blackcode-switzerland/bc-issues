@@ -13,12 +13,12 @@ import (
 )
 
 // newTrashCmd is the recycle bin: list / restore / purge / empty the soft-
-// deleted issues, projects, and milestones in the active workspace.
+// deleted issues, projects, and tasks in the active workspace.
 func newTrashCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "trash",
 		Aliases: []string{"recycle", "bin"},
-		Short:   "Manage the recycle bin (deleted issues, projects, milestones)",
+		Short:   "Manage the recycle bin (deleted issues, projects, tasks)",
 	}
 	cmd.AddCommand(
 		newTrashListCmd(),
@@ -39,9 +39,9 @@ func parseRefs(args []string) ([]client.TrashEntityRef, error) {
 		}
 		typ := strings.ToLower(strings.TrimSpace(parts[0]))
 		switch typ {
-		case "issue", "project", "milestone":
+		case "issue", "project", "task":
 		default:
-			return nil, fmt.Errorf("invalid type %q — must be issue, project, or milestone", parts[0])
+			return nil, fmt.Errorf("invalid type %q — must be issue, project, or task", parts[0])
 		}
 		id, err := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil {
@@ -59,9 +59,9 @@ func newTrashListCmd() *cobra.Command {
 		Short: "List items in the recycle bin",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch typ {
-			case "", "issue", "project", "milestone":
+			case "", "issue", "project", "task":
 			default:
-				return fmt.Errorf("--type must be issue, project, or milestone")
+				return fmt.Errorf("--type must be issue, project, or task")
 			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -107,7 +107,7 @@ func newTrashListCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&typ, "type", "", "Filter by type: issue | project | milestone")
+	cmd.Flags().StringVar(&typ, "type", "", "Filter by type: issue | project | task")
 	return cmd
 }
 
@@ -120,7 +120,7 @@ func newTrashRestoreCmd() *cobra.Command {
 		Long: "Restore deleted items back to the workspace.\n\n" +
 			"Pass refs like `issue:42 project:3`, or restore a whole delete group with\n" +
 			"--batch <id> (see the BATCH column in `bk trash list`).\n\n" +
-			"If a restored item's project/milestone is also in the Trash, by default it\n" +
+			"If a restored item's project/task is also in the Trash, by default it\n" +
 			"comes back as a group when they were deleted together, otherwise standalone.\n" +
 			"Force the choice with --restore-parents or --standalone.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -175,7 +175,7 @@ func newTrashRestoreCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&batch, "batch", 0, "Restore an entire delete batch by id")
-	cmd.Flags().BoolVar(&restoreParents, "restore-parents", false, "Also restore deleted parent projects/milestones")
+	cmd.Flags().BoolVar(&restoreParents, "restore-parents", false, "Also restore deleted parent projects/tasks")
 	cmd.Flags().BoolVar(&standalone, "standalone", false, "Restore items standalone, clearing dangling parent links")
 	return cmd
 }

@@ -14,7 +14,7 @@ func newWorkspaceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workspace",
 		Short: "Manage workspaces (your current scope)",
-		Long: `Workspaces partition everything: projects, milestones, issues, labels,
+		Long: `Workspaces partition everything: projects, tasks, issues, labels,
 members, activity, analytics. Pick the active workspace once with ` + "`bk workspace use`" + `,
 and the rest of bk operates within it.`,
 	}

@@ -142,7 +142,7 @@ colors in components — use the token utilities.
 | `/dashboard` | Projects listing (`ProjectsListing`) |
 | `/dashboard/[projectId]` | Project detail (`ProjectDetailView`) |
 | `/dashboard/issues` · `/issues/[id]` | Issues listing · issue detail |
-| `/dashboard/milestones` · `/milestones/[id]` | Milestones listing · detail |
+| `/dashboard/tasks` · `/tasks/[id]` | Tasks listing · detail |
 | `/dashboard/labels` | Workspace labels |
 | `/dashboard/members` | Workspace members + invitations |
 | `/dashboard/activity` | Activity feed |
@@ -193,12 +193,12 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   `settings-nav`, `super-admin-nav`.
 - **Listings (`components/listings/`):** `projects-listing` (+ `projects-kanban`,
   `projects-timeline`), `issues-listing` (+ `issues-kanban`, `issues-timeline`),
-  `milestones-listing` (list-only — no kanban/timeline view), plus `filter-bar`
+  `tasks-listing` (list-only — no kanban/timeline view), plus `filter-bar`
   (`MultiSelect`, `SearchInput`, `ViewToggle`), `labels-pill`,
   `bulk-action-bar` (multi-select toolbar for batch status/delete), and the
   `use-active-workspace` hook.
 - **Detail views:** `project-detail-view`, `issue-detail-view`,
-  `milestone-detail-view`.
+  `task-detail-view`.
 - **Create / edit modals:** `issue-create-modal` (kanban flow only — all other
   "new" buttons POST immediately then redirect to the detail page with `?new=1`),
   `project-settings-modal`, `workspace-create-modal`.
@@ -244,7 +244,7 @@ library**; use `var(--primary)` and the `SERIES` palette, never hardcode the
 old `#5e6ad2`).
 
 - **Controls (sticky):** a scope segmented control (Workspace / Project /
-  Milestone / Member) with a searchable target picker; a granularity toggle
+  Task / Member) with a searchable target picker; a granularity toggle
   (Daily / Weekly); date-range presets (7D/30D/90D/12M/All) + a Custom range
   built from two `DatePicker` chips; and a faceted **filter bar** (Status /
   Priority / Assignee / Label multi-selects via `FilterMenu`, with an active
@@ -253,7 +253,7 @@ old `#5e6ad2`).
 - **Tabs:** Overview (KPI grid + velocity + status/priority/project), Throughput
   (velocity, cumulative flow, cycle-time + aging histograms), Workload (assignee
   table, labels), Activity (event series + by-action + top members), and —
-  milestone scope only — Burndown.
+  task scope only — Burndown.
 - **Export:** "PDF" opens `/dashboard/analytics/print` (the same payload,
   forwarding **all** params incl. filters + interval + theme, then auto-prints).
   "CSV" downloads a client-built summary + velocity table.
@@ -294,7 +294,7 @@ kanban, detail pages, modals) rendering work-item state identically.
   `window.confirm/alert/prompt`.
 - **`components/ui/delete-with-children-dialog.tsx`** — `DeleteDialogProvider` +
   `useDeleteDialog()`: `confirmDelete(opts) → Promise<{mode:'cascade'|'detach'}|null>`.
-  Used when deleting a project or milestone — fetches live child counts from
+  Used when deleting a project or task — fetches live child counts from
   `?preview=1` and shows a cascade-vs-detach toggle before confirming. Wrap the
   app in `<DeleteDialogProvider>` (done in `app/providers.tsx`).
 - **`components/ui/restore-conflict-dialog.tsx`** — controlled dialog rendered by
@@ -326,9 +326,9 @@ Recurring query-key conventions:
 | Key | Scope |
 |-----|-------|
 | `['active-workspace']` | current workspace context |
-| `['ws-projects-listing', slug, filters]`, `['ws-issues', slug, filters]`, `['ws-milestones-listing', slug, filters]` | listing pages |
-| `['ws-members', slug]`, `['ws-projects', slug]`, `['ws-labels', slug]`, `['ws-milestones', slug]` | dropdown sources in modals |
-| `['project', id, slug]`, `['issue', id]`, `['milestone', id, slug]` | detail pages |
+| `['ws-projects-listing', slug, filters]`, `['ws-issues', slug, filters]`, `['ws-tasks-listing', slug, filters]` | listing pages |
+| `['ws-members', slug]`, `['ws-projects', slug]`, `['ws-labels', slug]`, `['ws-tasks', slug]` | dropdown sources in modals |
+| `['project', id, slug]`, `['issue', id]`, `['task', id, slug]` | detail pages |
 | `['project-updates', id, slug]`, `['project-members', id]`, `['*-comments', id]` | detail sub-resources |
 | `['inbox', unreadOnly]`, `['inbox-unread']` | inbox + badge |
 | `['ws-activity', …]`, `['ws-analytics', …]` | activity / analytics |

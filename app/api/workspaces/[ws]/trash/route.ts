@@ -7,7 +7,7 @@ interface Params {
   params: Promise<{ ws: string }>
 }
 
-const TYPES = new Set<TrashType>(['issue', 'project', 'milestone'])
+const TYPES = new Set<TrashType>(['issue', 'project', 'task'])
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
@@ -18,7 +18,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   let type: TrashType | undefined
   if (typeRaw) {
     if (!TYPES.has(typeRaw as TrashType)) {
-      throw Errors.badRequest('invalid_type', 'type must be issue, project, or milestone')
+      throw Errors.badRequest('invalid_type', 'type must be issue, project, or task')
     }
     type = typeRaw as TrashType
   }

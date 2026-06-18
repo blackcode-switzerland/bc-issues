@@ -14,7 +14,27 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
 )
+
+// LatestSeen and MinSeen capture the most recent values of the
+// X-BK-CLI-Latest / X-BK-CLI-Min response headers the API sends on every
+// response. main.go reads them after Execute() to print the soft update
+// notice; the hard floor is enforced in do() via OutdatedError.
+var (
+	LatestSeen string
+	MinSeen    string
+)
+
+// OutdatedError is returned by every request when the running CLI version is
+// below the minimum version the API still supports (X-BK-CLI-Min). Commands
+// fail fast with this so the user is forced to upgrade.
+type OutdatedError struct{ Current, Min string }
+
+func (e *OutdatedError) Error() string {
+	return fmt.Sprintf("bk %s is below the minimum supported version %s", e.Current, e.Min)
+}
 
 type APIError struct {
 	Status     int
@@ -71,13 +91,27 @@ func (c *Client) do(req *http.Request, out any) error {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "bk-cli/0.1")
+	req.Header.Set("User-Agent", "bk-cli/"+version.Version)
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Record the version headers the API sends on every response. Header.Get
+	// is case-insensitive, so the canonical/non-canonical casing both work.
+	if v := resp.Header.Get("X-BK-CLI-Latest"); v != "" {
+		LatestSeen = v
+	}
+	if v := resp.Header.Get("X-BK-CLI-Min"); v != "" {
+		MinSeen = v
+	}
+	// Hard floor: if we're below the minimum supported version, refuse the
+	// request outcome so every command fails fast and the user must upgrade.
+	if version.Parsable(version.Version) && MinSeen != "" && version.Less(version.Version, MinSeen) {
+		return &OutdatedError{Current: version.Version, Min: MinSeen}
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -305,30 +339,30 @@ func (c *Client) ListIssueAttachments(issueID int) ([]Attachment, error) {
 	return env.Data, nil
 }
 
-func (c *Client) ListMilestones(projectID int) ([]Milestone, error) {
-	path, err := c.wsPath("milestones")
+func (c *Client) ListTasks(projectID int) ([]Task, error) {
+	path, err := c.wsPath("tasks")
 	if err != nil {
 		return nil, err
 	}
 	if projectID > 0 {
 		path += "?project_id=" + fmt.Sprint(projectID)
 	}
-	var env milestonesEnvelope
+	var env tasksEnvelope
 	if err := c.get(path, &env); err != nil {
 		return nil, err
 	}
 	return env.Data, nil
 }
 
-func (c *Client) GetMilestone(id int, includeIssues bool) (*Milestone, error) {
-	path, err := c.wsPath(fmt.Sprintf("milestones/%d", id))
+func (c *Client) GetTask(id int, includeIssues bool) (*Task, error) {
+	path, err := c.wsPath(fmt.Sprintf("tasks/%d", id))
 	if err != nil {
 		return nil, err
 	}
 	if includeIssues {
 		path += "?includeIssues=true"
 	}
-	var m Milestone
+	var m Task
 	if err := c.get(path, &m); err != nil {
 		return nil, err
 	}
@@ -436,7 +470,7 @@ func (c *Client) UpdateProject(id int, req UpdateProjectRequest) (*Project, erro
 }
 
 // DeleteProject moves a project to the recycle bin. mode is "cascade" (also bin
-// the attached issues/milestones) or "detach"/"" (keep them, unlinked).
+// the attached issues/tasks) or "detach"/"" (keep them, unlinked).
 func (c *Client) DeleteProject(id int, mode string) error {
 	path, err := c.wsPath(fmt.Sprintf("projects/%d", id))
 	if err != nil {
@@ -497,34 +531,34 @@ func (c *Client) DeleteAttachment(issueID, attachmentID int) error {
 	return c.deleteJSON(path, nil, nil)
 }
 
-func (c *Client) CreateMilestone(req CreateMilestoneRequest) (*Milestone, error) {
-	path, err := c.wsPath("milestones")
+func (c *Client) CreateTask(req CreateTaskRequest) (*Task, error) {
+	path, err := c.wsPath("tasks")
 	if err != nil {
 		return nil, err
 	}
-	var m Milestone
+	var m Task
 	if err := c.postJSON(path, req, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
 }
 
-func (c *Client) UpdateMilestone(id int, req UpdateMilestoneRequest) (*Milestone, error) {
-	path, err := c.wsPath(fmt.Sprintf("milestones/%d", id))
+func (c *Client) UpdateTask(id int, req UpdateTaskRequest) (*Task, error) {
+	path, err := c.wsPath(fmt.Sprintf("tasks/%d", id))
 	if err != nil {
 		return nil, err
 	}
-	var m Milestone
+	var m Task
 	if err := c.patchJSON(path, req, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
 }
 
-// DeleteMilestone moves a milestone to the recycle bin. mode is "cascade" (also
+// DeleteTask moves a task to the recycle bin. mode is "cascade" (also
 // bin the attached issues) or "detach"/"" (keep them, unlinked).
-func (c *Client) DeleteMilestone(id int, mode string) error {
-	path, err := c.wsPath(fmt.Sprintf("milestones/%d", id))
+func (c *Client) DeleteTask(id int, mode string) error {
+	path, err := c.wsPath(fmt.Sprintf("tasks/%d", id))
 	if err != nil {
 		return err
 	}

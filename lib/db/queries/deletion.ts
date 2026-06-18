@@ -1,10 +1,10 @@
 // Recycle bin engine — soft-delete, restore (batch-aware, conflict-resolving),
-// and manual purge for issues, projects, and milestones.
+// and manual purge for issues, projects, and tasks.
 //
 // Model
 // -----
 // A soft-delete stamps deleted_at/deleted_by/delete_batch_id on the row and
-// keeps it. Because the row survives, its FK columns (project_id, milestone_id)
+// keeps it. Because the row survives, its FK columns (project_id, task_id)
 // survive too — so cascade-deleted children re-link to their parent
 // automatically on restore, and an issue's seq is never freed (no restore
 // collision).
@@ -17,15 +17,15 @@
 //
 // Purge is the only destructive op — it hard-deletes the row (the existing FK
 // cascades wipe comments/attachments/labels/watchers for issues; SET NULL
-// detaches children for projects/milestones). Purge is gated to owners at the
+// detaches children for projects/tasks). Purge is gated to owners at the
 // route layer.
 
 import { and, desc, eq, inArray, isNull, isNotNull, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { deletionBatches, issues, milestones, projects } from '../schema'
+import { deletionBatches, issues, tasks, projects } from '../schema'
 import { recordEvent } from './events'
 
-export type TrashType = 'issue' | 'project' | 'milestone'
+export type TrashType = 'issue' | 'project' | 'task'
 export type DeleteMode = 'cascade' | 'detach'
 export type RestoreResolution = 'restore_parent' | 'standalone'
 
@@ -38,7 +38,7 @@ export interface EntityRef {
 
 export interface ChildCounts {
   issues: number
-  milestones: number
+  tasks: number
 }
 
 export interface TrashItem {
@@ -55,7 +55,7 @@ export interface TrashItem {
   batch_root_type: TrashType | null
   batch_root_id: number | null
   project_id: number | null
-  milestone_id: number | null
+  task_id: number | null
 }
 
 // --------------------------------------------------------------------------
@@ -84,26 +84,26 @@ async function createBatch(
   return row.id
 }
 
-// Count the active (non-binned) children of a project or milestone. Drives the
-// "delete N issues / M milestones too?" dialog.
+// Count the active (non-binned) children of a project or task. Drives the
+// "delete N issues / M tasks too?" dialog.
 export async function previewDeletion(
   workspaceId: number,
   rootType: TrashType,
   rootId: number
 ): Promise<ChildCounts> {
-  if (rootType === 'issue') return { issues: 0, milestones: 0 }
-  if (rootType === 'milestone') {
+  if (rootType === 'issue') return { issues: 0, tasks: 0 }
+  if (rootType === 'task') {
     const [r] = await db
       .select({ n: sql<number>`COUNT(*)::int` })
       .from(issues)
       .where(
         and(
           eq(issues.workspace_id, workspaceId),
-          eq(issues.milestone_id, rootId),
+          eq(issues.task_id, rootId),
           isNull(issues.deleted_at)
         )
       )
-    return { issues: Number(r?.n ?? 0), milestones: 0 }
+    return { issues: Number(r?.n ?? 0), tasks: 0 }
   }
   const [iss] = await db
     .select({ n: sql<number>`COUNT(*)::int` })
@@ -113,15 +113,15 @@ export async function previewDeletion(
     )
   const [ms] = await db
     .select({ n: sql<number>`COUNT(*)::int` })
-    .from(milestones)
+    .from(tasks)
     .where(
       and(
-        eq(milestones.workspace_id, workspaceId),
-        eq(milestones.project_id, rootId),
-        isNull(milestones.deleted_at)
+        eq(tasks.workspace_id, workspaceId),
+        eq(tasks.project_id, rootId),
+        isNull(tasks.deleted_at)
       )
     )
-  return { issues: Number(iss?.n ?? 0), milestones: Number(ms?.n ?? 0) }
+  return { issues: Number(iss?.n ?? 0), tasks: Number(ms?.n ?? 0) }
 }
 
 export async function softDeleteIssue(
@@ -188,13 +188,13 @@ export async function softDeleteProject(
           )
         )
       await tx
-        .update(milestones)
+        .update(tasks)
         .set({ deleted_at: now, deleted_by: actorUserId, delete_batch_id: batchId })
         .where(
           and(
-            eq(milestones.workspace_id, workspaceId),
-            eq(milestones.project_id, id),
-            isNull(milestones.deleted_at)
+            eq(tasks.workspace_id, workspaceId),
+            eq(tasks.project_id, id),
+            isNull(tasks.deleted_at)
           )
         )
     } else {
@@ -210,13 +210,13 @@ export async function softDeleteProject(
           )
         )
       await tx
-        .update(milestones)
+        .update(tasks)
         .set({ project_id: null })
         .where(
           and(
-            eq(milestones.workspace_id, workspaceId),
-            eq(milestones.project_id, id),
-            isNull(milestones.deleted_at)
+            eq(tasks.workspace_id, workspaceId),
+            eq(tasks.project_id, id),
+            isNull(tasks.deleted_at)
           )
         )
     }
@@ -239,7 +239,7 @@ export async function softDeleteProject(
   })
 }
 
-export async function softDeleteMilestone(
+export async function softDeleteTask(
   workspaceId: number,
   id: number,
   actorUserId: number,
@@ -248,18 +248,18 @@ export async function softDeleteMilestone(
   return await db.transaction(async (tx) => {
     const [before] = await tx
       .select()
-      .from(milestones)
+      .from(tasks)
       .where(
         and(
-          eq(milestones.id, id),
-          eq(milestones.workspace_id, workspaceId),
-          isNull(milestones.deleted_at)
+          eq(tasks.id, id),
+          eq(tasks.workspace_id, workspaceId),
+          isNull(tasks.deleted_at)
         )
       )
       .limit(1)
     if (!before) return false
 
-    const batchId = await createBatch(tx, workspaceId, actorUserId, mode, 'milestone', id)
+    const batchId = await createBatch(tx, workspaceId, actorUserId, mode, 'task', id)
     const now = new Date()
 
     if (mode === 'cascade') {
@@ -269,32 +269,32 @@ export async function softDeleteMilestone(
         .where(
           and(
             eq(issues.workspace_id, workspaceId),
-            eq(issues.milestone_id, id),
+            eq(issues.task_id, id),
             isNull(issues.deleted_at)
           )
         )
     } else {
       await tx
         .update(issues)
-        .set({ milestone_id: null })
+        .set({ task_id: null })
         .where(
           and(
             eq(issues.workspace_id, workspaceId),
-            eq(issues.milestone_id, id),
+            eq(issues.task_id, id),
             isNull(issues.deleted_at)
           )
         )
     }
 
     await tx
-      .update(milestones)
+      .update(tasks)
       .set({ deleted_at: now, deleted_by: actorUserId, delete_batch_id: batchId })
-      .where(eq(milestones.id, id))
+      .where(eq(tasks.id, id))
 
     await recordEvent(tx, {
       workspaceId,
       actorUserId,
-      entityType: 'milestone',
+      entityType: 'task',
       entityId: id,
       action: 'deleted',
       diff: { before: { name: before.name } },
@@ -313,7 +313,7 @@ export function softDeleteEntity(
 ): Promise<boolean> {
   if (type === 'issue') return softDeleteIssue(workspaceId, id, actorUserId)
   if (type === 'project') return softDeleteProject(workspaceId, id, actorUserId, mode)
-  return softDeleteMilestone(workspaceId, id, actorUserId, mode)
+  return softDeleteTask(workspaceId, id, actorUserId, mode)
 }
 
 // --------------------------------------------------------------------------
@@ -331,7 +331,7 @@ export async function listTrash(
   const result = await db.execute(sql`
     WITH src AS (
       SELECT 'issue' AS type, i.id, i.title AS title, i.seq, i.status,
-             i.deleted_at, i.deleted_by, i.delete_batch_id, i.project_id, i.milestone_id
+             i.deleted_at, i.deleted_by, i.delete_batch_id, i.project_id, i.task_id
       FROM issues i
       WHERE i.workspace_id = ${workspaceId} AND i.deleted_at IS NOT NULL
       UNION ALL
@@ -340,9 +340,9 @@ export async function listTrash(
       FROM projects p
       WHERE p.workspace_id = ${workspaceId} AND p.deleted_at IS NOT NULL
       UNION ALL
-      SELECT 'milestone', m.id, m.name, NULL, m.status,
+      SELECT 'task', m.id, m.name, NULL, m.status,
              m.deleted_at, m.deleted_by, m.delete_batch_id, m.project_id, NULL
-      FROM milestones m
+      FROM tasks m
       WHERE m.workspace_id = ${workspaceId} AND m.deleted_at IS NOT NULL
     )
     SELECT src.*, du.name AS deleted_by_name,
@@ -369,7 +369,7 @@ export async function listTrash(
     batch_root_type: (r.batch_root_type as TrashType | null) ?? null,
     batch_root_id: r.batch_root_id != null ? Number(r.batch_root_id) : null,
     project_id: r.project_id != null ? Number(r.project_id) : null,
-    milestone_id: r.milestone_id != null ? Number(r.milestone_id) : null,
+    task_id: r.task_id != null ? Number(r.task_id) : null,
   }))
 }
 
@@ -399,7 +399,7 @@ interface BinnedRow {
   id: number
   title: string
   project_id: number | null
-  milestone_id: number | null
+  task_id: number | null
   delete_batch_id: number | null
   deleted: boolean // deleted_at IS NOT NULL (still binned)
 }
@@ -416,7 +416,7 @@ async function loadRow(
         id: issues.id,
         title: issues.title,
         project_id: issues.project_id,
-        milestone_id: issues.milestone_id,
+        task_id: issues.task_id,
         delete_batch_id: issues.delete_batch_id,
         deleted_at: issues.deleted_at,
       })
@@ -426,20 +426,20 @@ async function loadRow(
     if (!r) return null
     return { ...r, deleted: r.deleted_at != null } as BinnedRow
   }
-  if (type === 'milestone') {
+  if (type === 'task') {
     const [r] = await ex
       .select({
-        id: milestones.id,
-        title: milestones.name,
-        project_id: milestones.project_id,
-        delete_batch_id: milestones.delete_batch_id,
-        deleted_at: milestones.deleted_at,
+        id: tasks.id,
+        title: tasks.name,
+        project_id: tasks.project_id,
+        delete_batch_id: tasks.delete_batch_id,
+        deleted_at: tasks.deleted_at,
       })
-      .from(milestones)
-      .where(and(eq(milestones.id, id), eq(milestones.workspace_id, workspaceId)))
+      .from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.workspace_id, workspaceId)))
       .limit(1)
     if (!r) return null
-    return { id: r.id, title: r.title, project_id: r.project_id, milestone_id: null, delete_batch_id: r.delete_batch_id, deleted: r.deleted_at != null }
+    return { id: r.id, title: r.title, project_id: r.project_id, task_id: null, delete_batch_id: r.delete_batch_id, deleted: r.deleted_at != null }
   }
   const [r] = await ex
     .select({
@@ -452,7 +452,7 @@ async function loadRow(
     .where(and(eq(projects.id, id), eq(projects.workspace_id, workspaceId)))
     .limit(1)
   if (!r) return null
-  return { id: r.id, title: r.title, project_id: null, milestone_id: null, delete_batch_id: r.delete_batch_id, deleted: r.deleted_at != null }
+  return { id: r.id, title: r.title, project_id: null, task_id: null, delete_batch_id: r.delete_batch_id, deleted: r.deleted_at != null }
 }
 
 // Batch-aware default: if the child was binned in the SAME batch as its parent,
@@ -476,7 +476,7 @@ export async function previewRestore(
   for (const ref of refs) {
     const row = await loadRow(db, workspaceId, ref.type, ref.id)
     if (!row || !row.deleted) continue
-    if ((ref.type === 'issue' || ref.type === 'milestone') && row.project_id != null) {
+    if ((ref.type === 'issue' || ref.type === 'task') && row.project_id != null) {
       if (!sel.has(`project:${row.project_id}`)) {
         const parent = await loadRow(db, workspaceId, 'project', row.project_id)
         if (!parent) {
@@ -486,13 +486,13 @@ export async function previewRestore(
         }
       }
     }
-    if (ref.type === 'issue' && row.milestone_id != null) {
-      if (!sel.has(`milestone:${row.milestone_id}`)) {
-        const parent = await loadRow(db, workspaceId, 'milestone', row.milestone_id)
+    if (ref.type === 'issue' && row.task_id != null) {
+      if (!sel.has(`task:${row.task_id}`)) {
+        const parent = await loadRow(db, workspaceId, 'task', row.task_id)
         if (!parent) {
-          conflicts.push({ type: ref.type, id: ref.id, title: row.title, parent_type: 'milestone', parent_id: row.milestone_id, parent_title: null, kind: 'parent_missing', suggested: 'standalone' })
+          conflicts.push({ type: ref.type, id: ref.id, title: row.title, parent_type: 'task', parent_id: row.task_id, parent_title: null, kind: 'parent_missing', suggested: 'standalone' })
         } else if (parent.deleted) {
-          conflicts.push({ type: ref.type, id: ref.id, title: row.title, parent_type: 'milestone', parent_id: row.milestone_id, parent_title: parent.title, kind: 'parent_binned', suggested: defaultResolution(row.delete_batch_id, parent) })
+          conflicts.push({ type: ref.type, id: ref.id, title: row.title, parent_type: 'task', parent_id: row.task_id, parent_title: parent.title, kind: 'parent_binned', suggested: defaultResolution(row.delete_batch_id, parent) })
         }
       }
     }
@@ -531,12 +531,12 @@ async function restoreEntity(
   }
 
   let nextProjectId = row.project_id
-  let nextMilestoneId = row.milestone_id
+  let nextTaskId = row.task_id
 
   // A parent that's part of this same restore (selection/batch) is always
   // brought back and re-linked; only a parent NOT being restored falls to the
   // explicit resolution / batch-aware default.
-  if (type === 'issue' || type === 'milestone') {
+  if (type === 'issue' || type === 'task') {
     if (row.project_id != null) {
       const parent = await loadRow(tx, workspaceId, 'project', row.project_id)
       if (parent && parent.deleted) {
@@ -553,28 +553,28 @@ async function restoreEntity(
       }
     }
   }
-  if (type === 'issue' && row.milestone_id != null) {
-    const parent = await loadRow(tx, workspaceId, 'milestone', row.milestone_id)
+  if (type === 'issue' && row.task_id != null) {
+    const parent = await loadRow(tx, workspaceId, 'task', row.task_id)
     if (parent && parent.deleted) {
-      const res = selection.has(`milestone:${row.milestone_id}`)
+      const res = selection.has(`task:${row.task_id}`)
         ? 'restore_parent'
         : resolutions[key] ?? defaultResolution(row.delete_batch_id, parent)
       if (res === 'restore_parent') {
-        await restoreEntity(tx, workspaceId, 'milestone', row.milestone_id, actorUserId, resolutions, selection, restored)
+        await restoreEntity(tx, workspaceId, 'task', row.task_id, actorUserId, resolutions, selection, restored)
       } else {
-        nextMilestoneId = null
+        nextTaskId = null
       }
     } else if (!parent) {
-      nextMilestoneId = null
+      nextTaskId = null
     }
   }
 
-  const table = type === 'issue' ? issues : type === 'milestone' ? milestones : projects
+  const table = type === 'issue' ? issues : type === 'task' ? tasks : projects
   const set: Record<string, unknown> = { ...clearDeleteCols() }
   if (type === 'issue') {
     set.project_id = nextProjectId
-    set.milestone_id = nextMilestoneId
-  } else if (type === 'milestone') {
+    set.task_id = nextTaskId
+  } else if (type === 'task') {
     set.project_id = nextProjectId
   }
   await tx.update(table).set(set).where(eq(table.id, id))
@@ -599,9 +599,9 @@ export async function restoreItems(
   return await db.transaction(async (tx) => {
     const restored = new Set<string>()
     const selection = new Set(refs.map((r) => `${r.type}:${r.id}`))
-    // Restore projects first, then milestones, then issues, so parents exist as
+    // Restore projects first, then tasks, then issues, so parents exist as
     // active rows before children link to them.
-    const order: TrashType[] = ['project', 'milestone', 'issue']
+    const order: TrashType[] = ['project', 'task', 'issue']
     const sorted = [...refs].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
     for (const ref of sorted) {
       await restoreEntity(tx, workspaceId, ref.type, ref.id, actorUserId, resolutions, selection, restored)
@@ -634,10 +634,10 @@ export async function batchMembers(workspaceId: number, batchId: number): Promis
     .where(and(eq(projects.workspace_id, workspaceId), eq(projects.delete_batch_id, batchId), isNotNull(projects.deleted_at)))
   refs.push(...pr.map((r) => ({ type: 'project' as const, id: r.id })))
   const ms = await db
-    .select({ id: milestones.id })
-    .from(milestones)
-    .where(and(eq(milestones.workspace_id, workspaceId), eq(milestones.delete_batch_id, batchId), isNotNull(milestones.deleted_at)))
-  refs.push(...ms.map((r) => ({ type: 'milestone' as const, id: r.id })))
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.workspace_id, workspaceId), eq(tasks.delete_batch_id, batchId), isNotNull(tasks.deleted_at)))
+  refs.push(...ms.map((r) => ({ type: 'task' as const, id: r.id })))
   const iss = await db
     .select({ id: issues.id })
     .from(issues)
@@ -652,7 +652,7 @@ export async function batchMembers(workspaceId: number, batchId: number): Promis
 
 // Purge the given items. Only rows already in the bin (deleted_at IS NOT NULL)
 // are touched, so a stray active id can never be hard-deleted here. Issues are
-// purged before projects/milestones so FK SET NULL doesn't orphan a parent's
+// purged before projects/tasks so FK SET NULL doesn't orphan a parent's
 // binned children mid-batch.
 export async function purgeItems(
   workspaceId: number,
@@ -661,7 +661,7 @@ export async function purgeItems(
 ): Promise<{ purged: number }> {
   return await db.transaction(async (tx) => {
     let purged = 0
-    const order: TrashType[] = ['issue', 'milestone', 'project']
+    const order: TrashType[] = ['issue', 'task', 'project']
     const sorted = [...refs].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
     for (const ref of sorted) {
       const ok = await purgeOne(tx, workspaceId, ref.type, ref.id, actorUserId)
@@ -678,7 +678,7 @@ async function purgeOne(
   id: number,
   actorUserId: number
 ): Promise<boolean> {
-  const table = type === 'issue' ? issues : type === 'milestone' ? milestones : projects
+  const table = type === 'issue' ? issues : type === 'task' ? tasks : projects
   const [before] = await tx
     .select()
     .from(table)

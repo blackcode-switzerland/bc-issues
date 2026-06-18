@@ -11,10 +11,10 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const id = parseInt(idStr)
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
-  if (!(await verifyCommentParent(ctx.workspace.id, 'milestone', id))) {
-    throw Errors.notFound('milestone')
+  if (!(await verifyCommentParent(ctx.workspace.id, 'task', id))) {
+    throw Errors.notFound('task')
   }
-  const data = await listComments('milestone', id)
+  const data = await listComments('task', id)
   return NextResponse.json({ data })
 })
 
@@ -23,8 +23,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const id = parseInt(idStr)
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
-  if (!(await verifyCommentParent(ctx.workspace.id, 'milestone', id))) {
-    throw Errors.notFound('milestone')
+  if (!(await verifyCommentParent(ctx.workspace.id, 'task', id))) {
+    throw Errors.notFound('task')
   }
   const body = await req.json().catch(() => null)
   const content = typeof body?.content === 'string' ? body.content.trim() : ''
@@ -33,7 +33,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   const comment = await createComment({
     workspaceId: ctx.workspace.id,
-    parentType: 'milestone',
+    parentType: 'task',
     parentId: id,
     userId: ctx.user.id,
     content,

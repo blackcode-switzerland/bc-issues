@@ -14,7 +14,7 @@ export function OnboardingCreateWorkspace({ defaultName }: { defaultName: string
         <span className="font-bold">blackcode issues</span>
       </div>
       <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
-        Welcome! Create your first workspace to start adding projects, milestones, and issues.
+        Welcome! Create your first workspace to start adding projects, tasks, and issues.
       </p>
       {/* Always-open modal; no close affordance since a workspace is required. */}
       <WorkspaceCreateModal open dismissible={false} onClose={() => {}} defaultName={defaultName} />

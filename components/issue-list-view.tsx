@@ -41,7 +41,7 @@ interface Issue {
   assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   project_id: number
   project_name?: string
-  milestone_name?: string
+  task_name?: string
   comment_count?: number
   attachment_count?: number
   created_at: string

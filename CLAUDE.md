@@ -43,15 +43,15 @@ See memory file `design-system.md` for full details. Short version:
 
 ## Create-item UX pattern
 
-"New issue / milestone / project" buttons **do not open a modal**. They POST a minimal record immediately, then `router.push` to the detail page with `?new=1`. On the detail page, `useSearchParams()` detects `?new=1` and auto-focuses + selects the title field so the user can rename right away.
+"New issue / task / project" buttons **do not open a modal**. They POST a minimal record immediately, then `router.push` to the detail page with `?new=1`. On the detail page, `useSearchParams()` detects `?new=1` and auto-focuses + selects the title field so the user can rename right away.
 
 - Issue listing → `POST /api/workspaces/:slug/issues { title: 'New Issue' }` → `/dashboard/issues/:id?new=1`
-- Milestone listing → `POST /api/workspaces/:slug/milestones { name: 'New Milestone' }` → `/dashboard/milestones/:id?new=1`
+- Task listing → `POST /api/workspaces/:slug/tasks { name: 'New Task' }` → `/dashboard/tasks/:id?new=1`
 - Project listing → `POST /api/workspaces/:slug/projects { name: 'New Project' }` → `/dashboard/:id?new=1`
-- Inside project detail: "New issue" / "New milestone" pre-set `project_id`; per-milestone "+" also pre-sets `milestone_id`.
-- Inside milestone detail: "New issue" pre-sets `milestone_id` (and `project_id` if the milestone belongs to one).
+- Inside project detail: "New issue" / "New task" pre-set `project_id`; per-task "+" also pre-sets `task_id`.
+- Inside task detail: "New issue" pre-sets `task_id` (and `project_id` if the task belongs to one).
 
-The three old create-modal files (`issue-create-modal.tsx`, `milestone-create-modal.tsx`, `project-create-modal.tsx`) have been deleted. `create-issue-modal.tsx` still exists for the kanban "create issue" flow.
+The three old create-modal files (`issue-create-modal.tsx`, `task-create-modal.tsx`, `project-create-modal.tsx`) have been deleted. `create-issue-modal.tsx` still exists for the kanban "create issue" flow.
 
 ## Data fetching
 

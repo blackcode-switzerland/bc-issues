@@ -6,7 +6,7 @@
 //   - assignee_ids  → 'assigned' / 'unassigned' (one event per user added/removed)
 //   - status        → 'status_changed' (and sets completed_at / cancelled_at)
 //   - priority      → 'priority_changed'
-//   - milestone_id  → 'milestone_changed'
+//   - task_id  → 'task_changed'
 //   - project_id    → 'project_changed'
 // This lets the activity feed and inbox surface meaningful events without
 // dredging through diff jsonb.
@@ -33,7 +33,7 @@ export interface AssigneeInfo {
 
 export interface IssueListRow extends Issue {
   assignees: AssigneeInfo[]
-  milestone_name?: string | null
+  task_name?: string | null
   project_name?: string | null
   project_icon?: string | null
   project_color?: string | null
@@ -50,7 +50,7 @@ const issueListSelect = sql`
     JOIN users u2 ON u2.id = ia.user_id
     WHERE ia.issue_id = i.id
   ), '[]'::json) AS assignees,
-  m.name AS milestone_name,
+  m.name AS task_name,
   p.name AS project_name,
   p.icon AS project_icon,
   p.color AS project_color,
@@ -61,7 +61,7 @@ const issueListSelect = sql`
 
 export interface ListIssuesOptions {
   projectId?: number | null
-  milestoneId?: number | null
+  taskId?: number | null
   /** Filter by assignee(s). null = unassigned, array = any of these users. */
   assigneeIds?: number[] | null
   status?: string
@@ -92,11 +92,11 @@ export async function listIssuesInWorkspace(
       : opts.projectId !== undefined
         ? sql`AND i.project_id = ${opts.projectId}`
         : sql``
-  const milestoneFilter =
-    opts.milestoneId === null
-      ? sql`AND i.milestone_id IS NULL`
-      : opts.milestoneId !== undefined
-        ? sql`AND i.milestone_id = ${opts.milestoneId}`
+  const taskFilter =
+    opts.taskId === null
+      ? sql`AND i.task_id IS NULL`
+      : opts.taskId !== undefined
+        ? sql`AND i.task_id = ${opts.taskId}`
         : sql``
   const assigneeFilter =
     opts.assigneeIds === null
@@ -109,7 +109,7 @@ export async function listIssuesInWorkspace(
     WHERE i.workspace_id = ${workspaceId}
       AND i.deleted_at IS NULL
       ${projectFilter}
-      ${milestoneFilter}
+      ${taskFilter}
       ${assigneeFilter}
       ${opts.status ? sql`AND i.status = ${opts.status}` : sql``}
       ${opts.priority ? sql`AND i.priority = ${opts.priority}` : sql``}
@@ -124,7 +124,7 @@ export async function listIssuesInWorkspace(
     db.execute(sql`
       SELECT ${issueListSelect}
       FROM issues i
-      LEFT JOIN milestones m ON m.id = i.milestone_id
+      LEFT JOIN tasks m ON m.id = i.task_id
       LEFT JOIN projects p ON p.id = i.project_id
       ${whereClause}
       ${opts.cursor ? sql`AND i.id < ${opts.cursor}` : sql``}
@@ -153,7 +153,7 @@ export async function getIssueInWorkspace(
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN tasks m ON m.id = i.task_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE i.id = ${id} AND i.workspace_id = ${workspaceId} AND i.deleted_at IS NULL
   `)
@@ -178,7 +178,7 @@ export interface CreateIssueInput {
   status?: string
   priority?: number
   assigneeIds?: number[]
-  milestoneId?: number | null
+  taskId?: number | null
   projectId?: number | null
   startDate?: string | null
   dueDate?: string | null
@@ -214,7 +214,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
         description: input.description ?? null,
         status,
         priority: input.priority ?? 3,
-        milestone_id: input.milestoneId ?? null,
+        task_id: input.taskId ?? null,
         project_id: input.projectId ?? null,
         reporter_id: input.reporterId,
         start_date: input.startDate ?? null,
@@ -276,7 +276,7 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
           status: row.status,
           priority: row.priority,
           project_id: row.project_id,
-          milestone_id: row.milestone_id,
+          task_id: row.task_id,
           assignee_ids: uniqueAssigneeIds,
         },
       },
@@ -307,7 +307,7 @@ export interface UpdateIssueInput {
   priority?: number
   /** Provide to replace the full assignee list. Empty array = unassign all. */
   assignee_ids?: number[] | null
-  milestone_id?: number | null
+  task_id?: number | null
   project_id?: number | null
   start_date?: string | null
   due_date?: string | null
@@ -340,7 +340,7 @@ export async function updateIssue(
     if (patch.title !== undefined) updates.title = patch.title
     if (patch.description !== undefined) updates.description = patch.description
     if (patch.priority !== undefined) updates.priority = patch.priority
-    if (patch.milestone_id !== undefined) updates.milestone_id = patch.milestone_id
+    if (patch.task_id !== undefined) updates.task_id = patch.task_id
     if (patch.project_id !== undefined) updates.project_id = patch.project_id
     if (patch.start_date !== undefined) updates.start_date = patch.start_date
     if (patch.due_date !== undefined) updates.due_date = patch.due_date
@@ -448,14 +448,14 @@ export async function updateIssue(
         meta: { from: before.priority, to: after.priority, seq: after.seq, title: after.title },
       })
     }
-    if (patch.milestone_id !== undefined && before.milestone_id !== after.milestone_id) {
+    if (patch.task_id !== undefined && before.task_id !== after.task_id) {
       await recordEvent(tx, {
         workspaceId,
         actorUserId,
         entityType: 'issue',
         entityId: id,
-        action: 'milestone_changed',
-        meta: { from: before.milestone_id, to: after.milestone_id, seq: after.seq, title: after.title },
+        action: 'task_changed',
+        meta: { from: before.task_id, to: after.task_id, seq: after.seq, title: after.title },
       })
     }
     if (patch.project_id !== undefined && before.project_id !== after.project_id) {
@@ -526,7 +526,7 @@ export async function getIssuesByProject(projectId: number) {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN tasks m ON m.id = i.task_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
@@ -538,7 +538,7 @@ export async function getAllIssuesWithProjects() {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN tasks m ON m.id = i.task_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE i.deleted_at IS NULL
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
@@ -563,7 +563,7 @@ export async function getIssuesPage(opts: {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN tasks m ON m.id = i.task_id
     LEFT JOIN projects p ON p.id = i.project_id
     WHERE 1=1
       AND i.deleted_at IS NULL
@@ -579,13 +579,13 @@ export async function getIssuesPage(opts: {
   return { data, next_cursor }
 }
 
-export async function getIssuesByMilestone(milestoneId: number) {
+export async function getIssuesByTask(taskId: number) {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
     FROM issues i
-    LEFT JOIN milestones m ON m.id = i.milestone_id
+    LEFT JOIN tasks m ON m.id = i.task_id
     LEFT JOIN projects p ON p.id = i.project_id
-    WHERE i.milestone_id = ${milestoneId} AND i.deleted_at IS NULL
+    WHERE i.task_id = ${taskId} AND i.deleted_at IS NULL
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
   return result.rows

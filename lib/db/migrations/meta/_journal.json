@@ -190,6 +190,13 @@
       "when": 1781800000000,
       "tag": "0026_drop_workspace_key",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1781900000000,
+      "tag": "0027_rename_milestones_to_tasks",
+      "breakpoints": true
     }
   ]
 }

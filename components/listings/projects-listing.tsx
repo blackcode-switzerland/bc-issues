@@ -189,7 +189,7 @@ export function ProjectsListing() {
     const noun = ids.length === 1 ? 'project' : 'projects'
     const decision = await confirmDelete({
       kind: 'project',
-      childLabel: `the issues and milestones inside the selected ${noun}`,
+      childLabel: `the issues and tasks inside the selected ${noun}`,
       confirmLabel: `Move ${ids.length} ${noun} to Trash`,
     })
     if (!decision) return
@@ -209,8 +209,8 @@ export function ProjectsListing() {
       toast.success(`Moved ${ids.length} ${noun} to Trash`)
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing', ws?.slug] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
@@ -296,7 +296,7 @@ export function ProjectsListing() {
           <EmptyState
             icon={<Folder size={28} />}
             title="No projects yet"
-            description="Create your first project to organize issues and milestones."
+            description="Create your first project to organize issues and tasks."
             action={{ label: <><Plus size={14} />New project</>, onClick: () => ws && createProject.mutate(), loading: createProject.isPending }}
           />
         )

@@ -1,18 +1,18 @@
-// Milestone queries — workspace-scoped. project_id is optional: milestones
+// Task queries — workspace-scoped. project_id is optional: tasks
 // can exist standalone within a workspace.
 //
 // Listing rules:
-//   - listMilestonesInWorkspace(ws, { project_id: null })   only standalone
-//   - listMilestonesInWorkspace(ws, { project_id: <N> })   only attached to project N
-//   - listMilestonesInWorkspace(ws, {})                     everything in the workspace
+//   - listTasksInWorkspace(ws, { project_id: null })   only standalone
+//   - listTasksInWorkspace(ws, { project_id: <N> })   only attached to project N
+//   - listTasksInWorkspace(ws, {})                     everything in the workspace
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { milestones, type Milestone } from '../schema'
+import { tasks, type Task } from '../schema'
 import { recordEvent } from './events'
-import { softDeleteMilestone, type DeleteMode } from './deletion'
+import { softDeleteTask, type DeleteMode } from './deletion'
 
-export interface MilestoneListItem extends Milestone {
+export interface TaskListItem extends Task {
   project_name: string | null
   project_icon: string | null
   project_color: string | null
@@ -20,16 +20,16 @@ export interface MilestoneListItem extends Milestone {
   completed_issues: number
 }
 
-export interface ListMilestonesOptions {
+export interface ListTasksOptions {
   projectId?: number | null
   status?: string
   search?: string
 }
 
-export async function listMilestonesInWorkspace(
+export async function listTasksInWorkspace(
   workspaceId: number,
-  opts: ListMilestonesOptions = {}
-): Promise<MilestoneListItem[]> {
+  opts: ListTasksOptions = {}
+): Promise<TaskListItem[]> {
   const result = await db.execute(sql`
     SELECT
       m.*,
@@ -38,9 +38,9 @@ export async function listMilestonesInWorkspace(
       p.color AS project_color,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM milestones m
+    FROM tasks m
     LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.workspace_id = ${workspaceId}
       AND m.deleted_at IS NULL
       ${
@@ -59,13 +59,13 @@ export async function listMilestonesInWorkspace(
     GROUP BY m.id, p.name, p.icon, p.color
     ORDER BY m.due_date ASC NULLS LAST, m.id DESC
   `)
-  return result.rows as unknown as MilestoneListItem[]
+  return result.rows as unknown as TaskListItem[]
 }
 
-export async function getMilestoneInWorkspace(
+export async function getTaskInWorkspace(
   workspaceId: number,
   id: number
-): Promise<MilestoneListItem | null> {
+): Promise<TaskListItem | null> {
   const result = await db.execute(sql`
     SELECT
       m.*,
@@ -74,16 +74,16 @@ export async function getMilestoneInWorkspace(
       p.color AS project_color,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM milestones m
+    FROM tasks m
     LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.workspace_id = ${workspaceId} AND m.deleted_at IS NULL
     GROUP BY m.id, p.name, p.icon, p.color
   `)
-  return (result.rows[0] as unknown as MilestoneListItem) ?? null
+  return (result.rows[0] as unknown as TaskListItem) ?? null
 }
 
-export interface CreateMilestoneInput {
+export interface CreateTaskInput {
   workspaceId: number
   name: string
   description?: string | null
@@ -93,10 +93,10 @@ export interface CreateMilestoneInput {
   actorUserId: number
 }
 
-export async function createMilestone(input: CreateMilestoneInput): Promise<Milestone> {
+export async function createTask(input: CreateTaskInput): Promise<Task> {
   return await db.transaction(async (tx) => {
     const [row] = await tx
-      .insert(milestones)
+      .insert(tasks)
       .values({
         workspace_id: input.workspaceId,
         project_id: input.projectId ?? null,
@@ -106,12 +106,12 @@ export async function createMilestone(input: CreateMilestoneInput): Promise<Mile
         status: input.status ?? 'active',
       })
       .returning()
-    if (!row) throw new Error('milestone insert returned nothing')
+    if (!row) throw new Error('task insert returned nothing')
 
     await recordEvent(tx, {
       workspaceId: input.workspaceId,
       actorUserId: input.actorUserId,
-      entityType: 'milestone',
+      entityType: 'task',
       entityId: row.id,
       action: 'created',
       diff: {
@@ -122,7 +122,7 @@ export async function createMilestone(input: CreateMilestoneInput): Promise<Mile
   })
 }
 
-export interface UpdateMilestoneInput {
+export interface UpdateTaskInput {
   name?: string
   description?: string | null
   due_date?: string | null
@@ -130,19 +130,19 @@ export interface UpdateMilestoneInput {
   project_id?: number | null
 }
 
-const MILESTONE_DIFF_KEYS = ['name', 'description', 'due_date', 'status', 'project_id'] as const
+const TASK_DIFF_KEYS = ['name', 'description', 'due_date', 'status', 'project_id'] as const
 
-export async function updateMilestone(
+export async function updateTask(
   workspaceId: number,
   id: number,
-  patch: UpdateMilestoneInput,
+  patch: UpdateTaskInput,
   actorUserId: number
-): Promise<Milestone | null> {
+): Promise<Task | null> {
   return await db.transaction(async (tx) => {
     const beforeRows = await tx
       .select()
-      .from(milestones)
-      .where(and(eq(milestones.id, id), eq(milestones.workspace_id, workspaceId)))
+      .from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.workspace_id, workspaceId)))
       .limit(1)
     const before = beforeRows[0]
     if (!before) return null
@@ -158,9 +158,9 @@ export async function updateMilestone(
     updates.updated_at = new Date()
 
     const [after] = await tx
-      .update(milestones)
+      .update(tasks)
       .set(updates)
-      .where(and(eq(milestones.id, id), eq(milestones.workspace_id, workspaceId)))
+      .where(and(eq(tasks.id, id), eq(tasks.workspace_id, workspaceId)))
       .returning()
     if (!after) return null
 
@@ -168,7 +168,7 @@ export async function updateMilestone(
       await recordEvent(tx, {
         workspaceId,
         actorUserId,
-        entityType: 'milestone',
+        entityType: 'task',
         entityId: id,
         action: 'status_changed',
         meta: { from: before.status, to: after.status, title: after.name },
@@ -178,7 +178,7 @@ export async function updateMilestone(
       await recordEvent(tx, {
         workspaceId,
         actorUserId,
-        entityType: 'milestone',
+        entityType: 'task',
         entityId: id,
         action: 'due_date_changed',
         meta: {
@@ -191,7 +191,7 @@ export async function updateMilestone(
 
     const beforeSnap: Record<string, unknown> = {}
     const afterSnap: Record<string, unknown> = {}
-    for (const k of MILESTONE_DIFF_KEYS) {
+    for (const k of TASK_DIFF_KEYS) {
       if ((before as Record<string, unknown>)[k] !== (after as Record<string, unknown>)[k]) {
         beforeSnap[k] = (before as Record<string, unknown>)[k]
         afterSnap[k] = (after as Record<string, unknown>)[k]
@@ -204,7 +204,7 @@ export async function updateMilestone(
       await recordEvent(tx, {
         workspaceId,
         actorUserId,
-        entityType: 'milestone',
+        entityType: 'task',
         entityId: id,
         action: 'updated',
         diff: { before: beforeSnap, after: afterSnap },
@@ -217,24 +217,24 @@ export async function updateMilestone(
 // Delete now means soft-delete (move to the recycle bin). `mode` controls the
 // attached issues: 'detach' (default) keeps them active but unlinks them;
 // 'cascade' bins them together. See lib/db/queries/deletion.ts.
-export async function deleteMilestone(
+export async function deleteTask(
   workspaceId: number,
   id: number,
   actorUserId: number,
   mode: DeleteMode = 'detach'
 ): Promise<boolean> {
-  return softDeleteMilestone(workspaceId, id, actorUserId, mode)
+  return softDeleteTask(workspaceId, id, actorUserId, mode)
 }
 
 // --- Legacy compatibility ---
 
-export async function getMilestones(projectId: number) {
+export async function getTasks(projectId: number) {
   const result = await db.execute(sql`
     SELECT m.*,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM milestones m
-    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    FROM tasks m
+    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.project_id = ${projectId} AND m.deleted_at IS NULL
     GROUP BY m.id
     ORDER BY m.due_date ASC NULLS LAST
@@ -242,14 +242,14 @@ export async function getMilestones(projectId: number) {
   return result.rows
 }
 
-export async function getAllMilestones() {
+export async function getAllTasks() {
   const result = await db.execute(sql`
     SELECT m.*, p.name AS project_name,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM milestones m
+    FROM tasks m
     LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.deleted_at IS NULL
     GROUP BY m.id, p.name
     ORDER BY m.due_date ASC NULLS LAST
@@ -257,14 +257,14 @@ export async function getAllMilestones() {
   return result.rows
 }
 
-export async function getMilestoneWithDetails(id: number) {
+export async function getTaskWithDetails(id: number) {
   const result = await db.execute(sql`
     SELECT m.*, p.name AS project_name,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM milestones m
+    FROM tasks m
     LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN issues i ON i.milestone_id = m.id AND i.deleted_at IS NULL
+    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.deleted_at IS NULL
     GROUP BY m.id, p.name
   `)

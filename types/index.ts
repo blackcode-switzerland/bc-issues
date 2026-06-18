@@ -24,7 +24,7 @@ export interface Project {
   updated_at: string
 }
 
-export interface Milestone {
+export interface Task {
   id: number
   project_id: number
   name: string
@@ -47,7 +47,7 @@ export interface IssueAssignee {
 export interface Issue {
   id: number
   project_id: number
-  milestone_id?: number
+  task_id?: number
   title: string
   description?: string
   status: string
@@ -56,7 +56,7 @@ export interface Issue {
   reporter_id?: number
   due_date?: string
   estimate_hours?: number
-  milestone_name?: string
+  task_name?: string
   labels?: string[]
   comment_count: number
   attachment_count: number

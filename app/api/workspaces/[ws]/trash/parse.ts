@@ -6,7 +6,7 @@
 import { Errors } from '@/lib/api/errors'
 import type { EntityRef, RestoreResolution, TrashType } from '@/lib/db/queries/deletion'
 
-const TYPES = new Set<TrashType>(['issue', 'project', 'milestone'])
+const TYPES = new Set<TrashType>(['issue', 'project', 'task'])
 
 export interface TrashSelection {
   batchId: number | null
@@ -36,7 +36,7 @@ export function parseSelection(body: unknown): TrashSelection {
       const type = it.type as TrashType
       const id = Number(it.id)
       if (!TYPES.has(type) || !Number.isInteger(id)) {
-        throw Errors.badRequest('invalid_item', 'item.type must be issue|project|milestone and id an integer')
+        throw Errors.badRequest('invalid_item', 'item.type must be issue|project|task and id an integer')
       }
       items.push({ type, id })
     }

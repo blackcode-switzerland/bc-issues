@@ -1,4 +1,4 @@
-// Polymorphic comments — attach to issue, milestone, or project.
+// Polymorphic comments — attach to issue, task, or project.
 //
 // New code uses parent_type + parent_id. The legacy issue_id column is kept
 // (NOT NULL for now) and mirrored on issue-parent comments so the old code
@@ -9,7 +9,7 @@ import { db } from '../client'
 import {
   comments,
   issues,
-  milestones,
+  tasks,
   projects,
   users,
   workspaceMembers,
@@ -57,7 +57,7 @@ async function resolveMentions(
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-export type CommentParentType = 'issue' | 'milestone' | 'project'
+export type CommentParentType = 'issue' | 'task' | 'project'
 
 export interface CommentListItem extends Comment {
   author_name: string | null
@@ -113,15 +113,15 @@ export async function verifyCommentParent(
       .limit(1)
     return !!rows[0]
   }
-  if (parentType === 'milestone') {
+  if (parentType === 'task') {
     const rows = await db
-      .select({ id: milestones.id })
-      .from(milestones)
+      .select({ id: tasks.id })
+      .from(tasks)
       .where(
         and(
-          eq(milestones.id, parentId),
-          eq(milestones.workspace_id, workspaceId),
-          isNull(milestones.deleted_at)
+          eq(tasks.id, parentId),
+          eq(tasks.workspace_id, workspaceId),
+          isNull(tasks.deleted_at)
         )
       )
       .limit(1)

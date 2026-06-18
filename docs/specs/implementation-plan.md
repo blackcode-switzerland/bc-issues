@@ -12,7 +12,7 @@ Four major features to implement in parallel tracks:
 1. **Gantt Timeline View** - Transform vertical timeline to horizontal Gantt chart
 2. **Project Members Management** - UI for team member management (API exists)
 3. **Rich Issue Pages** - Rich text editor, file uploads, activity history
-4. **Milestone Detail Pages** - Individual milestone pages with filtered views
+4. **Task Detail Pages** - Individual task pages with filtered views
 
 ---
 
@@ -35,7 +35,7 @@ Four major features to implement in parallel tracks:
 - `components/kanban-board.tsx` - Kanban reference implementation
 - `app/api/projects/[id]/members/route.ts` - Members API (complete)
 - `app/dashboard/issues/[id]/page.tsx` - Issue detail (553 lines)
-- `app/dashboard/milestones/page.tsx` - Milestones list (447 lines)
+- `app/dashboard/tasks/page.tsx` - Tasks list (447 lines)
 
 ---
 
@@ -50,7 +50,7 @@ Four major features to implement in parallel tracks:
 ### Target State
 - Horizontal Gantt chart with time axis
 - Issues as horizontal bars (start_date -> due_date)
-- Grouping by: milestone, status, assignee
+- Grouping by: task, status, assignee
 - Interactive: click to open, hover for details
 - Time navigation: zoom in/out, pan left/right
 
@@ -71,7 +71,7 @@ Four major features to implement in parallel tracks:
 - [ ] Create `components/gantt-view.tsx`
 - [ ] Add date range calculation utilities
 - [ ] Implement horizontal bar rendering
-- [ ] Add grouping toggle (milestone/status/assignee)
+- [ ] Add grouping toggle (task/status/assignee)
 - [ ] Add zoom/pan controls
 - [ ] Integrate into project dashboard with view switcher
 
@@ -173,38 +173,38 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 ---
 
-## Feature 4: Milestone Detail Pages
+## Feature 4: Task Detail Pages
 
 ### Current State
-- List view at `/dashboard/milestones`
-- Shows milestone cards with progress bars
-- No individual milestone pages
+- List view at `/dashboard/tasks`
+- Shows task cards with progress bars
+- No individual task pages
 
 ### Target State
-- Detail page at `/dashboard/milestones/[id]`
-- Milestone header with full info
-- Issues table/list filtered to milestone
-- Mini Kanban view of milestone issues
-- Mini Gantt view of milestone issues
+- Detail page at `/dashboard/tasks/[id]`
+- Task header with full info
+- Issues table/list filtered to task
+- Mini Kanban view of task issues
+- Mini Gantt view of task issues
 - Progress statistics
 
 ### Technical Approach
 1. Create dynamic route page
-2. Fetch milestone with issues
-3. Reuse KanbanBoard component with milestone filter
-4. Reuse GanttView component with milestone filter
+2. Fetch task with issues
+3. Reuse KanbanBoard component with task filter
+4. Reuse GanttView component with task filter
 
 ### Dependencies Needed
 - Depends on Feature 1 (Gantt view)
 
 ### API Changes
-- [ ] Add `getMilestoneWithIssues(id)` to lib/db.ts
-- [ ] Create or extend `/api/milestones/[id]` to include issues
+- [ ] Add `getTaskWithIssues(id)` to lib/db.ts
+- [ ] Create or extend `/api/tasks/[id]` to include issues
 
 ### Implementation Tasks
-- [ ] Create `app/dashboard/milestones/[id]/page.tsx`
-- [ ] Add milestone detail API endpoint
-- [ ] Create milestone header component
+- [ ] Create `app/dashboard/tasks/[id]/page.tsx`
+- [ ] Add task detail API endpoint
+- [ ] Create task header component
 - [ ] Add filtered Kanban view
 - [ ] Add filtered Gantt view
 - [ ] Add statistics panel
@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 ### Wave 2 - Dependent Features
 - **Track A:** Feature 3 - File uploads and attachments
-- **Track B:** Feature 4 - Milestone Detail Pages (depends on Gantt)
+- **Track B:** Feature 4 - Task Detail Pages (depends on Gantt)
 
 ### Wave 3 - Integration & Polish
 - Connect all features
@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 ### Low Risk
 - **Members UI** - API complete, straightforward UI
-- **Milestone pages** - Mostly reusing existing components
+- **Task pages** - Mostly reusing existing components
 
 ---
 
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 | Gantt View | High | 8-12 | P1 |
 | Members UI | Low | 3-4 | P2 |
 | Rich Issues | Medium | 6-8 | P1 |
-| Milestone Pages | Medium | 4-6 | P2 |
+| Task Pages | Medium | 4-6 | P2 |
 
 **Total: 21-30 hours**
 

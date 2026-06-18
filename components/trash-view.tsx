@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/restore-conflict-dialog'
 import { TrashSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
 
-type TrashType = 'issue' | 'project' | 'milestone'
+type TrashType = 'issue' | 'project' | 'task'
 
 interface TrashItem {
   type: TrashType
@@ -32,7 +32,7 @@ interface TrashItem {
   batch_root_type: TrashType | null
   batch_root_id: number | null
   project_id: number | null
-  milestone_id: number | null
+  task_id: number | null
 }
 
 interface EntityRef {
@@ -44,12 +44,12 @@ const TYPE_TABS: { value: TrashType | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'issue', label: 'Issues' },
   { value: 'project', label: 'Projects' },
-  { value: 'milestone', label: 'Milestones' },
+  { value: 'task', label: 'Tasks' },
 ]
 
 function TypeIcon({ type, size = 15 }: { type: TrashType; size?: number }) {
   if (type === 'project') return <Folder size={size} className="text-muted-foreground" />
-  if (type === 'milestone') return <Target size={size} className="text-muted-foreground" />
+  if (type === 'task') return <Target size={size} className="text-muted-foreground" />
   return <ListChecks size={size} className="text-muted-foreground" />
 }
 
@@ -89,12 +89,12 @@ export function TrashView() {
     queryClient.invalidateQueries({ queryKey: ['ws-trash', slug] })
     queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
     queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-    queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['task-issues'] })
     queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
     queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
-    queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-    queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
-    queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
+    queryClient.invalidateQueries({ queryKey: ['project-tasks'] })
     queryClient.invalidateQueries({ queryKey: ['sidebar-counts', slug] })
     setSelected(new Set())
   }
@@ -251,7 +251,7 @@ export function TrashView() {
         <div>
           <h1 className="text-xl font-semibold">Trash</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Deleted issues, projects, and milestones. Restore them, or remove them for good.
+            Deleted issues, projects, and tasks. Restore them, or remove them for good.
           </p>
         </div>
         {isOwner && items.length > 0 ? (

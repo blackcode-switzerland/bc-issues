@@ -10,7 +10,7 @@ import type {
   AnalyticsView,
 } from '@/lib/db/queries/analytics'
 
-const ALLOWED_VIEWS = new Set<AnalyticsView>(['workspace', 'project', 'milestone', 'member'])
+const ALLOWED_VIEWS = new Set<AnalyticsView>(['workspace', 'project', 'task', 'member'])
 
 export interface ParsedAnalyticsParams {
   view: AnalyticsView
@@ -63,7 +63,7 @@ export function parseAnalyticsParams(sp: URLSearchParams): ParsedAnalyticsParams
   if (!ALLOWED_VIEWS.has(view)) {
     throw Errors.badRequest(
       'invalid_view',
-      'view must be one of: workspace, project, milestone, member'
+      'view must be one of: workspace, project, task, member'
     )
   }
 

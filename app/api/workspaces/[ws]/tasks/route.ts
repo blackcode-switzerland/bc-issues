@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
 import {
-  createMilestone,
-  listMilestonesInWorkspace,
-} from '@/lib/db/queries/milestones'
+  createTask,
+  listTasksInWorkspace,
+} from '@/lib/db/queries/tasks'
 import { getProjectInWorkspace } from '@/lib/db/queries/projects'
 
 interface Params {
@@ -24,7 +24,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     projectId = n
   }
 
-  const data = await listMilestonesInWorkspace(ctx.workspace.id, {
+  const data = await listTasksInWorkspace(ctx.workspace.id, {
     projectId,
     search: sp.get('search') ?? undefined,
   })
@@ -53,7 +53,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     projectId = body.project_id
   }
 
-  const milestone = await createMilestone({
+  const task = await createTask({
     workspaceId: ctx.workspace.id,
     projectId,
     name,
@@ -61,5 +61,5 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     due_date: typeof body.due_date === 'string' ? body.due_date : null,
     actorUserId: ctx.user.id,
   })
-  return NextResponse.json(milestone, { status: 201 })
+  return NextResponse.json(task, { status: 201 })
 })

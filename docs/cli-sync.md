@@ -59,7 +59,7 @@ Two files do almost all the work:
 
 A third area matters when you're adding **new user-facing functionality**:
 
-- **`cli/internal/commands/*.go`** — Cobra command definitions. One file per resource (`project.go`, `issue.go`, `milestone.go`, …). This is where new flags / subcommands get wired up.
+- **`cli/internal/commands/*.go`** — Cobra command definitions. One file per resource (`project.go`, `issue.go`, `task.go`, …). This is where new flags / subcommands get wired up.
 
 ---
 
@@ -119,7 +119,7 @@ AssigneeID *int `json:"assigneeId"`
 Optional vs. nullable:
 
 - `*int` / `*string` with `omitempty` = the field can be omitted from JSON. Use for optional response fields and create-time inputs.
-- `json.RawMessage` with `omitempty` = the field can be omitted **or** sent as `null`. Use for "clear-to-null vs leave-alone" semantics on PATCH endpoints (see `UpdateIssueRequest` — `assignee_id`, `milestone_id`, `start_date`, `due_date` all use this pattern).
+- `json.RawMessage` with `omitempty` = the field can be omitted **or** sent as `null`. Use for "clear-to-null vs leave-alone" semantics on PATCH endpoints (see `UpdateIssueRequest` — `assignee_id`, `task_id`, `start_date`, `due_date` all use this pattern).
 
 ### 3. Update `client.go` for any path / method / query-string change
 
@@ -163,7 +163,7 @@ make build                                    # or: go build -o bk ./cmd/bk
 If your change touched a specific area, hit that area too:
 
 - Changed uploads? `./bk issue attach 1 --file ./path/to/file.png`
-- Changed milestones? `./bk milestone list --project 1`
+- Changed tasks? `./bk task list --project 1`
 - Changed undo? `./bk undo`
 
 ---
@@ -284,7 +284,7 @@ $BK issue edit "$ISSUE_ID" --status in_progress
 $BK issue comment "$ISSUE_ID" --body "smoke comment"
 $BK issue activity "$ISSUE_ID"
 
-$BK milestone list --project "$PROJECT_ID"
+$BK task list --project "$PROJECT_ID"
 $BK activity --limit 5
 $BK undo --count 1     # rolls back the status change above
 

@@ -282,7 +282,7 @@
 
 /* ----- Legacy classes — will be replaced as components migrate to shadcn ----- */
 
-/* Kanban (used in components/kanban-board.tsx, app/dashboard/milestones/[id]/page.tsx) */
+/* Kanban (used in components/kanban-board.tsx, app/dashboard/tasks/[id]/page.tsx) */
 .kanban-column {
   @apply rounded-xl p-4 min-h-[500px];
   background-color: color-mix(in oklch, var(--secondary) 50%, transparent);

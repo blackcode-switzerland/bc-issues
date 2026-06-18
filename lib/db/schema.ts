@@ -183,15 +183,15 @@ export const projectUpdates = pgTable(
   })
 )
 
-export const milestones = pgTable(
-  'milestones',
+export const tasks = pgTable(
+  'tasks',
   {
     id: serial('id').primaryKey(),
     // Phase 1: nullable during backfill. Phase 13 tightens.
     workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    // Phase 7: project_id is now optional — milestones can be standalone within
+    // Phase 7: project_id is now optional — tasks can be standalone within
     // a workspace. ON DELETE SET NULL so deleting the project doesn't take the
-    // milestone with it.
+    // task with it.
     project_id: integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
     name: varchar('name', { length: 100 }).notNull(),
     description: text('description'),
@@ -205,9 +205,9 @@ export const milestones = pgTable(
     delete_batch_id: integer('delete_batch_id'),
   },
   (t) => ({
-    projectIdx: index('idx_milestones_project').on(t.project_id),
-    deletedIdx: index('idx_milestones_deleted').on(t.workspace_id, t.deleted_at),
-    batchIdx: index('idx_milestones_batch').on(t.delete_batch_id),
+    projectIdx: index('idx_tasks_project').on(t.project_id),
+    deletedIdx: index('idx_tasks_deleted').on(t.workspace_id, t.deleted_at),
+    batchIdx: index('idx_tasks_batch').on(t.delete_batch_id),
   })
 )
 
@@ -225,7 +225,7 @@ export const issues = pgTable(
     // workspace. ON DELETE SET NULL so deleting the project doesn't take its
     // issues with it.
     project_id: integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-    milestone_id: integer('milestone_id').references(() => milestones.id, {
+    task_id: integer('task_id').references(() => tasks.id, {
       onDelete: 'set null',
     }),
     title: varchar('title', { length: 200 }).notNull(),
@@ -249,7 +249,7 @@ export const issues = pgTable(
   (t) => ({
     projectIdx: index('idx_issues_project').on(t.project_id),
     statusIdx: index('idx_issues_status').on(t.status),
-    milestoneIdx: index('idx_issues_milestone').on(t.milestone_id),
+    taskIdx: index('idx_issues_task').on(t.task_id),
     priorityIdx: index('idx_issues_priority').on(t.priority),
     workspaceIdx: index('idx_issues_workspace').on(t.workspace_id),
     workspaceSeqUniq: uniqueIndex('uq_issues_workspace_seq').on(t.workspace_id, t.seq),
@@ -265,14 +265,14 @@ export const comments = pgTable(
     id: serial('id').primaryKey(),
     // Phase 1: nullable during backfill. Phase 13 tightens.
     workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    // Polymorphic parent: 'issue' | 'milestone' | 'project'.
+    // Polymorphic parent: 'issue' | 'task' | 'project'.
     // Existing rows backfill with parent_type='issue', parent_id=issue_id.
     // We keep `issue_id` in place for one release for safety; new code uses parent_*.
     parent_type: varchar('parent_type', { length: 20 }),
     parent_id: integer('parent_id'),
     // Phase 9: comments are polymorphic via parent_type/parent_id. The legacy
     // issue_id column stays for one release (data + legacy queries) but is
-    // now nullable since milestone/project comments don't have an issue.
+    // now nullable since task/project comments don't have an issue.
     issue_id: integer('issue_id').references(() => issues.id, { onDelete: 'cascade' }),
     user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
     content: text('content').notNull(),
@@ -288,7 +288,7 @@ export const comments = pgTable(
     parentCommentIdx: index('idx_comments_parent_comment').on(t.parent_comment_id),
     parentTypeCheck: check(
       'comments_parent_type_check',
-      sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'milestone', 'project')`
+      sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'task', 'project')`
     ),
   })
 )
@@ -583,7 +583,7 @@ export const deletionBatches = pgTable(
     modeCheck: check('deletion_batches_mode_check', sql`${t.mode} IN ('cascade', 'detach')`),
     rootTypeCheck: check(
       'deletion_batches_root_type_check',
-      sql`${t.root_type} IN ('project', 'milestone', 'issue')`
+      sql`${t.root_type} IN ('project', 'task', 'issue')`
     ),
   })
 )
@@ -636,7 +636,7 @@ export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Project = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert
-export type Milestone = typeof milestones.$inferSelect
+export type Task = typeof tasks.$inferSelect
 export type Issue = typeof issues.$inferSelect
 export type NewIssue = typeof issues.$inferInsert
 export type Comment = typeof comments.$inferSelect
@@ -655,7 +655,7 @@ export type ErrorEvent = typeof errorEvents.$inferSelect
 export type NewErrorEvent = typeof errorEvents.$inferInsert
 export type DeletionBatch = typeof deletionBatches.$inferSelect
 export type NewDeletionBatch = typeof deletionBatches.$inferInsert
-export type NewMilestone = typeof milestones.$inferInsert
+export type NewTask = typeof tasks.$inferInsert
 export type Workspace = typeof workspaces.$inferSelect
 export type NewWorkspace = typeof workspaces.$inferInsert
 export type WorkspaceMember = typeof workspaceMembers.$inferSelect

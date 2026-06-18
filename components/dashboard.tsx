@@ -298,10 +298,10 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
                   </div>
                 </div>
 
-                {/* Next milestone placeholder */}
+                {/* Next task placeholder */}
                 <div>
-                  <h4 className="text-xs font-medium text-muted-foreground mb-2">Next Milestone</h4>
-                  <p className="text-sm text-muted-foreground">No milestones set</p>
+                  <h4 className="text-xs font-medium text-muted-foreground mb-2">Next Task</h4>
+                  <p className="text-sm text-muted-foreground">No tasks set</p>
                 </div>
               </div>
             </motion.div>

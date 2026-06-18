@@ -19,11 +19,11 @@ VERSION   ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo de
 COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
-# Strip the binary (-s -w) and stamp the version into commands.Version.
+# Strip the binary (-s -w) and stamp the version into version.Version.
 LDFLAGS   := -s -w \
-             -X '$(MODULE)/internal/commands.Version=$(VERSION)' \
-             -X '$(MODULE)/internal/commands.Commit=$(COMMIT)'   \
-             -X '$(MODULE)/internal/commands.BuildDate=$(DATE)'
+             -X '$(MODULE)/internal/version.Version=$(VERSION)' \
+             -X '$(MODULE)/internal/version.Commit=$(COMMIT)'   \
+             -X '$(MODULE)/internal/version.BuildDate=$(DATE)'
 
 GO        ?= go
 GOFLAGS   ?= -trimpath

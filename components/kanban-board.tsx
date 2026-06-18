@@ -62,8 +62,8 @@ interface Issue {
   status: string
   priority: number
   assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
-  milestone_id?: number
-  milestone_name?: string
+  task_id?: number
+  task_name?: string
   labels?: string[]
   comment_count: number
   attachment_count: number
@@ -184,7 +184,7 @@ export function KanbanBoard({
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
     },
     onError: (error) => {
       console.error('Mutation error:', error)
@@ -200,7 +200,7 @@ export function KanbanBoard({
       status: string
       priority?: number
       assignee_ids?: number[]
-      milestone_id?: number
+      task_id?: number
     }) => {
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
         method: 'POST',
@@ -673,7 +673,7 @@ function Column({
     description?: string
     priority?: number
     assignee_ids?: number[]
-    milestone_id?: number
+    task_id?: number
   }) => void
   isCreating: boolean
   onSelectIssue: (issue: Issue) => void
@@ -685,18 +685,18 @@ function Column({
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<number>(3)
   const [assigneeIds, setAssigneeIds] = useState<number[]>([])
-  const [milestoneId, setMilestoneId] = useState<number | undefined>(undefined)
+  const [taskId, setTaskId] = useState<number | undefined>(undefined)
 
   const resetForm = () => {
     setNewTitle('')
     setDescription('')
     setPriority(3)
     setAssigneeIds([])
-    setMilestoneId(undefined)
+    setTaskId(undefined)
     setShowExpanded(false)
   }
 
-  // Fetch project members and milestones
+  // Fetch project members and tasks
   const { data: members = [] } = useQuery({
     queryKey: ['project-members', projectId, ws?.slug],
     enabled: !!ws?.slug,
@@ -708,11 +708,11 @@ function Column({
     },
   })
 
-  const { data: milestones = [] } = useQuery({
-    queryKey: ['milestones', projectId, ws?.slug],
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks', projectId, ws?.slug],
     enabled: !!ws?.slug,
     queryFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones?project_id=${projectId}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks?project_id=${projectId}`)
       if (!res.ok) return []
       const json = await res.json()
       return json.data
@@ -830,14 +830,14 @@ function Column({
                         </div>
 
                         <select
-                          value={milestoneId || ''}
+                          value={taskId || ''}
                           onChange={(e) =>
-                            setMilestoneId(e.target.value ? parseInt(e.target.value) : undefined)
+                            setTaskId(e.target.value ? parseInt(e.target.value) : undefined)
                           }
                           className="w-full px-2 py-1.5 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                         >
-                          <option value="">No milestone</option>
-                          {milestones.map((m: any) => (
+                          <option value="">No task</option>
+                          {tasks.map((m: any) => (
                             <option key={m.id} value={m.id}>
                               {m.name}
                             </option>
@@ -883,7 +883,7 @@ function Column({
                                 description: description.trim() || undefined,
                                 priority,
                                 assignee_ids: assigneeIds.length > 0 ? assigneeIds : undefined,
-                                milestone_id: milestoneId,
+                                task_id: taskId,
                               })
                               resetForm()
                             }

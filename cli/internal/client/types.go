@@ -51,7 +51,7 @@ type IssueAssignee struct {
 type Issue struct {
 	ID              int             `json:"id" yaml:"id"`
 	ProjectID       int             `json:"project_id" yaml:"project_id"`
-	MilestoneID     *int            `json:"milestone_id" yaml:"milestone_id"`
+	TaskID     *int            `json:"task_id" yaml:"task_id"`
 	Title           string          `json:"title" yaml:"title"`
 	Description     *string         `json:"description" yaml:"description"`
 	Status          string          `json:"status" yaml:"status"`
@@ -61,7 +61,7 @@ type Issue struct {
 	DueDate         *string         `json:"due_date" yaml:"due_date"`
 	EstimatedHours  json.RawMessage `json:"estimated_hours,omitempty" yaml:"-"`
 	Assignees       []IssueAssignee `json:"assignees" yaml:"assignees"`
-	MilestoneName   *string         `json:"milestone_name,omitempty" yaml:"milestone_name,omitempty"`
+	TaskName   *string         `json:"task_name,omitempty" yaml:"task_name,omitempty"`
 	ProjectName     *string         `json:"project_name,omitempty" yaml:"project_name,omitempty"`
 	CommentCount    *int            `json:"comment_count,omitempty" yaml:"comment_count,omitempty"`
 	AttachmentCount *int            `json:"attachment_count,omitempty" yaml:"attachment_count,omitempty"`
@@ -77,7 +77,7 @@ type IssuesPage struct {
 
 // dataEnvelope is the generic { "data": [...] } wrapper returned by
 // workspace-scoped list endpoints (members, comments, activity, attachments,
-// milestones).
+// tasks).
 type projectMembersEnvelope struct {
 	Data []ProjectMember `json:"data" yaml:"data"`
 }
@@ -94,8 +94,8 @@ type attachmentsEnvelope struct {
 	Data []Attachment `json:"data" yaml:"data"`
 }
 
-type milestonesEnvelope struct {
-	Data []Milestone `json:"data" yaml:"data"`
+type tasksEnvelope struct {
+	Data []Task `json:"data" yaml:"data"`
 }
 
 type ProjectsPage struct {
@@ -114,7 +114,7 @@ type ProjectMember struct {
 	CreatedAt *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
 }
 
-type Milestone struct {
+type Task struct {
 	ID              int     `json:"id" yaml:"id"`
 	ProjectID       int     `json:"project_id" yaml:"project_id"`
 	Name            string  `json:"name" yaml:"name"`
@@ -179,13 +179,13 @@ type CreateIssueRequest struct {
 	Status      string          `json:"status,omitempty"`
 	Priority    int             `json:"priority,omitempty"`
 	AssigneeIDs []int           `json:"assignee_ids,omitempty"`
-	MilestoneID json.RawMessage `json:"milestone_id,omitempty"`
+	TaskID json.RawMessage `json:"task_id,omitempty"`
 	StartDate   *string         `json:"start_date,omitempty"`
 	DueDate     *string         `json:"due_date,omitempty"`
 	Labels      []string        `json:"labels,omitempty"`
 }
 
-// UpdateIssueRequest uses json.RawMessage for milestone_id, start_date, due_date
+// UpdateIssueRequest uses json.RawMessage for task_id, start_date, due_date
 // so they can be sent as null to clear, a value to set, or omitted to leave
 // untouched. AssigneeIDs replaces the full assignee list when present (empty
 // array = clear all assignees).
@@ -195,7 +195,7 @@ type UpdateIssueRequest struct {
 	Status      *string         `json:"status,omitempty"`
 	Priority    *int            `json:"priority,omitempty"`
 	AssigneeIDs json.RawMessage `json:"assignee_ids,omitempty"`
-	MilestoneID json.RawMessage `json:"milestone_id,omitempty"`
+	TaskID json.RawMessage `json:"task_id,omitempty"`
 	StartDate   json.RawMessage `json:"start_date,omitempty"`
 	DueDate     json.RawMessage `json:"due_date,omitempty"`
 }
@@ -228,14 +228,14 @@ type AddMemberRequest struct {
 	Role  string `json:"role,omitempty"`
 }
 
-type CreateMilestoneRequest struct {
+type CreateTaskRequest struct {
 	ProjectID   int     `json:"project_id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description,omitempty"`
 	DueDate     *string `json:"due_date,omitempty"`
 }
 
-type UpdateMilestoneRequest struct {
+type UpdateTaskRequest struct {
 	Name        *string         `json:"name,omitempty"`
 	Description *string         `json:"description,omitempty"`
 	DueDate     json.RawMessage `json:"due_date,omitempty"`
@@ -356,7 +356,7 @@ type CreatedToken struct {
 }
 
 // WorkspaceComment is a comment returned from workspace-scoped endpoints
-// (issues, milestones, projects). Has richer parent fields than the legacy Comment.
+// (issues, tasks, projects). Has richer parent fields than the legacy Comment.
 type WorkspaceComment struct {
 	ID              int     `json:"id" yaml:"id"`
 	WorkspaceID     int     `json:"workspace_id" yaml:"workspace_id"`
@@ -415,7 +415,7 @@ type TrashItem struct {
 	BatchRootType *string `json:"batch_root_type" yaml:"batch_root_type"`
 	BatchRootID   *int    `json:"batch_root_id" yaml:"batch_root_id"`
 	ProjectID     *int    `json:"project_id" yaml:"project_id"`
-	MilestoneID   *int    `json:"milestone_id" yaml:"milestone_id"`
+	TaskID   *int    `json:"task_id" yaml:"task_id"`
 }
 
 // RestoreTrashRequest restores either a whole batch or an explicit item list.

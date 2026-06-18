@@ -6,7 +6,7 @@ import (
 )
 
 const rootLong = `bk is the CLI for blackcode-issues. Every feature on the website
-is available here: projects, issues, milestones, comments, labels,
+is available here: projects, issues, tasks, comments, labels,
 members, tokens, inbox, analytics, and more.
 
 First run:
@@ -28,7 +28,7 @@ Conventions for agents:
   • long bodies (--description, --body) accept three forms:
       "literal", "-" to read stdin, or paired --*-file FILE
   • clearing a nullable field on edit: pass the literal "none" (or
-    "null"/"unset"/"clear") to --assignee, --milestone, --due-date,
+    "null"/"unset"/"clear") to --assignee, --task, --due-date,
     --start-date. Omit the flag to leave it unchanged.
   • --assignee accepts: numeric id | email | display name | "me"
   • bk undo --count N rolls back your last N writes (max 10).
@@ -40,7 +40,7 @@ Command groups:
   project     list, view, create, edit, delete, members, updates, comment(s)
   issue       list, view, create, edit, delete, assign, watch, comment(s),
               edit-comment, delete-comment, attach, activity
-  milestone   list, view, create, edit, delete, comment(s)
+  task   list, view, create, edit, delete, comment(s)
   label       list, create, delete, attach, detach
   member      list, remove, leave
   invite      send, list, accept, decline, revoke, pending
@@ -67,7 +67,7 @@ func NewRoot() *cobra.Command {
 		newProjectCmd(),
 		newIssueCmd(),
 		newUserCmd(),
-		newMilestoneCmd(),
+		newTaskCmd(),
 		newLabelCmd(),
 		newMemberCmd(),
 		newInviteCmd(),

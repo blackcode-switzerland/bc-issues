@@ -11,7 +11,7 @@ This document is the **single source of truth** for the rebuild. Every phase bel
 
 ## 0. Executive summary
 
-We are restructuring the data model from `Project → Milestone → Issue` to `Workspace → (Projects, Milestones, Issues, Labels, Members, Analytics, Activity)` where projects/milestones/issues can be standalone within a workspace and linked or unlinked at will. Everything else — permissions, invitations, inbox, analytics, errors — is rebuilt around this.
+We are restructuring the data model from `Project → Task → Issue` to `Workspace → (Projects, Tasks, Issues, Labels, Members, Analytics, Activity)` where projects/tasks/issues can be standalone within a workspace and linked or unlinked at will. Everything else — permissions, invitations, inbox, analytics, errors — is rebuilt around this.
 
 The north star: **a tightly scoped Linear alternative we'd actually want to use ourselves.** Not feature-complete with Linear. Professional in the parts we do build.
 
@@ -19,7 +19,7 @@ The north star: **a tightly scoped Linear alternative we'd actually want to use 
 
 1. **Workspace is the unit of multi-tenancy.** Every domain row carries `workspace_id`. Every API call is workspace-scoped. There is no global cross-workspace listing.
 2. **Permissions are workspace-level only.** Two roles: `owner` (invite, remove members, delete workspace) and `member` (everything inside). No per-project ACLs, no nested roles. Anything else creates complexity we don't want.
-3. **Issues and milestones are first-class.** They can exist without a project. The project link is metadata, not ownership. The owning row is always the workspace.
+3. **Issues and tasks are first-class.** They can exist without a project. The project link is metadata, not ownership. The owning row is always the workspace.
 4. **Events are the spine.** Every domain mutation writes an event. Activity feed, inbox, and analytics are projections over events. We never duplicate this data; we project it.
 5. **Inbox is user-scoped, not workspace-scoped.** A single inbox spans all workspaces a user is in. Filterable by workspace/project/issue.
 6. **No email, no webhooks, no push.** All "notifications" are inbox messages with `read/unread` state. We won't pretend to send email.
@@ -51,7 +51,7 @@ We keep this brutally simple.
 - `workspaces.owner_id` is the **current** owner. Exactly one.
 - `workspace_members.role ∈ {'owner', 'member'}`. The owner row is always present in `workspace_members` for query consistency.
 - **Owner permissions:** invite members, remove members, transfer ownership, update workspace name/logo, delete workspace.
-- **Member permissions:** everything else inside the workspace (CRUD projects, milestones, issues, comments, labels, view analytics, view activity).
+- **Member permissions:** everything else inside the workspace (CRUD projects, tasks, issues, comments, labels, view analytics, view activity).
 - **Owner transfer:** a workspace must always have an owner. To leave, owner transfers to another member first. Or deletes the workspace.
 - **No per-project private projects.** Every member sees every project in the workspace. If users need privacy, they create another workspace.
 
@@ -59,30 +59,30 @@ We considered adding `admin` between owner and member (for managing labels, remo
 
 ### 1.3 Hierarchy: optional, non-transitive parenting
 
-The user's mental model is that projects, milestones, and issues are first-class within a workspace, linkable in any combination. We model this as **direct, optional foreign keys** rather than a transitive hierarchy.
+The user's mental model is that projects, tasks, and issues are first-class within a workspace, linkable in any combination. We model this as **direct, optional foreign keys** rather than a transitive hierarchy.
 
 ```
 issues.workspace_id   NOT NULL  → workspaces
 issues.project_id     NULLABLE  → projects
-issues.milestone_id   NULLABLE  → milestones
+issues.task_id   NULLABLE  → tasks
 
-milestones.workspace_id NOT NULL → workspaces
-milestones.project_id   NULLABLE → projects
+tasks.workspace_id NOT NULL → workspaces
+tasks.project_id   NULLABLE → projects
 
 projects.workspace_id   NOT NULL → workspaces
 ```
 
-**Rule we adopt:** the issue's project link is independent of its milestone's project link. If issue A is linked to milestone M which is linked to project P, the issue is **not** automatically "in project P." It belongs to P only if `issue.project_id = P`.
+**Rule we adopt:** the issue's project link is independent of its task's project link. If issue A is linked to task M which is linked to project P, the issue is **not** automatically "in project P." It belongs to P only if `issue.project_id = P`.
 
-This avoids the "what does it mean to be in two projects?" question and gives us simple, predictable listings. Listing "Issues in project P" returns issues where `project_id = P`. The "Issues in this project" page on a project will also offer a tab "Via milestones" that includes issues linked to a milestone of P but not directly to P — but only as a derived view, never persisted.
+This avoids the "what does it mean to be in two projects?" question and gives us simple, predictable listings. Listing "Issues in project P" returns issues where `project_id = P`. The "Issues in this project" page on a project will also offer a tab "Via tasks" that includes issues linked to a task of P but not directly to P — but only as a derived view, never persisted.
 
 **Cascade rules:**
 
 | Parent deleted | Child behavior |
 |---|---|
-| Workspace deleted | Cascade delete all rows (projects, milestones, issues, comments, attachments, labels, members, invitations, events scoped to it, inbox messages scoped to it) |
-| Project deleted | Issues' `project_id` set to NULL (issue survives). Milestones' `project_id` set to NULL (milestone survives). |
-| Milestone deleted | Issues' `milestone_id` set to NULL (issue survives). |
+| Workspace deleted | Cascade delete all rows (projects, tasks, issues, comments, attachments, labels, members, invitations, events scoped to it, inbox messages scoped to it) |
+| Project deleted | Issues' `project_id` set to NULL (issue survives). Tasks' `project_id` set to NULL (task survives). |
+| Task deleted | Issues' `task_id` set to NULL (issue survives). |
 | Issue deleted | Cascade delete comments, attachments, issue_labels. |
 | User deleted (soft) | Issue.assignee_id/reporter_id, comment.user_id stay pointing at the soft-deleted user row. UI shows "(deleted)". |
 
@@ -96,9 +96,9 @@ events {
   workspace_id    int       NOT NULL FK
   actor_user_id   int       NULL FK     -- null for system events
   actor_token_id  int       NULL FK     -- which API token, if via CLI
-  entity_type     text      NOT NULL    -- 'issue' | 'milestone' | 'project' | 'comment' | 'attachment' | 'label' | 'workspace' | 'member' | 'invitation'
+  entity_type     text      NOT NULL    -- 'issue' | 'task' | 'project' | 'comment' | 'attachment' | 'label' | 'workspace' | 'member' | 'invitation'
   entity_id       int       NOT NULL
-  action          text      NOT NULL    -- 'created' | 'updated' | 'deleted' | 'commented' | 'assigned' | 'unassigned' | 'status_changed' | 'priority_changed' | 'milestone_changed' | 'project_changed' | 'labeled' | 'unlabeled' | 'attached' | 'unattached' | 'mentioned' | 'member_added' | 'member_removed' | 'invited' | 'invitation_accepted' | 'ownership_transferred'
+  action          text      NOT NULL    -- 'created' | 'updated' | 'deleted' | 'commented' | 'assigned' | 'unassigned' | 'status_changed' | 'priority_changed' | 'task_changed' | 'project_changed' | 'labeled' | 'unlabeled' | 'attached' | 'unattached' | 'mentioned' | 'member_added' | 'member_removed' | 'invited' | 'invitation_accepted' | 'ownership_transferred'
   diff            jsonb     NULL        -- { before: {...}, after: {...} } for updates
   meta            jsonb     NULL        -- e.g. { mentioned_user_ids: [...], label_id, comment_id }
   occurred_at     timestamptz NOT NULL DEFAULT now()
@@ -128,7 +128,7 @@ inbox_messages {
   user_id       int       NOT NULL FK
   event_id      bigint    NULL FK         -- source event (null for synthetic messages)
   workspace_id  int       NULL FK         -- nullable for cross-workspace system messages
-  type          text      NOT NULL        -- 'mention' | 'assigned' | 'unassigned' | 'status_changed' | 'commented' | 'invitation' | 'member_added' | 'workspace_deleted' | 'ownership_transferred' | 'due_soon' | 'milestone_due_soon' | 'system'
+  type          text      NOT NULL        -- 'mention' | 'assigned' | 'unassigned' | 'status_changed' | 'commented' | 'invitation' | 'member_added' | 'workspace_deleted' | 'ownership_transferred' | 'due_soon' | 'task_due_soon' | 'system'
   entity_type   text      NULL            -- denormalized for filter UI
   entity_id     int       NULL
   payload       jsonb     NOT NULL        -- enough to render the message without joining events
@@ -153,7 +153,7 @@ inbox_messages {
 | `workspace.ownership_transferred` | new owner + old owner (type=`ownership_transferred`) |
 | `workspace.deleted` | all members (type=`workspace_deleted`) |
 | Cron: issue due within 24h | assignee (type=`due_soon`) |
-| Cron: milestone due within 72h | all watchers of issues in milestone (type=`milestone_due_soon`) |
+| Cron: task due within 72h | all watchers of issues in task (type=`task_due_soon`) |
 
 **Watchers** (`issue_watchers` table): you auto-watch when you create or are assigned to an issue. You auto-unwatch when unassigned, unless you've manually pinned it. Manual `bk issue watch/unwatch`.
 
@@ -239,10 +239,10 @@ Migration of existing labels: today they're keyed by project. We re-key to works
 
 ### 1.9 Analytics: views, filters, PDF
 
-The user wants analytics views: workspace, project, milestone, issues, member, with date filters and PDF download. We compute everything from `events` and the live state tables.
+The user wants analytics views: workspace, project, task, issues, member, with date filters and PDF download. We compute everything from `events` and the live state tables.
 
 **Implementation:**
-- A single `/api/workspaces/[ws]/analytics` route accepts query params: `view` (workspace|project|milestone|member), `id` (id of project/milestone/member when view ≠ workspace), `from`, `to`.
+- A single `/api/workspaces/[ws]/analytics` route accepts query params: `view` (workspace|project|task|member), `id` (id of project/task/member when view ≠ workspace), `from`, `to`.
 - Returns a normalized `AnalyticsPayload`:
   ```ts
   {
@@ -259,7 +259,7 @@ The user wants analytics views: workspace, project, milestone, issues, member, w
     by_assignee: [{ user_id, name, open, done }],
     by_label: [{ label_id, name, color, count }],
     velocity_series: [{ bucket: '2026-05-15', created, completed }],
-    burndown_series?: [{ date, remaining }],  // only for milestone view
+    burndown_series?: [{ date, remaining }],  // only for task view
     top_active_members: [{ user_id, name, events }],
   }
   ```
@@ -270,7 +270,7 @@ The user wants analytics views: workspace, project, milestone, issues, member, w
 
 ### 1.10 Activity page
 
-The activity page is the literal `events` table for a workspace, filtered/grouped for humans. Filters: actor, entity_type, action, project, milestone, date range.
+The activity page is the literal `events` table for a workspace, filtered/grouped for humans. Filters: actor, entity_type, action, project, task, date range.
 
 Reuses the same data the inbox is built from, so the two stay consistent.
 
@@ -421,7 +421,7 @@ projects
   INDEX (workspace_id, status)
   -- visibility, priority, banner_url, icon_url DROPPED (unused / over-engineered)
 
-milestones
+tasks
   id              serial PK
   workspace_id    int           NOT NULL FK → workspaces ON DELETE CASCADE   -- NEW
   project_id      int           FK → projects ON DELETE SET NULL              -- now NULLABLE
@@ -440,7 +440,7 @@ issues
   workspace_id    int           NOT NULL FK → workspaces ON DELETE CASCADE   -- NEW
   seq             int           NOT NULL                                       -- NEW: workspace-scoped, allocated via workspace_counters
   project_id      int           FK → projects ON DELETE SET NULL              -- now NULLABLE
-  milestone_id    int           FK → milestones ON DELETE SET NULL
+  task_id    int           FK → tasks ON DELETE SET NULL
   title           varchar(200)  NOT NULL
   description     text
   status          varchar(20)   NOT NULL DEFAULT 'backlog'  -- 'backlog'|'todo'|'in_progress'|'in_review'|'done'|'cancelled'
@@ -458,7 +458,7 @@ issues
   INDEX (workspace_id, status)
   INDEX (workspace_id, assignee_id)
   INDEX (workspace_id, project_id) WHERE project_id IS NOT NULL
-  INDEX (workspace_id, milestone_id) WHERE milestone_id IS NOT NULL
+  INDEX (workspace_id, task_id) WHERE task_id IS NOT NULL
   INDEX (workspace_id, priority)
 
 labels
@@ -486,8 +486,8 @@ issue_watchers
 comments
   id              serial PK
   workspace_id    int           NOT NULL FK → workspaces ON DELETE CASCADE   -- NEW
-  parent_type     varchar(20)   NOT NULL CHECK parent_type IN ('issue','milestone','project')   -- NEW
-  parent_id       int           NOT NULL                                       -- references issues/milestones/projects by parent_type; integrity in query layer
+  parent_type     varchar(20)   NOT NULL CHECK parent_type IN ('issue','task','project')   -- NEW
+  parent_id       int           NOT NULL                                       -- references issues/tasks/projects by parent_type; integrity in query layer
   user_id         int           FK → users ON DELETE SET NULL
   content         text          NOT NULL                          -- markdown
   mentions        int[]                                            -- NEW: cached @-mention user_ids
@@ -575,15 +575,15 @@ GET     /api/workspaces/[ws]/projects/[id]
 PATCH   /api/workspaces/[ws]/projects/[id]
 DELETE  /api/workspaces/[ws]/projects/[id]
 
-# Milestones
-GET     /api/workspaces/[ws]/milestones?project_id=&status=&search=&cursor=
-POST    /api/workspaces/[ws]/milestones
-GET     /api/workspaces/[ws]/milestones/[id]
-PATCH   /api/workspaces/[ws]/milestones/[id]
-DELETE  /api/workspaces/[ws]/milestones/[id]
+# Tasks
+GET     /api/workspaces/[ws]/tasks?project_id=&status=&search=&cursor=
+POST    /api/workspaces/[ws]/tasks
+GET     /api/workspaces/[ws]/tasks/[id]
+PATCH   /api/workspaces/[ws]/tasks/[id]
+DELETE  /api/workspaces/[ws]/tasks/[id]
 
 # Issues
-GET     /api/workspaces/[ws]/issues?project_id=&milestone_id=&assignee_id=&status=&label_id=&priority=&search=&cursor=&sort=
+GET     /api/workspaces/[ws]/issues?project_id=&task_id=&assignee_id=&status=&label_id=&priority=&search=&cursor=&sort=
 POST    /api/workspaces/[ws]/issues
 GET     /api/workspaces/[ws]/issues/[id]
 PATCH   /api/workspaces/[ws]/issues/[id]
@@ -608,7 +608,7 @@ PATCH   /api/workspaces/[ws]/labels/[id]
 DELETE  /api/workspaces/[ws]/labels/[id]
 
 # Activity
-GET     /api/workspaces/[ws]/activity?actor=&entity_type=&action=&project_id=&milestone_id=&from=&to=&cursor=
+GET     /api/workspaces/[ws]/activity?actor=&entity_type=&action=&project_id=&task_id=&from=&to=&cursor=
 
 # Analytics
 GET     /api/workspaces/[ws]/analytics?view=&id=&from=&to=
@@ -660,14 +660,14 @@ Migrations:
 4. For each existing project: derive a workspace assignment. Use this rule:
    - If the project has members other than the owner, create a new shared workspace (`name = project.name + ' workspace'`, owner = project.owner_id) and put all project members in it.
    - Otherwise, attach the project to its owner's Personal workspace.
-5. Add `workspace_id` columns to `projects`, `milestones`, `issues`, `comments`, `attachments` (nullable initially), backfill them via joins, then `ALTER ... SET NOT NULL`.
+5. Add `workspace_id` columns to `projects`, `tasks`, `issues`, `comments`, `attachments` (nullable initially), backfill them via joins, then `ALTER ... SET NOT NULL`.
 6. Add `labels.workspace_id`, backfill from `projects.workspace_id`. Deduplicate label names per workspace (coalesce + repoint `issue_labels`).
 7. Add `users.deleted_at`, `users.tagline`, `users.active_workspace_id`.
 8. Replace `users.email` unique constraint with partial unique on `WHERE deleted_at IS NULL`.
 
 After this phase, every existing API route still works as before — we haven't changed any route URL or handler logic yet. Internal queries just have access to `workspace_id` for free.
 
-**Verification:** boot the app, log in, see all old projects/milestones/issues exactly as before. CLI `bk projects ls` returns same results.
+**Verification:** boot the app, log in, see all old projects/tasks/issues exactly as before. CLI `bk projects ls` returns same results.
 
 **Acceptance:** schema migrated, data backfilled, all current routes pass smoke tests.
 
@@ -675,7 +675,7 @@ After this phase, every existing API route still works as before — we haven't 
 
 **Goal:** route everything through `/api/workspaces/[ws]/...`, but keep the old `/api/projects/...` etc. as compatibility shims that resolve workspace internally.
 
-- [ ] Create new routes under `app/api/workspaces/[ws]/...` for projects/milestones/issues/comments/attachments. Each uses `workspaceContext()` to assert membership.
+- [ ] Create new routes under `app/api/workspaces/[ws]/...` for projects/tasks/issues/comments/attachments. Each uses `workspaceContext()` to assert membership.
 - [ ] Keep old routes (`/api/projects/[id]`, etc.) as shims that internally look up `project.workspace_id` and call the new handlers. Mark `@deprecated` in code.
 - [ ] Add `POST /api/workspaces`, `GET /api/workspaces/[ws]`, `PATCH /api/workspaces/[ws]`, `DELETE /api/workspaces/[ws]`, `POST /api/workspaces/[ws]/transfer`.
 - [ ] Add `GET /api/me/workspaces`, `POST /api/me/active-workspace`.
@@ -683,7 +683,7 @@ After this phase, every existing API route still works as before — we haven't 
 - [ ] Frontend: `/dashboard/[ws]/...` route group. Existing `/dashboard/...` routes redirect to `/dashboard/[active-ws-slug]/...`.
 - [ ] Frontend: `/dashboard/[ws]/settings/workspace` page (name, logo upload, transfer, delete with confirmation).
 
-**Acceptance:** can create a workspace, switch to it, projects/milestones/issues in it are isolated from other workspaces. Old URLs still work via shim. CLI continues to work against the shims.
+**Acceptance:** can create a workspace, switch to it, projects/tasks/issues in it are isolated from other workspaces. Old URLs still work via shim. CLI continues to work against the shims.
 
 ### Phase 3 — Members & invitations (1-2 sessions)
 
@@ -707,11 +707,11 @@ After this phase, every existing API route still works as before — we haven't 
 **Goal:** replace `transaction_log` with `events`. Build the activity page. Migrate undo to use new table.
 
 - [ ] Migration: create `events` table with indexes from §1.4.
-- [ ] Refactor every mutation route to call `recordEvent(tx, ...)` in the same transaction. This includes: workspace CRUD, member changes, project/milestone/issue/comment/attachment/label CRUD, status/priority/assignee changes (each gets a distinct `action`).
+- [ ] Refactor every mutation route to call `recordEvent(tx, ...)` in the same transaction. This includes: workspace CRUD, member changes, project/task/issue/comment/attachment/label CRUD, status/priority/assignee changes (each gets a distinct `action`).
 - [ ] Backfill: from `transaction_log` rows, generate equivalent `events` rows (best-effort, with `meta.migrated_from = 'transaction_log'`). For old rows where workspace_id is unknown, derive it from the target entity.
 - [ ] `GET /api/workspaces/[ws]/activity` with filters. Returns `{ data: [...], next_cursor }`.
-- [ ] Frontend: `/dashboard/[ws]/activity` page. Filter panel: actor (multi), entity type (multi), action (multi), project, milestone, date range. List grouped by day.
-- [ ] Refactor undo: replace lookups against `transaction_log` with `events`. Undo only applies to events where `action ∈ ('created','updated','deleted','assigned','status_changed','priority_changed','milestone_changed','project_changed','labeled','unlabeled')` and the user is the actor. Same 5-undo limit as today (or whatever current behavior is).
+- [ ] Frontend: `/dashboard/[ws]/activity` page. Filter panel: actor (multi), entity type (multi), action (multi), project, task, date range. List grouped by day.
+- [ ] Refactor undo: replace lookups against `transaction_log` with `events`. Undo only applies to events where `action ∈ ('created','updated','deleted','assigned','status_changed','priority_changed','task_changed','project_changed','labeled','unlabeled')` and the user is the actor. Same 5-undo limit as today (or whatever current behavior is).
 - [ ] Keep `transaction_log` table for one more release for rollback safety, but stop writing to it.
 
 **Acceptance:** every mutation produces an event. The activity page renders. Undo still works (now reading from `events`).
@@ -747,21 +747,21 @@ After this phase, every existing API route still works as before — we haven't 
 
 ### Phase 7 — Three listing pages with list/kanban/timeline views (3-4 sessions)
 
-**Goal:** rebuild the three main listing pages — projects, milestones, issues — with search, filters, and three views.
+**Goal:** rebuild the three main listing pages — projects, tasks, issues — with search, filters, and three views.
 
 This is the biggest visual workload. We do it after the data plumbing is right.
 
-For each of the three pages (`/dashboard/[ws]/projects`, `/dashboard/[ws]/milestones`, `/dashboard/[ws]/issues`):
+For each of the three pages (`/dashboard/[ws]/projects`, `/dashboard/[ws]/tasks`, `/dashboard/[ws]/issues`):
 
 - [ ] **List view** — paginated table. Sort by any column. Saved sort/filter as URL query params.
-- [ ] **Kanban view** — columns by status (issues, milestones) or by quarter (projects, grouped by `end_date` quarter). Drag-and-drop to change status.
-- [ ] **Timeline view** — Gantt-style horizontal bars. Issues span `start_date` → `due_date`. Milestones plot as a vertical line on `due_date`. Projects span `start_date` → `end_date`. Library choice: build a simple custom timeline (Gantt libraries are heavy and over-styled); we have date ranges and a horizontal scroller is enough.
+- [ ] **Kanban view** — columns by status (issues, tasks) or by quarter (projects, grouped by `end_date` quarter). Drag-and-drop to change status.
+- [ ] **Timeline view** — Gantt-style horizontal bars. Issues span `start_date` → `due_date`. Tasks plot as a vertical line on `due_date`. Projects span `start_date` → `end_date`. Library choice: build a simple custom timeline (Gantt libraries are heavy and over-styled); we have date ranges and a horizontal scroller is enough.
 - [ ] **Search:** simple ILIKE on name/title/description (Postgres `pg_trgm` index added later if needed).
-- [ ] **Filters:** assignee (multi), status (multi), priority (multi), label (multi), project (for issues/milestones), milestone (for issues), date range. Filters persist in URL.
+- [ ] **Filters:** assignee (multi), status (multi), priority (multi), label (multi), project (for issues/tasks), task (for issues), date range. Filters persist in URL.
 - [ ] **Empty/loading/error states** for each view.
-- [ ] **Standalone entities visible**: the issues list shows issues regardless of project/milestone link. A facet shows "No project" / "No milestone" as filter options.
+- [ ] **Standalone entities visible**: the issues list shows issues regardless of project/task link. A facet shows "No project" / "No task" as filter options.
 
-A reasonable build order: issues list → kanban → timeline → milestones (same shape) → projects (same shape). The kanban/timeline components should be parameterized — same component, different field bindings.
+A reasonable build order: issues list → kanban → timeline → tasks (same shape) → projects (same shape). The kanban/timeline components should be parameterized — same component, different field bindings.
 
 **Acceptance:** all three pages have all three views, share filter components, URL-state synced, ~50ms perceived load on a dataset of 1k rows.
 
@@ -780,7 +780,7 @@ A reasonable build order: issues list → kanban → timeline → milestones (sa
 **Goal:** the analytics page.
 
 - [ ] `GET /api/workspaces/[ws]/analytics` with full `AnalyticsPayload` (§1.9).
-- [ ] Frontend: `/dashboard/[ws]/analytics` page. View selector (workspace/project/milestone/member), date range picker, charts. Recharts for charts.
+- [ ] Frontend: `/dashboard/[ws]/analytics` page. View selector (workspace/project/task/member), date range picker, charts. Recharts for charts.
 - [ ] Print view: `/dashboard/[ws]/analytics/print?view=...&id=...&from=...&to=...` — no shell, no nav, print-styled. "Download PDF" opens this in a new window and immediately calls `window.print()`.
 - [ ] CSS print stylesheet for clean PDFs (page breaks before each major section, no shadows).
 - [ ] Test PDF export from each view.
@@ -827,7 +827,7 @@ A reasonable build order: issues list → kanban → timeline → milestones (sa
   - `bk label list|create|delete`
   - `bk issue label add|remove`
   - `bk invite send|list|revoke`
-- [ ] Rewire existing commands (`bk project|milestone|issue ...`) to call `/api/workspaces/[ws]/...` using the active workspace.
+- [ ] Rewire existing commands (`bk project|task|issue ...`) to call `/api/workspaces/[ws]/...` using the active workspace.
 - [ ] Bump CLI version to `0.2.0`. On startup, ping `/api/version`; if server version requires CLI ≥ 0.2.0 and CLI is older, print upgrade message + exit non-zero.
 - [ ] Update `docs/cli-sync.md` worked examples for the new endpoints.
 - [ ] Smoke test script (`scripts/cli-smoke.sh`) covering create workspace → invite → accept → create project → issue → comment → mention → assign → kanban move → archive → delete workspace.
@@ -861,10 +861,10 @@ pass can pick up where this one left off:
 - `comments.issue_id` — still read by two queries: the `comment_count`
   subquery in `issues.ts` and the activity query in `activity.ts`. Replace
   both with `(parent_type='issue' AND parent_id = i.id)` before dropping.
-- Legacy API shims (`/api/projects`, `/api/issues`, `/api/milestones`,
+- Legacy API shims (`/api/projects`, `/api/issues`, `/api/tasks`,
   `/api/analytics`, `/api/users/me`, `/api/issues/[id]/comments`,
   `/api/issues/[id]/attachments`) — kept because the CLI's existing
-  `bk project|issue|milestone|...` commands still call them. Could be
+  `bk project|issue|task|...` commands still call them. Could be
   removed once the CLI is migrated to call `/api/workspaces/[ws]/...`
   directly. Today the shims just resolve active workspace and forward.
 
@@ -878,8 +878,8 @@ pass can pick up where this one left off:
 - [ ] Add `idx_events_workspace_actor_occurred` if member-page queries are slow.
 - [ ] Add `pg_trgm` and `GIN` indexes on `issues.title`, `issues.description`, `projects.name` if search is slow.
 - [ ] Lighthouse pass on every page; fix top 3 issues.
-- [ ] Empty state design on every list (no projects yet, no milestones, no issues, no labels, no members beyond self, empty inbox, no activity).
-- [ ] Keyboard shortcuts: `c` create issue, `g i` go to issues, `g p` projects, `g m` milestones, `g a` activity, `/` search, `?` shortcuts help.
+- [ ] Empty state design on every list (no projects yet, no tasks, no issues, no labels, no members beyond self, empty inbox, no activity).
+- [ ] Keyboard shortcuts: `c` create issue, `g i` go to issues, `g p` projects, `g m` tasks, `g a` activity, `/` search, `?` shortcuts help.
 - [ ] Dark/light mode polish (already in place; verify on new pages).
 
 **Acceptance:** the team uses it daily for a sprint and prefers it to Linear for this team's workflow.
@@ -904,7 +904,7 @@ pass can pick up where this one left off:
 
 1. **Mentions stay email-based.** No username column. When the user types `@` in a comment box, an autocomplete dropdown queries workspace members and inserts the chosen user's `email` token (rendered nicely in the comment). The parser stores resolved `user_id`s in `comments.mentions` so we don't depend on the textual form for lookups later.
 2. **Issue identifiers: `WORKSPACE_KEY-<seq>`, workspace-scoped.** Every `workspaces` row has a `key` (3–6 chars, uppercase, alphanumeric, unique). Default derived from the slug; owner-editable. Every `issues` row has a `seq` (int, unique within workspace). Display is always `<workspace.key>-<seq>` (e.g. `ACME-42`) — the number is stable even if the issue moves between projects. Sequence is allocated via a Postgres advisory lock or a per-workspace counter table to avoid gaps under contention. We pick **a counter table** (`workspace_counters(workspace_id, last_issue_seq)`) updated in the same transaction as the insert — predictable, no race.
-3. **Polymorphic comments.** `comments` is generalized: `parent_type ∈ ('issue','milestone','project')`, `parent_id` references the right table by convention (enforced in the query layer, not via FK). All existing comments migrate to `parent_type='issue'`. Workspace and project pages get a "Discussion" tab; milestone pages get one too. Attachments and watchers stay issue-only for v1 — there's no real ask for project-level attachments.
+3. **Polymorphic comments.** `comments` is generalized: `parent_type ∈ ('issue','task','project')`, `parent_id` references the right table by convention (enforced in the query layer, not via FK). All existing comments migrate to `parent_type='issue'`. Workspace and project pages get a "Discussion" tab; task pages get one too. Attachments and watchers stay issue-only for v1 — there's no real ask for project-level attachments.
 4. **No email notifications.** Inbox-only, confirmed.
 5. **Polling, not push, for v1.** SWR with focus-revalidate and a 30s inbox-badge poll. Revisit if the team complains about staleness.
 
@@ -937,10 +937,10 @@ pass can pick up where this one left off:
 6. Bob retries Delete Account. Now succeeds: his `Personal` workspace is sole-owner-no-members, gets hard-deleted. Acme survives with Alice as owner. Bob's user row is soft-deleted.
 7. Acme's members page shows Bob's name with "(deleted)" badge in old comments and the activity feed.
 
-### A.3 Issue with no project, attached to milestone with project P, then filter by project P
-1. Alice creates issue `WS-42` with no project, attached to milestone `M` which is in project `P`.
-2. Alice opens `/dashboard/[ws]/projects/P`. The page shows tabs "Issues directly in P" and "Issues via milestones of P". The first tab excludes `WS-42`, the second includes it.
-3. If Alice goes to "Issues" page and filters `project = P`, she sees only the first tab's contents (direct project membership). To find `WS-42` she'd filter `milestone = M`.
+### A.3 Issue with no project, attached to task with project P, then filter by project P
+1. Alice creates issue `WS-42` with no project, attached to task `M` which is in project `P`.
+2. Alice opens `/dashboard/[ws]/projects/P`. The page shows tabs "Issues directly in P" and "Issues via tasks of P". The first tab excludes `WS-42`, the second includes it.
+3. If Alice goes to "Issues" page and filters `project = P`, she sees only the first tab's contents (direct project membership). To find `WS-42` she'd filter `task = M`.
 4. This is intentional — the project link on an issue is a deliberate, direct association.
 
 ### A.4 Comment mentions a non-member
@@ -980,13 +980,13 @@ To stay honest about scope. These are deliberate omissions for v1; we may revisi
 - Full-text search beyond ILIKE
 - Saved views / custom filters as first-class entities
 - Issue templates
-- Sub-issues / parent-child issues beyond the milestone link
+- Sub-issues / parent-child issues beyond the task link
 - Slash commands in comments
 - Mobile app
 - SAML / SSO beyond Google
 - Multi-language / i18n
 - Per-project private projects (use a separate workspace)
-- Cycle / sprint as a first-class entity (milestones cover this)
+- Cycle / sprint as a first-class entity (tasks cover this)
 - Roadmap view
 - Recurring issues
 - Time tracking (we keep `estimated_hours` but no log)
@@ -997,24 +997,24 @@ If something here turns out to be a must-have, it gets a phase 14+ and a write-u
 
 ## Appendix D — Recycle bin (soft-delete, restore, purge)
 
-Added after v1. Deleting an issue, project, or milestone no longer hard-deletes
+Added after v1. Deleting an issue, project, or task no longer hard-deletes
 it; it moves to a per-workspace **Trash** (`/dashboard/trash`, `bk trash`).
 
 ### Data model (migration `0022_recycle_bin`)
-- `issues`, `projects`, `milestones` each gain `deleted_at` (NULL = active),
+- `issues`, `projects`, `tasks` each gain `deleted_at` (NULL = active),
   `deleted_by`, and `delete_batch_id`.
 - `deletion_batches(id, workspace_id, actor_user_id, mode, root_type, root_id,
   created_at)` records one delete operation. `mode` is `cascade` (children binned
   with the root) or `detach` (children kept active, unlinked).
 
 **Why soft-delete keeps the row, not a snapshot:** the row's FK columns
-(`project_id`, `milestone_id`) survive, so cascade-deleted children re-link to
+(`project_id`, `task_id`) survive, so cascade-deleted children re-link to
 their parent automatically on restore, and an issue's `seq` slot is never freed —
 restore can't collide on `uq_issues_workspace_seq`. There are no unique-name
-constraints on projects/milestones, so restore never collides on name either.
+constraints on projects/tasks, so restore never collides on name either.
 
 ### Engine — `lib/db/queries/deletion.ts`
-- `softDelete{Issue,Project,Milestone}` / `softDeleteEntity` — stamp the row,
+- `softDelete{Issue,Project,Task}` / `softDeleteEntity` — stamp the row,
   create a batch, record a `deleted` event. Cascade stamps children (FKs kept);
   detach nulls children's link and leaves them active.
 - `previewDeletion` — active child counts for the "delete N issues too?" dialog.
@@ -1030,12 +1030,12 @@ constraints on projects/milestones, so restore never collides on name either.
   delete (the existing FK cascades wipe comments/attachments/labels/watchers).
   Records `purged` before deleting. **Owner-only** at the route layer.
 
-The legacy `delete{Issue,Project,Milestone}` query functions now delegate to the
+The legacy `delete{Issue,Project,Task}` query functions now delegate to the
 soft-delete engine (default `mode = detach`, matching the old hard-delete + FK
 SET NULL behavior), so existing callers keep working.
 
 ### Read-path filtering
-Every query that reads `issues`/`projects`/`milestones` filters
+Every query that reads `issues`/`projects`/`tasks` filters
 `deleted_at IS NULL` so binned rows vanish from active views and counts. For the
 aggregate-count queries the filter goes in the JOIN condition
 (`LEFT JOIN issues i ON … AND i.deleted_at IS NULL`) to preserve zero-child rows.
@@ -1055,7 +1055,7 @@ to any member; **purge and empty-bin require the workspace owner** (`requireOwne
   `delete-with-children-dialog` (cascade/detach toggle) and
   `restore-conflict-dialog` (per-item parent resolution).
 - CLI: `bk trash list|restore|purge|empty`; `--cascade`/`--detach` on
-  `project delete` and `milestone delete`.
+  `project delete` and `task delete`.
 
 ### Tests
 `npm test` (Vitest) runs the route-parser unit tests; set `TEST_DATABASE_URL` to

@@ -4,7 +4,7 @@ import "testing"
 
 func TestParseRefs(t *testing.T) {
 	t.Run("valid mixed refs", func(t *testing.T) {
-		refs, err := parseRefs([]string{"issue:42", "project:3", "milestone:7"})
+		refs, err := parseRefs([]string{"issue:42", "project:3", "task:7"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -14,7 +14,7 @@ func TestParseRefs(t *testing.T) {
 		want := []struct {
 			typ string
 			id  int
-		}{{"issue", 42}, {"project", 3}, {"milestone", 7}}
+		}{{"issue", 42}, {"project", 3}, {"task", 7}}
 		for i, w := range want {
 			if refs[i].Type != w.typ || refs[i].ID != w.id {
 				t.Errorf("ref %d = %s:%d, want %s:%d", i, refs[i].Type, refs[i].ID, w.typ, w.id)

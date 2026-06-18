@@ -22,7 +22,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
 
-  // ?preview=1 reports how many attached issues/milestones a delete would touch,
+  // ?preview=1 reports how many attached issues/tasks a delete would touch,
   // so the delete dialog can show "delete N issues too?" without mutating.
   if (req.nextUrl.searchParams.get('preview')) {
     const counts = await previewDeletion(ctx.workspace.id, 'project', id)

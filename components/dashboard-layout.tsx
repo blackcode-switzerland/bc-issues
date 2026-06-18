@@ -43,7 +43,7 @@ const NAV_PRIMARY = [
 
 const NAV_WORKSPACE = [
   { href: '/dashboard', label: 'Projects', icon: LayoutGrid, match: (p: string) => p === '/dashboard' },
-  { href: '/dashboard/milestones', label: 'Milestones', icon: Target, match: (p: string) => p === '/dashboard/milestones' || p.startsWith('/dashboard/milestones/') },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: Target, match: (p: string) => p === '/dashboard/tasks' || p.startsWith('/dashboard/tasks/') },
   { href: '/dashboard/issues', label: 'Issues', icon: List, match: (p: string) => p === '/dashboard/issues' || p.startsWith('/dashboard/issues/') },
   { href: '/dashboard/labels', label: 'Labels', icon: Tag, match: (p: string) => p === '/dashboard/labels' },
 ]
@@ -94,11 +94,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       const slug = ws!.slug
       const [p, m, i, l] = await Promise.all([
         fetch(`/api/workspaces/${slug}/projects`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
-        fetch(`/api/workspaces/${slug}/milestones`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
+        fetch(`/api/workspaces/${slug}/tasks`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
         fetch(`/api/workspaces/${slug}/issues`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
         fetch(`/api/workspaces/${slug}/labels`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
       ])
-      return { projects: p, milestones: m, issues: i, labels: l }
+      return { projects: p, tasks: m, issues: i, labels: l }
     },
   })
 
@@ -141,7 +141,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {NAV_WORKSPACE.map((item) => {
             const countMap: Record<string, number | undefined> = {
               '/dashboard': counts?.projects,
-              '/dashboard/milestones': counts?.milestones,
+              '/dashboard/tasks': counts?.tasks,
               '/dashboard/issues': counts?.issues,
               '/dashboard/labels': counts?.labels,
             }

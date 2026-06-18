@@ -223,8 +223,8 @@ func newIssueViewCmd() *cobra.Command {
 				fmt.Fprintf(w, "Status:      %s\n", iss.Status)
 				fmt.Fprintf(w, "Priority:    P%d\n", iss.Priority)
 				fmt.Fprintf(w, "Assignees:   %s\n", issueAssigneeLabel(iss.Assignees))
-				if iss.MilestoneName != nil {
-					fmt.Fprintf(w, "Milestone:   %s\n", *iss.MilestoneName)
+				if iss.TaskName != nil {
+					fmt.Fprintf(w, "Task:   %s\n", *iss.TaskName)
 				}
 				if iss.DueDate != nil {
 					fmt.Fprintf(w, "Due:         %s\n", *iss.DueDate)
@@ -241,7 +241,7 @@ func newIssueViewCmd() *cobra.Command {
 func newIssueCreateCmd() *cobra.Command {
 	var projectID, priority int
 	var title, description, descriptionFile, status, attach string
-	var assignee, milestone, startDate, dueDate string
+	var assignee, task, startDate, dueDate string
 	var labels []string
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -280,12 +280,12 @@ func newIssueCreateCmd() *cobra.Command {
 					req.AssigneeIDs = []int{uid}
 				}
 			}
-			if milestone != "" {
-				raw, err := PlainIntOrNullJSON(milestone)
+			if task != "" {
+				raw, err := PlainIntOrNullJSON(task)
 				if err != nil {
 					return err
 				}
-				req.MilestoneID = raw
+				req.TaskID = raw
 			}
 			if startDate != "" {
 				req.StartDate = &startDate
@@ -327,7 +327,7 @@ func newIssueCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&priority, "priority", 0, "Priority 1-5 (1=urgent)")
 	cmd.Flags().StringVar(&attach, "attach", "", "Path to a file to attach")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, or 'me')")
-	cmd.Flags().StringVar(&milestone, "milestone", "", "Milestone id")
+	cmd.Flags().StringVar(&task, "task", "", "Task id")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "Label name (repeatable); existing labels matched, unknown ones created")
@@ -337,10 +337,10 @@ func newIssueCreateCmd() *cobra.Command {
 func newIssueEditCmd() *cobra.Command {
 	var status, title, description, descriptionFile string
 	var priority int
-	var assignee, milestone, startDate, dueDate string
+	var assignee, task, startDate, dueDate string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit an issue (status, title, priority, description, assignee, milestone, dates)",
+		Short: "Edit an issue (status, title, priority, description, assignee, task, dates)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
@@ -385,12 +385,12 @@ func newIssueEditCmd() *cobra.Command {
 					req.AssigneeIDs = encoded
 				}
 			}
-			if cmd.Flags().Changed("milestone") {
-				raw, err := PlainIntOrNullJSON(milestone)
+			if cmd.Flags().Changed("task") {
+				raw, err := PlainIntOrNullJSON(task)
 				if err != nil {
 					return err
 				}
-				req.MilestoneID = raw
+				req.TaskID = raw
 			}
 			if cmd.Flags().Changed("start-date") {
 				req.StartDate = StringOrNullJSON(startDate)
@@ -414,7 +414,7 @@ func newIssueEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
 	cmd.Flags().IntVar(&priority, "priority", 0, "New priority (1-5)")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, 'me', or 'none' to clear)")
-	cmd.Flags().StringVar(&milestone, "milestone", "", "Milestone id (or 'none' to clear)")
+	cmd.Flags().StringVar(&task, "task", "", "Task id (or 'none' to clear)")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD (or 'none')")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD (or 'none')")
 	return cmd

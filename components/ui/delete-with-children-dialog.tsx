@@ -5,8 +5,8 @@ import { Loader2, Trash2 } from 'lucide-react'
 import { Modal } from './modal'
 
 /**
- * Delete dialog for projects and milestones — where the user must choose what
- * happens to the attached issues/milestones. `useConfirm` can only return a
+ * Delete dialog for projects and tasks — where the user must choose what
+ * happens to the attached issues/tasks. `useConfirm` can only return a
  * boolean, so this is a separate imperative dialog that returns the chosen
  * delete *mode*:
  *
@@ -24,11 +24,11 @@ import { Modal } from './modal'
 export type DeleteMode = 'cascade' | 'detach'
 
 export interface DeleteDialogOptions {
-  kind: 'project' | 'milestone'
+  kind: 'project' | 'task'
   /** Name of the item, shown in the title. */
   name?: string
   /** Precomputed child counts (used for bulk where we don't fetch per item). */
-  counts?: { issues: number; milestones: number }
+  counts?: { issues: number; tasks: number }
   /** If set, the dialog fetches exact counts from this `?preview=1` URL. */
   previewUrl?: string
   /** Override the count copy entirely (e.g. "12 issues across 3 projects"). */
@@ -58,16 +58,16 @@ export function useDeleteDialog(): DeleteDialogContextValue {
 }
 
 function childSummary(
-  kind: 'project' | 'milestone',
-  counts: { issues: number; milestones: number } | null,
+  kind: 'project' | 'task',
+  counts: { issues: number; tasks: number } | null,
   childLabel?: string
 ): string {
   if (childLabel) return childLabel
-  if (!counts) return kind === 'project' ? 'its issues and milestones' : 'its issues'
+  if (!counts) return kind === 'project' ? 'its issues and tasks' : 'its issues'
   const parts: string[] = []
   if (counts.issues > 0) parts.push(`${counts.issues} ${counts.issues === 1 ? 'issue' : 'issues'}`)
-  if (kind === 'project' && counts.milestones > 0) {
-    parts.push(`${counts.milestones} ${counts.milestones === 1 ? 'milestone' : 'milestones'}`)
+  if (kind === 'project' && counts.tasks > 0) {
+    parts.push(`${counts.tasks} ${counts.tasks === 1 ? 'task' : 'tasks'}`)
   }
   if (parts.length === 0) return ''
   if (parts.length === 1) return parts[0]
@@ -77,7 +77,7 @@ function childSummary(
 export function DeleteDialogProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null)
   const [mode, setMode] = useState<DeleteMode>('detach')
-  const [counts, setCounts] = useState<{ issues: number; milestones: number } | null>(null)
+  const [counts, setCounts] = useState<{ issues: number; tasks: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const resolverRef = useRef<Pending | null>(null)
 
@@ -102,7 +102,7 @@ export function DeleteDialogProvider({ children }: { children: React.ReactNode }
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!cancelled && j && typeof j === 'object') {
-          setCounts({ issues: Number(j.issues ?? 0), milestones: Number(j.milestones ?? 0) })
+          setCounts({ issues: Number(j.issues ?? 0), tasks: Number(j.tasks ?? 0) })
         }
       })
       .catch(() => {})
@@ -122,7 +122,7 @@ export function DeleteDialogProvider({ children }: { children: React.ReactNode }
 
   const opts = pending?.opts
   const summary = childSummary(opts?.kind ?? 'project', counts, opts?.childLabel)
-  const hasChildren = !counts || counts.issues > 0 || (opts?.kind === 'project' && counts.milestones > 0)
+  const hasChildren = !counts || counts.issues > 0 || (opts?.kind === 'project' && counts.tasks > 0)
   const noun = opts?.kind ?? 'project'
 
   return (

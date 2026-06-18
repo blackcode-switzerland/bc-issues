@@ -36,9 +36,9 @@ interface IssueRow {
   status: string
   priority: number
   project_id: number | null
-  milestone_id: number | null
+  task_id: number | null
   assignees: IssueAssignee[]
-  milestone_name: string | null
+  task_name: string | null
   project_name: string | null
   project_icon: string | null
   project_color: string | null
@@ -74,7 +74,7 @@ interface Project {
   icon?: string | null
 }
 
-interface Milestone {
+interface Task {
   id: number
   name: string
 }
@@ -99,7 +99,7 @@ export function IssuesListing() {
   const [priority, setPriority] = useState<Array<string | number>>([])
   const [assignees, setAssignees] = useState<Array<string | number>>([])
   const [projects, setProjects] = useState<Array<string | number>>([])
-  const [milestones, setMilestones] = useState<Array<string | number>>([])
+  const [tasks, setTasks] = useState<Array<string | number>>([])
   const [labels, setLabels] = useState<Array<string | number>>([])
   const [labelMode, setLabelMode] = useState<LabelFilterMode>('any')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -143,14 +143,14 @@ export function IssuesListing() {
       return j.data as Project[]
     },
   })
-  const { data: milestoneList } = useQuery({
-    queryKey: ['ws-milestones', ws?.slug],
+  const { data: taskList } = useQuery({
+    queryKey: ['ws-tasks', ws?.slug],
     enabled: !!ws,
     queryFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks`)
       if (!res.ok) return []
       const j = await res.json()
-      return j.data as Milestone[]
+      return j.data as Task[]
     },
   })
   const { data: labelList } = useQuery({
@@ -164,10 +164,10 @@ export function IssuesListing() {
     },
   })
 
-  const hasFilters = !!(search || status.length || priority.length || assignees.length || projects.length || milestones.length || labels.length)
+  const hasFilters = !!(search || status.length || priority.length || assignees.length || projects.length || tasks.length || labels.length)
 
   const issuesQuery = useQuery({
-    queryKey: ['ws-issues', ws?.slug, { search, status, priority, assignees, projects, milestones, labels, labelMode }],
+    queryKey: ['ws-issues', ws?.slug, { search, status, priority, assignees, projects, tasks, labels, labelMode }],
     enabled: !!ws,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -177,7 +177,7 @@ export function IssuesListing() {
       if (priority.length === 1) params.set('priority', String(priority[0]))
       if (assignees.length === 1) params.set('assignee_ids', String(assignees[0]))
       if (projects.length === 1 && projects[0] !== 'null') params.set('project_id', String(projects[0]))
-      if (milestones.length === 1 && milestones[0] !== 'null') params.set('milestone_id', String(milestones[0]))
+      if (tasks.length === 1 && tasks[0] !== 'null') params.set('task_id', String(tasks[0]))
       params.set('limit', '200')
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues?${params}`)
       if (!res.ok) throw new Error('failed')
@@ -198,10 +198,10 @@ export function IssuesListing() {
         (hasNull && d.project_id == null) || (d.project_id != null && projects.includes(d.project_id))
       )
     }
-    if (milestones.length > 1 || milestones.includes('null')) {
-      const hasNull = milestones.includes('null')
+    if (tasks.length > 1 || tasks.includes('null')) {
+      const hasNull = tasks.includes('null')
       data = data.filter((d) =>
-        (hasNull && d.milestone_id == null) || (d.milestone_id != null && milestones.includes(d.milestone_id))
+        (hasNull && d.task_id == null) || (d.task_id != null && tasks.includes(d.task_id))
       )
     }
     if (labels.length > 0) {
@@ -216,7 +216,7 @@ export function IssuesListing() {
       })
     }
     return data
-  }, [issuesQuery.data, status, priority, assignees, projects, milestones, labels, labelMode])
+  }, [issuesQuery.data, status, priority, assignees, projects, tasks, labels, labelMode])
 
   async function bulkPatch(patch: Record<string, unknown>) {
     const ids = Array.from(selectedIds)
@@ -231,8 +231,8 @@ export function IssuesListing() {
     )
     queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
     queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-    queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
-    queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+    queryClient.invalidateQueries({ queryKey: ['task-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
     queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
   }
 
@@ -249,7 +249,7 @@ export function IssuesListing() {
     )
     queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
     queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-    queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+    queryClient.invalidateQueries({ queryKey: ['task-issues'] })
     queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
   }
 
@@ -274,8 +274,8 @@ export function IssuesListing() {
       toast.success(`Moved ${ids.length} ${ids.length === 1 ? 'issue' : 'issues'} to Trash`)
       queryClient.invalidateQueries({ queryKey: ['ws-issues', ws?.slug] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
@@ -306,9 +306,9 @@ export function IssuesListing() {
     })),
   ]
 
-  const MILESTONE_OPTIONS = [
-    { value: '', label: 'No milestone' },
-    ...(milestoneList ?? []).map((m) => ({ value: m.id, label: m.name })),
+  const TASK_OPTIONS = [
+    { value: '', label: 'No task' },
+    ...(taskList ?? []).map((m) => ({ value: m.id, label: m.name })),
   ]
 
   const LABEL_OPTIONS = (labelList ?? []).map((l) => ({
@@ -365,18 +365,18 @@ export function IssuesListing() {
       },
     },
     {
-      key: 'milestone',
-      label: 'Milestone',
-      options: MILESTONE_OPTIONS,
+      key: 'task',
+      label: 'Task',
+      options: TASK_OPTIONS,
       onSelect: async (v) => {
         const ok = await confirm({
-          title: `Update milestone for ${selectedIds.size} ${selectedIds.size === 1 ? 'issue' : 'issues'}?`,
-          description: `All selected issues will be moved to the chosen milestone.`,
+          title: `Update task for ${selectedIds.size} ${selectedIds.size === 1 ? 'issue' : 'issues'}?`,
+          description: `All selected issues will be moved to the chosen task.`,
           confirmLabel: 'Apply',
         })
         if (!ok) return
-        await bulkPatch({ milestone_id: v === '' ? null : Number(v) })
-        toast.success(`Updated milestone on ${selectedIds.size} ${selectedIds.size === 1 ? 'issue' : 'issues'}`)
+        await bulkPatch({ task_id: v === '' ? null : Number(v) })
+        toast.success(`Updated task on ${selectedIds.size} ${selectedIds.size === 1 ? 'issue' : 'issues'}`)
       },
     },
     ...(LABEL_OPTIONS.length > 0
@@ -474,17 +474,17 @@ export function IssuesListing() {
             onChange={setProjects}
           />
           <MultiSelect
-            label="Milestone"
+            label="Task"
             options={[
-              { value: 'null', label: 'No milestone', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
-              ...(milestoneList ?? []).map((m) => ({
+              { value: 'null', label: 'No task', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
+              ...(taskList ?? []).map((m) => ({
                 value: m.id,
                 label: m.name,
                 icon: <Target size={15} className="text-muted-foreground" />,
               })),
             ]}
-            selected={milestones}
-            onChange={setMilestones}
+            selected={tasks}
+            onChange={setTasks}
           />
           <LabelFilter
             options={(labelList ?? []).map((l) => ({ value: l.id, label: l.name, color: l.color }))}
@@ -503,7 +503,7 @@ export function IssuesListing() {
           members={members ?? []}
           loading={issuesQuery.isLoading}
           hasFilters={hasFilters}
-          onClearFilters={() => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setMilestones([]); setLabels([]) }}
+          onClearFilters={() => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setTasks([]); setLabels([]) }}
           onNewIssue={() => ws && createIssue.mutate()}
           creatingIssue={createIssue.isPending}
           selectedIds={selectedIds}
@@ -874,8 +874,8 @@ function IssueRowItem({
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ws-issues', workspaceSlug] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
     },
   })

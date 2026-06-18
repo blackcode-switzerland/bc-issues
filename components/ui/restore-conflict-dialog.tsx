@@ -5,7 +5,7 @@ import { Loader2, RotateCcw } from 'lucide-react'
 import { Modal } from './modal'
 
 /**
- * Shown before restoring items whose parent (project/milestone) is itself in
+ * Shown before restoring items whose parent (project/task) is itself in
  * the bin or was purged. For each affected item the user picks:
  *   - restore_parent → bring the parent back too (re-links the item)
  *   - standalone     → restore the item with the link cleared
@@ -15,10 +15,10 @@ import { Modal } from './modal'
 export type RestoreResolution = 'restore_parent' | 'standalone'
 
 export interface RestoreConflict {
-  type: 'issue' | 'project' | 'milestone'
+  type: 'issue' | 'project' | 'task'
   id: number
   title: string
-  parent_type: 'issue' | 'project' | 'milestone'
+  parent_type: 'issue' | 'project' | 'task'
   parent_id: number
   parent_title: string | null
   kind: 'parent_binned' | 'parent_missing'

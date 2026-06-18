@@ -47,7 +47,7 @@ export function IssueSkeletonRow({ i }: { i: number }) {
   )
 }
 
-export function MilestoneSkeletonRow({ i }: { i: number }) {
+export function TaskSkeletonRow({ i }: { i: number }) {
   const titleW = ['w-40', 'w-52', 'w-32', 'w-44', 'w-36', 'w-48'][i % 6]
   return (
     <div className="flex h-12 items-center gap-3 border-b border-border/50 px-6">

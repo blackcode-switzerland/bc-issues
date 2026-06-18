@@ -83,7 +83,7 @@ export function WorkspaceCreateModal({
       onClose={onClose}
       dismissible={dismissible}
       title="Create workspace"
-      description="A workspace holds your projects, milestones, issues, and team."
+      description="A workspace holds your projects, tasks, issues, and team."
     >
       <form onSubmit={create} className="space-y-4">
         <div>

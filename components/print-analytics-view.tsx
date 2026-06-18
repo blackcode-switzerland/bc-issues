@@ -3,7 +3,7 @@
 // Printable analytics report. Fetches the same payload as the on-screen
 // dashboard (forwarding every filter via `query`) and lays it out for paper:
 // a header, KPI grid, velocity + cumulative charts, distributions, cycle-time
-// and aging histograms, and an optional milestone burndown. Auto-prints once
+// and aging histograms, and an optional task burndown. Auto-prints once
 // the data resolves.
 
 import { useEffect } from 'react'

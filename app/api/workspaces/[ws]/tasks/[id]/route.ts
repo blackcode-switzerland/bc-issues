@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
 import {
-  deleteMilestone,
-  getMilestoneInWorkspace,
-  updateMilestone,
-} from '@/lib/db/queries/milestones'
-import { getIssuesByMilestone } from '@/lib/db/queries/issues'
+  deleteTask,
+  getTaskInWorkspace,
+  updateTask,
+} from '@/lib/db/queries/tasks'
+import { getIssuesByTask } from '@/lib/db/queries/issues'
 import { getProjectInWorkspace } from '@/lib/db/queries/projects'
 import { previewDeletion, type DeleteMode } from '@/lib/db/queries/deletion'
 
@@ -20,15 +20,15 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const ctx = await resolveWorkspace(req, ws)
 
   if (req.nextUrl.searchParams.get('preview')) {
-    const counts = await previewDeletion(ctx.workspace.id, 'milestone', id)
+    const counts = await previewDeletion(ctx.workspace.id, 'task', id)
     return NextResponse.json(counts)
   }
 
-  const m = await getMilestoneInWorkspace(ctx.workspace.id, id)
-  if (!m) throw Errors.notFound('milestone')
+  const m = await getTaskInWorkspace(ctx.workspace.id, id)
+  if (!m) throw Errors.notFound('task')
 
   if (req.nextUrl.searchParams.get('includeIssues') === 'true') {
-    const issues = await getIssuesByMilestone(id)
+    const issues = await getIssuesByTask(id)
     return NextResponse.json({ ...m, issues })
   }
   return NextResponse.json(m)
@@ -56,8 +56,8 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     }
   }
 
-  const updated = await updateMilestone(ctx.workspace.id, id, body, ctx.user.id)
-  if (!updated) throw Errors.notFound('milestone')
+  const updated = await updateTask(ctx.workspace.id, id, body, ctx.user.id)
+  if (!updated) throw Errors.notFound('task')
   return NextResponse.json(updated)
 })
 
@@ -68,7 +68,7 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const ctx = await resolveWorkspace(req, ws)
 
   const mode: DeleteMode = req.nextUrl.searchParams.get('mode') === 'cascade' ? 'cascade' : 'detach'
-  const ok = await deleteMilestone(ctx.workspace.id, id, ctx.user.id, mode)
-  if (!ok) throw Errors.notFound('milestone')
+  const ok = await deleteTask(ctx.workspace.id, id, ctx.user.id, mode)
+  if (!ok) throw Errors.notFound('task')
   return NextResponse.json({ deleted: true, mode })
 })

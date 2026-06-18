@@ -30,7 +30,7 @@ interface IssueRow {
   project_icon: string | null
   project_color: string | null
   due_date: string | null
-  milestone_name: string | null
+  task_name: string | null
 }
 
 const COLUMNS = ISSUE_STATUSES.map((s) => ({ status: s.value, label: s.label }))
@@ -178,9 +178,9 @@ export function IssuesKanban({
                                   {format(new Date(issue.due_date), 'MMM d')}
                                 </span>
                               ) : null}
-                              {issue.milestone_name ? (
+                              {issue.task_name ? (
                                 <span className="ml-auto truncate max-w-[80px] text-[10px]">
-                                  {issue.milestone_name}
+                                  {issue.task_name}
                                 </span>
                               ) : issue.project_name ? (
                                 <span className="ml-auto flex items-center gap-1 truncate max-w-[90px]">

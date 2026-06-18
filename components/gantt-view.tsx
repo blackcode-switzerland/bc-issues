@@ -59,8 +59,8 @@ interface Issue {
   status: string
   priority: number
   assignees?: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
-  milestone_id?: number
-  milestone_name?: string
+  task_id?: number
+  task_name?: string
   start_date?: string | null
   due_date?: string | null
   comment_count?: number
@@ -82,7 +82,7 @@ interface User {
   image?: string | null
 }
 
-type GroupBy = 'milestone' | 'status' | 'assignee' | 'none'
+type GroupBy = 'task' | 'status' | 'assignee' | 'none'
 type ColorBy = 'priority' | 'status'
 
 // Zoom levels: days per column
@@ -257,9 +257,9 @@ export function GanttView({
       let label: string
 
       switch (groupBy) {
-        case 'milestone':
-          key = issue.milestone_id?.toString() || 'no-milestone'
-          label = issue.milestone_name || 'No Milestone'
+        case 'task':
+          key = issue.task_id?.toString() || 'no-task'
+          label = issue.task_name || 'No Task'
           break
         case 'status':
           key = issue.status
@@ -465,7 +465,7 @@ export function GanttView({
               className="px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
               <option value="none">No Grouping</option>
-              <option value="milestone">Group by Milestone</option>
+              <option value="task">Group by Task</option>
               <option value="status">Group by Status</option>
               <option value="assignee">Group by Assignee</option>
             </select>

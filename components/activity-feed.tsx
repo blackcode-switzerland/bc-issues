@@ -51,7 +51,7 @@ interface Member {
 }
 
 interface ActivityFeedProps {
-  entityType: 'issue' | 'project' | 'milestone'
+  entityType: 'issue' | 'project' | 'task'
   entityId: number
   wsSlug: string
   commentsUrl: string
@@ -230,8 +230,8 @@ function describeAction(
       )
     }
 
-    case 'milestone_changed':
-      return 'changed milestone'
+    case 'task_changed':
+      return 'changed task'
 
     case 'project_changed':
       return 'changed project'

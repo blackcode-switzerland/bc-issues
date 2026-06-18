@@ -5,7 +5,7 @@
 //   TEST_DATABASE_URL=postgres://… npm test
 //
 // Each test seeds a fresh, uniquely-named workspace and tears it down at the
-// end (the workspace FK cascade wipes its projects/issues/milestones/batches).
+// end (the workspace FK cascade wipes its projects/issues/tasks/batches).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 const TEST_DB = process.env.TEST_DATABASE_URL
@@ -64,17 +64,17 @@ run('deletion engine (integration)', () => {
       .values({ workspace_id: wsId, name: 'P', owner_id: userId })
       .returning({ id: schema.projects.id })
     const [m] = await db
-      .insert(schema.milestones)
+      .insert(schema.tasks)
       .values({ workspace_id: wsId, project_id: p.id, name: 'M' })
-      .returning({ id: schema.milestones.id })
+      .returning({ id: schema.tasks.id })
     const issueRows = await db
       .insert(schema.issues)
       .values([
-        { workspace_id: wsId, seq: seqBase + 1, title: 'I1', project_id: p.id, milestone_id: m.id },
+        { workspace_id: wsId, seq: seqBase + 1, title: 'I1', project_id: p.id, task_id: m.id },
         { workspace_id: wsId, seq: seqBase + 2, title: 'I2', project_id: p.id },
       ])
       .returning({ id: schema.issues.id })
-    return { projectId: p.id, milestoneId: m.id, issueIds: issueRows.map((r) => r.id) }
+    return { projectId: p.id, taskId: m.id, issueIds: issueRows.map((r) => r.id) }
   }
 
   it('cascade delete hides children from active views and excludes them from counts', async () => {
@@ -91,7 +91,7 @@ run('deletion engine (integration)', () => {
     const issues = await issuesQ.listIssuesInWorkspace(wsId)
     expect(issues.data.length).toBe(0)
 
-    // All three (project + milestone + 2 issues) sit in the bin under one batch.
+    // All three (project + task + 2 issues) sit in the bin under one batch.
     const trash = await engine.listTrash(wsId)
     expect(trash.length).toBe(4)
     const batchIds = new Set(trash.map((t) => t.batch_id))

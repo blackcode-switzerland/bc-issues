@@ -113,7 +113,7 @@ func IntOrNullJSON(ref string, c *client.Client, cfg *config.Config) ([]byte, er
 	}
 	id, err := ResolveUserRef(c, cfg, ref)
 	if err != nil {
-		// Fall through: maybe it's a milestone id, not a user
+		// Fall through: maybe it's a task id, not a user
 		if strings.Contains(err.Error(), "no user") {
 			return nil, err
 		}
@@ -123,7 +123,7 @@ func IntOrNullJSON(ref string, c *client.Client, cfg *config.Config) ([]byte, er
 }
 
 // PlainIntOrNullJSON does the same but does not try to resolve names —
-// useful for milestone ids where we expect numeric input.
+// useful for task ids where we expect numeric input.
 func PlainIntOrNullJSON(ref string) ([]byte, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {

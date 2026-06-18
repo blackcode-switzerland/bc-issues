@@ -15,6 +15,9 @@ type Config struct {
 	Email               string `json:"email,omitempty"`
 	ActiveWorkspaceID   int    `json:"active_workspace_id,omitempty"`
 	ActiveWorkspaceSlug string `json:"active_workspace_slug,omitempty"`
+	// LastUpdateCheck is the unix timestamp (seconds) of the last time the CLI
+	// printed the "update available" soft notice. Throttles it to once/24h.
+	LastUpdateCheck int64 `json:"last_update_check,omitempty"`
 }
 
 func dir() (string, error) {

@@ -15,7 +15,7 @@ import {
   Minus,
   ArrowDown,
   User,
-  Milestone,
+  ListChecks,
   Maximize2,
   Minimize2,
   Check,
@@ -66,7 +66,7 @@ export function CreateIssueModal({
   const [status, setStatus] = useState(defaultStatus)
   const [priority, setPriority] = useState<number>(3)
   const [assigneeIds, setAssigneeIds] = useState<number[]>([])
-  const [milestoneId, setMilestoneId] = useState<number | null>(null)
+  const [taskId, setTaskId] = useState<number | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(projectId || null)
   const [createMore, setCreateMore] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -76,7 +76,7 @@ export function CreateIssueModal({
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false)
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false)
   const [showProjectDropdown, setShowProjectDropdown] = useState(false)
-  const [showMilestoneDropdown, setShowMilestoneDropdown] = useState(false)
+  const [showTaskDropdown, setShowTaskDropdown] = useState(false)
 
   // Close all dropdowns
   const closeAllDropdowns = () => {
@@ -84,7 +84,7 @@ export function CreateIssueModal({
     setShowPriorityDropdown(false)
     setShowAssigneeDropdown(false)
     setShowProjectDropdown(false)
-    setShowMilestoneDropdown(false)
+    setShowTaskDropdown(false)
   }
 
   // Fetch projects for dropdown (if no projectId provided)
@@ -112,12 +112,12 @@ export function CreateIssueModal({
     enabled: !!selectedProjectId && !!ws?.slug,
   })
 
-  // Fetch milestones for dropdown
-  const { data: milestones = [] } = useQuery({
-    queryKey: ['milestones', selectedProjectId, ws?.slug],
+  // Fetch tasks for dropdown
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks', selectedProjectId, ws?.slug],
     queryFn: async () => {
       if (!selectedProjectId) return []
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones?project_id=${selectedProjectId}`)
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks?project_id=${selectedProjectId}`)
       if (!res.ok) return []
       const json = await res.json()
       return json.data
@@ -130,7 +130,7 @@ export function CreateIssueModal({
   const currentStatus = STATUSES.find(s => s.id === status) || STATUSES[0]
   const currentPriority = PRIORITIES.find(p => p.id === priority) || PRIORITIES[2]
   const currentAssignees = members.filter((m: any) => assigneeIds.includes(m.user_id))
-  const currentMilestone = milestones.find((m: any) => m.id === milestoneId)
+  const currentTask = tasks.find((m: any) => m.id === taskId)
 
   // Image upload handler for rich text editor
   const handleFileUpload = useCallback(async (file: File): Promise<string> => {
@@ -166,7 +166,7 @@ export function CreateIssueModal({
           status,
           priority,
           assignee_ids: assigneeIds.length > 0 ? assigneeIds : undefined,
-          milestone_id: milestoneId || undefined,
+          task_id: taskId || undefined,
         }),
       })
 
@@ -187,7 +187,7 @@ export function CreateIssueModal({
         setDescription('')
         setStatus(defaultStatus)
         setPriority(3)
-        setMilestoneId(null)
+        setTaskId(null)
         // Keep assigneeIds and project so "create more" stays in context.
         titleInputRef.current?.focus()
       } else {
@@ -273,7 +273,7 @@ export function CreateIssueModal({
                           onClick={() => {
                             setSelectedProjectId(p.id)
                             setAssigneeIds([])
-                            setMilestoneId(null)
+                            setTaskId(null)
                             setShowProjectDropdown(false)
                           }}
                         >
@@ -491,44 +491,44 @@ export function CreateIssueModal({
                 </AnimatePresence>
               </div>
 
-              {/* Milestone button */}
+              {/* Task button */}
               <div className="relative">
                 <ControlButton
                   onClick={() => {
                     closeAllDropdowns()
-                    setShowMilestoneDropdown(!showMilestoneDropdown)
+                    setShowTaskDropdown(!showTaskDropdown)
                   }}
-                  active={showMilestoneDropdown}
+                  active={showTaskDropdown}
                   disabled={!selectedProjectId}
                 >
-                  <Milestone size={14} />
+                  <ListChecks size={14} />
                   <span className="hidden sm:inline">
-                    {currentMilestone?.name || 'Milestone'}
+                    {currentTask?.name || 'Task'}
                   </span>
                 </ControlButton>
                 <AnimatePresence>
-                  {showMilestoneDropdown && (
-                    <DropdownMenu onClose={() => setShowMilestoneDropdown(false)} position="top">
+                  {showTaskDropdown && (
+                    <DropdownMenu onClose={() => setShowTaskDropdown(false)} position="top">
                       <DropdownItem
-                        selected={!milestoneId}
+                        selected={!taskId}
                         onClick={() => {
-                          setMilestoneId(null)
-                          setShowMilestoneDropdown(false)
+                          setTaskId(null)
+                          setShowTaskDropdown(false)
                         }}
                       >
-                        <Milestone size={14} className="text-muted-foreground" />
-                        No milestone
+                        <ListChecks size={14} className="text-muted-foreground" />
+                        No task
                       </DropdownItem>
-                      {milestones.map((m: any) => (
+                      {tasks.map((m: any) => (
                         <DropdownItem
                           key={m.id}
-                          selected={milestoneId === m.id}
+                          selected={taskId === m.id}
                           onClick={() => {
-                            setMilestoneId(m.id)
-                            setShowMilestoneDropdown(false)
+                            setTaskId(m.id)
+                            setShowTaskDropdown(false)
                           }}
                         >
-                          <Milestone size={14} />
+                          <ListChecks size={14} />
                           {m.name}
                         </DropdownItem>
                       ))}

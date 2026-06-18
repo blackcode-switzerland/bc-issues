@@ -1,7 +1,7 @@
 // Hand-authored OpenAPI 3.1 description of the Blackcode Issues HTTP API.
 //
 // Scope: every user-facing feature route, kept in sync with app/api/** and the
-// bk CLI — issues, projects, milestones, comments, labels, members, attachments,
+// bk CLI — issues, projects, tasks, comments, labels, members, attachments,
 // activity, analytics, invitations, inbox, trash, project updates, account/me,
 // tokens, undo, upload, users, super-admin and public auth. Only true internals
 // are omitted (NextAuth handler, client-error beacon, and the /api/docs +
@@ -154,7 +154,7 @@ export const openApiSpec = {
     { name: 'Workspaces', description: 'Workspaces and membership.' },
     { name: 'Issues', description: 'Issues and their comments, labels, attachments, activity.' },
     { name: 'Projects', description: 'Projects and project members.' },
-    { name: 'Milestones', description: 'Milestones.' },
+    { name: 'Tasks', description: 'Tasks.' },
     { name: 'Labels', description: 'Workspace labels.' },
     { name: 'Insights', description: 'Activity feed and analytics.' },
     { name: 'Tokens', description: 'API token management (session-only).' },
@@ -234,7 +234,7 @@ export const openApiSpec = {
           seq: { type: 'integer', description: 'Per-workspace issue number.' },
           workspace_id: { type: 'integer' },
           project_id: { type: ['integer', 'null'] },
-          milestone_id: { type: ['integer', 'null'] },
+          task_id: { type: ['integer', 'null'] },
           title: { type: 'string' },
           description: { type: ['string', 'null'] },
           status: { type: 'string', enum: ISSUE_STATUS_VALUES },
@@ -258,7 +258,7 @@ export const openApiSpec = {
           status: { type: 'string', enum: ISSUE_STATUS_VALUES },
           priority: { type: 'integer', enum: ISSUE_PRIORITY_VALUES },
           project_id: { type: ['integer', 'null'] },
-          milestone_id: { type: ['integer', 'null'] },
+          task_id: { type: ['integer', 'null'] },
           assignee_ids: { type: 'array', items: { type: 'integer' }, description: 'Must be workspace members.' },
           label_ids: { type: 'array', items: { type: 'integer' }, description: 'Existing label ids.' },
           labels: { type: 'array', items: { type: 'string' }, description: 'Label names — existing are matched case-insensitively, unknown ones are created on the fly. Use this (not label_ids) to add or create labels by name.' },
@@ -277,7 +277,7 @@ export const openApiSpec = {
           status: { type: 'string', enum: ISSUE_STATUS_VALUES },
           priority: { type: 'integer', enum: ISSUE_PRIORITY_VALUES },
           project_id: { type: ['integer', 'null'] },
-          milestone_id: { type: ['integer', 'null'] },
+          task_id: { type: ['integer', 'null'] },
           assignee_ids: { type: 'array', items: { type: 'integer' } },
           start_date: { type: ['string', 'null'], format: 'date' },
           due_date: { type: ['string', 'null'], format: 'date' },
@@ -319,7 +319,7 @@ export const openApiSpec = {
           member_ids: { type: 'array', items: { type: 'integer' } },
         },
       },
-      Milestone: entity(
+      Task: entity(
         {
           id: { type: 'integer' },
           workspace_id: { type: 'integer' },
@@ -329,9 +329,9 @@ export const openApiSpec = {
           due_date: { type: ['string', 'null'], format: 'date' },
           status: { type: ['string', 'null'] },
         },
-        'A milestone (standalone or attached to a project).'
+        'A task (standalone or attached to a project).'
       ),
-      CreateMilestone: {
+      CreateTask: {
         type: 'object',
         required: ['name'],
         additionalProperties: false,
@@ -345,7 +345,7 @@ export const openApiSpec = {
       Comment: entity(
         {
           id: { type: 'integer' },
-          parent_type: { type: 'string', enum: ['issue', 'milestone', 'project'] },
+          parent_type: { type: 'string', enum: ['issue', 'task', 'project'] },
           parent_id: { type: 'integer' },
           user_id: { type: 'integer' },
           content: { type: 'string' },
@@ -455,7 +455,7 @@ export const openApiSpec = {
       ),
       TrashItem: entity(
         {
-          type: { type: 'string', enum: ['issue', 'project', 'milestone'] },
+          type: { type: 'string', enum: ['issue', 'project', 'task'] },
           id: { type: 'integer' },
           title: { type: ['string', 'null'] },
           deleted_at: { type: ['string', 'null'], format: 'date-time' },
@@ -676,7 +676,7 @@ export const openApiSpec = {
         tags: ['Issues'], operationId: 'listIssues', summary: 'List issues',
         parameters: [
           { name: 'project_id', in: 'query', schema: { type: 'string' }, description: 'Filter by project; "null" for none.' },
-          { name: 'milestone_id', in: 'query', schema: { type: 'string' }, description: 'Filter by milestone; "null" for none.' },
+          { name: 'task_id', in: 'query', schema: { type: 'string' }, description: 'Filter by task; "null" for none.' },
           { name: 'assignee_id', in: 'query', schema: { type: 'string' }, description: 'Single assignee, or "null" for unassigned.' },
           { name: 'assignee_ids', in: 'query', schema: { type: 'array', items: { type: 'integer' } }, style: 'form', explode: true, description: 'Repeatable multi-assignee filter.' },
           { name: 'status', in: 'query', schema: { type: 'string', enum: ISSUE_STATUS_VALUES } },
@@ -834,41 +834,41 @@ export const openApiSpec = {
       parameters: [wsParam, idParam(), idParam('updateId', 'Project update id.')],
       delete: { tags: ['Projects'], operationId: 'deleteProjectUpdate', summary: 'Delete a project update (author)', responses: { '200': deletedResponse, ...errors(401, 403, 404) } },
     },
-    '/api/workspaces/{ws}/milestones': {
+    '/api/workspaces/{ws}/tasks': {
       parameters: [wsParam],
       get: {
-        tags: ['Milestones'], operationId: 'listMilestones', summary: 'List milestones',
+        tags: ['Tasks'], operationId: 'listTasks', summary: 'List tasks',
         parameters: [
           { name: 'project_id', in: 'query', schema: { type: 'string' }, description: 'Filter by project; "null" for standalone.' },
           { name: 'search', in: 'query', schema: { type: 'string' } },
         ],
-        responses: { '200': jsonList('Milestone'), ...errors(400, 401, 404) },
+        responses: { '200': jsonList('Task'), ...errors(400, 401, 404) },
       },
       post: {
-        tags: ['Milestones'], operationId: 'createMilestone', summary: 'Create a milestone',
-        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateMilestone' } } } },
-        responses: { '201': jsonObject('Milestone', 'Created'), ...errors(400, 401, 404) },
+        tags: ['Tasks'], operationId: 'createTask', summary: 'Create a task',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateTask' } } } },
+        responses: { '201': jsonObject('Task', 'Created'), ...errors(400, 401, 404) },
       },
     },
-    '/api/workspaces/{ws}/milestones/{id}': {
+    '/api/workspaces/{ws}/tasks/{id}': {
       parameters: [wsParam, idParam()],
-      get: { tags: ['Milestones'], operationId: 'getMilestone', summary: 'Milestone detail', responses: { '200': jsonObject('Milestone'), ...errors(400, 401, 404) } },
+      get: { tags: ['Tasks'], operationId: 'getTask', summary: 'Task detail', responses: { '200': jsonObject('Task'), ...errors(400, 401, 404) } },
       patch: {
-        tags: ['Milestones'], operationId: 'updateMilestone', summary: 'Update a milestone',
+        tags: ['Tasks'], operationId: 'updateTask', summary: 'Update a task',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },
-        responses: { '200': jsonObject('Milestone'), ...errors(400, 401, 404) },
+        responses: { '200': jsonObject('Task'), ...errors(400, 401, 404) },
       },
       delete: {
-        tags: ['Milestones'], operationId: 'deleteMilestone', summary: 'Move milestone to Trash',
+        tags: ['Tasks'], operationId: 'deleteTask', summary: 'Move task to Trash',
         parameters: [{ name: 'mode', in: 'query', schema: { type: 'string', enum: ['cascade', 'detach'], default: 'detach' } }],
         responses: { '200': deletedResponse, ...errors(400, 401, 404) },
       },
     },
-    '/api/workspaces/{ws}/milestones/{id}/comments': {
+    '/api/workspaces/{ws}/tasks/{id}/comments': {
       parameters: [wsParam, idParam()],
-      get: { tags: ['Milestones'], operationId: 'listMilestoneComments', summary: 'List milestone comments', responses: { '200': jsonList('Comment'), ...errors(401, 404) } },
+      get: { tags: ['Tasks'], operationId: 'listTaskComments', summary: 'List task comments', responses: { '200': jsonList('Comment'), ...errors(401, 404) } },
       post: {
-        tags: ['Milestones'], operationId: 'createMilestoneComment', summary: 'Add a milestone comment',
+        tags: ['Tasks'], operationId: 'createTaskComment', summary: 'Add a task comment',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateComment' } } } },
         responses: { '201': jsonObject('Comment', 'Created'), ...errors(400, 401, 404) },
       },
@@ -920,7 +920,7 @@ export const openApiSpec = {
       get: {
         tags: ['Insights'], operationId: 'getAnalytics', summary: 'Workspace analytics',
         parameters: [
-          { name: 'view', in: 'query', schema: { type: 'string', enum: ['workspace', 'project', 'milestone', 'member'] } },
+          { name: 'view', in: 'query', schema: { type: 'string', enum: ['workspace', 'project', 'task', 'member'] } },
           { name: 'id', in: 'query', schema: { type: 'integer' }, description: 'Target id (required for non-workspace views).' },
           { name: 'from', in: 'query', schema: { type: 'string', format: 'date-time' } },
           { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
@@ -945,7 +945,7 @@ export const openApiSpec = {
       parameters: [wsParam],
       get: {
         tags: ['Trash'], operationId: 'listTrash', summary: 'Browse the Trash',
-        parameters: [{ name: 'type', in: 'query', schema: { type: 'string', enum: ['issue', 'project', 'milestone'] }, description: 'Filter to one resource type.' }],
+        parameters: [{ name: 'type', in: 'query', schema: { type: 'string', enum: ['issue', 'project', 'task'] }, description: 'Filter to one resource type.' }],
         responses: { '200': jsonList('TrashItem'), ...errors(400, 401, 404) },
       },
     },
@@ -954,7 +954,7 @@ export const openApiSpec = {
       post: {
         tags: ['Trash'], operationId: 'restoreFromTrash', summary: 'Restore items from the Trash',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: true, properties: {
-          items: { type: 'array', items: { type: 'object', required: ['type', 'id'], properties: { type: { type: 'string', enum: ['issue', 'project', 'milestone'] }, id: { type: 'integer' } } } },
+          items: { type: 'array', items: { type: 'object', required: ['type', 'id'], properties: { type: { type: 'string', enum: ['issue', 'project', 'task'] }, id: { type: 'integer' } } } },
           batch_id: { type: 'string', description: 'Restore an entire delete batch at once.' },
           dry_run: { type: 'boolean', description: 'Report conflicts without restoring.' },
           resolutions: { type: 'object', additionalProperties: true, description: 'How to resolve conflicts (e.g. relink/detach).' },
@@ -967,7 +967,7 @@ export const openApiSpec = {
       delete: {
         tags: ['Trash'], operationId: 'purgeTrash', summary: 'Permanently delete trashed items (owner)',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: true, properties: {
-          items: { type: 'array', items: { type: 'object', required: ['type', 'id'], properties: { type: { type: 'string', enum: ['issue', 'project', 'milestone'] }, id: { type: 'integer' } } } },
+          items: { type: 'array', items: { type: 'object', required: ['type', 'id'], properties: { type: { type: 'string', enum: ['issue', 'project', 'task'] }, id: { type: 'integer' } } } },
           batch_id: { type: 'string' },
         } } } } },
         responses: { '200': deletedResponse, ...errors(400, 401, 403, 404) },

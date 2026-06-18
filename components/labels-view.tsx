@@ -115,7 +115,7 @@ export function LabelsView() {
       queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -132,7 +132,7 @@ export function LabelsView() {
       queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     },
     onError: () => toast.error('Could not delete label'),
@@ -159,7 +159,7 @@ export function LabelsView() {
       queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
     } catch {
       toast.error('Some labels could not be deleted')
@@ -191,7 +191,7 @@ export function LabelsView() {
       queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
     } catch {
       toast.error('Some labels could not be updated')
     }

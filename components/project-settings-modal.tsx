@@ -501,7 +501,7 @@ export function ProjectSettingsModal({
                           This action cannot be undone
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          This will permanently delete the project, all its issues, milestones, and comments.
+                          This will permanently delete the project, all its issues, tasks, and comments.
                         </p>
                       </div>
                     </div>

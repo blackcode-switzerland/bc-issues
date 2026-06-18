@@ -21,7 +21,7 @@ func newProjectCmd() *cobra.Command {
 		newProjectViewCmd(),
 		newProjectMembersCmd(),
 		newProjectIssuesCmd(),
-		newProjectMilestonesCmd(),
+		newProjectTasksCmd(),
 		newProjectCreateCmd(),
 		newProjectEditCmd(),
 		newProjectDeleteCmd(),
@@ -195,10 +195,10 @@ func newProjectIssuesCmd() *cobra.Command {
 	return cmd
 }
 
-func newProjectMilestonesCmd() *cobra.Command {
+func newProjectTasksCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "milestones <project-id>",
-		Short: "List milestones for a project",
+		Use:   "tasks <project-id>",
+		Short: "List tasks for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -213,11 +213,11 @@ func newProjectMilestonesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ms, err := c.ListMilestones(id)
+			ms, err := c.ListTasks(id)
 			if err != nil {
 				return err
 			}
-			return output.Render(format, ms, milestoneTable(ms, cmd.ErrOrStderr()))
+			return output.Render(format, ms, taskTable(ms, cmd.ErrOrStderr()))
 		},
 	}
 }
@@ -367,7 +367,7 @@ func newProjectDeleteCmd() *cobra.Command {
 		Use:   "delete <id>",
 		Short: "Move a project to the Trash",
 		Long: "Move a project to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
-			"Attached issues and milestones: by default they stay active and are\n" +
+			"Attached issues and tasks: by default they stay active and are\n" +
 			"unlinked from the project (--detach). Pass --cascade to move them to the\n" +
 			"Trash along with the project so they can be restored as a group.",
 		Args: cobra.ExactArgs(1),
@@ -387,7 +387,7 @@ func newProjectDeleteCmd() *cobra.Command {
 			}
 			prompt := fmt.Sprintf("Move project #%d to Trash?", id)
 			if cascade {
-				prompt = fmt.Sprintf("Move project #%d and its issues/milestones to Trash?", id)
+				prompt = fmt.Sprintf("Move project #%d and its issues/tasks to Trash?", id)
 			}
 			if !Confirm(prompt, yes) {
 				return fmt.Errorf("aborted")
@@ -404,8 +404,8 @@ func newProjectDeleteCmd() *cobra.Command {
 		},
 	}
 	AddYesFlag(cmd, &yes)
-	cmd.Flags().BoolVar(&cascade, "cascade", false, "Also move attached issues/milestones to Trash")
-	cmd.Flags().BoolVar(&detach, "detach", false, "Keep attached issues/milestones active, unlinked (default)")
+	cmd.Flags().BoolVar(&cascade, "cascade", false, "Also move attached issues/tasks to Trash")
+	cmd.Flags().BoolVar(&detach, "detach", false, "Keep attached issues/tasks active, unlinked (default)")
 	return cmd
 }
 

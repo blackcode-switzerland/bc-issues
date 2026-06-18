@@ -39,7 +39,7 @@ const ENTITY_TYPES = [
   { value: 'workspace_member', label: 'Members' },
   { value: 'invitation', label: 'Invitations' },
   { value: 'project', label: 'Projects' },
-  { value: 'milestone', label: 'Milestones' },
+  { value: 'task', label: 'Tasks' },
   { value: 'issue', label: 'Issues' },
   { value: 'comment', label: 'Comments' },
   { value: 'attachment', label: 'Attachments' },
@@ -54,7 +54,7 @@ const ACTIONS = [
   { value: 'unassigned', label: 'Unassigned' },
   { value: 'status_changed', label: 'Status changed' },
   { value: 'priority_changed', label: 'Priority changed' },
-  { value: 'milestone_changed', label: 'Milestone changed' },
+  { value: 'task_changed', label: 'Task changed' },
   { value: 'project_changed', label: 'Project changed' },
   { value: 'labeled', label: 'Labeled' },
   { value: 'unlabeled', label: 'Unlabeled' },
@@ -264,8 +264,8 @@ function describe(e: EventRow): string {
       return `moved ${entityRef} from ${statusName(meta.from)} to ${statusName(meta.to)}`
     case 'priority_changed':
       return `changed priority of ${entityRef}`
-    case 'milestone_changed':
-      return `changed the milestone of ${entityRef}`
+    case 'task_changed':
+      return `changed the task of ${entityRef}`
     case 'project_changed':
       return `moved ${entityRef} to another project`
     case 'due_date_changed':

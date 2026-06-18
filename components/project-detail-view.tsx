@@ -70,7 +70,7 @@ interface IssueRow {
   assignees: IssueAssignee[]
 }
 
-interface MilestoneRow {
+interface TaskRow {
   id: number
   name: string
   due_date: string | null
@@ -97,30 +97,30 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
   const router = useRouter()
 
-  const createMilestone = useMutation({
+  const createTask = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Milestone', project_id: projectId }),
+        body: JSON.stringify({ name: 'New Task', project_id: projectId }),
       })
-      if (!res.ok) throw new Error('Failed to create milestone')
+      if (!res.ok) throw new Error('Failed to create task')
       return res.json() as Promise<{ id: number }>
     },
-    onSuccess: (milestone) => {
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
-      queryClient.invalidateQueries({ queryKey: ['project-milestones', projectId] })
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project-tasks', projectId] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/milestones/${milestone.id}?new=1`)
+      router.push(`/dashboard/tasks/${task.id}?new=1`)
     },
-    onError: () => toast.error('Failed to create milestone'),
+    onError: () => toast.error('Failed to create task'),
   })
 
   const createIssue = useMutation({
-    mutationFn: async (milestoneId: number | null) => {
+    mutationFn: async (taskId: number | null) => {
       const body: Record<string, unknown> = { title: 'New Issue', project_id: projectId }
-      if (milestoneId != null) body.milestone_id = milestoneId
+      if (taskId != null) body.task_id = taskId
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,12 +186,12 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
     },
   })
 
-  const milestones = useQuery({
-    queryKey: ['project-milestones', projectId, ws?.slug],
+  const tasks = useQuery({
+    queryKey: ['project-tasks', projectId, ws?.slug],
     enabled: !!ws,
-    queryFn: async (): Promise<MilestoneRow[]> => {
+    queryFn: async (): Promise<TaskRow[]> => {
       const res = await fetch(
-        `/api/workspaces/${ws!.slug}/milestones?project_id=${projectId}`
+        `/api/workspaces/${ws!.slug}/tasks?project_id=${projectId}`
       )
       if (!res.ok) return []
       const j = await res.json()
@@ -285,8 +285,8 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
       )
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push('/dashboard')
@@ -559,35 +559,35 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               }}
             />
 
-            {/* Milestones */}
+            {/* Tasks */}
             <section className="mt-12">
               <div className="mb-2 flex items-center gap-3">
                 <h2 className="text-base font-medium">
-                  Milestones{' '}
-                  {milestones.data?.length ? (
-                    <span className="font-normal text-muted-foreground">{milestones.data.length}</span>
+                  Tasks{' '}
+                  {tasks.data?.length ? (
+                    <span className="font-normal text-muted-foreground">{tasks.data.length}</span>
                   ) : null}
                 </h2>
                 <div className="h-px flex-1 bg-border" />
                 <button
-                  onClick={() => ws && createMilestone.mutate()}
-                  disabled={createMilestone.isPending || !ws}
+                  onClick={() => ws && createTask.mutate()}
+                  disabled={createTask.isPending || !ws}
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                 >
                   <Plus size={13} />
-                  New milestone
+                  New task
                 </button>
               </div>
-              {milestones.data?.length ? (
+              {tasks.data?.length ? (
                 <ul>
-                  {milestones.data.map((m) => {
+                  {tasks.data.map((m) => {
                     const t = m.issue_count ?? 0
                     const d = m.completed_issues ?? 0
                     const p = t > 0 ? Math.round((d / t) * 100) : 0
                     return (
                       <li key={m.id} className="group -mx-2 flex items-center gap-1 rounded-md px-2 transition-colors hover:bg-secondary/50">
                         <Link
-                          href={`/dashboard/milestones/${m.id}`}
+                          href={`/dashboard/tasks/${m.id}`}
                           prefetch={false}
                           className="flex flex-1 items-center gap-2.5 py-2 text-sm"
                         >
@@ -612,7 +612,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                         <button
                           onClick={() => ws && createIssue.mutate(m.id)}
                           disabled={createIssue.isPending || !ws}
-                          title="Add issue to milestone"
+                          title="Add issue to task"
                           className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100 disabled:opacity-30"
                         >
                           <Plus size={13} />
@@ -623,7 +623,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
                 </ul>
               ) : (
                 <p className="py-2 text-sm text-muted-foreground">
-                  No milestones in this project yet.
+                  No tasks in this project yet.
                 </p>
               )}
             </section>
@@ -827,15 +827,15 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               </span>
               <span className="ml-auto text-xs text-muted-foreground">{pct}%</span>
             </div>
-            {(milestones.data?.length ?? 0) > 0 ? (() => {
-              const mTotal = milestones.data!.length
-              const mDone = milestones.data!.filter((m) => m.status === 'done').length
+            {(tasks.data?.length ?? 0) > 0 ? (() => {
+              const mTotal = tasks.data!.length
+              const mDone = tasks.data!.filter((m) => m.status === 'done').length
               const mPct = mTotal > 0 ? Math.round((mDone / mTotal) * 100) : 0
               return (
                 <div className="mt-1 flex items-center gap-2.5 px-2 text-[13px]">
                   <ProgressRing pct={mPct} size={16} />
                   <span className="text-muted-foreground">
-                    {mDone} of {mTotal} milestones done
+                    {mDone} of {mTotal} tasks done
                   </span>
                   <span className="ml-auto text-xs text-muted-foreground">{mPct}%</span>
                 </div>

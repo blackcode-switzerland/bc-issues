@@ -324,7 +324,7 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
             Danger zone
           </h2>
           <p className="mb-5 text-sm text-muted-foreground">
-            Deleting a workspace permanently removes all its projects, milestones, issues, comments, attachments, labels,
+            Deleting a workspace permanently removes all its projects, tasks, issues, comments, attachments, labels,
             members, and history. This cannot be undone.
           </p>
           <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">

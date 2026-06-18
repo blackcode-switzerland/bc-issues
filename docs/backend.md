@@ -186,10 +186,10 @@ for exact column types, indexes, and check constraints.
 |-------|---------------------------|
 | `projects` | `workspace_id`, `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `end_date` |
 | `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
-| `milestones` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — milestones can be standalone), `due_date`, `status` |
-| `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`milestone_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
+| `tasks` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status` |
+| `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
-| `comments` | **polymorphic**: `parent_type` ∈ `issue`/`milestone`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
+| `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
 | `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by` |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
 | `issue_labels` / `project_labels` | join tables (composite PKs) linking workspace labels to issues / projects |
@@ -236,7 +236,7 @@ This single spine is read by:
 ### Analytics contract (`analytics.ts`)
 
 `computeAnalytics(input)` returns one `AnalyticsPayload` for the requested
-**view** (`workspace` | `project` | `milestone` | `member`) + optional target
+**view** (`workspace` | `project` | `task` | `member`) + optional target
 `id` + date window + faceted filters. Everything is workspace-scoped (no
 cross-workspace leakage) and computed live (no materialized views) — fine up to
 ~100k events/workspace.
@@ -258,7 +258,7 @@ time/active members vs. the previous equal-length window — `null` for all-time
 distributions (`by_status`, `by_priority`, `by_assignee` incl. per-assignee avg
 cycle, `by_label`, `by_project` for workspace/member views), time series
 (`velocity_series`, `activity_series`), histograms (`cycle_time_buckets`,
-`aging_buckets`), `activity_by_action`, `top_active_members`, and — milestone
+`aging_buckets`), `activity_by_action`, `top_active_members`, and — task
 view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
 
 ## API reference
@@ -276,7 +276,7 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   envelope can't drift. Single resources return the bare entity object.
 - **Mutations:** create → `201` + the created entity; update → `200` + the
   updated entity; delete → `200` + `{ deleted: true }` (plus `mode` where the
-  resource cascades, e.g. projects/milestones).
+  resource cascades, e.g. projects/tasks).
 
 ### Discovery (for agents & tooling)
 
@@ -336,11 +336,11 @@ POST   /api/workspaces/{ws}/projects/{id}/updates    post update (status + body)
 DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}   delete (author)
 POST   /api/workspaces/{ws}/projects/reorder    update display order (drag-and-drop)
 
-GET    /api/workspaces/{ws}/milestones          list / POST create
-GET    /api/workspaces/{ws}/milestones/{id}?preview=1   child counts for delete dialog
-PATCH  /api/workspaces/{ws}/milestones/{id}     update
-DELETE /api/workspaces/{ws}/milestones/{id}?mode=cascade|detach   move to Trash (default: detach)
-GET    /api/workspaces/{ws}/milestones/{id}/comments  list / POST
+GET    /api/workspaces/{ws}/tasks          list / POST create
+GET    /api/workspaces/{ws}/tasks/{id}?preview=1   child counts for delete dialog
+PATCH  /api/workspaces/{ws}/tasks/{id}     update
+DELETE /api/workspaces/{ws}/tasks/{id}?mode=cascade|detach   move to Trash (default: detach)
+GET    /api/workspaces/{ws}/tasks/{id}/comments  list / POST
 
 GET    /api/workspaces/{ws}/issues              list (filters) / POST create
                                                (create accepts label_ids (existing) and labels: string[] —
@@ -363,7 +363,7 @@ DELETE /api/workspaces/{ws}/comments/{id}       edit/delete a comment (author)
 GET    /api/workspaces/{ws}/activity            activity feed
 GET    /api/workspaces/{ws}/analytics           analytics (view/target/range/interval/filters)
 
-GET    /api/workspaces/{ws}/trash               list binned items (?type=issue|project|milestone)
+GET    /api/workspaces/{ws}/trash               list binned items (?type=issue|project|task)
 POST   /api/workspaces/{ws}/trash/restore       restore items ({items:[{type,id}]|batch_id, dry_run?, resolutions?})
 DELETE /api/workspaces/{ws}/trash/purge         permanent delete — owner only ({items|batch_id})
 POST   /api/workspaces/{ws}/trash/empty         hard-delete everything in the bin — owner only
@@ -426,7 +426,7 @@ POST     /api/errors/client                       client error beacon
 ### Legacy non-workspace shims
 
 The implicit-active-workspace duplicates of the core entities —
-`/api/projects`, `/api/issues`, `/api/milestones` and all their `/{id}`
+`/api/projects`, `/api/issues`, `/api/tasks` and all their `/{id}`
 children (incl. `/api/issues/{id}/comments`, `/attachments`, `/activity` and
 `/api/projects/{id}/members`) — have been **removed**. Both the web app and the
 `bk` CLI now call the canonical `/api/workspaces/{ws}/...` routes exclusively.
@@ -460,7 +460,7 @@ these; they never write SQL inline.
 | `projects.ts` | project CRUD; list joins lead + latest update health |
 | `project-relations.ts` | project ↔ member and project ↔ label sets |
 | `project-updates.ts` | status-update feed (on_track/at_risk/off_track) |
-| `milestones.ts` | milestone CRUD (project optional) |
+| `tasks.ts` | task CRUD (project optional) |
 | `issues.ts` | issue CRUD, seq allocation, field-level events, auto-watchers |
 | `comments.ts` | polymorphic comments + `@email` mention resolution |
 | `labels.ts` | workspace labels; case-insensitive unique names |
@@ -470,7 +470,7 @@ these; they never write SQL inline.
 | `fanout.ts` | event → per-user inbox materialization |
 | `inbox.ts` | inbox writes (dedup window) + listing |
 | `activity.ts` | activity feed reads |
-| `analytics.ts` | workspace/project/milestone/member analytics — see below |
+| `analytics.ts` | workspace/project/task/member analytics — see below |
 | `deletion.ts` | soft-delete engine — `softDelete*`, `previewDeletion`, `listTrash`, `previewRestore`, `restoreItems/Batch`, `purgeItems/Batch`, `emptyTrash` |
 | `transaction.ts` | transaction log + `undoLastOperations` |
 | `error-events.ts` | error log reads (public list redacts; detail is gated) |
@@ -479,6 +479,18 @@ these; they never write SQL inline.
 | `admin.ts` | `listAllPlatformUsers` — cross-workspace user listing for super admin view |
 
 ## Cross-cutting concerns
+
+### CLI version signaling
+
+`apiHandler` stamps two headers on **every** API response, sourced from
+`lib/cli-version.ts` (override via `BK_CLI_LATEST` / `BK_CLI_MIN` env, no redeploy):
+
+- `X-BK-CLI-Latest` — newest published `bk` CLI. The CLI shows a throttled
+  "update available" notice when the caller is behind it.
+- `X-BK-CLI-Min` — minimum CLI the API supports. The CLI hard-refuses (exit code
+  8) below this. **Raise `CLI_MIN_VERSION` whenever a server change breaks older
+  CLIs** (e.g. the milestone→task / key-removal rename) so stale clients get a
+  clear "please upgrade" instead of cryptic 404s.
 
 ### Middleware (`middleware.ts`)
 

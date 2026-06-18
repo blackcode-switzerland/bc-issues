@@ -209,12 +209,12 @@ projects: id, name, description, owner_id, status, created_at, updated_at
 -- Project Members (many-to-many)
 project_members: project_id, user_id, role ('owner'|'member')
 
--- Milestones
-milestones: id, project_id, name, description, due_date, created_at, updated_at
+-- Tasks
+tasks: id, project_id, name, description, due_date, created_at, updated_at
 
 -- Issues
 issues: id, project_id, title, description, status, priority (1-5), 
-        assignee_id, reporter_id, milestone_id, 
+        assignee_id, reporter_id, task_id, 
         start_date, due_date, estimated_hours,
         created_at, updated_at
 
@@ -246,7 +246,7 @@ blackcode-issues/
 │   │   ├── issues/route.ts              # CRUD issues
 │   │   ├── issues/[id]/route.ts
 │   │   ├── issues/[id]/comments/route.ts
-│   │   ├── milestones/route.ts
+│   │   ├── tasks/route.ts
 │   │   ├── users/route.ts
 │   │   ├── migrate/route.ts             # DB migrations (admin only)
 │   │   ├── seed/route.ts                # Mock data (admin only)
@@ -257,7 +257,7 @@ blackcode-issues/
 │   │   ├── [projectId]/page.tsx         # Project detail (Kanban/Timeline)
 │   │   ├── issues/page.tsx              # All Issues list
 │   │   ├── issues/[id]/page.tsx         # Issue detail/edit
-│   │   └── milestones/page.tsx
+│   │   └── tasks/page.tsx
 │   ├── login/page.tsx
 │   └── page.tsx                         # Landing page
 ├── components/
@@ -357,7 +357,7 @@ fetch('/api/admin/promote', { method: 'POST' }).then(r => r.json()).then(console
 **Needed:** Horizontal Gantt chart with:
 - Time axis (dates) across the top
 - Issues as horizontal bars showing duration (start_date → due_date)
-- Grouped by milestone or status
+- Grouped by task or status
 - Reference image provided shows classic project timeline style
 
 ### 2. Project Members Management
@@ -376,12 +376,12 @@ fetch('/api/admin/promote', { method: 'POST' }).then(r => r.json()).then(console
 - File attachments
 - Activity history
 
-### 4. Rich Milestone Pages
-**Current:** Basic milestone list  
+### 4. Rich Task Pages
+**Current:** Basic task list  
 **Needed:**
-- Individual milestone page showing its issues
+- Individual task page showing its issues
 - Progress bar (% complete)
-- Kanban or Gantt view filtered to milestone
+- Kanban or Gantt view filtered to task
 - Sortable by project
 
 ---

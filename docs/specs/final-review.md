@@ -13,7 +13,7 @@
 
 - Horizontal Gantt chart with time axis
 - Issues displayed as horizontal bars (start_date → due_date)
-- Grouping by: Milestone, Status, or Assignee
+- Grouping by: Task, Status, or Assignee
 - Color-coded by priority
 - Pan/zoom navigation with keyboard shortcuts
 - Responsive design with horizontal scroll
@@ -56,18 +56,18 @@ Features:
 - @tiptap/extension-link
 - @vercel/blob
 
-### 4. Milestone Detail Pages ✅
+### 4. Task Detail Pages ✅
 **Files:**
-- `app/dashboard/milestones/[id]/page.tsx` - New milestone detail page
-- `app/dashboard/milestones/page.tsx` - Updated list with clickable cards
+- `app/dashboard/tasks/[id]/page.tsx` - New task detail page
+- `app/dashboard/tasks/page.tsx` - Updated list with clickable cards
 
 Features:
-- Milestone header with name, description, due date
+- Task header with name, description, due date
 - Progress bar (% of issues completed)
 - Issues list with filtering (status, priority)
-- Tabbed views: List, Kanban, Gantt (filtered to milestone)
-- Edit milestone details
-- Delete milestone functionality
+- Tabbed views: List, Kanban, Gantt (filtered to task)
+- Edit task details
+- Delete task functionality
 - Clickable cards in list view
 
 ---
@@ -79,13 +79,13 @@ Features:
 - `components/project-members-panel.tsx`
 - `components/rich-text-editor.tsx`
 - `app/api/upload/route.ts`
-- `app/dashboard/milestones/[id]/page.tsx`
+- `app/dashboard/tasks/[id]/page.tsx`
 
 ### Files Modified
 - `components/project-view.tsx` - Added Gantt tab
 - `app/dashboard/[projectId]/page.tsx` - Added Members panel
 - `app/dashboard/issues/[id]/page.tsx` - Rich editor & attachments
-- `app/dashboard/milestones/page.tsx` - Clickable cards
+- `app/dashboard/tasks/page.tsx` - Clickable cards
 - `app/globals.css` - Prose styles for rich text
 - `lib/db.ts` - Activity history function
 

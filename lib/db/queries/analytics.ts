@@ -15,7 +15,7 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '../client'
 
-export type AnalyticsView = 'workspace' | 'project' | 'milestone' | 'member'
+export type AnalyticsView = 'workspace' | 'project' | 'task' | 'member'
 export type AnalyticsInterval = 'day' | 'week'
 
 export interface AnalyticsFilters {
@@ -142,8 +142,8 @@ function scopeWhere(input: ComputeAnalyticsInput): SQL {
   let scoped: SQL = base
   if (input.view === 'project' && input.id != null) {
     scoped = sql`${base} AND i.project_id = ${input.id}`
-  } else if (input.view === 'milestone' && input.id != null) {
-    scoped = sql`${base} AND i.milestone_id = ${input.id}`
+  } else if (input.view === 'task' && input.id != null) {
+    scoped = sql`${base} AND i.task_id = ${input.id}`
   } else if (input.view === 'member' && input.id != null) {
     // Issues this member is involved with: assignee OR reporter.
     scoped = sql`${base} AND (EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.user_id = ${input.id}) OR i.reporter_id = ${input.id})`
@@ -164,11 +164,11 @@ async function resolveScope(input: ComputeAnalyticsInput): Promise<AnalyticsScop
     )
     return { type: 'project', id: input.id, label: rows.rows[0]?.name ?? '' }
   }
-  if (input.view === 'milestone' && input.id != null) {
+  if (input.view === 'task' && input.id != null) {
     const rows = await db.execute<{ name: string }>(
-      sql`SELECT name FROM milestones WHERE id = ${input.id} AND workspace_id = ${input.workspaceId} LIMIT 1`
+      sql`SELECT name FROM tasks WHERE id = ${input.id} AND workspace_id = ${input.workspaceId} LIMIT 1`
     )
-    return { type: 'milestone', id: input.id, label: rows.rows[0]?.name ?? '' }
+    return { type: 'task', id: input.id, label: rows.rows[0]?.name ?? '' }
   }
   if (input.view === 'member' && input.id != null) {
     const rows = await db.execute<{ email: string; name: string | null }>(
@@ -485,18 +485,18 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     LIMIT 10
   `)
 
-  // ---------- optional milestone burndown (with ideal line) ----------
+  // ---------- optional task burndown (with ideal line) ----------
   let burndown: AnalyticsPayload['burndown_series']
-  if (input.view === 'milestone' && input.id != null) {
+  if (input.view === 'task' && input.id != null) {
     const m = await db.execute<{ due_date: string | null }>(
-      sql`SELECT due_date FROM milestones WHERE id = ${input.id} LIMIT 1`
+      sql`SELECT due_date FROM tasks WHERE id = ${input.id} LIMIT 1`
     )
     const due = m.rows[0]?.due_date
     if (due) {
       const series = await db.execute<{ date: string; remaining: number }>(sql`
         WITH bounds AS (
           SELECT
-            COALESCE((SELECT MIN(i.created_at) FROM issues i WHERE i.milestone_id = ${input.id} AND i.deleted_at IS NULL), NOW() - interval '14 days') AS start_at,
+            COALESCE((SELECT MIN(i.created_at) FROM issues i WHERE i.task_id = ${input.id} AND i.deleted_at IS NULL), NOW() - interval '14 days') AS start_at,
             (${due}::date + interval '1 day') AS end_at
         ),
         days AS (
@@ -506,7 +506,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
         )
         SELECT to_char(days.d, 'YYYY-MM-DD') AS date,
           (SELECT COUNT(*)::int FROM issues i
-           WHERE i.milestone_id = ${input.id}
+           WHERE i.task_id = ${input.id}
              AND i.deleted_at IS NULL
              AND i.created_at <= days.d + interval '1 day'
              AND (i.completed_at IS NULL OR i.completed_at > days.d + interval '1 day')) AS remaining

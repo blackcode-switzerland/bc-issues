@@ -41,14 +41,14 @@ interface IssueDetail {
   assignees: AssigneeInfo[]
   reporter_id: number | null
   project_id: number | null
-  milestone_id: number | null
+  task_id: number | null
   start_date: string | null
   due_date: string | null
   completed_at: string | null
   cancelled_at: string | null
   created_at: string
   updated_at: string
-  milestone_name: string | null
+  task_name: string | null
   project_name: string | null
 }
 
@@ -72,7 +72,7 @@ interface Project {
   icon: string | null
 }
 
-interface Milestone {
+interface Task {
   id: number
   name: string
   project_id: number | null
@@ -158,11 +158,11 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
     },
   })
 
-  const milestones = useQuery({
-    queryKey: ['ws-milestones', ws?.slug],
+  const tasks = useQuery({
+    queryKey: ['ws-tasks', ws?.slug],
     enabled: !!ws,
-    queryFn: async (): Promise<Milestone[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones`)
+    queryFn: async (): Promise<Task[]> => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -202,8 +202,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
     },
     onError: (e: Error) => toast.error(e.message),
@@ -267,7 +267,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
     },
     onError: () => toast.error('Could not update labels'),
   })
@@ -285,7 +285,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.invalidateQueries({ queryKey: ['activity', 'issue', issueId] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
     },
     onError: () => toast.error('Could not update labels'),
   })
@@ -334,13 +334,13 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['project-issues'] }, (old) =>
         old?.filter((i) => i.id !== issueId)
       )
-      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['milestone-issues'] }, (old) =>
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['task-issues'] }, (old) =>
         old?.filter((i) => i.id !== issueId)
       )
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push('/dashboard/issues')
@@ -616,18 +616,18 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               onChange={(v) => patchIssue.mutate({ project_id: v ? parseInt(v) : null })}
             />
             <PropertySelect
-              value={data.milestone_id ? String(data.milestone_id) : ''}
-              placeholder="Add to milestone"
-              searchPlaceholder="Set milestone…"
+              value={data.task_id ? String(data.task_id) : ''}
+              placeholder="Add to task"
+              searchPlaceholder="Set task…"
               options={[
-                { value: '', label: 'No milestone' },
-                ...(milestones.data ?? []).map((m) => ({
+                { value: '', label: 'No task' },
+                ...(tasks.data ?? []).map((m) => ({
                   value: String(m.id),
                   label: m.name,
                   icon: <Target size={14} className="text-muted-foreground" />,
                 })),
               ]}
-              onChange={(v) => patchIssue.mutate({ milestone_id: v ? parseInt(v) : null })}
+              onChange={(v) => patchIssue.mutate({ task_id: v ? parseInt(v) : null })}
             />
 
             <div className="my-4 h-px bg-border" />

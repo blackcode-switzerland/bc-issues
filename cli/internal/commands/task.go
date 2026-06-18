@@ -10,29 +10,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newMilestoneCmd() *cobra.Command {
+func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "milestone",
-		Aliases: []string{"milestones"},
-		Short:   "Manage milestones",
+		Use:     "task",
+		Aliases: []string{"tasks"},
+		Short:   "Manage tasks",
 	}
 	cmd.AddCommand(
-		newMilestoneListCmd(),
-		newMilestoneViewCmd(),
-		newMilestoneCreateCmd(),
-		newMilestoneEditCmd(),
-		newMilestoneDeleteCmd(),
-		newMilestoneCommentCmd(),
-		newMilestoneCommentsCmd(),
+		newTaskListCmd(),
+		newTaskViewCmd(),
+		newTaskCreateCmd(),
+		newTaskEditCmd(),
+		newTaskDeleteCmd(),
+		newTaskCommentCmd(),
+		newTaskCommentsCmd(),
 	)
 	return cmd
 }
 
-func newMilestoneListCmd() *cobra.Command {
+func newTaskListCmd() *cobra.Command {
 	var projectID int
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List milestones (optionally filter by --project)",
+		Short: "List tasks (optionally filter by --project)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -42,22 +42,22 @@ func newMilestoneListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ms, err := c.ListMilestones(projectID)
+			ms, err := c.ListTasks(projectID)
 			if err != nil {
 				return err
 			}
-			return output.Render(format, ms, milestoneTable(ms, cmd.ErrOrStderr()))
+			return output.Render(format, ms, taskTable(ms, cmd.ErrOrStderr()))
 		},
 	}
 	cmd.Flags().IntVar(&projectID, "project", 0, "Filter by project id")
 	return cmd
 }
 
-func newMilestoneViewCmd() *cobra.Command {
+func newTaskViewCmd() *cobra.Command {
 	var includeIssues bool
 	cmd := &cobra.Command{
 		Use:   "view <id>",
-		Short: "Show a milestone",
+		Short: "Show a task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -72,7 +72,7 @@ func newMilestoneViewCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			m, err := c.GetMilestone(id, includeIssues)
+			m, err := c.GetTask(id, includeIssues)
 			if err != nil {
 				return err
 			}
@@ -98,16 +98,16 @@ func newMilestoneViewCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&includeIssues, "include-issues", false, "Embed the milestone's issues")
+	cmd.Flags().BoolVar(&includeIssues, "include-issues", false, "Embed the task's issues")
 	return cmd
 }
 
-func newMilestoneCreateCmd() *cobra.Command {
+func newTaskCreateCmd() *cobra.Command {
 	var projectID int
 	var name, description, descriptionFile, dueDate string
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a milestone",
+		Short: "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if projectID == 0 || name == "" {
 				return fmt.Errorf("--project and --name are required")
@@ -124,7 +124,7 @@ func newMilestoneCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			req := client.CreateMilestoneRequest{
+			req := client.CreateTaskRequest{
 				ProjectID:   projectID,
 				Name:        name,
 				Description: body,
@@ -132,29 +132,29 @@ func newMilestoneCreateCmd() *cobra.Command {
 			if dueDate != "" {
 				req.DueDate = &dueDate
 			}
-			m, err := c.CreateMilestone(req)
+			m, err := c.CreateTask(req)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, m, func(w io.Writer) error {
-				fmt.Fprintf(w, "created milestone #%d %q\n", m.ID, m.Name)
+				fmt.Fprintf(w, "created task #%d %q\n", m.ID, m.Name)
 				return nil
 			})
 		},
 	}
 	cmd.Flags().IntVar(&projectID, "project", 0, "Project id (required)")
-	cmd.Flags().StringVar(&name, "name", "", "Milestone name (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Task name (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Description (\"-\" for stdin)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	return cmd
 }
 
-func newMilestoneEditCmd() *cobra.Command {
+func newTaskEditCmd() *cobra.Command {
 	var name, description, descriptionFile, dueDate string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit a milestone (name, description, due date; use 'none' to clear due date)",
+		Short: "Edit a task (name, description, due date; use 'none' to clear due date)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
@@ -165,7 +165,7 @@ func newMilestoneEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			req := client.UpdateMilestoneRequest{}
+			req := client.UpdateTaskRequest{}
 			if cmd.Flags().Changed("name") {
 				req.Name = &name
 			}
@@ -183,12 +183,12 @@ func newMilestoneEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			m, err := c.UpdateMilestone(id, req)
+			m, err := c.UpdateTask(id, req)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, m, func(w io.Writer) error {
-				fmt.Fprintf(w, "updated milestone #%d %q\n", m.ID, m.Name)
+				fmt.Fprintf(w, "updated task #%d %q\n", m.ID, m.Name)
 				return nil
 			})
 		},
@@ -200,14 +200,14 @@ func newMilestoneEditCmd() *cobra.Command {
 	return cmd
 }
 
-func newMilestoneDeleteCmd() *cobra.Command {
+func newTaskDeleteCmd() *cobra.Command {
 	var yes, cascade, detach bool
 	cmd := &cobra.Command{
 		Use:   "delete <id>",
-		Short: "Move a milestone to the Trash",
-		Long: "Move a milestone to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
+		Short: "Move a task to the Trash",
+		Long: "Move a task to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
 			"Attached issues: by default they stay active and are unlinked from the\n" +
-			"milestone (--detach). Pass --cascade to move them to the Trash too so they\n" +
+			"task (--detach). Pass --cascade to move them to the Trash too so they\n" +
 			"can be restored as a group.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -224,9 +224,9 @@ func newMilestoneDeleteCmd() *cobra.Command {
 			} else if detach {
 				mode = "detach"
 			}
-			prompt := fmt.Sprintf("Move milestone #%d to Trash?", id)
+			prompt := fmt.Sprintf("Move task #%d to Trash?", id)
 			if cascade {
-				prompt = fmt.Sprintf("Move milestone #%d and its issues to Trash?", id)
+				prompt = fmt.Sprintf("Move task #%d and its issues to Trash?", id)
 			}
 			if !Confirm(prompt, yes) {
 				return fmt.Errorf("aborted")
@@ -235,10 +235,10 @@ func newMilestoneDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := c.DeleteMilestone(id, mode); err != nil {
+			if err := c.DeleteTask(id, mode); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "moved milestone #%d to Trash\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "moved task #%d to Trash\n", id)
 			return nil
 		},
 	}
@@ -248,16 +248,16 @@ func newMilestoneDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func newMilestoneCommentCmd() *cobra.Command {
+func newTaskCommentCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "comment <milestone-id>",
-		Short: "Post a comment on a milestone",
+		Use:   "comment <task-id>",
+		Short: "Post a comment on a task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid milestone id: %w", err)
+				return fmt.Errorf("invalid task id: %w", err)
 			}
 			content, err := ReadBody(body, bodyFile)
 			if err != nil {
@@ -278,12 +278,12 @@ func newMilestoneCommentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cm, err := c.CreateMilestoneComment(ws, id, content)
+			cm, err := c.CreateTaskComment(ws, id, content)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, cm, func(w io.Writer) error {
-				fmt.Fprintf(w, "comment #%d posted on milestone #%d\n", cm.ID, id)
+				fmt.Fprintf(w, "comment #%d posted on task #%d\n", cm.ID, id)
 				return nil
 			})
 		},
@@ -293,15 +293,15 @@ func newMilestoneCommentCmd() *cobra.Command {
 	return cmd
 }
 
-func newMilestoneCommentsCmd() *cobra.Command {
+func newTaskCommentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <milestone-id>",
-		Short: "List comments on a milestone",
+		Use:   "comments <task-id>",
+		Short: "List comments on a task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid milestone id: %w", err)
+				return fmt.Errorf("invalid task id: %w", err)
 			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -315,7 +315,7 @@ func newMilestoneCommentsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			comments, err := c.ListMilestoneComments(ws, id)
+			comments, err := c.ListTaskComments(ws, id)
 			if err != nil {
 				return err
 			}
@@ -324,7 +324,7 @@ func newMilestoneCommentsCmd() *cobra.Command {
 	}
 }
 
-func milestoneTable(ms []client.Milestone, stderr io.Writer) func(io.Writer) error {
+func taskTable(ms []client.Task, stderr io.Writer) func(io.Writer) error {
 	return func(w io.Writer) error {
 		tw := output.Tabwriter(w)
 		fmt.Fprintln(tw, "ID\tNAME\tPROJECT\tDUE\tISSUES (DONE/TOTAL)")
@@ -338,7 +338,7 @@ func milestoneTable(ms []client.Milestone, stderr io.Writer) func(io.Writer) err
 			return err
 		}
 		if len(ms) == 0 {
-			fmt.Fprintln(stderr, "(no milestones)")
+			fmt.Fprintln(stderr, "(no tasks)")
 		}
 		return nil
 	}

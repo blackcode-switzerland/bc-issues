@@ -84,7 +84,7 @@ func newAnalyticsCmd() *cobra.Command {
 		Long: `Show analytics for the active workspace (or --ws <slug|id>).
 
 Mirrors the web dashboard: pick a scope with --view (workspace|project|
-milestone|member) and --id, narrow the window with --from/--to/--interval, and
+task|member) and --id, narrow the window with --from/--to/--interval, and
 slice with the --status/--priority/--label/--assignee filters. The default
 output is a readable summary; --json / --yaml emit the full payload.`,
 		Example: `  bk analytics
@@ -153,8 +153,8 @@ output is a readable summary; --json / --yaml emit the full payload.`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&view, "view", "", "Scope: workspace (default) | project | milestone | member")
-	cmd.Flags().IntVar(&id, "id", 0, "Target id (required for project/milestone/member views)")
+	cmd.Flags().StringVar(&view, "view", "", "Scope: workspace (default) | project | task | member")
+	cmd.Flags().IntVar(&id, "id", 0, "Target id (required for project/task/member views)")
 	cmd.Flags().StringVar(&ws, "ws", "", "Workspace slug or id (defaults to the active workspace)")
 	cmd.Flags().StringVar(&from, "from", "", "Window start (YYYY-MM-DD or ISO timestamp)")
 	cmd.Flags().StringVar(&to, "to", "", "Window end (YYYY-MM-DD or ISO timestamp)")

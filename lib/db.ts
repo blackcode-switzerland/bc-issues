@@ -2,7 +2,7 @@ export { db, schema } from './db/client'
 export type {
   User,
   Project,
-  Milestone,
+  Task,
   Issue,
   Comment,
   Attachment,
@@ -16,7 +16,7 @@ export type {
 export * from './db/queries/users'
 export * from './db/queries/projects'
 export * from './db/queries/issues'
-export * from './db/queries/milestones'
+export * from './db/queries/tasks'
 export * from './db/queries/comments'
 export * from './db/queries/attachments'
 export * from './db/queries/members'

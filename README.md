@@ -76,14 +76,14 @@ prompted to create your first workspace.
 - **Projects** — status, priority, lead, members, labels, start/target dates,
   icon, and a **status-update feed** (health: on-track / at-risk / off-track).
 - **Issues** — workspace sequence IDs, priority, status, assignee, labels,
-  milestone, due dates, watchers, rich-text description, comments with
+  task, due dates, watchers, rich-text description, comments with
   `@mentions`, and attachments. Standalone issues (no project) are allowed.
-- **Milestones** — workspace- or project-scoped, with their own issues and
+- **Tasks** — workspace- or project-scoped, with their own issues and
   comments.
 - **Labels** — defined at the workspace level, applied to issues and projects.
 - **Activity & inbox** — every mutation writes to an append-only event spine
   (`events`), which fans out into a per-user `inbox` and the activity feed.
-- **Analytics** — workspace / project / milestone / member views, with a
+- **Analytics** — workspace / project / task / member views, with a
   print-to-PDF page.
 - **Undo** — a transaction log backs `bk undo` and the `/api/undo` endpoint.
 - **Reliability** — server-side error tracking with a public `/status` page.
@@ -98,7 +98,7 @@ Workspace-scoped routes are canonical:
 /api/workspaces/{ws}/projects/{id}/updates       GET, POST    # status updates
 /api/workspaces/{ws}/issues              GET, POST
 /api/workspaces/{ws}/issues/{id}         GET, PATCH, DELETE
-/api/workspaces/{ws}/milestones …        GET, POST, PATCH, DELETE
+/api/workspaces/{ws}/tasks …        GET, POST, PATCH, DELETE
 /api/workspaces/{ws}/labels …            GET, POST, DELETE
 /api/workspaces/{ws}/members …           GET, DELETE
 /api/workspaces/{ws}/invitations …       GET, POST, DELETE
@@ -108,7 +108,7 @@ Workspace-scoped routes are canonical:
 
 Personal/auth routes live under `/api/me/*`, `/api/auth/*`, `/api/tokens/*`,
 `/api/cli/authorize`, `/api/upload`, `/api/undo`, and `/api/status`. A set of
-legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/milestones`,
+legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
 `/api/users`, `/api/activity`) remain for the CLI. Full detail in
 [`docs/backend.md`](docs/backend.md).
 

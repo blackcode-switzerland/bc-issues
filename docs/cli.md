@@ -33,7 +33,7 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 | Auth | Bearer API tokens (same `api_tokens` table the web uses) |
 | Default server | `http://localhost:3000` |
 
-The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, milestones, labels, invitations, an inbox, the activity feed, analytics, undo, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
+The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, undo, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
 
 A typical session:
 
@@ -72,11 +72,11 @@ go build -o bk ./cmd/bk
 
 The cross-compile matrix (`make all` / `make dist`) covers `darwin/amd64`, `darwin/arm64`, `linux/amd64`, `linux/arm64`, `windows/amd64`, and `windows/arm64`, emitting `dist/bk-<version>-<os>-<arch>[.exe]`.
 
-Versions are stamped into the binary via `-ldflags`:
+Versions are stamped into the binary via `-ldflags` (into the `internal/version` package):
 
-- `commands.Version` — `git describe --tags --dirty --always` (or `"dev"`)
-- `commands.Commit` — short git SHA
-- `commands.BuildDate` — ISO-8601 UTC at build time
+- `version.Version` — `git describe --tags --dirty --always` (or `"dev"`)
+- `version.Commit` — short git SHA
+- `version.BuildDate` — ISO-8601 UTC at build time
 
 `bk version` prints all three.
 
@@ -145,7 +145,7 @@ Hits `GET /api/me`. Prints the authenticated user's id, email, name, role, and h
 
 ## Active workspace
 
-Everything below the workspace level is partitioned by workspace: projects, milestones, issues, labels, members, invitations, activity, analytics. Pick the active workspace once, and the rest of `bk` operates within it.
+Everything below the workspace level is partitioned by workspace: projects, tasks, issues, labels, members, invitations, activity, analytics. Pick the active workspace once, and the rest of `bk` operates within it.
 
 ```bash
 bk workspace list                 # workspaces you belong to (active row marked with *)
@@ -187,10 +187,10 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
 | `bk project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
 | `bk project issues <id> [--status S] [--assignee REF] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
-| `bk project milestones <id>` | `GET /api/workspaces/:ws/milestones?project_id=:id` | |
+| `bk project tasks <id>` | `GET /api/workspaces/:ws/tasks?project_id=:id` | |
 | `bk project create --name N [--description D \| --description-file F]` | `POST /api/workspaces/:ws/projects` | |
 | `bk project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/workspaces/:ws/projects/:id` | |
-| `bk project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached milestones/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
+| `bk project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached tasks/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
 | `bk project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/workspaces/:ws/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
 | `bk project remove-member <id> --user REF [--yes]` | `DELETE /api/workspaces/:ws/projects/:id/members` | `REF` = id, email, or display name. Prompts to confirm. |
 
@@ -222,7 +222,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 --priority 1-5          1 = urgent
 --status S              backlog | todo | in_progress | done | cancelled
 --assignee REF [...]    id, email, display name, or "me" — repeatable for multiple assignees
---milestone N           milestone id
+--task N           task id
 --start-date YYYY-MM-DD
 --due-date YYYY-MM-DD
 --label NAME            label name; repeatable — existing labels matched, unknown ones created on the fly
@@ -231,27 +231,27 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 > `--status` is free-form on the CLI side and validated server-side. The canonical issue statuses are `backlog`, `todo`, `in_progress`, `done`, and `cancelled`.
 
-**`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--milestone`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--milestone`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
+**`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--task`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--task`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
 
-### Milestones
+### Tasks
 
-`bk milestones` is an alias for `bk milestone`.
+`bk tasks` is an alias for `bk task`.
 
 | Command | Backend call |
 |---|---|
-| `bk milestone list [--project N]` | `GET /api/workspaces/:ws/milestones[?project_id=N]` |
-| `bk milestone view <id> [--include-issues]` | `GET /api/workspaces/:ws/milestones/:id[?includeIssues=true]` |
-| `bk milestone create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD]` | `POST /api/workspaces/:ws/milestones` |
-| `bk milestone edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/milestones/:id` |
-| `bk milestone delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/milestones/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
+| `bk task list [--project N]` | `GET /api/workspaces/:ws/tasks[?project_id=N]` |
+| `bk task view <id> [--include-issues]` | `GET /api/workspaces/:ws/tasks/:id[?includeIssues=true]` |
+| `bk task create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD]` | `POST /api/workspaces/:ws/tasks` |
+| `bk task edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/tasks/:id` |
+| `bk task delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/tasks/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
 
 ### Trash (recycle bin, workspace-scoped)
 
-All deletes (issues, projects, milestones) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk trash` to inspect and manage the bin.
+All deletes (issues, projects, tasks) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk trash` to inspect and manage the bin.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk trash list [--type issue\|project\|milestone]` | `GET /api/workspaces/:ws/trash` | Shows binned items grouped by deletion batch. |
+| `bk trash list [--type issue\|project\|task]` | `GET /api/workspaces/:ws/trash` | Shows binned items grouped by deletion batch. |
 | `bk trash restore <type:id> [<type:id> …]` | `POST /api/workspaces/:ws/trash/restore` | e.g. `bk trash restore issue:42 project:3`. Detects and reports conflicts. |
 | `bk trash restore --batch <id> [--restore-parents\|--standalone]` | same | Restore a whole cascade-delete group at once. |
 | `bk trash purge <type:id> [--yes]` | `DELETE /api/workspaces/:ws/trash/purge` | Permanent hard-delete. **Owner only.** |
@@ -324,8 +324,8 @@ workspace scope, last-30-days window, daily buckets:
 
 | Flag | Meaning |
 |---|---|
-| `--view workspace\|project\|milestone\|member` | Analytics scope. |
-| `--id N` | Target id — required for `project` / `milestone` / `member`. |
+| `--view workspace\|project\|task\|member` | Analytics scope. |
+| `--id N` | Target id — required for `project` / `task` / `member`. |
 | `--ws <slug\|id>` | Target a workspace without changing the active one. |
 | `--from`, `--to` | Window bounds (`YYYY-MM-DD` or ISO). Omit for all-time. |
 | `--interval day\|week` | Time-series bucket width. |
@@ -385,13 +385,13 @@ For any `--description` / `--body` flag, three forms work, and the `*-file` vari
 
 ### Nullable field convention
 
-For `edit` commands on nullable fields (`--assignee`, `--milestone`, `--start-date`, `--due-date`; `--due-date` on milestones):
+For `edit` commands on nullable fields (`--assignee`, `--task`, `--start-date`, `--due-date`; `--due-date` on tasks):
 
 - Omit the flag → leave it unchanged.
 - Pass `none`, `null`, `unset`, or `clear` (case-insensitive) → explicitly null it.
 
 ```bash
-bk issue edit 42 --milestone none --due-date 2026-06-30
+bk issue edit 42 --task none --due-date 2026-06-30
 ```
 
 ### User-reference convention
@@ -420,9 +420,12 @@ Non-numeric refs trigger a `GET /api/users` lookup the first time they're resolv
   "user_id": 7,
   "email":  "alice@example.com",
   "active_workspace_id": 3,
-  "active_workspace_slug": "acme"
+  "active_workspace_slug": "acme",
+  "last_update_check": 1718668800
 }
 ```
+
+`last_update_check` is a unix timestamp the CLI writes to throttle the soft update notice to once per 24h (see [Updates](#updates)).
 
 Override the directory with `BK_CONFIG_DIR` (the file is always `config.json` inside it). The token and server live here only — there are no `BK_SERVER` / `BK_TOKEN` environment variables.
 
@@ -488,6 +491,20 @@ Stable for scripting. The mapping happens in `cmd/bk/main.go` by inspecting the 
 | 5 | Not found (404) |
 | 6 | Validation error (400 / 422) |
 | 7 | User aborted (declined a confirm prompt) |
+| 8 | Client outdated — running version is below the API's minimum supported version; upgrade required |
+
+---
+
+## Updates
+
+The API sends two headers on **every** response, and the CLI acts on them:
+
+- `X-BK-CLI-Latest` — the newest published CLI version.
+- `X-BK-CLI-Min` — the oldest version the API still supports.
+
+**Soft notice.** When the running version is older than `X-BK-CLI-Latest`, the CLI prints `A new bk version (X) is available — upgrade: npm i -g @blackcode_sa/bc-issues@latest` to **stderr** after the command finishes. It's throttled to once per 24 hours via the `last_update_check` field in the config file, and never written to stdout (so it can't corrupt `--json` output).
+
+**Hard floor.** When the running version is below `X-BK-CLI-Min`, every request fails fast: the CLI prints `Your bk version (X) is no longer supported. Upgrade: …` to stderr and exits with code **8**. Dev / unparsable versions (`dev`, `(devel)`, etc.) are never blocked or nagged.
 
 ---
 
@@ -547,11 +564,12 @@ Built around a small `Client` struct:
 
 - Constructor: `client.New(baseURL, token) *Client` (trailing slash on the base URL is trimmed).
 - Verb helpers: `get`, `postJSON`, `patchJSON`, `deleteJSON`, plus `UploadFile` (multipart) and `AttachToIssue`.
-- Common headers on every request: `Authorization: Bearer …` (when a token is set), `Accept: application/json`, `User-Agent: bk-cli/0.1`.
+- Common headers on every request: `Authorization: Bearer …` (when a token is set), `Accept: application/json`, `User-Agent: bk-cli/<version>` (the stamped `internal/version.Version`).
 - 30-second timeout.
 - Non-2xx responses decode into `APIError { Status, ErrorMsg, Suggestion, Details }`; the `main.go` translator maps `Status` to an exit code.
+- Every response's `X-BK-CLI-Latest` / `X-BK-CLI-Min` headers are recorded into package vars `client.LatestSeen` / `client.MinSeen`. If the running version is below `MinSeen`, the request returns `*client.OutdatedError` (exit code 8). `main.go` reads `LatestSeen` after `Execute()` to print the throttled soft-update notice. See [Updates](#updates).
 
-DTO types live in `internal/client/types.go` (`Me`, `User`, `Project`, `Issue`, `Milestone`, `Comment`, `Attachment`, `ProjectMember`, the page wrappers, etc.) and `internal/client/workspace.go` (`Workspace`, `WorkspaceMember`, `WorkspaceInvitation`, `InboxMessage`, `Label`, and their request/response shapes). Some endpoints use the legacy non-workspace paths (`/api/workspaces/:ws/projects`, `/api/workspaces/:ws/issues`, `/api/workspaces/:ws/milestones`) while the newer workspace-scoped features (labels, members, invitations) use `/api/workspaces/{slug|id}/…`.
+DTO types live in `internal/client/types.go` (`Me`, `User`, `Project`, `Issue`, `Task`, `Comment`, `Attachment`, `ProjectMember`, the page wrappers, etc.) and `internal/client/workspace.go` (`Workspace`, `WorkspaceMember`, `WorkspaceInvitation`, `InboxMessage`, `Label`, and their request/response shapes). Some endpoints use the legacy non-workspace paths (`/api/workspaces/:ws/projects`, `/api/workspaces/:ws/issues`, `/api/workspaces/:ws/tasks`) while the newer workspace-scoped features (labels, members, invitations) use `/api/workspaces/{slug|id}/…`.
 
 ### Auth flow (`internal/commands/login.go`)
 
@@ -576,7 +594,7 @@ The state machine:
 | `ReadBody(literal, fromFile)` | Resolves `--body-file FILE` / `--body -` / `--body "..."` into a string. |
 | `ResolveUserRef(c, cfg, ref)` | Turns an email/name/id/"me" into a numeric user id (calls `/api/users` if needed). |
 | `IntOrNullJSON(ref, c, cfg)` | Encodes a user ref to JSON `null` or an int; supports `none`/`null`/`unset`/`clear`. |
-| `PlainIntOrNullJSON(ref)` | Same, but expects a plain integer (used for milestone ids). |
+| `PlainIntOrNullJSON(ref)` | Same, but expects a plain integer (used for task ids). |
 | `StringOrNullJSON(ref)` | Encodes a JSON string, `null` for the clear keywords, or omits when empty (used for dates). |
 
 ### Output (`internal/output/`)

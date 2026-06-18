@@ -153,7 +153,7 @@ export const PROJECT_ICON_KEYS = Object.keys(PROJECT_ICON_MAP)
 // Friendly search aliases so e.g. "task" finds Target, "money" finds DollarSign.
 const SEARCH_ALIASES: Record<string, string> = {
   Target: 'goal task aim',
-  Flag: 'milestone mark',
+  Flag: 'task mark',
   Rocket: 'launch ship startup',
   Bug: 'issue defect',
   Code2: 'dev engineering programming',

@@ -83,9 +83,9 @@ const FEATURES: Feature[] = [
   },
   {
     icon: Tag,
-    title: 'Labels & milestones',
+    title: 'Labels & tasks',
     description:
-      'Workspace-wide labels with colors, and milestones that stand alone or belong to a project — each with its own issues, comments and progress.',
+      'Workspace-wide labels with colors, and tasks that stand alone or belong to a project — each with its own issues, comments and progress.',
     status: 'live',
   },
   {
@@ -106,7 +106,7 @@ const FEATURES: Feature[] = [
     icon: Sparkles,
     title: 'Workspace analytics',
     description:
-      'Snapshot counts, completion rate, cycle time, velocity and aging — sliced by status, priority, assignee, label and project, plus per-milestone burndown.',
+      'Snapshot counts, completion rate, cycle time, velocity and aging — sliced by status, priority, assignee, label and project, plus per-task burndown.',
     status: 'live',
   },
   {
@@ -127,7 +127,7 @@ const FEATURES: Feature[] = [
     icon: Trash2,
     title: 'Trash & restore',
     description:
-      'Deleting an issue, project or milestone moves it to a recoverable Trash. Restore brings items back as a group; owners can purge or empty the bin.',
+      'Deleting an issue, project or task moves it to a recoverable Trash. Restore brings items back as a group; owners can purge or empty the bin.',
     status: 'live',
   },
   {
@@ -366,7 +366,7 @@ function CommandLine() {
     {
       title: 'Everything the UI can do',
       copy:
-        'issues, projects, milestones, comments, labels, members, invites, inbox, trash, analytics, and undo — all from the terminal.',
+        'issues, projects, tasks, comments, labels, members, invites, inbox, trash, analytics, and undo — all from the terminal.',
     },
   ]
   return (
@@ -603,7 +603,7 @@ function FAQ() {
     },
     {
       q: 'What happens when I delete something?',
-      a: 'Issues, projects and milestones soft-delete into a recoverable Trash rather than vanishing. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with bk undo (POST /api/undo), up to 10 at a time.',
+      a: 'Issues, projects and tasks soft-delete into a recoverable Trash rather than vanishing. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with bk undo (POST /api/undo), up to 10 at a time.',
     },
     {
       q: 'Can a team and its agents share a workspace?',

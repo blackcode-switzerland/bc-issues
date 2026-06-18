@@ -40,13 +40,13 @@ import {
 } from '@/lib/work-items'
 import type { AnalyticsPayload } from '@/lib/db/queries/analytics'
 
-type View = 'workspace' | 'project' | 'milestone' | 'member'
+type View = 'workspace' | 'project' | 'task' | 'member'
 type TabKey = 'overview' | 'throughput' | 'workload' | 'activity' | 'burndown'
 
 const SCOPES: Array<{ value: View; label: string }> = [
   { value: 'workspace', label: 'Workspace' },
   { value: 'project', label: 'Project' },
-  { value: 'milestone', label: 'Milestone' },
+  { value: 'task', label: 'Task' },
   { value: 'member', label: 'Member' },
 ]
 
@@ -387,11 +387,11 @@ export function AnalyticsView() {
       return (j.data ?? []).map((p: { id: number; name: string }) => ({ value: p.id, label: p.name }))
     },
   })
-  const milestones = useQuery({
-    queryKey: ['ws-milestones', ws?.slug],
-    enabled: !!ws && view === 'milestone',
+  const tasks = useQuery({
+    queryKey: ['ws-tasks', ws?.slug],
+    enabled: !!ws && view === 'task',
     queryFn: async (): Promise<ListItem[]> => {
-      const r = await fetch(`/api/workspaces/${ws!.slug}/milestones`)
+      const r = await fetch(`/api/workspaces/${ws!.slug}/tasks`)
       if (!r.ok) return []
       const j = await r.json()
       return (j.data ?? []).map((m: { id: number; name: string }) => ({ value: m.id, label: m.name }))
@@ -421,8 +421,8 @@ export function AnalyticsView() {
   const targetItems: ListItem[] =
     view === 'project'
       ? projects.data ?? []
-      : view === 'milestone'
-        ? milestones.data ?? []
+      : view === 'task'
+        ? tasks.data ?? []
         : view === 'member'
           ? (members.data ?? []).map((m) => ({ value: m.user_id, label: m.name ?? m.email, sub: m.email }))
           : []
@@ -523,7 +523,7 @@ export function AnalyticsView() {
     { key: 'throughput', label: 'Throughput', icon: <Gauge size={14} /> },
     { key: 'workload', label: 'Workload', icon: <Users size={14} /> },
     { key: 'activity', label: 'Activity', icon: <Activity size={14} /> },
-    ...(view === 'milestone'
+    ...(view === 'task'
       ? [{ key: 'burndown' as TabKey, label: 'Burndown', icon: <TrendingDown size={14} /> }]
       : []),
   ]
@@ -573,7 +573,7 @@ export function AnalyticsView() {
             onChange={(v) => {
               setView(v)
               setTargetId(null)
-              if (v !== 'milestone' && tab === 'burndown') setTab('overview')
+              if (v !== 'task' && tab === 'burndown') setTab('overview')
             }}
           />
           {view !== 'workspace' ? (
@@ -584,7 +584,7 @@ export function AnalyticsView() {
               onChange={setTargetId}
               loading={
                 (view === 'project' && projects.isLoading) ||
-                (view === 'milestone' && milestones.isLoading) ||
+                (view === 'task' && tasks.isLoading) ||
                 (view === 'member' && members.isLoading)
               }
             />
@@ -1060,7 +1060,7 @@ function ActivityTab({
 function BurndownTab({ data }: { data: AnalyticsPayload }) {
   const series = data.burndown_series
   if (!series || series.length === 0) {
-    return <EmptyState title="No burndown available" body="This milestone has no due date set, so a burndown can't be charted." />
+    return <EmptyState title="No burndown available" body="This task has no due date set, so a burndown can't be charted." />
   }
   const remaining = series[series.length - 1]?.remaining ?? 0
   const peak = Math.max(...series.map((p) => p.remaining))
@@ -1100,7 +1100,7 @@ function humanizeAction(action: string): string {
     status_changed: 'Status changed',
     priority_changed: 'Priority changed',
     due_date_changed: 'Due date changed',
-    milestone_changed: 'Milestone changed',
+    task_changed: 'Task changed',
     project_changed: 'Project changed',
     labeled: 'Labeled',
     unlabeled: 'Unlabeled',

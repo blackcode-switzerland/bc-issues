@@ -4,15 +4,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
 	"github.com/spf13/cobra"
-)
-
-// Version, Commit, and BuildDate are overridden at build time by the
-// Makefile via -ldflags "-X .../commands.Version=..." etc.
-var (
-	Version   = "dev"
-	Commit    = ""
-	BuildDate = ""
 )
 
 func newVersionCmd() *cobra.Command {
@@ -20,7 +13,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the bk CLI version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			v := Version
+			v := version.Version
 			if v == "dev" {
 				if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
 					v = info.Main.Version
@@ -28,11 +21,11 @@ func newVersionCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintln(out, v)
-			if Commit != "" {
-				fmt.Fprintf(out, "commit: %s\n", Commit)
+			if version.Commit != "" {
+				fmt.Fprintf(out, "commit: %s\n", version.Commit)
 			}
-			if BuildDate != "" {
-				fmt.Fprintf(out, "built:  %s\n", BuildDate)
+			if version.BuildDate != "" {
+				fmt.Fprintf(out, "built:  %s\n", version.BuildDate)
 			}
 			return nil
 		},

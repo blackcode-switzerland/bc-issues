@@ -368,7 +368,7 @@ func (c *Client) DeleteProjectUpdate(slugOrID string, projectID, updateID int) e
 	)
 }
 
-// ---------- workspace-scoped comments (issues, milestones, projects) ----------
+// ---------- workspace-scoped comments (issues, tasks, projects) ----------
 
 func (c *Client) ListIssueCommentsWS(slugOrID string, issueID int) ([]WorkspaceComment, error) {
 	var resp struct {
@@ -392,20 +392,20 @@ func (c *Client) CreateIssueCommentWS(slugOrID string, issueID int, content stri
 	return &cm, nil
 }
 
-func (c *Client) ListMilestoneComments(slugOrID string, milestoneID int) ([]WorkspaceComment, error) {
+func (c *Client) ListTaskComments(slugOrID string, taskID int) ([]WorkspaceComment, error) {
 	var resp struct {
 		Data []WorkspaceComment `json:"data"`
 	}
-	if err := c.get(fmt.Sprintf("/api/workspaces/%s/milestones/%d/comments", slugOrID, milestoneID), &resp); err != nil {
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/tasks/%d/comments", slugOrID, taskID), &resp); err != nil {
 		return nil, err
 	}
 	return resp.Data, nil
 }
 
-func (c *Client) CreateMilestoneComment(slugOrID string, milestoneID int, content string) (*WorkspaceComment, error) {
+func (c *Client) CreateTaskComment(slugOrID string, taskID int, content string) (*WorkspaceComment, error) {
 	var cm WorkspaceComment
 	if err := c.postJSON(
-		fmt.Sprintf("/api/workspaces/%s/milestones/%d/comments", slugOrID, milestoneID),
+		fmt.Sprintf("/api/workspaces/%s/tasks/%d/comments", slugOrID, taskID),
 		map[string]string{"content": content},
 		&cm,
 	); err != nil {
@@ -486,7 +486,7 @@ func (c *Client) GetWatchStatus(slugOrID string, issueID int) (bool, error) {
 
 // ---------- recycle bin (trash) ----------
 
-// ListTrash lists binned items. typ is "" for all, or issue|project|milestone.
+// ListTrash lists binned items. typ is "" for all, or issue|project|task.
 func (c *Client) ListTrash(slugOrID, typ string) ([]TrashItem, error) {
 	path := fmt.Sprintf("/api/workspaces/%s/trash", slugOrID)
 	if typ != "" {

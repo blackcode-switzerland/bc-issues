@@ -325,7 +325,7 @@ export async function updateProject(
 }
 
 // Delete now means soft-delete (move to the recycle bin). `mode` controls the
-// attached issues/milestones: 'detach' (default) keeps them active but unlinks
+// attached issues/tasks: 'detach' (default) keeps them active but unlinks
 // them — matching the old hard-delete + FK SET NULL behavior; 'cascade' bins
 // them together so they restore as a group. See lib/db/queries/deletion.ts.
 export async function deleteProject(

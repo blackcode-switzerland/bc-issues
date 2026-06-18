@@ -62,7 +62,7 @@ export async function undoLastOperations(userId: number, count = 1) {
             description: (old.description as string) ?? null,
             status: (old.status as string) ?? 'backlog',
             priority: (old.priority as number) ?? 3,
-            milestone_id: (old.milestone_id as number) ?? null,
+            task_id: (old.task_id as number) ?? null,
             updated_at: new Date(),
           })
           .where(eq(issues.id, op.record_id))

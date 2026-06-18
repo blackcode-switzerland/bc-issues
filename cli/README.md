@@ -39,7 +39,7 @@ config file, chosen at login time.
 
 ## Active workspace
 
-Projects, issues, milestones, labels, members, and invitations are scoped to a
+Projects, issues, tasks, labels, members, and invitations are scoped to a
 workspace. Pick one once:
 
 ```sh
@@ -129,7 +129,7 @@ bk project view <id>
 bk project members <id>
 bk project issues <id> [--status S] [--assignee <id|email|name|me>]
                        [--limit N] [--cursor N]
-bk project milestones <id>
+bk project tasks <id>
 
 bk project create --name N [--description D | --description-file F]
 bk project edit <id> [--name N] [--description D | --description-file F] [--status S]
@@ -149,14 +149,14 @@ bk issue view <id>
 bk issue create --project N --title "..."
                 [--description D | --description-file F]
                 [--priority 1-5] [--status S]
-                [--assignee <id|email|name|me>] [--milestone N]
+                [--assignee <id|email|name|me>] [--task N]
                 [--start-date YYYY-MM-DD] [--due-date YYYY-MM-DD]
                 [--attach FILE]
 
 bk issue edit <id> [--title T] [--description D | --description-file F]
                    [--status S] [--priority N]
                    [--assignee <id|email|name|me|none>]
-                   [--milestone <N|none>]
+                   [--task <N|none>]
                    [--start-date <YYYY-MM-DD|none>]
                    [--due-date <YYYY-MM-DD|none>]
 
@@ -175,28 +175,28 @@ bk issue detach <issue-id> <attachment-id> [--yes]
 
 Canonical issue statuses: `backlog`, `todo`, `in_progress`, `done`, `cancelled`.
 `--assignee` accepts a numeric id, an email, a display name, or `me`. Pass `none`
-(or `null`/`unset`/`clear`) on `issue edit` to clear `--assignee`, `--milestone`,
+(or `null`/`unset`/`clear`) on `issue edit` to clear `--assignee`, `--task`,
 `--start-date`, or `--due-date`; omit the flag to leave it unchanged.
 
-### Milestones
+### Tasks
 ```
-bk milestone list [--project N]
-bk milestone view <id> [--include-issues]
-bk milestone create --project N --name M
+bk task list [--project N]
+bk task view <id> [--include-issues]
+bk task create --project N --name M
                     [--description D | --description-file F] [--due-date YYYY-MM-DD]
-bk milestone edit <id> [--name M] [--description D | --description-file F]
+bk task edit <id> [--name M] [--description D | --description-file F]
                        [--due-date <YYYY-MM-DD|none>]
-bk milestone delete <id> [--yes] [--cascade | --detach]   move to Trash
+bk task delete <id> [--yes] [--cascade | --detach]   move to Trash
 ```
 
 ### Trash (recycle bin, workspace-scoped)
 
-Deleting an issue, project, or milestone moves it to the Trash instead of
+Deleting an issue, project, or task moves it to the Trash instead of
 removing it permanently. Restore items individually, in bulk, or as a delete
 group. Purging (permanent delete) is **owner-only**.
 
 ```
-bk trash list [--type issue|project|milestone]
+bk trash list [--type issue|project|task]
 bk trash restore <type:id>...        e.g. bk trash restore issue:42 project:3
 bk trash restore --batch <id>        restore a whole delete group
       [--restore-parents | --standalone]   force how dangling parents resolve
@@ -205,8 +205,8 @@ bk trash purge --batch <id> [--yes]
 bk trash empty [--yes]               permanently delete everything (owner only)
 ```
 
-When a project/milestone is deleted with `--cascade`, its attached issues (and
-a project's milestones) go to the Trash with it as one batch, so restoring the
+When a project/task is deleted with `--cascade`, its attached issues (and
+a project's tasks) go to the Trash with it as one batch, so restoring the
 batch brings the whole group back, re-linked. With `--detach` (the default) only
 the parent is binned and the children stay active, unlinked. On restore, if an
 item's parent is itself still in the Trash, the items it was deleted *with*
@@ -260,7 +260,7 @@ bk undo [--count N] [--yes]             roll back your last N writes (1-10)
 ```
 
 `bk analytics` mirrors the web dashboard. Flags (all optional): `--view`
-workspace|project|milestone|member, `--id`, `--ws <slug|id>`, `--from`/`--to`,
+workspace|project|task|member, `--id`, `--ws <slug|id>`, `--from`/`--to`,
 `--interval day|week`, and the `--status`/`--priority`/`--label`/`--assignee`
 filters (repeatable or comma-separated). Default output is a readable summary;
 `--json`/`--yaml` emit the full payload.

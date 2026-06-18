@@ -321,7 +321,7 @@ async function fanOutStatusChanged(tx: Tx, event: Event): Promise<void> {
 }
 
 async function fanOutCommented(tx: Tx, event: Event): Promise<void> {
-  // Only fan out for issue-parented comments for now. Milestone/project
+  // Only fan out for issue-parented comments for now. Task/project
   // comments are informational only — the activity feed has them.
   if (event.entity_type !== 'issue') return
 

@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Milestones table
-CREATE TABLE IF NOT EXISTS milestones (
+-- Tasks table
+CREATE TABLE IF NOT EXISTS tasks (
     id SERIAL PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS milestones (
 CREATE TABLE IF NOT EXISTS issues (
     id SERIAL PRIMARY KEY,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    milestone_id INTEGER REFERENCES milestones(id) ON DELETE SET NULL,
+    task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     title VARCHAR(200) NOT NULL,
     description TEXT,
     status VARCHAR(50) DEFAULT 'backlog',
@@ -126,11 +126,11 @@ CREATE TABLE IF NOT EXISTS transaction_log (
 CREATE INDEX IF NOT EXISTS idx_issues_project ON issues(project_id);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_assignee ON issues(assignee_id);
-CREATE INDEX IF NOT EXISTS idx_issues_milestone ON issues(milestone_id);
+CREATE INDEX IF NOT EXISTS idx_issues_task ON issues(task_id);
 CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
 CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_issue ON attachments(issue_id);
-CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_labels_project ON labels(project_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_log_user ON transaction_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_log_created ON transaction_log(created_at DESC);
@@ -154,8 +154,8 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECU
 DROP TRIGGER IF EXISTS update_projects_updated_at ON projects;
 CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-DROP TRIGGER IF EXISTS update_milestones_updated_at ON milestones;
-CREATE TRIGGER update_milestones_updated_at BEFORE UPDATE ON milestones FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks;
+CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 DROP TRIGGER IF EXISTS update_issues_updated_at ON issues;
 CREATE TRIGGER update_issues_updated_at BEFORE UPDATE ON issues FOR EACH ROW EXECUTE FUNCTION update_updated_at();

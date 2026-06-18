@@ -57,7 +57,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   const page = await listIssuesInWorkspace(ctx.workspace.id, {
     projectId: parseNullableInt(sp.get('project_id'), 'project_id'),
-    milestoneId: parseNullableInt(sp.get('milestone_id'), 'milestone_id'),
+    taskId: parseNullableInt(sp.get('task_id'), 'task_id'),
     assigneeIds,
     status: sp.get('status') ?? undefined,
     priority: sp.get('priority') ? parseInt(sp.get('priority')!) || undefined : undefined,
@@ -144,7 +144,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       status: typeof body.status === 'string' ? body.status : undefined,
       priority: typeof body.priority === 'number' ? body.priority : undefined,
       assigneeIds: rawAssigneeIds,
-      milestoneId: typeof body.milestone_id === 'number' ? body.milestone_id : null,
+      taskId: typeof body.task_id === 'number' ? body.task_id : null,
       projectId,
       startDate: typeof body.start_date === 'string' ? body.start_date : null,
       dueDate: typeof body.due_date === 'string' ? body.due_date : null,

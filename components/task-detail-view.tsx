@@ -18,7 +18,7 @@ import { MemberAvatar } from '@/components/ui/member-avatar'
 import { PropertySelect } from '@/components/ui/property-select'
 import { ProjectIcon } from '@/components/project-icon'
 
-interface MilestoneDetail {
+interface TaskDetail {
   id: number
   workspace_id: number
   project_id: number | null
@@ -61,7 +61,7 @@ interface Member {
   avatar_url?: string | null
 }
 
-export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
+export function TaskDetailView({ taskId }: { taskId: number }) {
   const queryClient = useQueryClient()
   const { confirmDelete } = useDeleteDialog()
   const { data: ws } = useActiveWorkspace()
@@ -72,29 +72,29 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
   const descRef = useRef<string>('')
   const descModifiedRef = useRef(false)
 
-  const milestone = useQuery({
-    queryKey: ['milestone', milestoneId, ws?.slug],
+  const task = useQuery({
+    queryKey: ['task', taskId, ws?.slug],
     enabled: !!ws,
-    queryFn: async (): Promise<MilestoneDetail | null> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}`)
+    queryFn: async (): Promise<TaskDetail | null> => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks/${taskId}`)
       if (!res.ok) return null
       return res.json()
     },
   })
 
   useEffect(() => {
-    if (isNew && milestone.data && nameInputRef.current) {
+    if (isNew && task.data && nameInputRef.current) {
       nameInputRef.current.focus()
       nameInputRef.current.select()
     }
-  }, [isNew, milestone.data?.id])
+  }, [isNew, task.data?.id])
 
   const issues = useQuery({
-    queryKey: ['milestone-issues', milestoneId, ws?.slug],
+    queryKey: ['task-issues', taskId, ws?.slug],
     enabled: !!ws,
     queryFn: async (): Promise<IssueRow[]> => {
       const res = await fetch(
-        `/api/workspaces/${ws!.slug}/issues?milestone_id=${milestoneId}&limit=200`
+        `/api/workspaces/${ws!.slug}/issues?task_id=${taskId}&limit=200`
       )
       if (!res.ok) return []
       const j = await res.json()
@@ -128,8 +128,8 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
 
   const createIssue = useMutation({
     mutationFn: async () => {
-      const body: Record<string, unknown> = { title: 'New Issue', milestone_id: milestoneId }
-      if (milestone.data?.project_id != null) body.project_id = milestone.data.project_id
+      const body: Record<string, unknown> = { title: 'New Issue', task_id: taskId }
+      if (task.data?.project_id != null) body.project_id = task.data.project_id
       const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,8 +140,8 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     },
     onSuccess: (issue) => {
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['milestone-issues', milestoneId] })
-      queryClient.invalidateQueries({ queryKey: ['milestone', milestoneId] })
+      queryClient.invalidateQueries({ queryKey: ['task-issues', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
       router.push(`/dashboard/issues/${issue.id}?new=1`)
     },
@@ -150,7 +150,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
 
   const patch = useMutation({
     mutationFn: async (input: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -158,37 +158,37 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      toast.success('Milestone updated')
+      toast.success('Task updated')
       descModifiedRef.current = false
-      queryClient.invalidateQueries({ queryKey: ['milestone', milestoneId] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
-      queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] })
     },
-    onError: () => toast.error('Failed to update milestone'),
+    onError: () => toast.error('Failed to update task'),
   })
 
   const remove = useMutation({
     mutationFn: async (mode: 'cascade' | 'detach') => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/milestones/${milestoneId}?mode=${mode}`, {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks/${taskId}?mode=${mode}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
-      toast.success('Milestone moved to Trash')
-      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['ws-milestones-listing'] }, (old) =>
-        old?.filter((m) => m.id !== milestoneId)
+      toast.success('Task moved to Trash')
+      queryClient.setQueriesData<{ id: number }[]>({ queryKey: ['ws-tasks-listing'] }, (old) =>
+        old?.filter((m) => m.id !== taskId)
       )
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-milestones'] })
-      queryClient.invalidateQueries({ queryKey: ['project-milestones'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project-tasks'] })
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push('/dashboard/milestones')
+      router.push('/dashboard/tasks')
     },
-    onError: () => toast.error('Could not delete milestone'),
+    onError: () => toast.error('Could not delete task'),
   })
 
   // Must be above early returns — hooks must be called unconditionally.
@@ -200,21 +200,21 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [nameDraft])
 
-  if (milestone.isLoading) {
+  if (task.isLoading) {
     return <DetailPageSkeleton />
   }
-  if (!milestone.data) {
+  if (!task.data) {
     return (
       <div className="p-8">
-        <Link href="/dashboard/milestones" className="text-xs text-muted-foreground hover:underline">
-          ← Back to milestones
+        <Link href="/dashboard/tasks" className="text-xs text-muted-foreground hover:underline">
+          ← Back to tasks
         </Link>
-        <p className="mt-4 text-sm">Milestone not found.</p>
+        <p className="mt-4 text-sm">Task not found.</p>
       </div>
     )
   }
 
-  const data = milestone.data
+  const data = task.data
   const due = data.due_date ? new Date(data.due_date) : null
   const overdue = due ? isPast(due) && !isToday(due) && data.status !== 'completed' : false
   const total = data.issue_count
@@ -238,11 +238,11 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
       {/* Breadcrumb header */}
       <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
-          href="/dashboard/milestones"
+          href="/dashboard/tasks"
           prefetch={false}
           className="text-muted-foreground transition-colors hover:text-foreground"
         >
-          Milestones
+          Tasks
         </Link>
         <ChevronRight size={13} className="text-muted-foreground/50" />
         <span className="max-w-[36ch] truncate font-medium">{data.name}</span>
@@ -250,14 +250,14 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
           <button
             onClick={async () => {
               const decision = await confirmDelete({
-                kind: 'milestone',
+                kind: 'task',
                 name: data.name,
-                previewUrl: `/api/workspaces/${ws!.slug}/milestones/${milestoneId}?preview=1`,
+                previewUrl: `/api/workspaces/${ws!.slug}/tasks/${taskId}?preview=1`,
               })
               if (!decision) return
               remove.mutate(decision.mode)
             }}
-            title="Delete milestone"
+            title="Delete task"
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2 size={15} />
@@ -282,7 +282,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                 }
               }}
               maxLength={120}
-              placeholder="Milestone name"
+              placeholder="Task name"
               className="mb-2 w-full resize-none overflow-hidden bg-transparent text-[26px] font-semibold leading-snug tracking-tight outline-none placeholder:text-muted-foreground/50"
               ref={(el) => {
                 nameInputRef.current = el
@@ -386,7 +386,7 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                 </ul>
               ) : (
                 <p className="py-2 text-[13px] text-muted-foreground">
-                  No issues in this milestone yet.
+                  No issues in this task yet.
                 </p>
               )}
             </section>
@@ -398,11 +398,11 @@ export function MilestoneDetailView({ milestoneId }: { milestoneId: number }) {
                 <div className="h-px flex-1 bg-border" />
               </div>
               <ActivityFeed
-                entityType="milestone"
-                entityId={milestoneId}
+                entityType="task"
+                entityId={taskId}
                 wsSlug={ws?.slug ?? ''}
-                commentsUrl={`/api/workspaces/${ws?.slug}/milestones/${milestoneId}/comments`}
-                commentsQueryKey={['milestone-comments', milestoneId, ws?.slug]}
+                commentsUrl={`/api/workspaces/${ws?.slug}/tasks/${taskId}/comments`}
+                commentsQueryKey={['task-comments', taskId, ws?.slug]}
                 mentionItems={mentionItems}
                 members={members.data}
               />
