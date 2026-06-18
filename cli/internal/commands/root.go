@@ -1,9 +1,31 @@
 package commands
 
 import (
+	"os"
+	"strings"
+
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
+
+// wsOverride is the per-invocation workspace target set by the persistent --ws
+// flag. When non-empty it overrides cfg.ActiveWorkspaceSlug for that command
+// only (a read must never mutate the active workspace). verboseFlag backs -v.
+var (
+	wsOverride  string
+	verboseFlag bool
+)
+
+// clientWorkspaceSlug returns the workspace slug/id the client should target:
+// the --ws override when set, otherwise the active workspace from config.
+func clientWorkspaceSlug(cfg *config.Config) string {
+	if strings.TrimSpace(wsOverride) != "" {
+		return wsOverride
+	}
+	return cfg.ActiveWorkspaceSlug
+}
 
 const rootLong = `bk is the CLI for blackcode-issues. Every feature on the website
 is available here: projects, issues, tasks, comments, labels,
@@ -56,8 +78,16 @@ func NewRoot() *cobra.Command {
 		Long:          rootLong,
 		SilenceUsage:  true,
 		SilenceErrors: false,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Verbose can be turned on per-invocation (--verbose) or via env.
+			if verboseFlag || os.Getenv("BK_DEBUG") == "1" {
+				client.Verbose = true
+			}
+		},
 	}
 	output.RegisterFlags(root)
+	root.PersistentFlags().StringVar(&wsOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
+	root.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
 	root.AddCommand(
 		newLoginCmd(),
 		newLogoutCmd(),

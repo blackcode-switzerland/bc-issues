@@ -3,8 +3,11 @@
 Notes captured live on **2026-06-18** while using the `bk` CLI against **production**
 to do something that should be trivial: *"fetch issue #234 in Andrea's workspace."*
 It took ~10 steps and a fallback to raw `curl` to answer, because of the gaps below.
-Nothing here is fixed yet — this is the backlog. Severity is "how badly it blocks a
-human or AI agent."
+
+> **✅ All items resolved on 2026-06-18.** See per-item "Fixed" notes. The original
+> task is now a one-liner: `bk issue list --ws 3 --search CRM` (or, once the API
+> change is deployed, `bk issue view 234 --ws 3`). This file is kept as a record of
+> what was wrong and how it was addressed.
 
 ## TL;DR of the struggle
 The issue exists and is perfectly fine in the web UI (`#234`, the "CRM — Contacts
@@ -21,79 +24,71 @@ The data was correct the whole time. The CLI just couldn't surface or address it
 
 ## Bugs (confirmed)
 
-### 1. The CLI silently drops fields the API returns — including `seq` 🔴 high
+### 1. The CLI silently drops fields the API returns — including `seq` ✅ FIXED
 - **Symptom:** `bk issue view 441 --json` and `bk issue list --json` never showed `seq`. I concluded "all 200 issues have null seq" — **false**. Raw API (`/api/workspaces/{ws}/issues/441`) returns `seq: 234` and `total: 234`.
-- **Root cause:** the CLI re-marshals API responses through its own `Issue` struct (`cli/internal/client/types.go:51`), which has **no `Seq` field** (and is missing `labels`, `task_name`/`task_id` consistency, `completed_at`, `position`, `workspace_id`, etc.). Anything not in the struct is dropped from `--json`/`--yaml` output too.
-- **Impact:** the CLI shows the *wrong/absent* issue number, hides data agents need, and actively misleads debugging. This single gap caused most of the wasted time.
-- **Fix:** add the missing fields to `Issue` (at minimum `Seq *int`), and surface `#seq` in table output. Audit every client struct for parity with the API (consider generating from the OpenAPI spec).
+- **Root cause:** the CLI re-marshals API responses through its own `Issue` struct (`cli/internal/client/types.go`), which had **no `Seq` field** (and was missing `labels`, `workspace_id`, `position`, `completed_at`, `cancelled_at`).
+- **Fixed:** added `Seq`, `WorkspaceID`, `Position`, `CompletedAt`, `CancelledAt`, and `Labels` (with an `IssueLabel` type) to the Go `Issue` struct (`types.go`). `issue list` now shows the `#seq` in a `#` column **and** the global id in the `ID` column; `issue view` shows both plus labels. Verified live: `#234 / id 441`.
 
-### 2. `bk issue view/edit/delete <id>` only accept the **global id**, not the displayed `#seq` 🔴 high
+### 2. `bk issue view/edit/delete <id>` only accept the global id, not the displayed `#seq` ✅ FIXED
 - **Symptom:** the UI shows `#234`; `bk issue view 234` → `404`. The real arg had to be `441` (global id).
-- **Root cause:** `cli/internal/commands/issue.go:207` does `strconv.Atoi(args[0])` → `client.GetIssue(id)` → `GET /api/workspaces/{ws}/issues/{id}` resolves by **global id**. Same pattern for edit/assign/comment/delete (lines ~346, 430, 458, 514, 545).
-- **Impact:** a human or agent reading `#234` anywhere (UI, another person, a report) has **no way** to act on it from the CLI. They must already know the hidden global id.
-- **Fix:** make these commands accept the **`seq`** (the workspace-facing number) — resolve seq→id server-side or via a lookup — and ideally accept a leading `#`. The number users see should be the number the CLI takes.
+- **Fixed:** every issue command now takes the **`seq`** by default (`bk issue view 234` or `#234`), resolving seq → global id server-side via a new `?seq=` filter on the list endpoint (`resolveIssueArg` + `GetIssueBySeq` in the CLI). Global id remains available as an escape hatch via the `id:441` prefix. Applies to view/edit/delete/assign/unassign/comment/comments/activity/attachments/attach/detach/watch/unwatch.
+- **Note:** the seq→id resolution depends on the `?seq=` API change being **deployed** (see "Deploy needed" at the bottom).
 
-### 3. Stale status values in `issue create --status` help 🟡 medium
-- **Symptom:** `cli/internal/commands/issue.go:326` help text lists `backlog/todo/in_progress/blocked/in_review/done/cancelled`. `blocked` and `in_review` **don't exist** (real set: backlog/todo/in_progress/done/cancelled — `lib/work-items.ts`). The web create-modal has the same stale list (`components/create-issue-modal.tsx`).
-- **Impact:** agents pass invalid statuses based on the help.
-- **Fix:** source the allowed values from a single place; drop `blocked`/`in_review`.
+### 3. Stale status values in `issue create --status` help ✅ FIXED
+- **Symptom:** help text listed `backlog/todo/in_progress/blocked/in_review/done/cancelled`. `blocked` and `in_review` **don't exist** (real set: backlog/todo/in_progress/done/cancelled — `lib/work-items.ts`). The web create-modal had the same stale list.
+- **Fixed:** corrected both `bk issue create --status` and `bk issue edit --status` help text, and aligned `components/create-issue-modal.tsx` to the canonical set (dropped `blocked`/`in_review`, added `cancelled`).
 
-### 4. `issue list` `total` not surfaced 🟡 medium
-- **Symptom:** couldn't get the real issue count from the CLI; had to read `total` from raw API. (`IssuesPage` in types.go *has* a `Total` field, but the list command output didn't expose it.)
-- **Impact:** scripts/agents can't see "X of N"; encourages the truncation bug class we already hit in the web listing.
-- **Fix:** print `total` (and `next_cursor`) in list output, table and JSON.
+### 4. `issue list` `total` not surfaced ✅ FIXED
+- **Symptom:** couldn't get the real issue count from the CLI; had to read `total` from raw API.
+- **Fixed:** `issue list` now prints `showing X of N` (N = server-side total for the filter) to stderr, and includes `total` in JSON/YAML output. Verified live: `showing 5 of 234`.
 
 ---
 
 ## Ergonomics — "easy finding of issues"
 
-### 5. No way to target another workspace without switching the active one 🔴 high
-- **Symptom:** issue/task commands have **no `--ws` flag**, so to read one issue in Andrea's workspace I ran `bk workspace use 3`, which **mutates** my active workspace (config **and** server-side `POST /api/me/active-workspace`). A read shouldn't have side effects.
-- **Fix:** add a global/`issue`-level `--ws <slug|id>` that overrides the active workspace for that command only (analytics already supports `--ws`; make it consistent everywhere).
+### 5. No way to target another workspace without switching the active one ✅ FIXED
+- **Symptom:** issue/task commands had **no `--ws` flag**, so reading one issue in Andrea's workspace meant `bk workspace use 3`, which **mutates** the active workspace (config + server-side). A read shouldn't have side effects.
+- **Fixed:** added a global `--ws <slug|id>` persistent flag that overrides the workspace for that command only — no config write, no `POST /api/me/active-workspace`. Verified live: `bk issue list --ws 3` reads Andrea's workspace while the active stays `*1`.
 
-### 6. Can't find an issue by number or text from the CLI 🔴 high
-- **Symptom:** `bk issue list` filters are `--project/--status/--assignee/--mine` only (`issue.go:64-68`). No `--search` (text), no `--seq`/by-number lookup. To find `#234` I had to page and grep client-side — which then failed because `seq` wasn't even in the output (bug #1).
-- **Fix:** add `--search` (server-side, the API already supports `?search=`), and a direct `bk issue view #<seq>` / `--seq` path. A `bk issue find` that matches title/number would help agents a lot.
+### 6. Can't find an issue by number or text from the CLI ✅ FIXED
+- **Symptom:** `bk issue list` filters were `--project/--status/--assignee/--mine` only. No `--search`, no by-number lookup.
+- **Fixed:** added `--search` (server-side, hits the API's `?search=`) and by-seq lookup (`bk issue view 234` / `#234`, plus `?seq=`). Verified live: `bk issue list --ws 3 --search CRM` → exactly `#234`, `showing 1 of 1`.
 
-### 7. Pagination is confusing / easy to under-fetch 🟡 medium
-- **Symptom:** `bk issue list --limit 200` returned 200 with `next_cursor`, then the next page returned 0; with `seq`/`total` hidden it was impossible to tell if I had the full set. (Mirrors the web listing truncation bug we fixed.)
-- **Fix:** surface `total` + a clear "showing X of N — use --cursor=… for more" line; consider an `--all`/auto-paginate flag for commands that need the full set.
+### 7. Pagination is confusing / easy to under-fetch ✅ FIXED
+- **Symptom:** `--limit 200` returned 200 with `next_cursor`, then the next page returned 0; with `seq`/`total` hidden it was impossible to tell if the full set was in hand.
+- **Fixed:** `issue list` now shows `showing X of N` and `more available — use --cursor=… or --all`, and a new `--all` flag auto-paginates every page.
 
 ---
 
 ## Verbosity / diagnosability
 
-### 8. No verbose/debug mode 🟡 medium
-- **Symptom:** when the CLI's view of the data disagreed with reality, there was no way to see the actual request/response. I had to drop to `curl` with the bearer token to diagnose.
-- **Fix:** a `-v/--verbose` (or `BK_DEBUG=1`) that logs the request URL, status, and raw response body to stderr.
+### 8. No verbose/debug mode ✅ FIXED
+- **Symptom:** when the CLI's view disagreed with reality, there was no way to see the actual request/response; I had to drop to `curl`.
+- **Fixed:** added a global `-v/--verbose` flag (and `BK_DEBUG=1`) that logs each request's method, URL, response status, and body to stderr. Verified live.
 
-### 9. The CLI couldn't answer the question at all — I bypassed it 🔴 high (meta)
-- The end state of "fetch issue #234" was: give up on `bk`, read the token out of `~/.config/bk/config.json`, and `curl` the API. If the maintainer has to bypass the CLI to read an issue by its visible number, agents/users will too. Bugs #1, #2, #5, #6 together cause this.
+### 9. The CLI couldn't answer the question at all — I bypassed it ✅ FIXED (meta)
+- Resolved transitively by #1, #2, #5, #6. The original "fetch issue #234 in Andrea's workspace" is now `bk issue list --ws 3 --search CRM` (or `bk issue view 234 --ws 3` once deployed) — no `curl`, no config spelunking, no workspace mutation.
 
 ---
 
-## Root cause behind most of it: dual identity (`seq` vs global `id`)
+## Root cause behind most of it: dual identity (`seq` vs global `id`) ✅ DECIDED
 
 Issues have two numbers: a per-workspace **`seq`** (what the web shows as `#234`) and a
-global **`id`** (441). The surfaces disagree about which is "the" identifier:
-- **Web UI** → shows `seq`.
-- **API routes** → address by global `id` (`/issues/{id}`).
-- **CLI** → takes global `id`, and doesn't even return `seq`.
+global **`id`** (441).
 
-This mismatch is the source of nearly every struggle above. **Decision needed:** pick the
-workspace-facing `seq` as the identifier humans/CLI use (resolve to `id` internally), and
-make the CLI/API/`/api/meta` consistent about it. Until then, "issue 234" means different
-things on different surfaces.
+**Decision taken:** the workspace-facing **`seq`** is now the identifier the CLI takes,
+matching what humans see in the UI. The CLI resolves `seq` → `id` internally (via the
+list endpoint's `?seq=` filter); the global id stays reachable through the `id:<n>`
+prefix for scripts/back-compat. The OpenAPI `Issue` schema already documented `seq`, and
+the `?seq=` query param was added to the spec, so REST/OpenAPI/CLI/docs stay in sync.
 
 ---
 
-## Suggested priority order
-1. **#1** add `seq` (+ missing fields) to the CLI `Issue` struct — stops the CLI from lying.
-2. **#2 / #6** accept `#seq` in `bk issue view`/etc. + add `--search` — make issues findable by what users see.
-3. **#5** `--ws` on issue/task commands — read across workspaces without side effects.
-4. **#4 / #7** surface `total` + pagination clarity.
-5. **#8** `--verbose`. **#3** fix stale status help.
-6. Resolve the **seq-vs-id identity** decision so the surfaces stop disagreeing.
+## Deploy needed
 
-> Most of these also feed the paused "edge cases & API/CLI verbosity" research — fold them
-> in when that resumes.
+The seq→id resolution (#2) and by-seq search (#6) rely on the **`?seq=` filter** added to
+`GET /api/workspaces/{ws}/issues` — a server change that takes effect on the next **web
+deploy**. Until then, the CLI's `#seq` column, `--ws`, `--search`, `--all`, `total`, and
+`--verbose` all work against the current production API; only the `bk issue view <seq>`
+resolution path needs the deploy. A new CLI release is also needed to ship the binary
+changes to users.

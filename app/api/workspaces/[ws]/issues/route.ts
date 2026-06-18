@@ -62,6 +62,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     status: sp.get('status') ?? undefined,
     priority: sp.get('priority') ? parseInt(sp.get('priority')!) || undefined : undefined,
     search: sp.get('search') ?? undefined,
+    seq: sp.get('seq') ? parseInt(sp.get('seq')!) || undefined : undefined,
     limit,
     cursor,
   })

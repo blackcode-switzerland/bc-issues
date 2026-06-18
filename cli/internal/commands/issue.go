@@ -46,6 +46,8 @@ type issueListFlags struct {
 	status    string
 	assignee  string
 	mine      bool
+	search    string
+	all       bool
 	limit     int
 	cursor    int
 	cursorSet bool
@@ -65,7 +67,9 @@ func newIssueListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status (client-side)")
 	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me' (client-side)")
 	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user")
-	cmd.Flags().IntVar(&f.limit, "limit", 50, "Page size (1-200, paginated mode)")
+	cmd.Flags().StringVar(&f.search, "search", "", "Full-text search on title/description (server-side)")
+	cmd.Flags().BoolVar(&f.all, "all", false, "Fetch every page (auto-paginate) instead of one page")
+	cmd.Flags().IntVar(&f.limit, "limit", 50, "Page size (1-200)")
 	cmd.Flags().IntVar(&f.cursor, "cursor", 0, "Cursor (last id seen) for pagination")
 	return cmd
 }
@@ -79,36 +83,59 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 	if err != nil {
 		return err
 	}
-	c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
+	c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
 
-	opts := client.ListIssuesOpts{ProjectID: f.projectID, Limit: f.limit}
+	opts := client.ListIssuesOpts{ProjectID: f.projectID, Limit: f.limit, Search: f.search}
 	if f.cursorSet {
 		opts.Cursor = &f.cursor
 	}
-	page, err := c.ListIssues(opts)
+
+	// Fetch a single page, or every page when --all is set. total is the
+	// server-side count for the current filter (ignores client-side filters).
+	var collected []client.Issue
+	var total *int
+	var nextCursor *int
+	for {
+		page, err := c.ListIssues(opts)
+		if err != nil {
+			return err
+		}
+		if total == nil {
+			total = page.Total
+		}
+		collected = append(collected, page.Data...)
+		nextCursor = page.NextCursor
+		if !f.all || page.NextCursor == nil {
+			break
+		}
+		opts.Cursor = page.NextCursor
+	}
+
+	filtered, err := filterIssues(c, cfg, collected, f)
 	if err != nil {
 		return err
 	}
 
-	filtered, err := filterIssues(c, cfg, page.Data, f)
-	if err != nil {
-		return err
+	showCursor := nextCursor
+	if f.all {
+		showCursor = nil // fully drained
 	}
 
 	out := any(filtered)
-	if format != output.FormatTable && page.NextCursor != nil {
+	if format != output.FormatTable {
 		out = struct {
 			Data       []client.Issue `json:"data" yaml:"data"`
 			NextCursor *int           `json:"next_cursor" yaml:"next_cursor"`
-		}{filtered, page.NextCursor}
+			Total      *int           `json:"total,omitempty" yaml:"total,omitempty"`
+		}{filtered, showCursor, total}
 	}
 
 	return output.Render(format, out, func(w io.Writer) error {
 		tw := output.Tabwriter(w)
-		fmt.Fprintln(tw, "ID\tPRIORITY\tSTATUS\tTITLE\tASSIGNEE")
+		fmt.Fprintln(tw, "#\tID\tPRIORITY\tSTATUS\tTITLE\tASSIGNEE")
 		for _, i := range filtered {
-			fmt.Fprintf(tw, "%d\tP%d\t%s\t%s\t%s\n",
-				i.ID, i.Priority, i.Status, truncate(i.Title, 60), issueAssigneeLabel(i.Assignees))
+			fmt.Fprintf(tw, "%s\t%d\tP%d\t%s\t%s\t%s\n",
+				issueRef(&i), i.ID, i.Priority, i.Status, truncate(i.Title, 60), issueAssigneeLabel(i.Assignees))
 		}
 		if err := tw.Flush(); err != nil {
 			return err
@@ -116,8 +143,11 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 		if len(filtered) == 0 {
 			fmt.Fprintln(cmd.ErrOrStderr(), "(no issues)")
 		}
-		if page.NextCursor != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "next page: --cursor=%d\n", *page.NextCursor)
+		if total != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "showing %d of %d\n", len(filtered), *total)
+		}
+		if showCursor != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "more available — use --cursor=%d or --all\n", *showCursor)
 		}
 		return nil
 	})
@@ -196,19 +226,19 @@ func filterIssues(c *client.Client, cfg *config.Config, issues []client.Issue, f
 
 func newIssueViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <id>",
-		Short: "Show a single issue",
+		Use:   "view <#seq|id:globalid>",
+		Short: "Show a single issue (by the #seq shown in the app, or id:<globalid>)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
 			}
@@ -217,12 +247,15 @@ func newIssueViewCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "ID:          %d\n", iss.ID)
+				fmt.Fprintf(w, "Issue:       %s  (global id %d)\n", issueRef(iss), iss.ID)
 				fmt.Fprintf(w, "Title:       %s\n", iss.Title)
 				fmt.Fprintf(w, "Project:     #%d %s\n", iss.ProjectID, derefOr(iss.ProjectName, ""))
 				fmt.Fprintf(w, "Status:      %s\n", iss.Status)
 				fmt.Fprintf(w, "Priority:    P%d\n", iss.Priority)
 				fmt.Fprintf(w, "Assignees:   %s\n", issueAssigneeLabel(iss.Assignees))
+				if len(iss.Labels) > 0 {
+					fmt.Fprintf(w, "Labels:      %s\n", issueLabelLabel(iss.Labels))
+				}
 				if iss.TaskName != nil {
 					fmt.Fprintf(w, "Task:   %s\n", *iss.TaskName)
 				}
@@ -262,7 +295,7 @@ func newIssueCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
+			c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
 
 			req := client.CreateIssueRequest{
 				ProjectID:   projectID,
@@ -314,7 +347,7 @@ func newIssueCreateCmd() *cobra.Command {
 			}
 
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "created #%d %q\n", iss.ID, iss.Title)
+				fmt.Fprintf(w, "created %s (global id %d) %q\n", issueRef(iss), iss.ID, iss.Title)
 				return nil
 			})
 		},
@@ -323,7 +356,7 @@ func newIssueCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "Issue title (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Description — Markdown or HTML (use \"-\" for stdin; --description-file for multi-line to avoid escaping newlines)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
-	cmd.Flags().StringVar(&status, "status", "", "Status (backlog/todo/in_progress/blocked/in_review/done/cancelled)")
+	cmd.Flags().StringVar(&status, "status", "", "Status (backlog/todo/in_progress/done/cancelled)")
 	cmd.Flags().IntVar(&priority, "priority", 0, "Priority 1-5 (1=urgent)")
 	cmd.Flags().StringVar(&attach, "attach", "", "Path to a file to attach")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, or 'me')")
@@ -339,14 +372,10 @@ func newIssueEditCmd() *cobra.Command {
 	var priority int
 	var assignee, task, startDate, dueDate string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
+		Use:   "edit <#seq|id:globalid>",
 		Short: "Edit an issue (status, title, priority, description, assignee, task, dates)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
@@ -372,7 +401,11 @@ func newIssueEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
+			c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
 			if cmd.Flags().Changed("assignee") {
 				if strings.EqualFold(assignee, "none") || strings.EqualFold(assignee, "null") || strings.EqualFold(assignee, "clear") || strings.EqualFold(assignee, "unset") {
 					req.AssigneeIDs = []byte("[]")
@@ -403,12 +436,12 @@ func newIssueEditCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "updated #%d (status=%s priority=P%d)\n", iss.ID, iss.Status, iss.Priority)
+				fmt.Fprintf(w, "updated %s (status=%s priority=P%d)\n", issueRef(iss), iss.Status, iss.Priority)
 				return nil
 			})
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "New status")
+	cmd.Flags().StringVar(&status, "status", "", "New status (backlog/todo/in_progress/done/cancelled)")
 	cmd.Flags().StringVar(&title, "title", "", "New title")
 	cmd.Flags().StringVar(&description, "description", "", "New description — Markdown or HTML (\"-\" for stdin; --description-file for multi-line)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
@@ -423,25 +456,25 @@ func newIssueEditCmd() *cobra.Command {
 func newIssueDeleteCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <id>",
+		Use:   "delete <#seq|id:globalid>",
 		Short: "Delete an issue (project owners/admins only)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
-			if !Confirm(fmt.Sprintf("Delete issue #%d?", id), yes) {
-				return fmt.Errorf("aborted")
-			}
 			c, err := newClient()
 			if err != nil {
 				return err
 			}
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
+			if !Confirm(fmt.Sprintf("Delete issue %s?", strings.TrimPrefix(args[0], "#")), yes) {
+				return fmt.Errorf("aborted")
+			}
 			if err := c.DeleteIssue(id); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "deleted issue #%d\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted issue %s (global id %d)\n", strings.TrimPrefix(args[0], "#"), id)
 			return nil
 		},
 	}
@@ -451,14 +484,10 @@ func newIssueDeleteCmd() *cobra.Command {
 
 func newIssueAssignCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "assign <id> <user>",
+		Use:   "assign <#seq|id:globalid> <user>",
 		Short: "Assign an issue (user is id, email, name, or 'me')",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
@@ -467,7 +496,11 @@ func newIssueAssignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
+			c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
 			uid, err := ResolveUserID(args[1], c, cfg)
 			if err != nil {
 				return err
@@ -497,7 +530,7 @@ func newIssueAssignCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "issue #%d assigned: %s\n", iss.ID, issueAssigneeLabel(iss.Assignees))
+				fmt.Fprintf(w, "issue %s assigned: %s\n", issueRef(iss), issueAssigneeLabel(iss.Assignees))
 				return nil
 			})
 		},
@@ -507,14 +540,10 @@ func newIssueAssignCmd() *cobra.Command {
 
 func newIssueUnassignCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unassign <id>",
+		Use:   "unassign <#seq|id:globalid>",
 		Short: "Clear the assignee on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
@@ -523,12 +552,16 @@ func newIssueUnassignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
 			iss, err := c.UpdateIssue(id, client.UpdateIssueRequest{AssigneeIDs: []byte("[]")})
 			if err != nil {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "issue #%d unassigned\n", iss.ID)
+				fmt.Fprintf(w, "issue %s unassigned\n", issueRef(iss))
 				return nil
 			})
 		},
@@ -538,14 +571,10 @@ func newIssueUnassignCmd() *cobra.Command {
 func newIssueCommentCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "comment <id>",
+		Use:   "comment <#seq|id:globalid>",
 		Short: "Post a comment on an issue (use --body \"-\" for stdin)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			content, err := ReadBody(body, bodyFile)
 			if err != nil {
 				return err
@@ -561,12 +590,16 @@ func newIssueCommentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
 			cm, err := c.CreateComment(id, client.CreateCommentRequest{Content: content})
 			if err != nil {
 				return err
 			}
 			return output.Render(format, cm, func(w io.Writer) error {
-				fmt.Fprintf(w, "comment #%d posted on issue #%d\n", cm.ID, id)
+				fmt.Fprintf(w, "comment #%d posted on issue %s\n", cm.ID, strings.TrimPrefix(args[0], "#"))
 				return nil
 			})
 		},
@@ -583,10 +616,8 @@ func newIssueEditCommentCmd() *cobra.Command {
 		Short: "Edit a comment on an issue (author only)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid issue id: %w", err)
-			}
+			// args[0] (the issue ref) is accepted for symmetry but the API
+			// addresses comments by their own id, so it isn't resolved here.
 			commentID, err := strconv.Atoi(args[1])
 			if err != nil {
 				return fmt.Errorf("invalid comment id: %w", err)
@@ -632,10 +663,8 @@ func newIssueDeleteCommentCmd() *cobra.Command {
 		Short: "Delete a comment (author only)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid issue id: %w", err)
-			}
+			// args[0] (the issue ref) is accepted for symmetry but the API
+			// addresses comments by their own id, so it isn't resolved here.
 			commentID, err := strconv.Atoi(args[1])
 			if err != nil {
 				return fmt.Errorf("invalid comment id: %w", err)
@@ -668,10 +697,6 @@ func newIssueWatchCmd() *cobra.Command {
 		Short: "Subscribe to notifications on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
 				return err
@@ -680,10 +705,14 @@ func newIssueWatchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
 			if err := c.WatchIssue(ws, id); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "watching issue #%d\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "watching issue %s\n", strings.TrimPrefix(args[0], "#"))
 			return nil
 		},
 	}
@@ -695,10 +724,6 @@ func newIssueUnwatchCmd() *cobra.Command {
 		Short: "Unsubscribe from notifications on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
 				return err
@@ -707,10 +732,14 @@ func newIssueUnwatchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
 			if err := c.UnwatchIssue(ws, id); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "no longer watching issue #%d\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "no longer watching issue %s\n", strings.TrimPrefix(args[0], "#"))
 			return nil
 		},
 	}
@@ -719,14 +748,10 @@ func newIssueUnwatchCmd() *cobra.Command {
 func newIssueAttachCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "attach <id>",
+		Use:   "attach <#seq|id:globalid>",
 		Short: "Upload and attach a file to an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			if file == "" {
 				return fmt.Errorf("--file is required")
 			}
@@ -735,6 +760,10 @@ func newIssueAttachCmd() *cobra.Command {
 				return err
 			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
 			}
@@ -759,24 +788,24 @@ func newIssueAttachCmd() *cobra.Command {
 func newIssueDetachCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "detach <issue-id> <attachment-id>",
+		Use:   "detach <#seq|id:globalid> <attachment-id>",
 		Short: "Delete an attachment from an issue",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issueID, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid issue id: %w", err)
-			}
 			attID, err := strconv.Atoi(args[1])
 			if err != nil {
 				return fmt.Errorf("invalid attachment id: %w", err)
 			}
-			if !Confirm(fmt.Sprintf("Delete attachment #%d on issue #%d?", attID, issueID), yes) {
-				return fmt.Errorf("aborted")
-			}
 			c, err := newClient()
 			if err != nil {
 				return err
+			}
+			issueID, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
+			if !Confirm(fmt.Sprintf("Delete attachment #%d on issue %s?", attID, strings.TrimPrefix(args[0], "#")), yes) {
+				return fmt.Errorf("aborted")
 			}
 			if err := c.DeleteAttachment(issueID, attID); err != nil {
 				return err
@@ -791,7 +820,7 @@ func newIssueDetachCmd() *cobra.Command {
 
 func newIssueCommentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <id>",
+		Use:   "comments <#seq|id:globalid>",
 		Short: "List comments on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -799,11 +828,11 @@ func newIssueCommentsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
 			}
@@ -829,7 +858,7 @@ func newIssueCommentsCmd() *cobra.Command {
 
 func newIssueActivityCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "activity <id>",
+		Use:   "activity <#seq|id:globalid>",
 		Short: "Show activity (comments + changes) on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -837,11 +866,11 @@ func newIssueActivityCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
 			}
@@ -875,7 +904,7 @@ func newIssueActivityCmd() *cobra.Command {
 
 func newIssueAttachmentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "attachments <id>",
+		Use:   "attachments <#seq|id:globalid>",
 		Short: "List attachments on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -883,11 +912,11 @@ func newIssueAttachmentsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid id: %w", err)
-			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
 			}
@@ -923,6 +952,46 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
+// resolveIssueArg turns a user-facing issue reference into the global issue id
+// the API addresses by. Accepted forms:
+//
+//	234  or  #234   the workspace-facing number shown in the UI/CLI (seq) — default
+//	id:441          the global issue id (escape hatch / back-compat)
+//
+// seq is resolved to the global id via the active (or --ws) workspace, so the
+// number a human reads anywhere is the number the CLI takes.
+func resolveIssueArg(c *client.Client, ref string) (int, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, fmt.Errorf("missing issue number")
+	}
+	if strings.HasPrefix(strings.ToLower(ref), "id:") {
+		n, err := strconv.Atoi(strings.TrimSpace(ref[3:]))
+		if err != nil {
+			return 0, fmt.Errorf("invalid global id %q", ref)
+		}
+		return n, nil
+	}
+	seq, err := strconv.Atoi(strings.TrimPrefix(ref, "#"))
+	if err != nil {
+		return 0, fmt.Errorf("invalid issue number %q — pass the #seq shown in the app, or id:<globalid>", ref)
+	}
+	iss, err := c.GetIssueBySeq(seq)
+	if err != nil {
+		return 0, err
+	}
+	return iss.ID, nil
+}
+
+// issueRef formats an issue's user-facing identifier for output: "#<seq>" when
+// the seq is known, falling back to the global id.
+func issueRef(iss *client.Issue) string {
+	if iss.Seq != nil {
+		return fmt.Sprintf("#%d", *iss.Seq)
+	}
+	return fmt.Sprintf("#%d", iss.ID)
+}
+
 // ResolveUserID resolves a user reference (id, email, display name, or "me")
 // to a numeric user ID. Does not accept "none"/"null" — callers handle those.
 func ResolveUserID(ref string, c *client.Client, cfg *config.Config) (int, error) {
@@ -941,6 +1010,18 @@ func issueAssigneeLabel(assignees []client.IssueAssignee) string {
 		} else {
 			names = append(names, a.Email)
 		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// issueLabelLabel formats labels for one-line display.
+func issueLabelLabel(labels []client.IssueLabel) string {
+	if len(labels) == 0 {
+		return "—"
+	}
+	names := make([]string, 0, len(labels))
+	for _, l := range labels {
+		names = append(names, l.Name)
 	}
 	return strings.Join(names, ", ")
 }

@@ -11,6 +11,7 @@ import { db } from '../client'
 import { tasks, type Task } from '../schema'
 import { recordEvent } from './events'
 import { softDeleteTask, type DeleteMode } from './deletion'
+import { toRichTextHtml } from '@/lib/rich-text'
 
 export interface TaskListItem extends Task {
   project_name: string | null
@@ -101,7 +102,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         workspace_id: input.workspaceId,
         project_id: input.projectId ?? null,
         name: input.name,
-        description: input.description ?? null,
+        description: toRichTextHtml(input.description) ?? null,
         due_date: input.due_date ?? null,
         status: input.status ?? 'active',
       })
@@ -149,7 +150,7 @@ export async function updateTask(
 
     const updates: Record<string, unknown> = {}
     if (patch.name !== undefined) updates.name = patch.name
-    if (patch.description !== undefined) updates.description = patch.description
+    if (patch.description !== undefined) updates.description = toRichTextHtml(patch.description)
     if (patch.due_date !== undefined) updates.due_date = patch.due_date
     if (patch.status !== undefined) updates.status = patch.status
     if (patch.project_id !== undefined) updates.project_id = patch.project_id

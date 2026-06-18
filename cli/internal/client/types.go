@@ -48,8 +48,16 @@ type IssueAssignee struct {
 	AvatarURL *string `json:"avatar_url" yaml:"avatar_url"`
 }
 
+type IssueLabel struct {
+	ID    int    `json:"id" yaml:"id"`
+	Name  string `json:"name" yaml:"name"`
+	Color string `json:"color" yaml:"color"`
+}
+
 type Issue struct {
 	ID              int             `json:"id" yaml:"id"`
+	Seq             *int            `json:"seq" yaml:"seq"`
+	WorkspaceID     *int            `json:"workspace_id,omitempty" yaml:"workspace_id,omitempty"`
 	ProjectID       int             `json:"project_id" yaml:"project_id"`
 	TaskID     *int            `json:"task_id" yaml:"task_id"`
 	Title           string          `json:"title" yaml:"title"`
@@ -61,10 +69,14 @@ type Issue struct {
 	DueDate         *string         `json:"due_date" yaml:"due_date"`
 	EstimatedHours  json.RawMessage `json:"estimated_hours,omitempty" yaml:"-"`
 	Assignees       []IssueAssignee `json:"assignees" yaml:"assignees"`
+	Labels          []IssueLabel    `json:"labels,omitempty" yaml:"labels,omitempty"`
 	TaskName   *string         `json:"task_name,omitempty" yaml:"task_name,omitempty"`
 	ProjectName     *string         `json:"project_name,omitempty" yaml:"project_name,omitempty"`
 	CommentCount    *int            `json:"comment_count,omitempty" yaml:"comment_count,omitempty"`
 	AttachmentCount *int            `json:"attachment_count,omitempty" yaml:"attachment_count,omitempty"`
+	Position        *int            `json:"position,omitempty" yaml:"position,omitempty"`
+	CompletedAt     *string         `json:"completed_at,omitempty" yaml:"completed_at,omitempty"`
+	CancelledAt     *string         `json:"cancelled_at,omitempty" yaml:"cancelled_at,omitempty"`
 	CreatedAt       *string         `json:"created_at" yaml:"created_at"`
 	UpdatedAt       *string         `json:"updated_at" yaml:"updated_at"`
 }

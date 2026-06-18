@@ -684,6 +684,7 @@ export const openApiSpec = {
           { name: 'status', in: 'query', schema: { type: 'string', enum: ISSUE_STATUS_VALUES } },
           { name: 'priority', in: 'query', schema: { type: 'integer', enum: ISSUE_PRIORITY_VALUES } },
           { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'seq', in: 'query', schema: { type: 'integer' }, description: 'Look up the single issue by its workspace-facing number (the #seq shown in the UI/CLI).' },
           limitParam, cursorParam,
         ],
         responses: { '200': jsonList('Issue'), ...errors(400, 401, 404) },

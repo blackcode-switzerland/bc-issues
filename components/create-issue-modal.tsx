@@ -22,13 +22,13 @@ import {
 } from 'lucide-react'
 import { RichTextEditor } from './rich-text-editor'
 
+// Canonical issue statuses — must match lib/work-items.ts (ISSUE_STATUSES).
 const STATUSES = [
   { id: 'backlog', label: 'Backlog', icon: Circle, color: 'text-gray-400' },
-  { id: 'todo', label: 'To Do', icon: Circle, color: 'text-blue-400' },
-  { id: 'in_progress', label: 'In Progress', icon: Circle, color: 'text-amber-400' },
-  { id: 'blocked', label: 'Blocked', icon: AlertTriangle, color: 'text-red-400' },
-  { id: 'in_review', label: 'In Review', icon: Circle, color: 'text-purple-400' },
+  { id: 'todo', label: 'Todo', icon: Circle, color: 'text-blue-400' },
+  { id: 'in_progress', label: 'In progress', icon: Circle, color: 'text-amber-400' },
   { id: 'done', label: 'Done', icon: Check, color: 'text-green-400' },
+  { id: 'cancelled', label: 'Cancelled', icon: X, color: 'text-gray-400' },
 ] as const
 
 const PRIORITIES = [

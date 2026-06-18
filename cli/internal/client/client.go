@@ -27,6 +27,12 @@ var (
 	MinSeen    string
 )
 
+// Verbose, when true (set by the root --verbose flag or BK_DEBUG=1), makes every
+// request log its method, URL, status, and response body to stderr. Useful when
+// the CLI's view of the data disagrees with reality and you'd otherwise reach
+// for curl.
+var Verbose bool
+
 // OutdatedError is returned by every request when the running CLI version is
 // below the minimum version the API still supports (X-BK-CLI-Min). Commands
 // fail fast with this so the user is forced to upgrade.
@@ -93,6 +99,10 @@ func (c *Client) do(req *http.Request, out any) error {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "bk-cli/"+version.Version)
 
+	if Verbose {
+		fmt.Fprintf(os.Stderr, "→ %s %s\n", req.Method, req.URL.String())
+	}
+
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
@@ -116,6 +126,13 @@ func (c *Client) do(req *http.Request, out any) error {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+
+	if Verbose {
+		fmt.Fprintf(os.Stderr, "← %d %s (%d bytes)\n", resp.StatusCode, http.StatusText(resp.StatusCode), len(body))
+		if len(body) > 0 {
+			fmt.Fprintf(os.Stderr, "  %s\n", truncate(string(body), 2000))
+		}
 	}
 
 	if resp.StatusCode >= 400 {
@@ -233,6 +250,12 @@ func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
 	if opts.Cursor != nil {
 		q.Set("cursor", fmt.Sprint(*opts.Cursor))
 	}
+	if strings.TrimSpace(opts.Search) != "" {
+		q.Set("search", opts.Search)
+	}
+	if opts.Seq > 0 {
+		q.Set("seq", fmt.Sprint(opts.Seq))
+	}
 
 	path, err := c.wsPath("issues")
 	if err != nil {
@@ -252,6 +275,8 @@ func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
 type ListIssuesOpts struct {
 	ProjectID int
 	Status    string
+	Search    string
+	Seq       int
 	Limit     int
 	Cursor    *int
 }
@@ -591,6 +616,20 @@ func (c *Client) GetIssue(id int) (*Issue, error) {
 		return nil, err
 	}
 	return &iss, nil
+}
+
+// GetIssueBySeq resolves the workspace-facing issue number (the #seq users see)
+// to the full issue via the list endpoint's ?seq= filter. Returns a not-found
+// error when no issue in the active workspace has that seq.
+func (c *Client) GetIssueBySeq(seq int) (*Issue, error) {
+	page, err := c.ListIssues(ListIssuesOpts{Seq: seq, Limit: 1})
+	if err != nil {
+		return nil, err
+	}
+	if len(page.Data) == 0 {
+		return nil, fmt.Errorf("no issue with number #%d in this workspace", seq)
+	}
+	return &page.Data[0], nil
 }
 
 func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {

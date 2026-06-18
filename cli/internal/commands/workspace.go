@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
@@ -259,7 +260,7 @@ func newClientAndConfig() (*client.Client, *config.Config, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug), cfg, nil
+	return client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg)), cfg, nil
 }
 
 // resolveWorkspaceRef returns either the slug/id explicitly given as the
@@ -268,6 +269,9 @@ func newClientAndConfig() (*client.Client, *config.Config, error) {
 func resolveWorkspaceRef(cfg *config.Config, args []string) (string, error) {
 	if len(args) > 0 && args[0] != "" {
 		return args[0], nil
+	}
+	if strings.TrimSpace(wsOverride) != "" {
+		return wsOverride, nil
 	}
 	if cfg.ActiveWorkspaceSlug != "" {
 		return cfg.ActiveWorkspaceSlug, nil

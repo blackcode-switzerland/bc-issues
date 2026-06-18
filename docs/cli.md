@@ -200,6 +200,23 @@ bk workspace show                 # details of the active workspace
 
 The active workspace (id, slug) is stored in the config file and is also set server-side via `POST /api/me/active-workspace`. Workspace-scoped command groups (`label`, `member`, `invite`) require an active workspace and fail with a clear message if none is set. Workspace API paths accept either the **slug** or the **numeric id**.
 
+### Reading another workspace without switching (`--ws`)
+
+`--ws <slug|id>` is a **global flag** that targets a different workspace for that one command only — it does **not** mutate the active workspace (no config write, no `POST /api/me/active-workspace`). A read should never have side effects:
+
+```bash
+bk issue list --ws acme --search "login bug"   # read acme; active workspace unchanged
+bk issue view 234 --ws acme                     # view by the #seq shown in the app
+```
+
+### Global flags
+
+| Flag | Purpose |
+|---|---|
+| `--ws <slug\|id>` | Target a workspace for this command only; does not change the active one. |
+| `-v`, `--verbose` | Log each HTTP request/response (method, URL, status, body) to stderr. Same as `BK_DEBUG=1`. Use this instead of dropping to `curl` when the CLI's view disagrees with reality. |
+| `-o`, `--json`, `--yaml` | Output format (see [Output formats](#output-formats)). |
+
 ---
 
 ## Command reference
@@ -241,21 +258,28 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 ### Issues
 
+> **Issue identifier — `#seq`, not the global id.** Issues have two numbers: the
+> per-workspace **`seq`** (what the web UI shows as `#234`) and a global **`id`**
+> (e.g. `441`). Issue commands take the **`seq`** — the number you see in the app —
+> so `bk issue view 234` and `bk issue view #234` both work. The list/view output
+> shows the `#seq` in the `#` column and the global id in the `ID` column. To
+> address the global id directly (back-compat / scripts), prefix it: `id:441`.
+
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues` | `--mine` = assigned to the current user. `--assignee` is repeatable for multi-assignee filter. |
-| `bk issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | |
+| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT] [--all] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues` | `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description). `--all` auto-paginates every page. Output footer shows `showing X of N` and the next `--cursor`. |
+| `bk issue view <#seq\|id:globalid>` | `GET /api/workspaces/:ws/issues/:id` | Resolves `#seq` → global id via `?seq=`. |
 | `bk issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
-| `bk issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
-| `bk issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
-| `bk issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
-| `bk issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
-| `bk issue comment <id> --body "..." \| --body - \| --body-file F` | `POST /api/workspaces/:ws/issues/:id/comments` | Body must be non-empty. |
-| `bk issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
-| `bk issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
-| `bk issue attach <id> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Two-step upload + attach. |
-| `bk issue attachments <id>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
-| `bk issue detach <issue-id> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
+| `bk issue edit <#seq> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
+| `bk issue assign <#seq> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
+| `bk issue unassign <#seq> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
+| `bk issue delete <#seq> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
+| `bk issue comment <#seq> --body "..." \| --body - \| --body-file F` | `POST /api/workspaces/:ws/issues/:id/comments` | Body must be non-empty. |
+| `bk issue comments <#seq>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
+| `bk issue activity <#seq>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
+| `bk issue attach <#seq> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Two-step upload + attach. |
+| `bk issue attachments <#seq>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
+| `bk issue detach <#seq> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
 
 **`issue create` flags**:
 

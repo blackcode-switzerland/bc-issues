@@ -349,7 +349,11 @@ DELETE /api/workspaces/{ws}/tasks/{id}?mode=cascade|detach   move to Trash (defa
 GET    /api/workspaces/{ws}/tasks/{id}/comments  list / POST
 
 GET    /api/workspaces/{ws}/issues              list (filters) / POST create
-                                               (create accepts label_ids (existing) and labels: string[] —
+                                               (filters: project_id, task_id, assignee_id(s), status,
+                                                priority, search, seq, limit, cursor. seq= returns the single
+                                                issue with that workspace-facing number — used by the CLI to
+                                                resolve #seq → global id.
+                                                create accepts label_ids (existing) and labels: string[] —
                                                 names matched case-insensitively, unknown ones created on the fly)
 GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH
 DELETE /api/workspaces/{ws}/issues/{id}         move to Trash

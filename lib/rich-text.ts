@@ -57,7 +57,13 @@ export function toRichTextHtml<T extends string | null | undefined>(input: T): T
 
   // Markdown / plain text. Tolerate JSON-escaped newlines/tabs (a common agent
   // mistake: sending the literal characters "\n" instead of real line breaks).
-  if (!text.includes('\n') && /\\[nrt]/.test(text)) {
+  // Unescape when the literal escapes clearly dominate real line breaks — a
+  // stray trailing newline (e.g. from --description-file) must not disable it,
+  // yet genuinely multi-line Markdown that happens to contain a stray "\n" must
+  // not be mangled.
+  const literalBreaks = (text.match(/\\r\\n|\\r|\\n/g) || []).length
+  const realBreaks = (text.match(/\n/g) || []).length
+  if (literalBreaks > realBreaks) {
     text = text.replace(/\\r\\n|\\r|\\n/g, '\n').replace(/\\t/g, '\t')
   }
 

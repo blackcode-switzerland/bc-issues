@@ -68,6 +68,8 @@ export interface ListIssuesOptions {
   status?: string
   priority?: number
   search?: string
+  /** Look up the single issue with this workspace-facing seq (the #number in the UI). */
+  seq?: number
   cursor?: number | null
   limit?: number
 }
@@ -114,6 +116,7 @@ export async function listIssuesInWorkspace(
       ${assigneeFilter}
       ${opts.status ? sql`AND i.status = ${opts.status}` : sql``}
       ${opts.priority ? sql`AND i.priority = ${opts.priority}` : sql``}
+      ${opts.seq !== undefined ? sql`AND i.seq = ${opts.seq}` : sql``}
       ${
         opts.search
           ? sql`AND (i.title ILIKE ${'%' + opts.search + '%'} OR i.description ILIKE ${'%' + opts.search + '%'})`
