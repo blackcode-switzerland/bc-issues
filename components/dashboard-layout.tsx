@@ -41,15 +41,19 @@ const NAV_PRIMARY = [
   { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, trailing: true, match: (p: string) => p === '/dashboard/inbox' },
 ]
 
-const NAV_WORKSPACE = [
-  { href: '/dashboard', label: 'Projects', icon: LayoutGrid, match: (p: string) => p === '/dashboard' },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: Target, match: (p: string) => p === '/dashboard/tasks' || p.startsWith('/dashboard/tasks/') },
-  { href: '/dashboard/issues', label: 'Issues', icon: List, match: (p: string) => p === '/dashboard/issues' || p.startsWith('/dashboard/issues/') },
-  { href: '/dashboard/labels', label: 'Labels', icon: Tag, match: (p: string) => p === '/dashboard/labels' },
-  { href: '/dashboard/members', label: 'Members', icon: Users, match: (p: string) => p.startsWith('/dashboard/members') },
-  { href: '/dashboard/activity', label: 'Activity', icon: Clock, match: (p: string) => p === '/dashboard/activity' },
-  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, match: (p: string) => p === '/dashboard/analytics' },
-  { href: '/dashboard/trash', label: 'Trash', icon: Trash2, match: (p: string) => p === '/dashboard/trash' },
+// Workspace-scoped nav. `seg` is the path under /dashboard/{ws}; the href and
+// active-match are built per-render from the current workspace slug. `countKey`
+// maps to the sidebar count badges.
+type CountKey = 'projects' | 'tasks' | 'issues' | 'labels'
+const NAV_WORKSPACE: { seg: string; label: string; icon: LucideIcon; countKey?: CountKey }[] = [
+  { seg: '', label: 'Projects', icon: LayoutGrid, countKey: 'projects' },
+  { seg: '/tasks', label: 'Tasks', icon: Target, countKey: 'tasks' },
+  { seg: '/issues', label: 'Issues', icon: List, countKey: 'issues' },
+  { seg: '/labels', label: 'Labels', icon: Tag, countKey: 'labels' },
+  { seg: '/members', label: 'Members', icon: Users },
+  { seg: '/activity', label: 'Activity', icon: Clock },
+  { seg: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { seg: '/trash', label: 'Trash', icon: Trash2 },
 ]
 
 
@@ -135,17 +139,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         <SectionLabel>This workspace</SectionLabel>
         <div className="space-y-0.5">
-          {NAV_WORKSPACE.map((item) => {
-            const countMap: Record<string, number | undefined> = {
-              '/dashboard': counts?.projects,
-              '/dashboard/tasks': counts?.tasks,
-              '/dashboard/issues': counts?.issues,
-              '/dashboard/labels': counts?.labels,
-            }
-            return (
-              <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} count={countMap[item.href]} />
-            )
-          })}
+          {ws?.slug
+            ? NAV_WORKSPACE.map((item) => {
+                const base = `/dashboard/${ws.slug}`
+                const href = `${base}${item.seg}`
+                const p = pathname ?? ''
+                const active = item.seg === ''
+                  ? p === base
+                  : p === href || p.startsWith(`${href}/`)
+                const count = item.countKey ? counts?.[item.countKey] : undefined
+                return <NavItem key={item.seg} item={{ href, label: item.label, icon: item.icon }} active={active} count={count} />
+              })
+            : null}
         </div>
 
         {me?.is_super_admin && (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, List, LayoutGrid, GanttChart, Search, X } from 'lucide-react'
+import { ArrowUpDown, Check, ChevronDown, List, LayoutGrid, GanttChart, Search, X } from 'lucide-react'
 
 export interface MultiSelectOption {
   value: string | number
@@ -205,5 +205,88 @@ export function FilterBar({ children }: FilterBarProps) {
     <div className="flex flex-wrap items-center gap-1.5">
       {children}
     </div>
+  )
+}
+
+// Single-select sort dropdown. The first option is treated as the default
+// ("manual"); the button highlights when a non-default sort is active.
+export function SortSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const active = options.find((o) => o.value === value) ?? options[0]
+  const isDefault = value === options[0]?.value
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+          !isDefault
+            ? 'border-primary/40 bg-primary/10 text-primary'
+            : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
+        }`}
+      >
+        <ArrowUpDown size={13} />
+        {isDefault ? 'Sort' : active?.label}
+        <ChevronDown size={12} />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
+          <ul className="max-h-72 overflow-y-auto py-1">
+            {options.map((opt) => {
+              const selected = opt.value === value
+              return (
+                <li key={opt.value}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.value)
+                      setOpen(false)
+                    }}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-colors hover:bg-secondary ${selected ? 'text-foreground' : 'text-foreground/80'}`}
+                  >
+                    <span className="flex-1 truncate">{opt.label}</span>
+                    {selected ? <Check size={12} className="shrink-0 text-primary" /> : null}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// Shown only when a filter/search is active (caller gates with `active`).
+export function ClearFiltersButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  if (!active) return null
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+    >
+      <X size={14} />
+      Clear
+    </button>
   )
 }

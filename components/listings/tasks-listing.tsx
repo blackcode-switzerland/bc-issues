@@ -7,7 +7,9 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { toast } from 'sonner'
 import { Plus, Target } from 'lucide-react'
 import { useActiveWorkspace } from './use-active-workspace'
-import { MultiSelect, SearchInput } from './filter-bar'
+import { usePersistentState } from './use-persistent-filters'
+import { ClearFiltersButton, MultiSelect, SearchInput, SortSelect } from './filter-bar'
+import { sortItems, TASK_SORTS, SORT_MANUAL } from './sort'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
 import { ProgressRing } from '@/components/ui/work-item-icons'
 import { ProjectIcon } from '@/components/project-icon'
@@ -27,6 +29,7 @@ import {
 
 interface TaskRow {
   id: number
+  seq: number | null
   workspace_id: number
   project_id: number | null
   name: string
@@ -42,6 +45,8 @@ interface TaskRow {
   lead_avatar: string | null
   issue_count: number
   completed_issues: number
+  created_at?: string
+  updated_at?: string
 }
 
 interface Project {
@@ -63,9 +68,12 @@ export function TasksListing() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const { confirmDelete } = useDeleteDialog()
-  const [search, setSearch] = useState('')
-  const [projectIds, setProjectIds] = useState<Array<string | number>>([])
-  const [leadIds, setLeadIds] = useState<Array<string | number>>([])
+  // Filters persist across navigation (until a hard reload), scoped per workspace.
+  const fk = (name: string) => `${ws?.slug ?? '~'}:tasks:${name}`
+  const [search, setSearch] = usePersistentState(fk('search'), '')
+  const [projectIds, setProjectIds] = usePersistentState<Array<string | number>>(fk('projectIds'), [])
+  const [leadIds, setLeadIds] = usePersistentState<Array<string | number>>(fk('leadIds'), [])
+  const [sort, setSort] = usePersistentState(fk('sort'), SORT_MANUAL)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const createTask = useMutation({
@@ -76,13 +84,13 @@ export function TasksListing() {
         body: JSON.stringify({ name: 'New Task' }),
       })
       if (!res.ok) throw new Error('Failed to create task')
-      return res.json() as Promise<{ id: number }>
+      return res.json() as Promise<{ id: number; seq: number | null }>
     },
     onSuccess: (task) => {
       queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/tasks/${task.id}?new=1`)
+      router.push(`/dashboard/${ws!.slug}/tasks/${task.seq ?? task.id}?new=1`)
     },
     onError: () => toast.error('Failed to create task'),
   })
@@ -109,7 +117,8 @@ export function TasksListing() {
     },
   })
 
-  const hasFilters = !!(search || projectIds.length || leadIds.length)
+  const hasFilters = !!(search || projectIds.length || leadIds.length || sort !== SORT_MANUAL)
+  const clearFilters = () => { setSearch(''); setProjectIds([]); setLeadIds([]); setSort(SORT_MANUAL) }
 
   const tasks = useQuery({
     queryKey: ['ws-tasks-listing', ws?.slug, { search, projectIds }],
@@ -144,6 +153,8 @@ export function TasksListing() {
     }
     return data
   }, [tasks.data, projectIds, leadIds])
+
+  const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
 
   const projectOptions = [
     { value: 'null', label: 'No project', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
@@ -277,6 +288,8 @@ export function TasksListing() {
           selected={leadIds}
           onChange={setLeadIds}
         />
+        <SortSelect value={sort} options={TASK_SORTS} onChange={setSort} />
+        <ClearFiltersButton active={hasFilters} onClick={clearFilters} />
       </div>
 
       {tasks.isLoading ? (
@@ -291,7 +304,7 @@ export function TasksListing() {
             icon={<Target size={28} />}
             title="No tasks found"
             description="No tasks match your current filters."
-            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setProjectIds([]); setLeadIds([]) } }}
+            secondaryAction={{ label: 'Clear filters', onClick: clearFilters }}
           />
         ) : (
           <EmptyState
@@ -319,7 +332,7 @@ export function TasksListing() {
             animate="show"
           >
             <AnimatePresence initial={false}>
-            {filtered.map((m) => (
+            {sorted.map((m) => (
               <motion.div
                 key={m.id}
                 variants={listItemVariants}
@@ -438,7 +451,7 @@ function TaskRowItem({
             onToggle(!selected)
             return
           }
-          router.push(`/dashboard/tasks/${m.id}`)
+          router.push(`/dashboard/${wsSlug}/tasks/${m.seq ?? m.id}`)
         }}
       >
         {/* Checkbox */}
@@ -452,6 +465,9 @@ function TaskRowItem({
         {/* Name */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Target size={18} className="shrink-0 text-muted-foreground" />
+          {m.seq != null ? (
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{m.seq}</span>
+          ) : null}
           <span className="truncate text-sm font-medium">{m.name}</span>
         </div>
 

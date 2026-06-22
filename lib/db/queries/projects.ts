@@ -12,6 +12,7 @@ import { projects, type Project } from '../schema'
 import { recordEvent } from './events'
 import { softDeleteProject, type DeleteMode } from './deletion'
 import { setProjectMembers } from './project-relations'
+import { allocateNextProjectSeq } from './workspaces'
 import { toRichTextHtml } from '@/lib/rich-text'
 
 export interface ProjectListItem extends Project {
@@ -152,10 +153,12 @@ export interface CreateProjectInput {
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
   return await db.transaction(async (tx) => {
+    const seq = await allocateNextProjectSeq(tx, input.workspaceId)
     const [row] = await tx
       .insert(projects)
       .values({
         workspace_id: input.workspaceId,
+        seq,
         name: input.name,
         summary: input.summary ?? null,
         description: toRichTextHtml(input.description) ?? null,

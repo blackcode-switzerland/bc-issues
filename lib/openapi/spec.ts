@@ -289,6 +289,7 @@ export const openApiSpec = {
       Project: entity(
         {
           id: { type: 'integer' },
+          seq: { type: ['integer', 'null'], description: 'Workspace-scoped #number shown in the UI/URL.' },
           workspace_id: { type: 'integer' },
           name: { type: 'string' },
           summary: { type: ['string', 'null'] },
@@ -324,6 +325,7 @@ export const openApiSpec = {
       Task: entity(
         {
           id: { type: 'integer' },
+          seq: { type: ['integer', 'null'], description: 'Workspace-scoped #number shown in the UI/URL.' },
           workspace_id: { type: 'integer' },
           project_id: { type: ['integer', 'null'] },
           name: { type: 'string' },
@@ -867,6 +869,34 @@ export const openApiSpec = {
       parameters: [wsParam, idParam(), idParam('updateId', 'Project update id.')],
       delete: { tags: ['Projects'], operationId: 'deleteProjectUpdate', summary: 'Delete a project update (author)', responses: { '200': deletedResponse, ...errors(401, 403, 404) } },
     },
+    '/api/workspaces/{ws}/resolve': {
+      parameters: [wsParam],
+      get: {
+        tags: ['Meta'], operationId: 'resolveSeq', summary: 'Resolve a workspace #number (seq) to its global id',
+        description:
+          'URLs use the workspace-scoped #number (seq); the rest of the API uses the ' +
+          'global id. This maps (type, seq) → id within the workspace.',
+        parameters: [
+          { name: 'type', in: 'query', required: true, schema: { type: 'string', enum: ['issue', 'task', 'project'] } },
+          { name: 'seq', in: 'query', required: true, schema: { type: 'integer' } },
+        ],
+        responses: {
+          '200': jsonShape(
+            {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['issue', 'task', 'project'] },
+                seq: { type: 'integer' },
+                id: { type: 'integer' },
+                workspace_slug: { type: 'string' },
+              },
+            },
+            'The resolved global id.'
+          ),
+          ...errors(400, 401, 404),
+        },
+      },
+    },
     '/api/workspaces/{ws}/tasks': {
       parameters: [wsParam],
       get: {
@@ -917,6 +947,10 @@ export const openApiSpec = {
     },
     '/api/workspaces/{ws}/labels/{id}': {
       parameters: [wsParam, idParam()],
+      get: {
+        tags: ['Labels'], operationId: 'getLabel', summary: 'Label detail',
+        responses: { '200': jsonObject('Label'), ...errors(400, 401, 404) },
+      },
       patch: {
         tags: ['Labels'], operationId: 'updateLabel', summary: 'Update a label',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },

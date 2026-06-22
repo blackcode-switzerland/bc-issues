@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, Check, ChevronRight, Loader2, Plus, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { avatarColor } from '@/components/ui/member-avatar'
-import { WorkspaceCreateModal } from './workspace-create-modal'
 
 interface WorkspaceItem {
   id: number
@@ -55,7 +54,6 @@ function WsAvatar({ ws, size }: { ws: WorkspaceItem; size: number }) {
 export function WorkspacesView() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [showCreate, setShowCreate] = useState(false)
   const [switchingId, setSwitchingId] = useState<number | null>(null)
 
   const { data: workspaces, isLoading } = useQuery({ queryKey: ['me-workspaces'], queryFn: fetchWorkspaces })
@@ -63,6 +61,7 @@ export function WorkspacesView() {
 
   async function switchTo(workspaceId: number) {
     if (workspaceId === me?.active_workspace_id) return
+    const target = workspaces?.find((w) => w.id === workspaceId)
     setSwitchingId(workspaceId)
     try {
       const res = await fetch('/api/me/active-workspace', {
@@ -75,7 +74,9 @@ export function WorkspacesView() {
         return
       }
       await queryClient.invalidateQueries()
-      router.refresh()
+      // Navigate into the workspace — the URL is the source of truth now.
+      if (target) router.push(`/dashboard/${target.slug}`)
+      else router.refresh()
     } finally {
       setSwitchingId(null)
     }
@@ -90,13 +91,13 @@ export function WorkspacesView() {
             Switch between your workspaces or manage their settings.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
+        <Link
+          href="/dashboard/workspaces/new"
           className="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus size={15} />
           Create workspace
-        </button>
+        </Link>
       </header>
 
       {isLoading ? (
@@ -152,26 +153,23 @@ export function WorkspacesView() {
                   </button>
                 ) : null}
 
-                <Link
-                  href={`/dashboard/workspaces/${w.slug}`}
-                  className="cursor-pointer inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-secondary"
-                  title="Manage workspace"
-                >
-                  <Settings size={13} />
-                  <span className="hidden sm:inline">Manage</span>
-                  <ChevronRight size={13} className="text-muted-foreground sm:hidden" />
-                </Link>
+                {w.member_role === 'owner' ? (
+                  <Link
+                    href={`/dashboard/workspaces/${w.slug}`}
+                    className="cursor-pointer inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-secondary"
+                    title="Manage workspace"
+                  >
+                    <Settings size={13} />
+                    <span className="hidden sm:inline">Manage</span>
+                    <ChevronRight size={13} className="text-muted-foreground sm:hidden" />
+                  </Link>
+                ) : null}
               </li>
             )
           })}
         </ul>
       )}
 
-      <WorkspaceCreateModal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={() => router.push('/dashboard')}
-      />
     </div>
   )
 }

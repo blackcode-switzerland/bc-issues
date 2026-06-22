@@ -6,13 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowLeft, Check, Globe, Mail, Search, UserPlus, Users } from 'lucide-react'
 import { MemberAvatar } from '@/components/ui/member-avatar'
-
-interface Workspace {
-  id: number
-  name: string
-  slug: string
-  member_role: 'owner' | 'member'
-}
+import { useActiveWorkspace } from '@/components/listings/use-active-workspace'
 
 interface InviteCandidate {
   user_id: number
@@ -25,17 +19,6 @@ interface InviteCandidate {
   from_platform: boolean
 }
 
-async function fetchActiveWorkspace(): Promise<Workspace | null> {
-  const meRes = await fetch('/api/me')
-  if (!meRes.ok) return null
-  const me = await meRes.json()
-  if (!me.active_workspace_id) return null
-  const wsRes = await fetch('/api/workspaces')
-  if (!wsRes.ok) return null
-  const { data } = await wsRes.json()
-  return (data as Workspace[]).find((w) => w.id === me.active_workspace_id) ?? null
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function InviteMembersView() {
@@ -43,7 +26,7 @@ export function InviteMembersView() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [search, setSearch] = useState('')
 
-  const { data: ws } = useQuery({ queryKey: ['active-workspace'], queryFn: fetchActiveWorkspace })
+  const { data: ws } = useActiveWorkspace()
 
   const { data: candidatesResp, isLoading: candidatesLoading } = useQuery({
     queryKey: ['invite-candidates', ws?.slug],
@@ -123,7 +106,7 @@ export function InviteMembersView() {
   if (ws.member_role !== 'owner') {
     return (
       <div>
-        <Header />
+        <Header wsSlug={ws.slug} />
         <div className="p-8">
           <p className="text-sm text-muted-foreground">
             Only the workspace owner can invite members.
@@ -135,7 +118,7 @@ export function InviteMembersView() {
 
   return (
     <div>
-      <Header />
+      <Header wsSlug={ws.slug} />
 
       <div className="mx-auto max-w-2xl px-6 py-8">
         {/* Invite by email */}
@@ -232,11 +215,11 @@ export function InviteMembersView() {
   )
 }
 
-function Header() {
+function Header({ wsSlug }: { wsSlug: string }) {
   return (
     <header className="sticky top-0 z-10 flex h-12 items-center gap-2.5 border-b border-border bg-background/80 px-4 backdrop-blur">
       <Link
-        href="/dashboard/members"
+        href={`/dashboard/${wsSlug}/members`}
         className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
         title="Back to members"
       >

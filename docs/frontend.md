@@ -137,23 +137,31 @@ colors in components — use the token utilities.
 
 ### Authenticated (`/dashboard`, guarded by `middleware.ts` + the dashboard layout)
 
+Workspace-scoped pages live under `/dashboard/[ws]/…` (see "Workspace-scoped
+URLs" above). Detail pages use the workspace #number (`seq`); labels use the id.
+
 | Path | Renders |
 |------|---------|
-| `/dashboard` | Projects listing (`ProjectsListing`) |
-| `/dashboard/[projectId]` | Project detail (`ProjectDetailView`) |
-| `/dashboard/issues` · `/issues/[id]` | Issues listing · issue detail |
-| `/dashboard/tasks` · `/tasks/[id]` | Tasks listing · detail |
-| `/dashboard/labels` | Workspace labels |
-| `/dashboard/members` | Workspace members + invitations |
-| `/dashboard/activity` | Activity feed |
-| `/dashboard/inbox` | Notifications |
-| `/dashboard/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
-| `/dashboard/settings/{profile,account,tokens,workspace}` | Settings (own sub-layout + nav) |
-| `/dashboard/super-admin/users` | All platform users across every workspace (super admin only) |
-| `/dashboard/super-admin/whitelist` | Manage allowed email addresses and domains |
-| `/dashboard/super-admin/errors` | Platform error log — triage, resolve, filter by status/level/date |
-| `/dashboard/workspaces` | Workspace manager (`WorkspacesView`) — list all workspaces + create |
+| `/dashboard/[ws]` | Projects listing (`ProjectsListing`) |
+| `/dashboard/[ws]/projects/[seq]` | Project detail (`ProjectDetailView`) |
+| `/dashboard/[ws]/issues` · `/issues/[seq]` | Issues listing · issue detail |
+| `/dashboard/[ws]/tasks` · `/tasks/[seq]` | Tasks listing · detail |
+| `/dashboard/[ws]/labels` · `/labels/new` · `/labels/[id]` | Labels listing · create page (`LabelCreateView`) · detail (`LabelDetailView`, inline-editable name/color + associated issues) |
+| `/dashboard/[ws]/members` · `/members/invite` | Workspace members + invitations |
+| `/dashboard/[ws]/activity` | Activity feed |
+| `/dashboard/[ws]/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
+| `/dashboard/[ws]/trash` | Recycle bin |
+| `/dashboard/inbox` | Notifications (cross-workspace, unscoped) |
+| `/dashboard/settings/{profile,account,tokens,workspace}` | Settings (own sub-layout + nav, unscoped) |
+| `/dashboard/super-admin/*` | Super-admin pages (unscoped) |
+| `/dashboard/workspaces` | Workspace manager (`WorkspacesView`) — list + switch; **Manage** shown to owners only |
+| `/dashboard/workspaces/new` | Create-workspace page (`WorkspaceCreateView`) — replaces the old modal in this flow |
 | `/dashboard/workspaces/[slug]` | Per-workspace settings (`WorkspaceSettingsView`) |
+
+Legacy `/dashboard`, `/dashboard/issues/[id]`, `/dashboard/tasks/[id]`, and old
+`/dashboard/{projectId}` paths still resolve — they redirect to the canonical
+`/dashboard/{ws}/…` URLs. `WorkspaceCreateModal` is still used by
+`OnboardingCreateWorkspace` (the forced first-workspace screen).
 
 `app/dashboard/layout.tsx` validates the session, shows
 `OnboardingCreateWorkspace` when the user has no workspace, and renders the
@@ -198,6 +206,23 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   (Projects listing filters: Status / Priority / Lead; Tasks listing filters:
   Project / Lead. Both show an inline-editable **Lead** column and the task
   detail sidebar has a **Lead** property — mirrors projects.)
+  Filter/search/view state on all three listings persists across navigation via
+  `usePersistentState` (`use-persistent-filters.ts`) — an in-memory, per-workspace
+  store that survives client-side navigation (open a detail, come back) but
+  resets on a full reload. Selection state is intentionally **not** persisted.
+  A **Sort** control (`SortSelect` + `sort.ts`, client-side: Manual/Name/Newest/
+  Oldest/Updated, plus Priority+Due for issues/projects, Due for tasks) sets the
+  order. Drag-to-reorder (`position`) is **only enabled under "Manual"**; other
+  sorts disable the drag handle. In kanban, a non-manual sort disables in-column
+  reorder but cross-column status-drag still works. Drag-reorder mutations
+  invalidate the listing query in `onSettled` so the new order survives
+  navigation (previously the optimistic order was lost until a reload).
+  List rows animate to their new order on sort change: the list view branches
+  on `dragEnabled` — manual → `@hello-pangea/dnd` (dnd owns motion), sorted →
+  `motion.li` with `layout` (the two libs don't share an element, avoiding
+  conflicts). Detail-page inline title edits write the new title to the query
+  cache optimistically (`setQueryData`) so clearing the draft doesn't flash the
+  old title during the PATCH + refetch.
   `bulk-action-bar` (multi-select toolbar for batch status/delete), and the
   `use-active-workspace` hook.
 - **Detail views:** `project-detail-view`, `issue-detail-view`,
@@ -315,27 +340,45 @@ kanban, detail pages, modals) rendering work-item state identically.
   - `RichTextDisplay({ content })` — read-only render.
   - `MentionItem` — the mention item type.
 
-## Cross-workspace deep links & inbox
+## Workspace-scoped URLs
 
-Detail URLs carry only the globally-unique entity id (`/dashboard/issues/30`,
-`/dashboard/tasks/12`, `/dashboard/{projectId}`) — **no workspace in the URL**.
-This keeps shared links portable. The three detail pages render
-`components/entity-resolver.tsx`, which:
+All workspace content lives under **`/dashboard/{ws}/…`** where `{ws}` is the
+workspace **slug**. Detail URLs use the workspace-scoped **#number (`seq`)**, not
+the global id — so the URL matches the number shown in the UI:
 
-1. calls `GET /api/me/locate?type=&id=` to find the entity's workspace (gated on
-   membership — non-members get 404);
-2. if the caller is a member of another workspace, **auto-switches the active
-   workspace** (`POST /api/me/active-workspace`) so the sidebar/back-links match;
-3. if not a member / entity gone, shows an error toast and redirects to
-   `/dashboard` (their own workspace context is left untouched).
+```
+/dashboard/{ws}                     workspace home (projects)
+/dashboard/{ws}/issues/{seq}        issue detail
+/dashboard/{ws}/tasks/{seq}         task detail
+/dashboard/{ws}/projects/{seq}      project detail
+/dashboard/{ws}/{labels|members|activity|analytics|trash}
+```
 
-The detail views (`IssueDetailView` / `TaskDetailView` / `ProjectDetailView`)
-take an optional `workspaceSlug` prop and fetch against `workspaceSlug ??
-activeWorkspace.slug` for **all** their requests. Because `resolveWorkspace`
-accepts a numeric workspace id as the `{ws}` path segment, the **inbox** passes
-each message's `workspace_id` directly as `workspaceSlug` — so inbox previews
-render correctly for items in any workspace, regardless of which one is active
-(no workspace switch on preview).
+Unscoped (user/platform) routes stay flat: `/dashboard/inbox`,
+`/dashboard/settings/*`, `/dashboard/workspaces`, `/dashboard/super-admin/*`.
+
+**URL is the source of truth for the active workspace.** `useActiveWorkspace()`
+reads the `ws` route param (falling back to the user's remembered default on
+unscoped pages). The `app/dashboard/[ws]/layout.tsx` server layout gates
+membership (redirect to `/dashboard` if not a member) and `PersistActiveWorkspace`
+records it as the default. The bare `/dashboard` redirects to the default
+workspace.
+
+**seq → id.** Detail pages render `components/seq-detail.tsx`, which calls
+`GET /api/workspaces/{ws}/resolve?type=&seq=` to map the #number to the global
+`id` the detail views fetch by. The views (`IssueDetailView` / `TaskDetailView` /
+`ProjectDetailView`) take an optional `workspaceSlug` prop and fetch against
+`workspaceSlug ?? activeWorkspace.slug`.
+
+**Legacy links** keep working: `/dashboard/issues/{id}`, `/dashboard/tasks/{id}`,
+and old `/dashboard/{projectId}` resolve the global id → canonical
+`/dashboard/{ws}/{type}/{seq}` and 301-style redirect (via `locateEntity`; the
+project case is handled by the `[ws]` layout's numeric fallback).
+
+**Inbox** is cross-workspace. Because `resolveWorkspace` accepts a numeric
+workspace id as `{ws}`, the inbox passes each message's `workspace_id` as
+`workspaceSlug` to the embedded detail view — previews render for items in any
+workspace, with no workspace switch on preview.
 
 ## State & data fetching
 

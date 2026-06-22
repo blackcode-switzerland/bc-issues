@@ -1246,6 +1246,14 @@ export function RichTextDisplay({ content, onImageClick }: RichTextDisplayProps)
     editable: false,
   })
 
+  // Keep the read-only view in sync when the content prop changes (e.g. paging
+  // between project updates reuses the same component instance).
+  useEffect(() => {
+    if (editor && !editor.isDestroyed && sanitizedContent !== editor.getHTML()) {
+      editor.commands.setContent(sanitizedContent)
+    }
+  }, [editor, sanitizedContent])
+
   useEffect(() => {
     if (!containerRef.current || !onImageClick) return
     const node = containerRef.current

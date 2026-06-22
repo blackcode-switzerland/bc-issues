@@ -174,7 +174,7 @@ for exact column types, indexes, and check constraints.
 | `users` | `email` (unique), `password_hash`, `google_id`, `avatar_url`, `tagline`, `active_workspace_id` (soft FK), `password_changed_at`, `deleted_at` (soft delete — email can be reused) |
 | `workspaces` | `name`, `slug` (unique), `owner_id`, `logo_url`, `deleted_at` |
 | `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
-| `workspace_counters` | `last_issue_seq` — per-workspace issue sequence allocator |
+| `workspace_counters` | per-workspace sequence allocators: `last_issue_seq`, `last_project_seq`, `last_task_seq` (allocated in-transaction by `allocateNext*Seq`) |
 | `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at` |
 | `api_tokens` | `token_hash` (unique), `token_prefix`, `scopes` (default `['full']`), `expires_at`, `last_used_at` |
 | `password_reset_otps` | `email`, `otp_hash`, `expires_at`, `consumed_at`, `attempts` |
@@ -184,9 +184,9 @@ for exact column types, indexes, and check constraints.
 
 | Table | Purpose / notable columns |
 |-------|---------------------------|
-| `projects` | `workspace_id`, `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `due_date` |
+| `projects` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace), `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `due_date` |
 | `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
-| `tasks` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
+| `tasks` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace — mirrors `issues.seq`), optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
 | `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
@@ -342,6 +342,8 @@ POST   /api/workspaces/{ws}/projects/{id}/updates    post update (status + body)
 DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}   delete (author)
 POST   /api/workspaces/{ws}/projects/reorder    update display order (drag-and-drop)
 
+GET    /api/workspaces/{ws}/resolve?type=&seq=   resolve a workspace #number (seq) → global id (powers /dashboard/{ws}/{type}/{seq} pages)
+
 GET    /api/workspaces/{ws}/tasks          list / POST create
 GET    /api/workspaces/{ws}/tasks/{id}?preview=1   child counts for delete dialog
 PATCH  /api/workspaces/{ws}/tasks/{id}     update
@@ -367,6 +369,7 @@ POST   /api/workspaces/{ws}/issues/{id}/watch        watch / DELETE unwatch
 POST   /api/workspaces/{ws}/issues/reorder      update display order (drag-and-drop)
 
 GET    /api/workspaces/{ws}/labels              list / POST create
+GET    /api/workspaces/{ws}/labels/{id}         label detail
 PATCH  /api/workspaces/{ws}/labels/{id}         update / DELETE
 DELETE /api/workspaces/{ws}/comments/{id}       edit/delete a comment (author)
 
@@ -411,7 +414,7 @@ POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
 GET      /api/me                                current user (+ active_workspace_id, via, is_super_admin)
 POST     /api/me/active-workspace                set active workspace
-GET      /api/me/locate?type=&id=                resolve a global entity id → its workspace (membership-gated; 404 if not a member)
+GET      /api/me/locate?type=&id=                resolve a GLOBAL entity id → { workspace_id, workspace_slug, seq } (membership-gated; powers legacy /dashboard/{type}/{id} redirects)
 GET      /api/me/inbox                            list inbox  (?unread, ?limit)
 POST     /api/me/inbox/mark-read                  mark read (ids | all)
 POST     /api/me/inbox/archive                    archive ids

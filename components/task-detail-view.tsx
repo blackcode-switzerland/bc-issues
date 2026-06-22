@@ -20,6 +20,7 @@ import { ProjectIcon } from '@/components/project-icon'
 
 interface TaskDetail {
   id: number
+  seq: number | null
   workspace_id: number
   project_id: number | null
   name: string
@@ -140,14 +141,14 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
         body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Failed to create issue')
-      return res.json() as Promise<{ id: number }>
+      return res.json() as Promise<{ id: number; seq: number | null }>
     },
     onSuccess: (issue) => {
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['task-issues', taskId] })
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/issues/${issue.id}?new=1`)
+      router.push(`/dashboard/${wsSlug}/issues/${issue.seq ?? issue.id}?new=1`)
     },
     onError: () => toast.error('Failed to create issue'),
   })
@@ -190,7 +191,7 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push('/dashboard/tasks')
+      router.push(`/dashboard/${wsSlug}/tasks`)
     },
     onError: () => toast.error('Could not delete task'),
   })
@@ -210,7 +211,7 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
   if (!task.data) {
     return (
       <div className="p-8">
-        <Link href="/dashboard/tasks" className="text-xs text-muted-foreground hover:underline">
+        <Link href={`/dashboard/${wsSlug}/tasks`} className="text-xs text-muted-foreground hover:underline">
           ← Back to tasks
         </Link>
         <p className="mt-4 text-sm">Task not found.</p>
@@ -233,7 +234,14 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
 
   function commitName() {
     const next = nameDraft?.trim()
-    if (next && next !== data.name) patch.mutate({ name: next })
+    if (next && next !== data.name) {
+      // Optimistically update the cache so clearing the draft doesn't flash the
+      // old name while the PATCH + refetch are in flight.
+      queryClient.setQueryData(['task', taskId, wsSlug], (old: TaskDetail | null | undefined) =>
+        old ? { ...old, name: next } : old
+      )
+      patch.mutate({ name: next })
+    }
     setNameDraft(null)
   }
 
@@ -242,13 +250,16 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
       {/* Breadcrumb header */}
       <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
-          href="/dashboard/tasks"
+          href={`/dashboard/${wsSlug}/tasks`}
           prefetch={false}
           className="text-muted-foreground transition-colors hover:text-foreground"
         >
           Tasks
         </Link>
         <ChevronRight size={13} className="text-muted-foreground/50" />
+        {data.seq != null ? (
+          <span className="font-mono text-xs text-muted-foreground">#{data.seq}</span>
+        ) : null}
         <span className="max-w-[36ch] truncate font-medium">{data.name}</span>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -359,7 +370,7 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
                   {issues.data.map((i) => (
                     <li key={i.id}>
                       <Link
-                        href={`/dashboard/issues/${i.id}`}
+                        href={`/dashboard/${wsSlug}/issues/${i.seq ?? i.id}`}
                         prefetch={false}
                         className="flex h-11 items-center gap-3 rounded-md px-0 transition-colors hover:bg-secondary/40"
                       >

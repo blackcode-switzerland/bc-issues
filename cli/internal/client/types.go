@@ -25,6 +25,7 @@ type User struct {
 
 type Project struct {
 	ID          int     `json:"id" yaml:"id"`
+	Seq         *int    `json:"seq" yaml:"seq"`
 	Name        string  `json:"name" yaml:"name"`
 	Summary     *string `json:"summary" yaml:"summary"`
 	Description *string `json:"description" yaml:"description"`
@@ -128,6 +129,7 @@ type ProjectMember struct {
 
 type Task struct {
 	ID              int     `json:"id" yaml:"id"`
+	Seq             *int    `json:"seq" yaml:"seq"`
 	ProjectID       int     `json:"project_id" yaml:"project_id"`
 	Name            string  `json:"name" yaml:"name"`
 	Description     *string `json:"description" yaml:"description"`

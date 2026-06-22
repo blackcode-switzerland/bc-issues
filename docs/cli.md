@@ -337,6 +337,7 @@ Operate on the active workspace; paths are `…/workspaces/{ws}/…`.
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk label list` | `GET /api/workspaces/:ws/labels` | |
+| `bk label view <id>` | `GET /api/workspaces/:ws/labels/:id` | |
 | `bk label create --name N [--color #rrggbb] [--description D]` | `POST /api/workspaces/:ws/labels` | `--color` defaults to `#6b7280`. |
 | `bk label delete <id>` | `DELETE /api/workspaces/:ws/labels/:id` | Removes it from all issues. |
 | `bk label attach <issue-id> <label-id>` | `POST /api/workspaces/:ws/issues/:issue/labels` | |

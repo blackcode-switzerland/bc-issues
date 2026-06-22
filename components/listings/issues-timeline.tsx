@@ -26,8 +26,10 @@ const LABEL_WIDTH = 260
 
 export function IssuesTimeline({
   issues,
+  wsSlug,
 }: {
   issues: IssueRow[]
+  wsSlug: string
 }) {
   if (issues.length === 0) {
     return (
@@ -83,7 +85,7 @@ export function IssuesTimeline({
           {issues.map((issue) => (
             <Link
               key={issue.id}
-              href={`/dashboard/issues/${issue.id}`}
+              href={`/dashboard/${wsSlug}/issues/${issue.seq ?? issue.id}`}
               prefetch={false}
               className="flex items-center gap-2 border-b border-r border-border/60 px-3 transition-colors hover:bg-secondary/30"
               style={{ height: ROW_HEIGHT }}
@@ -203,7 +205,7 @@ export function IssuesTimeline({
                   ) : null}
                   {/* Bar */}
                   <Link
-                    href={`/dashboard/issues/${issue.id}`}
+                    href={`/dashboard/${wsSlug}/issues/${issue.seq ?? issue.id}`}
                     prefetch={false}
                     className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium shadow-sm transition-opacity hover:opacity-90"
                     style={{

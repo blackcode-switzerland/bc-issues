@@ -85,6 +85,42 @@ export async function allocateNextIssueSeq(
   return next
 }
 
+// Allocate the next project sequence atomically (workspace-scoped #number).
+export async function allocateNextProjectSeq(
+  tx: typeof db,
+  workspaceId: number
+): Promise<number> {
+  const rows = await tx.execute<{ last_project_seq: number }>(sql`
+    UPDATE workspace_counters
+    SET last_project_seq = last_project_seq + 1
+    WHERE workspace_id = ${workspaceId}
+    RETURNING last_project_seq
+  `)
+  const next = rows.rows[0]?.last_project_seq
+  if (typeof next !== 'number') {
+    throw new Error(`workspace_counters row missing for workspace ${workspaceId}`)
+  }
+  return next
+}
+
+// Allocate the next task sequence atomically (workspace-scoped #number).
+export async function allocateNextTaskSeq(
+  tx: typeof db,
+  workspaceId: number
+): Promise<number> {
+  const rows = await tx.execute<{ last_task_seq: number }>(sql`
+    UPDATE workspace_counters
+    SET last_task_seq = last_task_seq + 1
+    WHERE workspace_id = ${workspaceId}
+    RETURNING last_task_seq
+  `)
+  const next = rows.rows[0]?.last_task_seq
+  if (typeof next !== 'number') {
+    throw new Error(`workspace_counters row missing for workspace ${workspaceId}`)
+  }
+  return next
+}
+
 export interface CreateWorkspaceInput {
   name: string
   ownerId: number

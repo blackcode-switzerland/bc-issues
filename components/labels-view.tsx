@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Edit3, Plus, Tag, Trash2, X } from 'lucide-react'
+import { Plus, Tag, Trash2 } from 'lucide-react'
 import {
   EmptyState,
   LabelSkeletonRow,
@@ -15,6 +17,7 @@ import {
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './listings/bulk-action-bar'
+import { PRESET_COLORS, COLOR_NAMES } from './label-colors'
 
 interface LabelRow {
   id: number
@@ -25,38 +28,11 @@ interface LabelRow {
   created_at: string
 }
 
-const PRESET_COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#14b8a6',
-  '#5e6ad2',
-  '#8a8f98',
-  '#a855f7',
-  '#ec4899',
-  '#6b7280',
-]
-
-const COLOR_NAMES: Record<string, string> = {
-  '#ef4444': 'Red',
-  '#f97316': 'Orange',
-  '#eab308': 'Yellow',
-  '#22c55e': 'Green',
-  '#14b8a6': 'Teal',
-  '#5e6ad2': 'Indigo',
-  '#8a8f98': 'Gray',
-  '#a855f7': 'Purple',
-  '#ec4899': 'Pink',
-  '#6b7280': 'Slate',
-}
-
 export function LabelsView() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
-  const [creating, setCreating] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const labels = useQuery({
@@ -68,56 +44,6 @@ export function LabelsView() {
       const j = await res.json()
       return j.data as LabelRow[]
     },
-  })
-
-  const create = useMutation({
-    mutationFn: async (input: { name: string; color: string; description: string | null }) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/labels`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'failed')
-      }
-    },
-    onSuccess: () => {
-      toast.success('Label created')
-      setCreating(false)
-      queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
-      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const update = useMutation({
-    mutationFn: async (input: { id: number; name?: string; color?: string; description?: string | null }) => {
-      const { id, ...patch } = input
-      const res = await fetch(`/api/workspaces/${ws!.slug}/labels/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'failed')
-      }
-    },
-    onSuccess: () => {
-      toast.success('Label updated')
-      setEditingId(null)
-      queryClient.invalidateQueries({ queryKey: ['ws-labels-listing'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-labels'] })
-      queryClient.invalidateQueries({ queryKey: ['issue-labels'] })
-      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['project-issues'] })
-      queryClient.invalidateQueries({ queryKey: ['task-issues'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
   })
 
   const remove = useMutation({
@@ -219,20 +145,14 @@ export function LabelsView() {
         <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">
           {labels.data?.length ?? 0}
         </span>
-        <button
-          onClick={() => setCreating(true)}
+        <Link
+          href={`/dashboard/${ws?.slug}/labels/new`}
           className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus size={15} />
           New label
-        </button>
+        </Link>
       </header>
-
-      {creating ? (
-        <div className="border-b border-border px-6 py-4">
-          <LabelForm onSubmit={(v) => create.mutate(v)} onCancel={() => setCreating(false)} />
-        </div>
-      ) : null}
 
       {labels.isLoading ? (
         <div>
@@ -245,39 +165,27 @@ export function LabelsView() {
           icon={<Tag size={28} />}
           title="No labels yet"
           description="Create labels to categorize and filter your issues."
-          action={{ label: <><Plus size={14} />New label</>, onClick: () => setCreating(true) }}
+          action={{ label: <><Plus size={14} />New label</>, onClick: () => router.push(`/dashboard/${ws?.slug}/labels/new`) }}
         />
       ) : (
         <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
           <AnimatePresence initial={false}>
-          {labels.data.map((l) =>
-            editingId === l.id ? (
-              <motion.li
-                key={l.id}
-                variants={listItemVariants}
-                exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                className="border-b border-border px-6 py-4"
-              >
-                <LabelForm
-                  initial={l}
-                  onSubmit={(v) => update.mutate({ id: l.id, ...v })}
-                  onCancel={() => setEditingId(null)}
-                />
-              </motion.li>
-            ) : (
+          {labels.data.map((l) => (
               <motion.li
                 key={l.id}
                 variants={listItemVariants}
                 exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 layout
-                className={`group flex items-center gap-3 border-b border-border/50 px-6 py-2.5 transition-colors hover:bg-secondary/40 ${selectedIds.has(l.id) ? 'bg-primary/5' : ''}`}
+                className={`group flex cursor-pointer items-center gap-3 border-b border-border/50 px-6 py-2.5 transition-colors hover:bg-secondary/40 ${selectedIds.has(l.id) ? 'bg-primary/5' : ''}`}
                 onClick={() => {
                   if (anySelected) {
                     const next = new Set(selectedIds)
                     if (selectedIds.has(l.id)) next.delete(l.id)
                     else next.add(l.id)
                     setSelectedIds(next)
+                    return
                   }
+                  router.push(`/dashboard/${ws?.slug}/labels/${l.id}`)
                 }}
               >
                 {/* Checkbox */}
@@ -293,7 +201,7 @@ export function LabelsView() {
                   className="size-4 shrink-0"
                 />
 
-                <span className="size-3.5 shrink-0 rounded-full transition-transform hover:scale-110" style={{ backgroundColor: l.color }} />
+                <span className="size-3.5 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
                 <span className="shrink-0 text-sm font-medium">{l.name}</span>
                 <div className="min-w-0 flex-1">
                   {l.description ? (
@@ -307,13 +215,6 @@ export function LabelsView() {
                   className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <button
-                    onClick={() => setEditingId(l.id)}
-                    className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-                    title="Edit"
-                  >
-                    <Edit3 size={14} />
-                  </button>
                   <button
                     onClick={async () => {
                       if (
@@ -348,73 +249,5 @@ export function LabelsView() {
         deleteLabel={`Delete ${selectedIds.size}`}
       />
     </div>
-  )
-}
-
-function LabelForm({
-  initial,
-  onSubmit,
-  onCancel,
-}: {
-  initial?: { name: string; color: string; description: string | null }
-  onSubmit: (v: { name: string; color: string; description: string | null }) => void
-  onCancel: () => void
-}) {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [color, setColor] = useState(initial?.color ?? PRESET_COLORS[5])
-  const [description, setDescription] = useState(initial?.description ?? '')
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (!name.trim()) return
-        onSubmit({ name: name.trim(), color, description: description.trim() || null })
-      }}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Label name"
-          maxLength={50}
-          className="flex-1 rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
-        >
-          <X size={14} />
-        </button>
-      </div>
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Color</span>
-        <div className="flex flex-wrap gap-1">
-          {PRESET_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setColor(c)}
-              className={`size-6 rounded-full ${color === c ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
-        </div>
-      </div>
-      <input
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder="Description (optional)"
-        className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-      />
-    </form>
   )
 }

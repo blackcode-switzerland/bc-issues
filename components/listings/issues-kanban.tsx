@@ -38,9 +38,13 @@ const COLUMNS = ISSUE_STATUSES.map((s) => ({ status: s.value, label: s.label }))
 export function IssuesKanban({
   issues,
   wsSlug,
+  reorderEnabled = true,
 }: {
   issues: IssueRow[]
   wsSlug: string
+  // When false (a non-manual sort is active) within-column reorder is disabled,
+  // but dragging a card to another column still changes its status.
+  reorderEnabled?: boolean
 }) {
   const queryClient = useQueryClient()
   const [board, setBoard] = useState<Record<string, IssueRow[]>>(() => groupByStatus(issues))
@@ -86,6 +90,8 @@ export function IssuesKanban({
     const fromCol = result.source.droppableId
     const toCol = result.destination.droppableId
     if (fromCol === toCol && result.source.index === result.destination.index) return
+    // Non-manual sort: within-column rearrange is disabled (sort owns the order).
+    if (!reorderEnabled && fromCol === toCol) return
     const issueId = parseInt(result.draggableId)
     const card = board[fromCol].find((c) => c.id === issueId)
     if (!card) return
@@ -101,11 +107,19 @@ export function IssuesKanban({
 
     const destIds = next[toCol].map((c) => c.id)
     if (fromCol !== toCol) {
-      // Status update first, then persist the new column order in one go.
-      // Invalidation happens only after reorder so the re-fetch sees the right positions.
-      updateStatus.mutate({ id: issueId, status: toCol }, {
-        onSuccess: () => reorder.mutate({ ids: destIds, status: toCol }),
-      })
+      if (reorderEnabled) {
+        // Status update first, then persist the new column order in one go.
+        // Invalidation happens only after reorder so the re-fetch sees the right positions.
+        updateStatus.mutate({ id: issueId, status: toCol }, {
+          onSuccess: () => reorder.mutate({ ids: destIds, status: toCol }),
+        })
+      } else {
+        // Status change only — the active sort decides the in-column order.
+        updateStatus.mutate(
+          { id: issueId, status: toCol },
+          { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ws-issues'] }) }
+        )
+      }
     } else {
       reorder.mutate({ ids: destIds, status: toCol })
     }
@@ -140,7 +154,7 @@ export function IssuesKanban({
                       <Draggable key={issue.id} draggableId={String(issue.id)} index={idx}>
                         {(p, s) => (
                           <Link
-                            href={`/dashboard/issues/${issue.id}`}
+                            href={`/dashboard/${wsSlug}/issues/${issue.seq ?? issue.id}`}
                             ref={p.innerRef as unknown as React.Ref<HTMLAnchorElement>}
                             {...p.draggableProps}
                             {...p.dragHandleProps}

@@ -17,12 +17,50 @@ func newLabelCmd() *cobra.Command {
 	}
 	cmd.AddCommand(
 		newLabelListCmd(),
+		newLabelViewCmd(),
 		newLabelCreateCmd(),
 		newLabelDeleteCmd(),
 		newLabelAttachCmd(),
 		newLabelDetachCmd(),
 	)
 	return cmd
+}
+
+func newLabelViewCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "view <id>",
+		Short: "Show a label",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid id: %w", err)
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			l, err := c.GetLabel(ws, id)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, l, func(w io.Writer) error {
+				fmt.Fprintf(w, "ID:          %d\n", l.ID)
+				fmt.Fprintf(w, "Name:        %s\n", l.Name)
+				fmt.Fprintf(w, "Color:       %s\n", l.Color)
+				fmt.Fprintf(w, "Description: %s\n", derefOr(l.Description, "—"))
+				return nil
+			})
+		},
+	}
 }
 
 func newLabelListCmd() *cobra.Command {

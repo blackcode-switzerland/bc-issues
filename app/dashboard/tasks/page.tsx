@@ -1,7 +1,9 @@
-import { TasksListing } from '@/components/listings/tasks-listing'
+import { redirect } from 'next/navigation'
+import { getDefaultWorkspaceSlug } from '@/lib/default-workspace'
 
 export const dynamic = 'force-dynamic'
 
-export default function TasksPage() {
-  return <TasksListing />
+export default async function LegacyTasksListing() {
+  const slug = await getDefaultWorkspaceSlug()
+  redirect(slug ? `/dashboard/${slug}/tasks` : '/dashboard')
 }

@@ -8,7 +8,9 @@ import { toast } from 'sonner'
 import { Folder, GripVertical, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { useActiveWorkspace } from './use-active-workspace'
-import { MultiSelect, SearchInput, ViewToggle, type ViewMode } from './filter-bar'
+import { usePersistentState } from './use-persistent-filters'
+import { ClearFiltersButton, MultiSelect, SearchInput, SortSelect, ViewToggle, type ViewMode } from './filter-bar'
+import { sortItems, PROJECT_SORTS, SORT_MANUAL } from './sort'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
 import { ProjectIcon } from '../project-icon'
 import { ProjectsKanban } from './projects-kanban'
@@ -32,10 +34,11 @@ import {
 } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
-import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
+import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
 
 interface ProjectRow {
   id: number
+  seq: number | null
   workspace_id: number
   name: string
   summary: string | null
@@ -84,11 +87,14 @@ export function ProjectsListing() {
   const router = useRouter()
   const { confirm } = useConfirm()
   const { confirmDelete } = useDeleteDialog()
-  const [view, setView] = useState<ViewMode>('list')
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<Array<string | number>>([])
-  const [priority, setPriority] = useState<Array<string | number>>([])
-  const [leadIds, setLeadIds] = useState<Array<string | number>>([])
+  // Filters persist across navigation (until a hard reload), scoped per workspace.
+  const fk = (name: string) => `${ws?.slug ?? '~'}:projects:${name}`
+  const [view, setView] = usePersistentState<ViewMode>(fk('view'), 'list')
+  const [search, setSearch] = usePersistentState(fk('search'), '')
+  const [status, setStatus] = usePersistentState<Array<string | number>>(fk('status'), [])
+  const [priority, setPriority] = usePersistentState<Array<string | number>>(fk('priority'), [])
+  const [leadIds, setLeadIds] = usePersistentState<Array<string | number>>(fk('leadIds'), [])
+  const [sort, setSort] = usePersistentState(fk('sort'), SORT_MANUAL)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const createProject = useMutation({
@@ -99,13 +105,13 @@ export function ProjectsListing() {
         body: JSON.stringify({ name: 'New Project' }),
       })
       if (!res.ok) throw new Error('Failed to create project')
-      return res.json() as Promise<{ id: number }>
+      return res.json() as Promise<{ id: number; seq: number | null }>
     },
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/${project.id}?new=1`)
+      router.push(`/dashboard/${ws!.slug}/projects/${project.seq ?? project.id}?new=1`)
     },
     onError: () => toast.error('Failed to create project'),
   })
@@ -121,7 +127,8 @@ export function ProjectsListing() {
     },
   })
 
-  const hasFilters = !!(search || status.length || priority.length || leadIds.length)
+  const hasFilters = !!(search || status.length || priority.length || leadIds.length || sort !== SORT_MANUAL)
+  const clearFilters = () => { setSearch(''); setStatus([]); setPriority([]); setLeadIds([]); setSort(SORT_MANUAL) }
 
   const projects = useQuery({
     queryKey: ['ws-projects-listing', ws?.slug, { search, status }],
@@ -151,8 +158,11 @@ export function ProjectsListing() {
     return data
   }, [projects.data, status, priority, leadIds])
 
-  const [localProjects, setLocalProjects] = useState(filtered)
-  useEffect(() => { setLocalProjects(filtered) }, [filtered])
+  const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
+  const dragEnabled = sort === SORT_MANUAL
+
+  const [localProjects, setLocalProjects] = useState(sorted)
+  useEffect(() => { setLocalProjects(sorted) }, [sorted])
 
   const reorderProjects = useMutation({
     mutationFn: async (ids: number[]) => {
@@ -165,17 +175,32 @@ export function ProjectsListing() {
     },
     onError: () => {
       toast.error('Reorder failed — reverting')
-      setLocalProjects(filtered)
+      setLocalProjects(sorted)
+    },
+    // Sync the new order into the cache so it survives navigation (the optimistic
+    // local order is lost on unmount; without this the stale cache snaps back
+    // until the next reload). Runs after the write, so no snap-back.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
+      queryClient.invalidateQueries({ queryKey: ['ws-projects'] })
     },
   })
 
   function onProjectListDragEnd(result: DropResult) {
+    if (!dragEnabled) return
     if (!result.destination || result.source.index === result.destination.index) return
     const next = [...localProjects]
     const [moved] = next.splice(result.source.index, 1)
     next.splice(result.destination.index, 0, moved)
     setLocalProjects(next)
     reorderProjects.mutate(next.map((p) => p.id))
+  }
+
+  function toggleSelect(id: number, checked: boolean) {
+    const next = new Set(selectedIds)
+    if (checked) next.add(id)
+    else next.delete(id)
+    setSelectedIds(next)
   }
 
   async function bulkPatch(patch: Record<string, unknown>) {
@@ -300,6 +325,8 @@ export function ProjectsListing() {
           selected={leadIds}
           onChange={setLeadIds}
         />
+        <SortSelect value={sort} options={PROJECT_SORTS} onChange={setSort} />
+        <ClearFiltersButton active={hasFilters} onClick={clearFilters} />
       </div>
 
       {projects.isLoading ? (
@@ -314,7 +341,7 @@ export function ProjectsListing() {
             icon={<Folder size={28} />}
             title="No projects found"
             description="No projects match your current filters."
-            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setStatus([]); setPriority([]); setLeadIds([]) } }}
+            secondaryAction={{ label: 'Clear filters', onClick: clearFilters }}
           />
         ) : (
           <EmptyState
@@ -326,61 +353,78 @@ export function ProjectsListing() {
         )
       ) : view === 'kanban' ? (
         <div className="p-4">
-          <ProjectsKanban projects={filtered} wsSlug={ws?.slug ?? ''} />
+          <ProjectsKanban projects={sorted} wsSlug={ws?.slug ?? ''} reorderEnabled={dragEnabled} />
         </div>
       ) : view === 'timeline' ? (
         <div className="p-4">
-          <ProjectsTimeline projects={filtered} />
+          <ProjectsTimeline projects={sorted} wsSlug={ws?.slug ?? ''} />
         </div>
       ) : (
-        <DragDropContext onDragEnd={onProjectListDragEnd}>
-          <div>
-            {/* Column header */}
-            <div className="flex items-center gap-3 border-b border-border px-3 pl-2 py-2.5 text-[13px] font-medium text-muted-foreground">
-              {/* Leading spacers mirror the row's drag handle (~22px) + checkbox (16px) so columns line up */}
-              <span className="w-[22px] shrink-0" />
-              <span className="w-4 shrink-0" />
-              <span className="flex-1">Name</span>
-              <span className="hidden w-28 shrink-0 sm:flex">Health</span>
-              <span className="w-28 shrink-0">Status</span>
-              <span className="hidden w-20 shrink-0 lg:flex">Priority</span>
-              <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
-              <span className="hidden w-24 shrink-0 lg:block">Due</span>
-              <span className="hidden w-12 shrink-0 sm:block">Issues</span>
-              <span className="w-20 shrink-0">Progress</span>
-            </div>
-            <Droppable droppableId="projects-list">
-              {(provided) => (
-                <ul ref={provided.innerRef} {...provided.droppableProps}>
-                  {localProjects.map((p, idx) => (
-                    <Draggable key={p.id} draggableId={String(p.id)} index={idx}>
-                      {(prov, snap) => (
-                        <ProjectRowItem
-                          project={p}
-                          wsSlug={ws?.slug ?? ''}
-                          members={members ?? []}
-                          selected={selectedIds.has(p.id)}
-                          anySelected={selectedIds.size > 0}
-                          onToggle={(checked) => {
-                            const next = new Set(selectedIds)
-                            if (checked) next.add(p.id)
-                            else next.delete(p.id)
-                            setSelectedIds(next)
-                          }}
-                          draggableRef={prov.innerRef}
-                          draggableProps={prov.draggableProps}
-                          dragHandleProps={prov.dragHandleProps}
-                          isDragging={snap.isDragging}
-                        />
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </ul>
-              )}
-            </Droppable>
+        <div>
+          {/* Column header */}
+          <div className="flex items-center gap-3 border-b border-border px-3 pl-2 py-2.5 text-[13px] font-medium text-muted-foreground">
+            {/* Leading spacers mirror the row's drag handle (~22px) + checkbox (16px) so columns line up */}
+            <span className="w-[22px] shrink-0" />
+            <span className="w-4 shrink-0" />
+            <span className="flex-1">Name</span>
+            <span className="hidden w-28 shrink-0 sm:flex">Health</span>
+            <span className="w-28 shrink-0">Status</span>
+            <span className="hidden w-20 shrink-0 lg:flex">Priority</span>
+            <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
+            <span className="hidden w-24 shrink-0 lg:block">Due</span>
+            <span className="hidden w-12 shrink-0 sm:block">Issues</span>
+            <span className="w-20 shrink-0">Progress</span>
           </div>
-        </DragDropContext>
+          {dragEnabled ? (
+            // Manual sort: drag-to-reorder (no layout animation — dnd owns motion).
+            <DragDropContext onDragEnd={onProjectListDragEnd}>
+              <Droppable droppableId="projects-list">
+                {(provided) => (
+                  <ul ref={provided.innerRef} {...provided.droppableProps}>
+                    {localProjects.map((p, idx) => (
+                      <Draggable key={p.id} draggableId={String(p.id)} index={idx}>
+                        {(prov, snap) => (
+                          <ProjectRowItem
+                            project={p}
+                            wsSlug={ws?.slug ?? ''}
+                            members={members ?? []}
+                            selected={selectedIds.has(p.id)}
+                            anySelected={selectedIds.size > 0}
+                            onToggle={(checked) => toggleSelect(p.id, checked)}
+                            draggableRef={prov.innerRef}
+                            draggableProps={prov.draggableProps}
+                            dragHandleProps={prov.dragHandleProps}
+                            isDragging={snap.isDragging}
+                          />
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </ul>
+                )}
+              </Droppable>
+            </DragDropContext>
+          ) : (
+            // Sorted: drag disabled; rows animate to their new order on sort change.
+            <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
+              <AnimatePresence initial={false}>
+                {localProjects.map((p) => (
+                  <motion.div key={p.id} layout variants={listItemVariants} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
+                    <ProjectRowItem
+                      project={p}
+                      wsSlug={ws?.slug ?? ''}
+                      members={members ?? []}
+                      selected={selectedIds.has(p.id)}
+                      anySelected={selectedIds.size > 0}
+                      onToggle={(checked) => toggleSelect(p.id, checked)}
+                      dragHandleProps={null}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.ul>
+          )}
+        </div>
       )}
 
       <BulkActionBar
@@ -484,18 +528,22 @@ function ProjectRowItem({
             onToggle(!selected)
             return
           }
-          router.push(`/dashboard/${p.id}`)
+          router.push(`/dashboard/${wsSlug}/projects/${p.seq ?? p.id}`)
         }}
         className={`group flex h-12 cursor-pointer items-center gap-3 px-3 pl-2 transition-colors hover:bg-secondary/40 ${selected ? 'bg-primary/5' : ''}`}
       >
-        {/* Drag handle */}
-        <div
-          {...(dragHandleProps as object)}
-          className="flex shrink-0 cursor-grab items-center justify-center px-1 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical size={14} />
-        </div>
+        {/* Drag handle — only when manual sort is active */}
+        {dragHandleProps !== null ? (
+          <div
+            {...(dragHandleProps as object)}
+            className="flex shrink-0 cursor-grab items-center justify-center px-1 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical size={14} />
+          </div>
+        ) : (
+          <span className="w-[22px] shrink-0" />
+        )}
         {/* Checkbox */}
         <RowCheckbox
           checked={selected}
@@ -507,6 +555,9 @@ function ProjectRowItem({
         {/* Name — navigates */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={26} />
+          {p.seq != null ? (
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{p.seq}</span>
+          ) : null}
           <span className="truncate text-sm font-medium">{p.name}</span>
         </div>
 

@@ -346,7 +346,7 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
       queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push('/dashboard/issues')
+      router.push(`/dashboard/${wsSlug}/issues`)
     },
     onError: () => toast.error('Could not delete issue'),
   })
@@ -359,7 +359,7 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
   if (!issue.data) {
     return (
       <div className="p-8">
-        <Link href="/dashboard/issues" className="text-xs text-muted-foreground hover:underline">
+        <Link href={`/dashboard/${wsSlug}/issues`} className="text-xs text-muted-foreground hover:underline">
           ← Back to issues
         </Link>
         <p className="mt-4 text-sm">Issue not found.</p>
@@ -383,6 +383,11 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
     const next = titleDraft?.trim()
     if (next && next !== data.title) {
       setSaving(true)
+      // Optimistically update the cache so clearing the draft doesn't flash the
+      // old title while the PATCH + refetch are in flight.
+      queryClient.setQueryData(['issue', issueId, wsSlug], (old: IssueDetail | undefined) =>
+        old ? { ...old, title: next } : old
+      )
       patchIssue.mutate({ title: next })
     }
     setTitleDraft(null)
@@ -393,7 +398,7 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
       {/* Breadcrumb header */}
       <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
-          href="/dashboard/issues"
+          href={`/dashboard/${wsSlug}/issues`}
           prefetch={false}
           className="text-muted-foreground transition-colors hover:text-foreground"
         >

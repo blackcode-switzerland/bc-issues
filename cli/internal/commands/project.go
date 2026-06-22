@@ -114,6 +114,9 @@ func newProjectViewCmd() *cobra.Command {
 			}
 			return output.Render(format, p, func(w io.Writer) error {
 				fmt.Fprintf(w, "ID:          %d\n", p.ID)
+				if p.Seq != nil {
+					fmt.Fprintf(w, "Number:      #%d\n", *p.Seq)
+				}
 				fmt.Fprintf(w, "Name:        %s\n", p.Name)
 				fmt.Fprintf(w, "Status:      %s\n", derefOr(p.Status, "—"))
 				fmt.Fprintf(w, "Description: %s\n", derefOr(p.Description, "—"))

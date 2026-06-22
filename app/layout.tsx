@@ -55,8 +55,10 @@ export default function RootLayout({
                 border: '1px solid var(--toast-border)',
               },
               classNames: {
-                success: '!border-green-600/40 !bg-green-950/60 !text-green-300',
-                error: '!border-red-600/40 !bg-red-950/60 !text-red-300',
+                success:
+                  '!border-green-600/30 !bg-green-50 !text-green-800 dark:!border-green-600/40 dark:!bg-green-950/60 dark:!text-green-300',
+                error:
+                  '!border-red-600/30 !bg-red-50 !text-red-700 dark:!border-red-600/40 dark:!bg-red-950/60 dark:!text-red-300',
               },
             }}
           />

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
-import { ChevronRight, Plus, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { ProjectIcon } from './project-icon'
 import { IconPicker } from './icon-picker'
@@ -41,6 +41,7 @@ interface ProjectMember {
 
 interface ProjectDetail {
   id: number
+  seq: number | null
   workspace_id: number
   name: string
   description: string | null
@@ -72,6 +73,7 @@ interface IssueRow {
 
 interface TaskRow {
   id: number
+  seq: number | null
   name: string
   due_date: string | null
   status: string | null
@@ -108,14 +110,14 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
         body: JSON.stringify({ name: 'New Task', project_id: projectId }),
       })
       if (!res.ok) throw new Error('Failed to create task')
-      return res.json() as Promise<{ id: number }>
+      return res.json() as Promise<{ id: number; seq: number | null }>
     },
     onSuccess: (task) => {
       queryClient.invalidateQueries({ queryKey: ['ws-tasks-listing'] })
       queryClient.invalidateQueries({ queryKey: ['ws-tasks'] })
       queryClient.invalidateQueries({ queryKey: ['project-tasks', projectId] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/tasks/${task.id}?new=1`)
+      router.push(`/dashboard/${wsSlug}/tasks/${task.seq ?? task.id}?new=1`)
     },
     onError: () => toast.error('Failed to create task'),
   })
@@ -130,13 +132,13 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
         body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Failed to create issue')
-      return res.json() as Promise<{ id: number }>
+      return res.json() as Promise<{ id: number; seq: number | null }>
     },
     onSuccess: (issue) => {
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['project-issues', projectId] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/issues/${issue.id}?new=1`)
+      router.push(`/dashboard/${wsSlug}/issues/${issue.seq ?? issue.id}?new=1`)
     },
     onError: () => toast.error('Failed to create issue'),
   })
@@ -330,7 +332,14 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
 
   function commitName() {
     const next = nameDraft?.trim()
-    if (next && next !== data.name) patch.mutate({ name: next })
+    if (next && next !== data.name) {
+      // Optimistically update the cache so clearing the draft doesn't flash the
+      // old name while the PATCH + refetch are in flight.
+      queryClient.setQueryData(['project', projectId, wsSlug], (old: ProjectDetail | null | undefined) =>
+        old ? { ...old, name: next } : old
+      )
+      patch.mutate({ name: next })
+    }
     setNameDraft(null)
   }
 
@@ -339,13 +348,16 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
       {/* Breadcrumb header */}
       <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-1.5 border-b border-border bg-background/80 px-4 text-[14px] backdrop-blur">
         <Link
-          href="/dashboard"
+          href={`/dashboard/${wsSlug}`}
           prefetch={false}
           className="text-muted-foreground transition-colors hover:text-foreground"
         >
           Projects
         </Link>
         <ChevronRight size={13} className="text-muted-foreground/50" />
+        {data.seq != null ? (
+          <span className="font-mono text-xs text-muted-foreground">#{data.seq}</span>
+        ) : null}
         <ProjectIcon icon={data.icon} color={data.color} name={data.name} size={18} />
         <span className="max-w-[32ch] truncate font-medium">{data.name}</span>
         <div className="ml-auto flex items-center gap-1">
@@ -502,29 +514,46 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                   ) : (
                     <p className="text-sm text-muted-foreground">No details.</p>
                   )}
-                  {(updates.data?.length ?? 0) > 1 ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-2.5">
-                      {(updates.data ?? []).map((u, i) => (
+                  {(updates.data?.length ?? 0) > 1 ? (() => {
+                    const total = updates.data!.length
+                    // Array is newest-first (index 0 = latest). Dots read
+                    // newest→oldest (left→right): left = newer, right = older.
+                    return (
+                      <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2 border-t border-border pt-2.5">
                         <button
-                          key={u.id}
-                          onClick={() => setSelectedUpdate(i)}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                            i === selectedUpdate
-                              ? 'border-border bg-secondary text-foreground'
-                              : 'border-transparent text-muted-foreground hover:bg-secondary/60'
-                          }`}
+                          onClick={() => setSelectedUpdate((i) => Math.max(i - 1, 0))}
+                          disabled={selectedUpdate <= 0}
+                          aria-label="Newer update"
+                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                         >
-                          <span
-                            className="size-2 rounded-full"
-                            style={{ backgroundColor: projectUpdateStatusColor(u.status) }}
-                          />
-                          <span suppressHydrationWarning>
-                            {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}
-                          </span>
+                          <ChevronLeft size={16} />
                         </button>
-                      ))}
-                    </div>
-                  ) : null}
+                        <div className="flex items-center justify-center gap-2">
+                          {updates.data!.map((u, idx) => (
+                            <button
+                              key={u.id}
+                              onClick={() => setSelectedUpdate(idx)}
+                              aria-label={`Update ${total - idx} of ${total}`}
+                              aria-current={idx === selectedUpdate}
+                              className={`rounded-full transition-all ${
+                                idx === selectedUpdate
+                                  ? 'size-2.5 bg-primary'
+                                  : 'size-2 bg-muted-foreground/30 hover:bg-muted-foreground/60'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setSelectedUpdate((i) => Math.min(i + 1, total - 1))}
+                          disabled={selectedUpdate >= total - 1}
+                          aria-label="Older update"
+                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    )
+                  })() : null}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3.5 py-3 text-[13px] text-muted-foreground">
@@ -590,7 +619,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                     return (
                       <li key={m.id} className="group -mx-2 flex items-center gap-1 rounded-md px-2 transition-colors hover:bg-secondary/50">
                         <Link
-                          href={`/dashboard/tasks/${m.id}`}
+                          href={`/dashboard/${wsSlug}/tasks/${m.seq ?? m.id}`}
                           prefetch={false}
                           className="flex flex-1 items-center gap-2.5 py-2 text-sm"
                         >
@@ -653,7 +682,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                   {issues.data.map((i) => (
                     <li key={i.id}>
                       <Link
-                        href={`/dashboard/issues/${i.id}`}
+                        href={`/dashboard/${wsSlug}/issues/${i.seq ?? i.id}`}
                         prefetch={false}
                         className="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-secondary/50"
                       >

@@ -88,6 +88,10 @@ export const workspaceCounters = pgTable('workspace_counters', {
     .primaryKey()
     .references(() => workspaces.id, { onDelete: 'cascade' }),
   last_issue_seq: integer('last_issue_seq').default(0).notNull(),
+  // Per-workspace, per-type sequences for the human-facing #number shown in the
+  // UI and URL. Allocated alongside the row insert (see allocateNext*Seq).
+  last_project_seq: integer('last_project_seq').default(0).notNull(),
+  last_task_seq: integer('last_task_seq').default(0).notNull(),
 })
 
 export const workspaceInvitations = pgTable(
@@ -130,6 +134,10 @@ export const projects = pgTable(
   summary: text('summary'),
   description: text('description'),
   status: varchar('status', { length: 50 }).default('active'),
+  // Workspace-scoped human number (the #N shown in UI + URL). Allocated via
+  // workspace_counters.last_project_seq. Nullable only during the backfill
+  // window; the application always sets it going forward.
+  seq: integer('seq'),
   owner_id: integer('owner_id').references(() => users.id, { onDelete: 'set null' }),
   priority: varchar('priority', { length: 10 }).default('P2'),
   visibility: varchar('visibility', { length: 20 }).default('team'),
@@ -152,6 +160,7 @@ export const projects = pgTable(
   (t) => ({
     deletedIdx: index('idx_projects_deleted').on(t.workspace_id, t.deleted_at),
     batchIdx: index('idx_projects_batch').on(t.delete_batch_id),
+    workspaceSeqUniq: uniqueIndex('uq_projects_workspace_seq').on(t.workspace_id, t.seq),
   })
 )
 
@@ -197,6 +206,9 @@ export const tasks = pgTable(
     description: text('description'),
     due_date: date('due_date'),
     status: varchar('status', { length: 50 }).default('active'),
+    // Workspace-scoped human number (the #N shown in UI + URL). Allocated via
+    // workspace_counters.last_task_seq. Nullable only during the backfill window.
+    seq: integer('seq'),
     // Task lead — the person accountable for the task (mirrors projects.owner_id).
     // ON DELETE SET NULL so removing the user just clears the lead.
     lead_id: integer('lead_id').references(() => users.id, { onDelete: 'set null' }),
@@ -211,6 +223,7 @@ export const tasks = pgTable(
     projectIdx: index('idx_tasks_project').on(t.project_id),
     deletedIdx: index('idx_tasks_deleted').on(t.workspace_id, t.deleted_at),
     batchIdx: index('idx_tasks_batch').on(t.delete_batch_id),
+    workspaceSeqUniq: uniqueIndex('uq_tasks_workspace_seq').on(t.workspace_id, t.seq),
   })
 )
 

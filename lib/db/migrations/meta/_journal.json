@@ -211,6 +211,13 @@
       "when": 1782100000000,
       "tag": "0029_task_lead",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1782200000000,
+      "tag": "0030_project_task_seq",
+      "breakpoints": true
     }
   ]
 }

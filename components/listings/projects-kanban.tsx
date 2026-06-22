@@ -20,6 +20,7 @@ import { PROJECT_STATUSES } from '@/lib/work-items'
 
 interface ProjectRow {
   id: number
+  seq: number | null
   name: string
   summary: string | null
   status: string
@@ -40,9 +41,13 @@ const COLUMNS = PROJECT_STATUSES.map((s) => ({ status: s.value, label: s.label, 
 export function ProjectsKanban({
   projects,
   wsSlug,
+  reorderEnabled = true,
 }: {
   projects: ProjectRow[]
   wsSlug: string
+  // When false (a non-manual sort is active) within-column reorder is disabled,
+  // but dragging a card to another column still changes its status.
+  reorderEnabled?: boolean
 }) {
   const queryClient = useQueryClient()
   const [board, setBoard] = useState<Record<string, ProjectRow[]>>(() => group(projects))
@@ -84,6 +89,8 @@ export function ProjectsKanban({
     const fromCol = result.source.droppableId
     const toCol = result.destination.droppableId
     if (fromCol === toCol && result.source.index === result.destination.index) return
+    // Non-manual sort: within-column rearrange is disabled (sort owns the order).
+    if (!reorderEnabled && fromCol === toCol) return
     const projectId = parseInt(result.draggableId)
     const card = board[fromCol].find((c) => c.id === projectId)
     if (!card) return
@@ -102,9 +109,16 @@ export function ProjectsKanban({
     const allIds = COLUMNS.flatMap((col) => next[col.status].map((p) => p.id))
 
     if (fromCol !== toCol) {
-      updateStatus.mutate({ id: projectId, status: toCol }, {
-        onSuccess: () => reorder.mutate(allIds),
-      })
+      if (reorderEnabled) {
+        updateStatus.mutate({ id: projectId, status: toCol }, {
+          onSuccess: () => reorder.mutate(allIds),
+        })
+      } else {
+        // Status change only — the active sort decides the in-column order.
+        updateStatus.mutate({ id: projectId, status: toCol }, {
+          onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ws-projects-listing'] }),
+        })
+      }
     } else {
       reorder.mutate(allIds)
     }
@@ -143,7 +157,7 @@ export function ProjectsKanban({
                         <Draggable key={p.id} draggableId={String(p.id)} index={idx}>
                           {(prov, snap) => (
                             <Link
-                              href={`/dashboard/${p.id}`}
+                              href={`/dashboard/${wsSlug}/projects/${p.seq ?? p.id}`}
                               ref={prov.innerRef as unknown as React.Ref<HTMLAnchorElement>}
                               {...prov.draggableProps}
                               {...prov.dragHandleProps}

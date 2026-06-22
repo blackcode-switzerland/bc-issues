@@ -8,7 +8,9 @@ import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { ChevronDown, CircleDot, GripVertical, Plus, Target } from 'lucide-react'
 import { useActiveWorkspace } from './use-active-workspace'
-import { FilterBar, MultiSelect, SearchInput, ViewToggle, type ViewMode } from './filter-bar'
+import { usePersistentState } from './use-persistent-filters'
+import { FilterBar, ClearFiltersButton, MultiSelect, SearchInput, SortSelect, ViewToggle, type ViewMode } from './filter-bar'
+import { sortItems, ISSUE_SORTS, SORT_MANUAL } from './sort'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
 import { IssuesKanban } from './issues-kanban'
 import { IssuesTimeline } from './issues-timeline'
@@ -19,7 +21,7 @@ import { PropertySelect } from '@/components/ui/property-select'
 import { ProjectIcon } from '../project-icon'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { EmptyState, IssueSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
+import { EmptyState, IssueSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
 
 interface IssueAssignee {
   id: number
@@ -93,15 +95,18 @@ export function IssuesListing() {
   const queryClient = useQueryClient()
   const router = useRouter()
   const { confirm } = useConfirm()
-  const [view, setView] = useState<ViewMode>('list')
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<Array<string | number>>([])
-  const [priority, setPriority] = useState<Array<string | number>>([])
-  const [assignees, setAssignees] = useState<Array<string | number>>([])
-  const [projects, setProjects] = useState<Array<string | number>>([])
-  const [tasks, setTasks] = useState<Array<string | number>>([])
-  const [labels, setLabels] = useState<Array<string | number>>([])
-  const [labelMode, setLabelMode] = useState<LabelFilterMode>('any')
+  // Filters persist across navigation (until a hard reload), scoped per workspace.
+  const fk = (name: string) => `${ws?.slug ?? '~'}:issues:${name}`
+  const [view, setView] = usePersistentState<ViewMode>(fk('view'), 'list')
+  const [search, setSearch] = usePersistentState(fk('search'), '')
+  const [status, setStatus] = usePersistentState<Array<string | number>>(fk('status'), [])
+  const [priority, setPriority] = usePersistentState<Array<string | number>>(fk('priority'), [])
+  const [assignees, setAssignees] = usePersistentState<Array<string | number>>(fk('assignees'), [])
+  const [projects, setProjects] = usePersistentState<Array<string | number>>(fk('projects'), [])
+  const [tasks, setTasks] = usePersistentState<Array<string | number>>(fk('tasks'), [])
+  const [labels, setLabels] = usePersistentState<Array<string | number>>(fk('labels'), [])
+  const [labelMode, setLabelMode] = usePersistentState<LabelFilterMode>(fk('labelMode'), 'any')
+  const [sort, setSort] = usePersistentState(fk('sort'), SORT_MANUAL)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const createIssue = useMutation({
@@ -117,7 +122,7 @@ export function IssuesListing() {
     onSuccess: (issue) => {
       queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
       queryClient.invalidateQueries({ queryKey: ['sidebar-counts'] })
-      router.push(`/dashboard/issues/${issue.id}?new=1`)
+      router.push(`/dashboard/${ws!.slug}/issues/${issue.seq ?? issue.id}?new=1`)
     },
     onError: () => toast.error('Failed to create issue'),
   })
@@ -164,7 +169,8 @@ export function IssuesListing() {
     },
   })
 
-  const hasFilters = !!(search || status.length || priority.length || assignees.length || projects.length || tasks.length || labels.length)
+  const hasFilters = !!(search || status.length || priority.length || assignees.length || projects.length || tasks.length || labels.length || sort !== SORT_MANUAL)
+  const clearFilters = () => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setTasks([]); setLabels([]); setLabelMode('any'); setSort(SORT_MANUAL) }
 
   const issuesQuery = useQuery({
     queryKey: ['ws-issues', ws?.slug, { search, status, priority, assignees, projects, tasks, labels, labelMode }],
@@ -231,6 +237,9 @@ export function IssuesListing() {
     }
     return data
   }, [issuesQuery.data, status, priority, assignees, projects, tasks, labels, labelMode])
+
+  const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
+  const dragEnabled = sort === SORT_MANUAL
 
   async function bulkPatch(patch: Record<string, unknown>) {
     const ids = Array.from(selectedIds)
@@ -507,17 +516,20 @@ export function IssuesListing() {
             mode={labelMode}
             onModeChange={setLabelMode}
           />
+          <SortSelect value={sort} options={ISSUE_SORTS} onChange={setSort} />
+          <ClearFiltersButton active={hasFilters} onClick={clearFilters} />
         </FilterBar>
       </div>
 
       {view === 'list' ? (
         <IssueListView
-          issues={filtered}
+          issues={sorted}
+          dragEnabled={dragEnabled}
           workspaceSlug={ws?.slug ?? ''}
           members={members ?? []}
           loading={issuesQuery.isLoading}
           hasFilters={hasFilters}
-          onClearFilters={() => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setTasks([]); setLabels([]) }}
+          onClearFilters={clearFilters}
           onNewIssue={() => ws && createIssue.mutate()}
           creatingIssue={createIssue.isPending}
           selectedIds={selectedIds}
@@ -525,11 +537,11 @@ export function IssuesListing() {
         />
       ) : view === 'kanban' ? (
         <div className="p-4">
-          <IssuesKanban issues={filtered} wsSlug={ws?.slug ?? ''} />
+          <IssuesKanban issues={sorted} wsSlug={ws?.slug ?? ''} reorderEnabled={dragEnabled} />
         </div>
       ) : (
         <div className="p-4">
-          <IssuesTimeline issues={filtered} />
+          <IssuesTimeline issues={sorted} wsSlug={ws?.slug ?? ''} />
         </div>
       )}
 
@@ -616,6 +628,7 @@ const STATUS_ORDER = ['in_progress', 'todo', 'backlog', 'done', 'cancelled']
 
 function IssueListView({
   issues,
+  dragEnabled,
   workspaceSlug,
   members,
   loading,
@@ -627,6 +640,7 @@ function IssueListView({
   onSelectionChange,
 }: {
   issues: IssueRow[]
+  dragEnabled: boolean
   workspaceSlug: string
   members: Member[]
   loading: boolean
@@ -640,6 +654,8 @@ function IssueListView({
   const queryClient = useQueryClient()
   const [localIssues, setLocalIssues] = useState(issues)
   useEffect(() => { setLocalIssues(issues) }, [issues])
+  // Status groups are accordions — all open by default; a status here is collapsed.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const reorder = useMutation({
     mutationFn: async (input: { ids: number[]; status: string }) => {
@@ -654,9 +670,15 @@ function IssueListView({
       toast.error('Reorder failed — reverting')
       setLocalIssues(issues)
     },
+    // Sync the new order into the cache so it survives navigation (see the
+    // projects listing for the rationale). Runs after the write, so no snap-back.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ws-issues'] })
+    },
   })
 
   function onDragEnd(result: DropResult) {
+    if (!dragEnabled) return
     if (!result.destination) return
     const fromGroup = result.source.droppableId
     const toGroup = result.destination.droppableId
@@ -728,6 +750,15 @@ function IssueListView({
     onSelectionChange(next)
   }
 
+  function toggleCollapse(status: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(status)) next.delete(status)
+      else next.add(status)
+      return next
+    })
+  }
+
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <div>
@@ -744,11 +775,17 @@ function IssueListView({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
             >
-              <div className="group/header flex w-full items-center gap-2 border-b border-border bg-secondary/30 px-6 py-2">
+              <div
+                className="group/header flex w-full cursor-pointer items-center gap-2 border-b border-border bg-secondary/30 px-6 py-2 transition-colors hover:bg-secondary/50"
+                onClick={() => toggleCollapse(group.status)}
+              >
                 {/* Group checkbox */}
                 <div
                   className="flex shrink-0 cursor-pointer items-center justify-center"
-                  onClick={() => toggleGroup(group.items)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleGroup(group.items)
+                  }}
                 >
                   <div
                     className={`flex size-3.5 items-center justify-center rounded border transition-all ${
@@ -775,32 +812,58 @@ function IssueListView({
                 <StatusIcon status={group.status} size={15} />
                 <span className="text-[13px] font-semibold text-foreground/80">{issueStatusLabel(group.status)}</span>
                 <span className="text-[13px] text-muted-foreground">{group.items.length}</span>
+                <ChevronDown
+                  size={15}
+                  className={`ml-auto shrink-0 text-muted-foreground transition-transform ${collapsed.has(group.status) ? '-rotate-90' : ''}`}
+                />
               </div>
-              <Droppable droppableId={group.status}>
-                {(provided) => (
-                  <ul ref={provided.innerRef} {...provided.droppableProps}>
-                    {group.items.map((i, idx) => (
-                      <Draggable key={i.id} draggableId={String(i.id)} index={idx}>
-                        {(p, s) => (
-                          <IssueRowItem
-                            issue={i}
-                            workspaceSlug={workspaceSlug}
-                            members={members}
-                            selected={selectedIds.has(i.id)}
-                            anySelected={anySelected}
-                            onToggle={(checked) => toggleItem(i.id, checked)}
-                            draggableRef={p.innerRef}
-                            draggableProps={p.draggableProps}
-                            dragHandleProps={p.dragHandleProps}
-                            isDragging={s.isDragging}
-                          />
-                        )}
-                      </Draggable>
+              {collapsed.has(group.status) ? null : dragEnabled ? (
+                // Manual sort: drag-to-reorder within the status group.
+                <Droppable droppableId={group.status}>
+                  {(provided) => (
+                    <ul ref={provided.innerRef} {...provided.droppableProps}>
+                      {group.items.map((i, idx) => (
+                        <Draggable key={i.id} draggableId={String(i.id)} index={idx}>
+                          {(p, s) => (
+                            <IssueRowItem
+                              issue={i}
+                              workspaceSlug={workspaceSlug}
+                              members={members}
+                              selected={selectedIds.has(i.id)}
+                              anySelected={anySelected}
+                              onToggle={(checked) => toggleItem(i.id, checked)}
+                              draggableRef={p.innerRef}
+                              draggableProps={p.draggableProps}
+                              dragHandleProps={p.dragHandleProps}
+                              isDragging={s.isDragging}
+                            />
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </ul>
+                  )}
+                </Droppable>
+              ) : (
+                // Sorted: drag disabled; rows animate to their new order.
+                <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
+                  <AnimatePresence initial={false}>
+                    {group.items.map((i) => (
+                      <motion.div key={i.id} layout variants={listItemVariants} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
+                        <IssueRowItem
+                          issue={i}
+                          workspaceSlug={workspaceSlug}
+                          members={members}
+                          selected={selectedIds.has(i.id)}
+                          anySelected={anySelected}
+                          onToggle={(checked) => toggleItem(i.id, checked)}
+                          dragHandleProps={null}
+                        />
+                      </motion.div>
                     ))}
-                    {provided.placeholder}
-                  </ul>
-                )}
-              </Droppable>
+                  </AnimatePresence>
+                </motion.ul>
+              )}
             </motion.section>
           )
         })}
@@ -912,18 +975,22 @@ function IssueRowItem({
             onToggle(!selected)
             return
           }
-          router.push(`/dashboard/issues/${issue.id}`)
+          router.push(`/dashboard/${workspaceSlug}/issues/${issue.seq ?? issue.id}`)
         }}
         className={`group flex h-11 cursor-pointer items-center gap-2.5 border-b border-border/50 px-3 pl-2 transition-colors hover:bg-secondary/40 ${selected ? 'bg-primary/5' : ''}`}
       >
-        {/* Drag handle */}
-        <div
-          {...(dragHandleProps as object)}
-          className="flex shrink-0 cursor-grab items-center justify-center px-1 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical size={14} />
-        </div>
+        {/* Drag handle — only when manual sort is active */}
+        {dragHandleProps !== null ? (
+          <div
+            {...(dragHandleProps as object)}
+            className="flex shrink-0 cursor-grab items-center justify-center px-1 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical size={14} />
+          </div>
+        ) : (
+          <span className="w-[22px] shrink-0" />
+        )}
         {/* Checkbox */}
         <RowCheckbox
           checked={selected}

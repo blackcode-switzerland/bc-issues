@@ -305,6 +305,14 @@ func (c *Client) ListLabels(slugOrID string) ([]Label, error) {
 	return resp.Data, nil
 }
 
+func (c *Client) GetLabel(slugOrID string, id int) (*Label, error) {
+	var label Label
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/labels/%d", slugOrID, id), &label); err != nil {
+		return nil, err
+	}
+	return &label, nil
+}
+
 type CreateLabelRequest struct {
 	Name        string  `json:"name"`
 	Color       string  `json:"color,omitempty"`

@@ -9,6 +9,7 @@ import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface ProjectRow {
   id: number
+  seq: number | null
   name: string
   status: string
   color: string | null
@@ -29,7 +30,7 @@ const HEADER_HEIGHT = 44
 const DAY_WIDTH = 26
 const LABEL_WIDTH = 260
 
-export function ProjectsTimeline({ projects }: { projects: ProjectRow[] }) {
+export function ProjectsTimeline({ projects, wsSlug }: { projects: ProjectRow[]; wsSlug: string }) {
   if (projects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card/30 p-16 text-center">
@@ -92,7 +93,7 @@ export function ProjectsTimeline({ projects }: { projects: ProjectRow[] }) {
             return (
               <Link
                 key={p.id}
-                href={`/dashboard/${p.id}`}
+                href={`/dashboard/${wsSlug}/projects/${p.seq ?? p.id}`}
                 prefetch={false}
                 className="flex items-center gap-2.5 border-b border-r border-border/60 px-3 transition-colors hover:bg-secondary/30"
                 style={{ height: ROW_HEIGHT }}
@@ -221,7 +222,7 @@ export function ProjectsTimeline({ projects }: { projects: ProjectRow[] }) {
                   ) : null}
                   {/* Bar */}
                   <Link
-                    href={`/dashboard/${p.id}`}
+                    href={`/dashboard/${wsSlug}/projects/${p.seq ?? p.id}`}
                     prefetch={false}
                     className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium shadow-sm transition-opacity hover:opacity-90"
                     style={{

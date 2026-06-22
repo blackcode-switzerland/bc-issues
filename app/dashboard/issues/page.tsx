@@ -1,7 +1,9 @@
-import { IssuesListing } from '@/components/listings/issues-listing'
+import { redirect } from 'next/navigation'
+import { getDefaultWorkspaceSlug } from '@/lib/default-workspace'
 
 export const dynamic = 'force-dynamic'
 
-export default function IssuesPage() {
-  return <IssuesListing />
+export default async function LegacyIssuesListing() {
+  const slug = await getDefaultWorkspaceSlug()
+  redirect(slug ? `/dashboard/${slug}/issues` : '/dashboard')
 }

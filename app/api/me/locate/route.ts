@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
 import { apiHandler, Errors } from '@/lib/api'
 import { getWorkspaceForUser } from '@/lib/db/queries/workspaces'
-import { locateEntityWorkspace, type LocatableType } from '@/lib/db/queries/locate'
+import { locateEntity, type LocatableType } from '@/lib/db/queries/locate'
 
 const TYPES: LocatableType[] = ['issue', 'task', 'project']
 
@@ -24,15 +24,16 @@ export const GET = apiHandler(async (req: NextRequest) => {
   const id = parseInt(sp.get('id') ?? '')
   if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
 
-  const workspaceId = await locateEntityWorkspace(type, id)
-  if (workspaceId == null) throw Errors.notFound(type)
+  const location = await locateEntity(type, id)
+  if (location == null) throw Errors.notFound(type)
 
-  const ws = await getWorkspaceForUser(String(workspaceId), user.id)
+  const ws = await getWorkspaceForUser(String(location.workspace_id), user.id)
   if (!ws) throw Errors.notFound(type)
 
   return NextResponse.json({
     type,
     id,
+    seq: location.seq,
     workspace_id: ws.id,
     workspace_slug: ws.slug,
   })

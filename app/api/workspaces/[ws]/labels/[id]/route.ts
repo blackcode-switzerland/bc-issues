@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
-import { deleteLabel, updateLabel } from '@/lib/db/queries/labels'
+import { deleteLabel, getLabelInWorkspace, updateLabel } from '@/lib/db/queries/labels'
 
 interface Params {
   params: Promise<{ ws: string; id: string }>
 }
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
+
+export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
+  const { ws, id: idStr } = await params
+  const id = parseInt(idStr)
+  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
+  const ctx = await resolveWorkspace(req, ws)
+  const label = await getLabelInWorkspace(ctx.workspace.id, id)
+  if (!label) throw Errors.notFound('label')
+  return NextResponse.json(label)
+})
 
 export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params

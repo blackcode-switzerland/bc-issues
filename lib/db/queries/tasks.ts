@@ -11,6 +11,7 @@ import { db } from '../client'
 import { tasks, type Task } from '../schema'
 import { recordEvent } from './events'
 import { softDeleteTask, type DeleteMode } from './deletion'
+import { allocateNextTaskSeq } from './workspaces'
 import { toRichTextHtml } from '@/lib/rich-text'
 
 export interface TaskListItem extends Task {
@@ -108,10 +109,12 @@ export interface CreateTaskInput {
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
   return await db.transaction(async (tx) => {
+    const seq = await allocateNextTaskSeq(tx, input.workspaceId)
     const [row] = await tx
       .insert(tasks)
       .values({
         workspace_id: input.workspaceId,
+        seq,
         project_id: input.projectId ?? null,
         name: input.name,
         description: toRichTextHtml(input.description) ?? null,

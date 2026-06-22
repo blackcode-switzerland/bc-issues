@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Crown, Search, UserPlus, X, Clock, Copy, Info } from 'lucide-react'
 import { format } from 'date-fns'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useActiveWorkspace } from '@/components/listings/use-active-workspace'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 
 interface Workspace {
@@ -38,23 +39,12 @@ interface Invitation {
   invited_by_email: string | null
 }
 
-async function fetchActiveWorkspace(): Promise<Workspace | null> {
-  const meRes = await fetch('/api/me')
-  if (!meRes.ok) return null
-  const me = await meRes.json()
-  if (!me.active_workspace_id) return null
-  const wsRes = await fetch('/api/workspaces')
-  if (!wsRes.ok) return null
-  const { data } = await wsRes.json()
-  return (data as Workspace[]).find((w) => w.id === me.active_workspace_id) ?? null
-}
-
 export function MembersView() {
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
 
-  const { data: ws } = useQuery({ queryKey: ['active-workspace'], queryFn: fetchActiveWorkspace })
+  const { data: ws } = useActiveWorkspace()
 
   const { data: members } = useQuery({
     queryKey: ['workspace-members', ws?.slug],
@@ -133,7 +123,7 @@ export function MembersView() {
         <span className="flex items-center justify-center rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground/70 ring-1 ring-border/60">{members?.length ?? 0}</span>
         {isOwner ? (
           <Link
-            href="/dashboard/members/invite"
+            href={`/dashboard/${ws?.slug}/members/invite`}
             className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             <UserPlus size={15} />

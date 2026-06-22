@@ -1,12 +1,10 @@
-import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
-import { ProjectsListing } from '@/components/listings/projects-listing'
+import { getDefaultWorkspaceSlug } from '@/lib/default-workspace'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
-  if (!session) redirect('/login')
-  return <ProjectsListing />
+export default async function DashboardIndex() {
+  const slug = await getDefaultWorkspaceSlug()
+  // Zero-workspace onboarding is handled by the parent dashboard layout.
+  redirect(slug ? `/dashboard/${slug}` : '/dashboard/workspaces')
 }
