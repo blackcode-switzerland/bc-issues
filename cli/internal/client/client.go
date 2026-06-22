@@ -215,6 +215,17 @@ func (c *Client) Whoami() (*Me, error) {
 	return &me, nil
 }
 
+// Locate resolves a globally-unique entity id (issue/task/project) to its
+// owning workspace. Works across workspaces; 404 if the caller isn't a member.
+func (c *Client) Locate(entityType string, id int) (*LocateResult, error) {
+	var res LocateResult
+	path := fmt.Sprintf("/api/me/locate?type=%s&id=%d", entityType, id)
+	if err := c.get(path, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 func (c *Client) ListProjects() ([]Project, error) {
 	path, err := c.wsPath("projects")
 	if err != nil {

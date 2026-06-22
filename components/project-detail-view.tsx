@@ -86,10 +86,13 @@ interface WsMember {
   avatar_url?: string | null
 }
 
-export function ProjectDetailView({ projectId }: { projectId: number }) {
+export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: number; workspaceSlug?: string }) {
   const queryClient = useQueryClient()
   const { confirmDelete } = useDeleteDialog()
   const { data: ws } = useActiveWorkspace()
+  // When opened cross-workspace (deep link / inbox preview) an explicit slug is
+  // passed; otherwise fall back to the active workspace.
+  const wsSlug = workspaceSlug ?? ws?.slug
   const searchParams = useSearchParams()
   const isNew = searchParams.get('new') === '1'
   const nameInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -99,7 +102,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
   const createTask = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'New Task', project_id: projectId }),
@@ -121,7 +124,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
     mutationFn: async (taskId: number | null) => {
       const body: Record<string, unknown> = { title: 'New Issue', project_id: projectId }
       if (taskId != null) body.task_id = taskId
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -148,10 +151,10 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   const descTouchedRef = useRef(false)
 
   const project = useQuery({
-    queryKey: ['project', projectId, ws?.slug],
-    enabled: !!ws,
+    queryKey: ['project', projectId, wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<ProjectDetail | null> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects/${projectId}`)
       if (!res.ok) return null
       return res.json()
     },
@@ -174,11 +177,11 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   }, [nameDraft])
 
   const issues = useQuery({
-    queryKey: ['project-issues', projectId, ws?.slug],
-    enabled: !!ws,
+    queryKey: ['project-issues', projectId, wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<IssueRow[]> => {
       const res = await fetch(
-        `/api/workspaces/${ws!.slug}/issues?project_id=${projectId}&limit=200`
+        `/api/workspaces/${wsSlug}/issues?project_id=${projectId}&limit=200`
       )
       if (!res.ok) return []
       const j = await res.json()
@@ -187,11 +190,11 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   })
 
   const tasks = useQuery({
-    queryKey: ['project-tasks', projectId, ws?.slug],
-    enabled: !!ws,
+    queryKey: ['project-tasks', projectId, wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<TaskRow[]> => {
       const res = await fetch(
-        `/api/workspaces/${ws!.slug}/tasks?project_id=${projectId}`
+        `/api/workspaces/${wsSlug}/tasks?project_id=${projectId}`
       )
       if (!res.ok) return []
       const j = await res.json()
@@ -200,10 +203,10 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   })
 
   const updates = useQuery({
-    queryKey: ['project-updates', projectId, ws?.slug],
-    enabled: !!ws,
+    queryKey: ['project-updates', projectId, wsSlug],
+    enabled: !!wsSlug,
     queryFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/updates`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects/${projectId}/updates`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data as Array<{
@@ -219,10 +222,10 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
   })
 
   const wsMembers = useQuery({
-    queryKey: ['ws-members', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-members', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<WsMember[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/members`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -231,7 +234,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
   const patch = useMutation({
     mutationFn: async (input: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -249,7 +252,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
   const postUpdate = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}/updates`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects/${projectId}/updates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: updateStatus, body: updateBody }),
@@ -273,7 +276,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
 
   const remove = useMutation({
     mutationFn: async (mode: 'cascade' | 'detach') => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects/${projectId}?mode=${mode}`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects/${projectId}?mode=${mode}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error('failed')
@@ -351,7 +354,7 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               const decision = await confirmDelete({
                 kind: 'project',
                 name: data.name,
-                previewUrl: `/api/workspaces/${ws!.slug}/projects/${projectId}?preview=1`,
+                previewUrl: `/api/workspaces/${wsSlug}/projects/${projectId}?preview=1`,
               })
               if (!decision) return
               remove.mutate(decision.mode)
@@ -684,9 +687,9 @@ export function ProjectDetailView({ projectId }: { projectId: number }) {
               <ActivityFeed
                 entityType="project"
                 entityId={projectId}
-                wsSlug={ws?.slug ?? ''}
-                commentsUrl={`/api/workspaces/${ws?.slug}/projects/${projectId}/comments`}
-                commentsQueryKey={['project-comments', projectId, ws?.slug]}
+                wsSlug={wsSlug ?? ''}
+                commentsUrl={`/api/workspaces/${wsSlug}/projects/${projectId}/comments`}
+                commentsQueryKey={['project-comments', projectId, wsSlug]}
                 mentionItems={mentionItems}
                 members={wsMembers.data}
               />

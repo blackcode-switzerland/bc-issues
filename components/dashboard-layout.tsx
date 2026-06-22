@@ -46,9 +46,6 @@ const NAV_WORKSPACE = [
   { href: '/dashboard/tasks', label: 'Tasks', icon: Target, match: (p: string) => p === '/dashboard/tasks' || p.startsWith('/dashboard/tasks/') },
   { href: '/dashboard/issues', label: 'Issues', icon: List, match: (p: string) => p === '/dashboard/issues' || p.startsWith('/dashboard/issues/') },
   { href: '/dashboard/labels', label: 'Labels', icon: Tag, match: (p: string) => p === '/dashboard/labels' },
-]
-
-const NAV_MANAGE = [
   { href: '/dashboard/members', label: 'Members', icon: Users, match: (p: string) => p.startsWith('/dashboard/members') },
   { href: '/dashboard/activity', label: 'Activity', icon: Clock, match: (p: string) => p === '/dashboard/activity' },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, match: (p: string) => p === '/dashboard/analytics' },
@@ -136,7 +133,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           ))}
         </div>
 
-        <SectionLabel>Workspace</SectionLabel>
+        <SectionLabel>This workspace</SectionLabel>
         <div className="space-y-0.5">
           {NAV_WORKSPACE.map((item) => {
             const countMap: Record<string, number | undefined> = {
@@ -149,13 +146,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} count={countMap[item.href]} />
             )
           })}
-        </div>
-
-        <SectionLabel>Manage</SectionLabel>
-        <div className="space-y-0.5">
-          {NAV_MANAGE.map((item) => (
-            <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
-          ))}
         </div>
 
         {me?.is_super_admin && (

@@ -59,6 +59,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     name,
     description: typeof body.description === 'string' ? body.description : null,
     due_date: typeof body.due_date === 'string' ? body.due_date : null,
+    lead_user_id: typeof body.lead_user_id === 'number' ? body.lead_user_id : ctx.user.id,
     actorUserId: ctx.user.id,
   })
   return NextResponse.json(task, { status: 201 })

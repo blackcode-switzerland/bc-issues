@@ -17,6 +17,9 @@ export interface TaskListItem extends Task {
   project_name: string | null
   project_icon: string | null
   project_color: string | null
+  lead_name: string | null
+  lead_email: string | null
+  lead_avatar: string | null
   issue_count: number
   completed_issues: number
 }
@@ -37,10 +40,14 @@ export async function listTasksInWorkspace(
       p.name AS project_name,
       p.icon AS project_icon,
       p.color AS project_color,
+      lead.name AS lead_name,
+      lead.email AS lead_email,
+      lead.avatar_url AS lead_avatar,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM tasks m
     LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN users lead ON lead.id = m.lead_id
     LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.workspace_id = ${workspaceId}
       AND m.deleted_at IS NULL
@@ -57,7 +64,7 @@ export async function listTasksInWorkspace(
           ? sql`AND (m.name ILIKE ${'%' + opts.search + '%'} OR m.description ILIKE ${'%' + opts.search + '%'})`
           : sql``
       }
-    GROUP BY m.id, p.name, p.icon, p.color
+    GROUP BY m.id, p.name, p.icon, p.color, lead.name, lead.email, lead.avatar_url
     ORDER BY m.due_date ASC NULLS LAST, m.id DESC
   `)
   return result.rows as unknown as TaskListItem[]
@@ -73,13 +80,17 @@ export async function getTaskInWorkspace(
       p.name AS project_name,
       p.icon AS project_icon,
       p.color AS project_color,
+      lead.name AS lead_name,
+      lead.email AS lead_email,
+      lead.avatar_url AS lead_avatar,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
     FROM tasks m
     LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN users lead ON lead.id = m.lead_id
     LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.workspace_id = ${workspaceId} AND m.deleted_at IS NULL
-    GROUP BY m.id, p.name, p.icon, p.color
+    GROUP BY m.id, p.name, p.icon, p.color, lead.name, lead.email, lead.avatar_url
   `)
   return (result.rows[0] as unknown as TaskListItem) ?? null
 }
@@ -91,6 +102,7 @@ export interface CreateTaskInput {
   due_date?: string | null
   status?: string
   projectId?: number | null
+  lead_user_id?: number | null
   actorUserId: number
 }
 
@@ -105,6 +117,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         description: toRichTextHtml(input.description) ?? null,
         due_date: input.due_date ?? null,
         status: input.status ?? 'active',
+        // Mirror projects: default the lead to the creator.
+        lead_id: input.lead_user_id ?? input.actorUserId,
       })
       .returning()
     if (!row) throw new Error('task insert returned nothing')
@@ -129,6 +143,7 @@ export interface UpdateTaskInput {
   due_date?: string | null
   status?: string
   project_id?: number | null
+  lead_user_id?: number | null
 }
 
 const TASK_DIFF_KEYS = ['name', 'description', 'due_date', 'status', 'project_id'] as const
@@ -154,6 +169,7 @@ export async function updateTask(
     if (patch.due_date !== undefined) updates.due_date = patch.due_date
     if (patch.status !== undefined) updates.status = patch.status
     if (patch.project_id !== undefined) updates.project_id = patch.project_id
+    if (patch.lead_user_id !== undefined) updates.lead_id = patch.lead_user_id
 
     if (Object.keys(updates).length === 0) return before
     updates.updated_at = new Date()
@@ -185,6 +201,20 @@ export async function updateTask(
         meta: {
           from: before.due_date ? String(before.due_date).slice(0, 10) : null,
           to: after.due_date ? String(after.due_date).slice(0, 10) : null,
+          title: after.name,
+        },
+      })
+    }
+    if (patch.lead_user_id !== undefined && before.lead_id !== after.lead_id) {
+      await recordEvent(tx, {
+        workspaceId,
+        actorUserId,
+        entityType: 'task',
+        entityId: id,
+        action: after.lead_id ? 'assigned' : 'unassigned',
+        meta: {
+          assignee_id: after.lead_id,
+          previous_assignee_id: before.lead_id,
           title: after.name,
         },
       })

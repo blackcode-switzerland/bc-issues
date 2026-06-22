@@ -330,6 +330,7 @@ export const openApiSpec = {
           description: { type: ['string', 'null'] },
           due_date: { type: ['string', 'null'], format: 'date' },
           status: { type: ['string', 'null'] },
+          lead_id: { type: ['integer', 'null'], description: 'User id of the task lead.' },
         },
         'A task (standalone or attached to a project).'
       ),
@@ -342,6 +343,7 @@ export const openApiSpec = {
           description: { type: 'string' },
           project_id: { type: ['integer', 'null'] },
           due_date: { type: ['string', 'null'], format: 'date' },
+          lead_user_id: { type: 'integer', description: 'User id of the task lead. Defaults to the creator.' },
         },
       },
       Comment: entity(
@@ -530,6 +532,34 @@ export const openApiSpec = {
         tags: ['Account'], operationId: 'setActiveWorkspace', summary: 'Set my active workspace',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['workspace_id'], properties: { workspace_id: { type: 'integer' } } } } } },
         responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Updated'), ...errors(400, 401, 404) },
+      },
+    },
+    '/api/me/locate': {
+      get: {
+        tags: ['Account'], operationId: 'locateEntity', summary: 'Resolve an entity id to its workspace',
+        description:
+          'Issue/task/project ids are globally unique, so a shared deep link can be ' +
+          'resolved to its owning workspace from the id alone. Gates on membership: ' +
+          'non-members (and missing entities) get 404.',
+        parameters: [
+          { name: 'type', in: 'query', required: true, schema: { type: 'string', enum: ['issue', 'task', 'project'] } },
+          { name: 'id', in: 'query', required: true, schema: { type: 'integer' } },
+        ],
+        responses: {
+          '200': jsonShape(
+            {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['issue', 'task', 'project'] },
+                id: { type: 'integer' },
+                workspace_id: { type: 'integer' },
+                workspace_slug: { type: 'string' },
+              },
+            },
+            'The owning workspace.'
+          ),
+          ...errors(400, 401, 404),
+        },
       },
     },
     '/api/me/inbox': {

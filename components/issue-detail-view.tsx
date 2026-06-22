@@ -78,11 +78,14 @@ interface Task {
   project_id: number | null
 }
 
-export function IssueDetailView({ issueId }: { issueId: number }) {
+export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; workspaceSlug?: string }) {
   const queryClient = useQueryClient()
   const router = useRouter()
   const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
+  // When opened cross-workspace (deep link / inbox preview) an explicit slug is
+  // passed; otherwise fall back to the active workspace.
+  const wsSlug = workspaceSlug ?? ws?.slug
 
   const searchParams = useSearchParams()
   const isNew = searchParams.get('new') === '1'
@@ -96,11 +99,11 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   const validId = Number.isFinite(issueId) && issueId > 0
 
   const issue = useQuery({
-    queryKey: ['issue', issueId, ws?.slug],
-    enabled: validId && !!ws?.slug,
+    queryKey: ['issue', issueId, wsSlug],
+    enabled: validId && !!wsSlug,
     retry: false,
     queryFn: async (): Promise<IssueDetail> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}`)
       if (!res.ok) throw new Error('failed')
       return res.json()
     },
@@ -114,11 +117,11 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   }, [isNew, issue.data?.id])
 
   const labels = useQuery({
-    queryKey: ['issue-labels', issueId, ws?.slug],
-    enabled: !!ws && validId,
+    queryKey: ['issue-labels', issueId, wsSlug],
+    enabled: !!wsSlug && validId,
     retry: false,
     queryFn: async (): Promise<Label[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/labels`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}/labels`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -126,10 +129,10 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   })
 
   const wsLabels = useQuery({
-    queryKey: ['ws-labels', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-labels', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<Label[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/labels`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/labels`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -137,10 +140,10 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   })
 
   const members = useQuery({
-    queryKey: ['ws-members', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-members', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<Member[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/members`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -148,10 +151,10 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   })
 
   const projects = useQuery({
-    queryKey: ['ws-projects', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-projects', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<Project[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -159,10 +162,10 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   })
 
   const tasks = useQuery({
-    queryKey: ['ws-tasks', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-tasks', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<Task[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/tasks`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -170,10 +173,10 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   })
 
   const watchStatus = useQuery({
-    queryKey: ['issue-watch', issueId, ws?.slug],
-    enabled: !!ws && validId,
+    queryKey: ['issue-watch', issueId, wsSlug],
+    enabled: !!wsSlug && validId,
     queryFn: async (): Promise<boolean> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/watch`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}/watch`)
       if (!res.ok) return false
       const j = await res.json()
       return j.watching ?? false
@@ -186,7 +189,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   // feedback); errors always toast.
   const patchIssue = useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -255,7 +258,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const attachLabel = useMutation({
     mutationFn: async (labelId: number) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/labels`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}/labels`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label_id: labelId }),
@@ -275,7 +278,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
   const detachLabel = useMutation({
     mutationFn: async (labelId: number) => {
       const res = await fetch(
-        `/api/workspaces/${ws!.slug}/issues/${issueId}/labels/${labelId}`,
+        `/api/workspaces/${wsSlug}/issues/${issueId}/labels/${labelId}`,
         { method: 'DELETE' }
       )
       if (!res.ok) throw new Error('failed')
@@ -292,7 +295,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const createLabel = useMutation({
     mutationFn: async ({ name, color }: { name: string; color: string }) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/labels`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/labels`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, color }),
@@ -301,7 +304,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
       return res.json() as Promise<Label>
     },
     onSuccess: async (newLabel) => {
-      await queryClient.invalidateQueries({ queryKey: ['ws-labels', ws?.slug] })
+      await queryClient.invalidateQueries({ queryKey: ['ws-labels', wsSlug] })
       attachLabel.mutate(newLabel.id)
     },
     onError: () => toast.error('Could not create label'),
@@ -309,7 +312,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const watch = useMutation({
     mutationFn: async (start: boolean) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}/watch`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}/watch`, {
         method: start ? 'POST' : 'DELETE',
       })
       if (!res.ok) throw new Error('failed')
@@ -323,7 +326,7 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
 
   const deleteIssue = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues/${issueId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues/${issueId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('failed')
     },
     onSuccess: () => {
@@ -488,8 +491,8 @@ export function IssueDetailView({ issueId }: { issueId: number }) {
               <ActivityFeed
                 entityType="issue"
                 entityId={issueId}
-                wsSlug={ws?.slug ?? ''}
-                commentsUrl={`/api/workspaces/${ws?.slug}/issues/${issueId}/comments`}
+                wsSlug={wsSlug ?? ''}
+                commentsUrl={`/api/workspaces/${wsSlug}/issues/${issueId}/comments`}
                 commentsQueryKey={['issue-comments', issueId]}
                 mentionItems={mentionItems}
                 members={members.data}

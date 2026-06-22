@@ -197,6 +197,9 @@ export const tasks = pgTable(
     description: text('description'),
     due_date: date('due_date'),
     status: varchar('status', { length: 50 }).default('active'),
+    // Task lead — the person accountable for the task (mirrors projects.owner_id).
+    // ON DELETE SET NULL so removing the user just clears the lead.
+    lead_id: integer('lead_id').references(() => users.id, { onDelete: 'set null' }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
     // Recycle bin (0022). See lib/db/queries/deletion.ts.

@@ -1,7 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
-import { ProjectDetailView } from '@/components/project-detail-view'
+import { EntityResolver } from '@/components/entity-resolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +7,6 @@ export default async function ProjectDetailPage({
 }: {
   params: Promise<{ projectId: string }>
 }) {
-  const session = await getServerSession(authOptions)
-  if (!session) redirect('/login')
   const { projectId } = await params
-  return <ProjectDetailView projectId={parseInt(projectId)} />
+  return <EntityResolver type="project" id={parseInt(projectId)} />
 }

@@ -11,6 +11,8 @@ import { MultiSelect, SearchInput } from './filter-bar'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
 import { ProgressRing } from '@/components/ui/work-item-icons'
 import { ProjectIcon } from '@/components/project-icon'
+import { MemberAvatar } from '@/components/ui/member-avatar'
+import { PropertySelect } from '@/components/ui/property-select'
 import { DatePicker } from '@/components/ui/date-picker'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
@@ -34,6 +36,10 @@ interface TaskRow {
   project_name: string | null
   project_icon: string | null
   project_color: string | null
+  lead_id: number | null
+  lead_name: string | null
+  lead_email: string | null
+  lead_avatar: string | null
   issue_count: number
   completed_issues: number
 }
@@ -45,6 +51,13 @@ interface Project {
   color: string | null
 }
 
+interface Member {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+}
+
 export function TasksListing() {
   const { data: ws } = useActiveWorkspace()
   const queryClient = useQueryClient()
@@ -52,6 +65,7 @@ export function TasksListing() {
   const { confirmDelete } = useDeleteDialog()
   const [search, setSearch] = useState('')
   const [projectIds, setProjectIds] = useState<Array<string | number>>([])
+  const [leadIds, setLeadIds] = useState<Array<string | number>>([])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const createTask = useMutation({
@@ -84,7 +98,18 @@ export function TasksListing() {
     },
   })
 
-  const hasFilters = !!(search || projectIds.length)
+  const { data: members } = useQuery({
+    queryKey: ['ws-members', ws?.slug],
+    enabled: !!ws,
+    queryFn: async () => {
+      const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
+      if (!res.ok) return []
+      const j = await res.json()
+      return j.data as Member[]
+    },
+  })
+
+  const hasFilters = !!(search || projectIds.length || leadIds.length)
 
   const tasks = useQuery({
     queryKey: ['ws-tasks-listing', ws?.slug, { search, projectIds }],
@@ -111,8 +136,14 @@ export function TasksListing() {
         return m.project_id != null && projectIds.includes(m.project_id)
       })
     }
+    if (leadIds.length > 0) {
+      const hasNull = leadIds.includes('null')
+      data = data.filter((m) =>
+        (hasNull && m.lead_id == null) || (m.lead_id != null && leadIds.includes(m.lead_id))
+      )
+    }
     return data
-  }, [tasks.data, projectIds])
+  }, [tasks.data, projectIds, leadIds])
 
   const projectOptions = [
     { value: 'null', label: 'No project', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
@@ -232,6 +263,20 @@ export function TasksListing() {
           selected={projectIds}
           onChange={setProjectIds}
         />
+        <MultiSelect
+          label="Lead"
+          searchable
+          options={[
+            { value: 'null', label: 'No lead', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
+            ...(members ?? []).map((m) => ({
+              value: m.user_id,
+              label: m.name ?? m.email,
+              icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={15} />,
+            })),
+          ]}
+          selected={leadIds}
+          onChange={setLeadIds}
+        />
       </div>
 
       {tasks.isLoading ? (
@@ -246,7 +291,7 @@ export function TasksListing() {
             icon={<Target size={28} />}
             title="No tasks found"
             description="No tasks match your current filters."
-            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setProjectIds([]) } }}
+            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setProjectIds([]); setLeadIds([]) } }}
           />
         ) : (
           <EmptyState
@@ -263,6 +308,7 @@ export function TasksListing() {
             <span className="w-4 shrink-0" />
             <span className="flex-1">Name</span>
             <span className="hidden w-28 shrink-0 sm:block">Project</span>
+            <span className="hidden w-28 shrink-0 lg:flex">Lead</span>
             <span className="w-24 shrink-0">Due date</span>
             <span className="hidden w-12 shrink-0 sm:block">Issues</span>
             <span className="w-20 shrink-0">Progress</span>
@@ -283,6 +329,7 @@ export function TasksListing() {
                 <TaskRowItem
                   task={m}
                   wsSlug={ws?.slug ?? ''}
+                  members={members ?? []}
                   selected={selectedIds.has(m.id)}
                   anySelected={anySelected}
                   onToggle={(checked) => {
@@ -313,12 +360,14 @@ export function TasksListing() {
 function TaskRowItem({
   task: m,
   wsSlug,
+  members,
   selected,
   anySelected,
   onToggle,
 }: {
   task: TaskRow
   wsSlug: string
+  members: Member[]
   selected: boolean
   anySelected: boolean
   onToggle: (checked: boolean) => void
@@ -363,6 +412,19 @@ function TaskRowItem({
     },
   })
 
+  const leadOptions = [
+    {
+      value: '',
+      label: 'No lead',
+      icon: <span className="size-[14px] rounded-full border border-dashed border-muted-foreground/40" />,
+    },
+    ...members.map((mem) => ({
+      value: String(mem.user_id),
+      label: mem.name ?? mem.email,
+      icon: <MemberAvatar name={mem.name} email={mem.email} avatarUrl={mem.avatar_url} size={15} />,
+    })),
+  ]
+
   function stop(e: React.MouseEvent) {
     e.stopPropagation()
   }
@@ -402,6 +464,18 @@ function TaskRowItem({
             </>
           ) : '—'}
         </span>
+
+        {/* Lead — inline editable */}
+        <div onClick={stop} className="hidden w-28 shrink-0 lg:flex">
+          <PropertySelect
+            value={String(m.lead_id ?? '')}
+            options={leadOptions}
+            onChange={(v) => patch.mutate({ lead_user_id: v ? parseInt(v) : null })}
+            noSearch
+            align="right"
+            buttonClassName="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[13px] text-muted-foreground hover:bg-secondary"
+          />
+        </div>
 
         {/* Due date — inline editable */}
         <div onClick={stop} className="w-24 shrink-0">

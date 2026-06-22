@@ -1,4 +1,4 @@
-import { IssueDetailView } from '@/components/issue-detail-view'
+import { EntityResolver } from '@/components/entity-resolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,5 +8,5 @@ export default async function IssueDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  return <IssueDetailView issueId={parseInt(id)} />
+  return <EntityResolver type="issue" id={parseInt(id)} />
 }

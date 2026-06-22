@@ -31,6 +31,7 @@ interface TaskDetail {
   project_name: string | null
   project_icon: string | null
   project_color: string | null
+  lead_id: number | null
   issue_count: number
   completed_issues: number
 }
@@ -61,10 +62,13 @@ interface Member {
   avatar_url?: string | null
 }
 
-export function TaskDetailView({ taskId }: { taskId: number }) {
+export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; workspaceSlug?: string }) {
   const queryClient = useQueryClient()
   const { confirmDelete } = useDeleteDialog()
   const { data: ws } = useActiveWorkspace()
+  // When opened cross-workspace (deep link / inbox preview) an explicit slug is
+  // passed; otherwise fall back to the active workspace.
+  const wsSlug = workspaceSlug ?? ws?.slug
   const searchParams = useSearchParams()
   const isNew = searchParams.get('new') === '1'
   const nameInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -73,10 +77,10 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
   const descModifiedRef = useRef(false)
 
   const task = useQuery({
-    queryKey: ['task', taskId, ws?.slug],
-    enabled: !!ws,
+    queryKey: ['task', taskId, wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<TaskDetail | null> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks/${taskId}`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/tasks/${taskId}`)
       if (!res.ok) return null
       return res.json()
     },
@@ -90,11 +94,11 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
   }, [isNew, task.data?.id])
 
   const issues = useQuery({
-    queryKey: ['task-issues', taskId, ws?.slug],
-    enabled: !!ws,
+    queryKey: ['task-issues', taskId, wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<IssueRow[]> => {
       const res = await fetch(
-        `/api/workspaces/${ws!.slug}/issues?task_id=${taskId}&limit=200`
+        `/api/workspaces/${wsSlug}/issues?task_id=${taskId}&limit=200`
       )
       if (!res.ok) return []
       const j = await res.json()
@@ -103,10 +107,10 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
   })
 
   const projects = useQuery({
-    queryKey: ['ws-projects', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-projects', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<Project[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/projects`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/projects`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -114,10 +118,10 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
   })
 
   const members = useQuery({
-    queryKey: ['ws-members', ws?.slug],
-    enabled: !!ws,
+    queryKey: ['ws-members', wsSlug],
+    enabled: !!wsSlug,
     queryFn: async (): Promise<Member[]> => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/members`)
+      const res = await fetch(`/api/workspaces/${wsSlug}/members`)
       if (!res.ok) return []
       const j = await res.json()
       return j.data
@@ -130,7 +134,7 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
     mutationFn: async () => {
       const body: Record<string, unknown> = { title: 'New Issue', task_id: taskId }
       if (task.data?.project_id != null) body.project_id = task.data.project_id
-      const res = await fetch(`/api/workspaces/${ws!.slug}/issues`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -150,7 +154,7 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
 
   const patch = useMutation({
     mutationFn: async (input: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks/${taskId}`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -170,7 +174,7 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
 
   const remove = useMutation({
     mutationFn: async (mode: 'cascade' | 'detach') => {
-      const res = await fetch(`/api/workspaces/${ws!.slug}/tasks/${taskId}?mode=${mode}`, {
+      const res = await fetch(`/api/workspaces/${wsSlug}/tasks/${taskId}?mode=${mode}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error('failed')
@@ -252,7 +256,7 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
               const decision = await confirmDelete({
                 kind: 'task',
                 name: data.name,
-                previewUrl: `/api/workspaces/${ws!.slug}/tasks/${taskId}?preview=1`,
+                previewUrl: `/api/workspaces/${wsSlug}/tasks/${taskId}?preview=1`,
               })
               if (!decision) return
               remove.mutate(decision.mode)
@@ -400,9 +404,9 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
               <ActivityFeed
                 entityType="task"
                 entityId={taskId}
-                wsSlug={ws?.slug ?? ''}
-                commentsUrl={`/api/workspaces/${ws?.slug}/tasks/${taskId}/comments`}
-                commentsQueryKey={['task-comments', taskId, ws?.slug]}
+                wsSlug={wsSlug ?? ''}
+                commentsUrl={`/api/workspaces/${wsSlug}/tasks/${taskId}/comments`}
+                commentsQueryKey={['task-comments', taskId, wsSlug]}
                 mentionItems={mentionItems}
                 members={members.data}
               />
@@ -428,6 +432,28 @@ export function TaskDetailView({ taskId }: { taskId: number }) {
                 })),
               ]}
               onChange={(v) => patch.mutate({ project_id: v ? parseInt(v) : null })}
+            />
+
+            <PropertySelect
+              value={data.lead_id ? String(data.lead_id) : ''}
+              placeholder="Lead"
+              searchPlaceholder="Set lead…"
+              options={[
+                { value: '', label: 'No lead' },
+                ...(members.data ?? []).map((m) => ({
+                  value: String(m.user_id),
+                  label: m.name ?? m.email,
+                  icon: (
+                    <MemberAvatar
+                      name={m.name}
+                      email={m.email}
+                      avatarUrl={m.avatar_url}
+                      size={16}
+                    />
+                  ),
+                })),
+              ]}
+              onChange={(v) => patch.mutate({ lead_user_id: v ? parseInt(v) : null })}
             />
 
             <div className="my-4 h-px bg-border" />

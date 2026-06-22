@@ -371,11 +371,20 @@ export function InboxView() {
             </button>
             <div className="flex-1 overflow-y-auto">
               {selectedMessage.entity_type === 'issue' && selectedMessage.entity_id ? (
-                <IssueDetailView issueId={selectedMessage.entity_id} />
+                <IssueDetailView
+                  issueId={selectedMessage.entity_id}
+                  workspaceSlug={selectedMessage.workspace_id != null ? String(selectedMessage.workspace_id) : undefined}
+                />
               ) : selectedMessage.entity_type === 'project' && selectedMessage.entity_id ? (
-                <ProjectDetailView projectId={selectedMessage.entity_id} />
+                <ProjectDetailView
+                  projectId={selectedMessage.entity_id}
+                  workspaceSlug={selectedMessage.workspace_id != null ? String(selectedMessage.workspace_id) : undefined}
+                />
               ) : selectedMessage.entity_type === 'task' && selectedMessage.entity_id ? (
-                <TaskDetailView taskId={selectedMessage.entity_id} />
+                <TaskDetailView
+                  taskId={selectedMessage.entity_id}
+                  workspaceSlug={selectedMessage.workspace_id != null ? String(selectedMessage.workspace_id) : undefined}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   <InboxIcon size={28} className="mb-3 text-muted-foreground" />

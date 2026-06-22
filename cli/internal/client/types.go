@@ -133,6 +133,7 @@ type Task struct {
 	Description     *string `json:"description" yaml:"description"`
 	DueDate         *string `json:"due_date" yaml:"due_date"`
 	Status          *string `json:"status,omitempty" yaml:"status,omitempty"`
+	LeadID          *int    `json:"lead_id" yaml:"lead_id"`
 	ProjectName     *string `json:"project_name,omitempty" yaml:"project_name,omitempty"`
 	IssueCount      *int    `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
 	CompletedIssues *int    `json:"completed_issues,omitempty" yaml:"completed_issues,omitempty"`
@@ -447,4 +448,12 @@ type RestoreTrashResponse struct {
 type PurgeTrashRequest struct {
 	BatchID *int             `json:"batch_id,omitempty"`
 	Items   []TrashEntityRef `json:"items,omitempty"`
+}
+
+// LocateResult resolves a globally-unique entity id to its owning workspace.
+type LocateResult struct {
+	Type          string `json:"type" yaml:"type"`
+	ID            int    `json:"id" yaml:"id"`
+	WorkspaceID   int    `json:"workspace_id" yaml:"workspace_id"`
+	WorkspaceSlug string `json:"workspace_slug" yaml:"workspace_slug"`
 }

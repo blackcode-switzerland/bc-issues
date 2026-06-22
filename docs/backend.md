@@ -186,7 +186,7 @@ for exact column types, indexes, and check constraints.
 |-------|---------------------------|
 | `projects` | `workspace_id`, `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `due_date` |
 | `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
-| `tasks` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status` |
+| `tasks` | `workspace_id`, optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
 | `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
@@ -411,6 +411,7 @@ POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
 GET      /api/me                                current user (+ active_workspace_id, via, is_super_admin)
 POST     /api/me/active-workspace                set active workspace
+GET      /api/me/locate?type=&id=                resolve a global entity id → its workspace (membership-gated; 404 if not a member)
 GET      /api/me/inbox                            list inbox  (?unread, ?limit)
 POST     /api/me/inbox/mark-read                  mark read (ids | all)
 POST     /api/me/inbox/archive                    archive ids
@@ -470,7 +471,7 @@ these; they never write SQL inline.
 | `projects.ts` | project CRUD; list joins lead + latest update health |
 | `project-relations.ts` | project ↔ member and project ↔ label sets |
 | `project-updates.ts` | status-update feed (on_track/at_risk/off_track) |
-| `tasks.ts` | task CRUD (project optional) |
+| `tasks.ts` | task CRUD (project optional); list/get join the task lead; PATCH `lead_user_id` writes `lead_id` and records an `assigned`/`unassigned` event |
 | `issues.ts` | issue CRUD, seq allocation, field-level events, auto-watchers |
 | `comments.ts` | polymorphic comments + `@email` mention resolution |
 | `labels.ts` | workspace labels; case-insensitive unique names |

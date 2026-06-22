@@ -195,6 +195,9 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   `projects-timeline`), `issues-listing` (+ `issues-kanban`, `issues-timeline`),
   `tasks-listing` (list-only — no kanban/timeline view), plus `filter-bar`
   (`MultiSelect`, `SearchInput`, `ViewToggle`), `labels-pill`,
+  (Projects listing filters: Status / Priority / Lead; Tasks listing filters:
+  Project / Lead. Both show an inline-editable **Lead** column and the task
+  detail sidebar has a **Lead** property — mirrors projects.)
   `bulk-action-bar` (multi-select toolbar for batch status/delete), and the
   `use-active-workspace` hook.
 - **Detail views:** `project-detail-view`, `issue-detail-view`,
@@ -311,6 +314,28 @@ kanban, detail pages, modals) rendering work-item state identically.
     enables `@mentions` (tippy dropdown; the `.mention` chip styles it).
   - `RichTextDisplay({ content })` — read-only render.
   - `MentionItem` — the mention item type.
+
+## Cross-workspace deep links & inbox
+
+Detail URLs carry only the globally-unique entity id (`/dashboard/issues/30`,
+`/dashboard/tasks/12`, `/dashboard/{projectId}`) — **no workspace in the URL**.
+This keeps shared links portable. The three detail pages render
+`components/entity-resolver.tsx`, which:
+
+1. calls `GET /api/me/locate?type=&id=` to find the entity's workspace (gated on
+   membership — non-members get 404);
+2. if the caller is a member of another workspace, **auto-switches the active
+   workspace** (`POST /api/me/active-workspace`) so the sidebar/back-links match;
+3. if not a member / entity gone, shows an error toast and redirects to
+   `/dashboard` (their own workspace context is left untouched).
+
+The detail views (`IssueDetailView` / `TaskDetailView` / `ProjectDetailView`)
+take an optional `workspaceSlug` prop and fetch against `workspaceSlug ??
+activeWorkspace.slug` for **all** their requests. Because `resolveWorkspace`
+accepts a numeric workspace id as the `{ws}` path segment, the **inbox** passes
+each message's `workspace_id` directly as `workspaceSlug` — so inbox previews
+render correctly for items in any workspace, regardless of which one is active
+(no workspace switch on preview).
 
 ## State & data fetching
 

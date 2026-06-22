@@ -87,6 +87,8 @@ export function ProjectsListing() {
   const [view, setView] = useState<ViewMode>('list')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<Array<string | number>>([])
+  const [priority, setPriority] = useState<Array<string | number>>([])
+  const [leadIds, setLeadIds] = useState<Array<string | number>>([])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const createProject = useMutation({
@@ -119,7 +121,7 @@ export function ProjectsListing() {
     },
   })
 
-  const hasFilters = !!(search || status.length)
+  const hasFilters = !!(search || status.length || priority.length || leadIds.length)
 
   const projects = useQuery({
     queryKey: ['ws-projects-listing', ws?.slug, { search, status }],
@@ -139,8 +141,15 @@ export function ProjectsListing() {
   const filtered = useMemo(() => {
     let data = projects.data ?? []
     if (status.length > 1) data = data.filter((p) => status.includes(p.status))
+    if (priority.length > 0) data = data.filter((p) => priority.includes(p.priority ?? 'P4'))
+    if (leadIds.length > 0) {
+      const hasNull = leadIds.includes('null')
+      data = data.filter((p) =>
+        (hasNull && p.owner_id == null) || (p.owner_id != null && leadIds.includes(p.owner_id))
+      )
+    }
     return data
-  }, [projects.data, status])
+  }, [projects.data, status, priority, leadIds])
 
   const [localProjects, setLocalProjects] = useState(filtered)
   useEffect(() => { setLocalProjects(filtered) }, [filtered])
@@ -276,6 +285,21 @@ export function ProjectsListing() {
 <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
         <MultiSelect label="Status" options={PROJECT_STATUS_OPTIONS} selected={status} onChange={setStatus} />
+        <MultiSelect label="Priority" options={PROJECT_PRIORITY_OPTIONS} selected={priority} onChange={setPriority} />
+        <MultiSelect
+          label="Lead"
+          searchable
+          options={[
+            { value: 'null', label: 'No lead', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
+            ...(members ?? []).map((m) => ({
+              value: m.user_id,
+              label: m.name ?? m.email,
+              icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={15} />,
+            })),
+          ]}
+          selected={leadIds}
+          onChange={setLeadIds}
+        />
       </div>
 
       {projects.isLoading ? (
@@ -290,7 +314,7 @@ export function ProjectsListing() {
             icon={<Folder size={28} />}
             title="No projects found"
             description="No projects match your current filters."
-            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setStatus([]) } }}
+            secondaryAction={{ label: 'Clear filters', onClick: () => { setSearch(''); setStatus([]); setPriority([]); setLeadIds([]) } }}
           />
         ) : (
           <EmptyState

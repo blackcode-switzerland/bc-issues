@@ -102,6 +102,7 @@ func NewRoot() *cobra.Command {
 		newMemberCmd(),
 		newInviteCmd(),
 		newInboxCmd(),
+		newLocateCmd(),
 		newTokenCmd(),
 		newActivityCmd(),
 		newAnalyticsCmd(),

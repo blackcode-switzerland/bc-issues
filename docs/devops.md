@@ -113,7 +113,18 @@ After changing env vars, redeploy: `./devops/release.sh web`
 
 ## Database migrations
 
-Run against production whenever the Drizzle schema changes:
+**Local dev** — one command brings the dockerised Postgres up (if needed) and
+applies any pending migrations:
+
+```bash
+./devops/migrate-local.sh            # start DB + apply migrations
+./devops/migrate-local.sh --status   # list migrations already applied
+```
+
+Production migrates automatically on deploy (`postbuild` runs `drizzle-kit
+migrate`), so the local script is only for keeping your own machine in sync —
+e.g. after pulling a branch that adds a migration. To run it manually against
+production instead:
 
 ```bash
 DATABASE_URL="<neon-url>" npm run db:migrate
