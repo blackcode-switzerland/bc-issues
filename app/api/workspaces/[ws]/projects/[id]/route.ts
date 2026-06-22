@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, publicProject } from '@/lib/api'
 import {
   deleteProject,
   getProjectInWorkspace,
@@ -18,12 +18,10 @@ interface Params {
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'project', idStr)
 
-  // ?preview=1 reports how many attached issues/tasks a delete would touch,
-  // so the delete dialog can show "delete N issues too?" without mutating.
+  // ?preview=1 reports how many attached issues/tasks a delete would touch.
   if (req.nextUrl.searchParams.get('preview')) {
     const counts = await previewDeletion(ctx.workspace.id, 'project', id)
     return NextResponse.json(counts)
@@ -32,14 +30,13 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const project = await getProjectInWorkspace(ctx.workspace.id, id)
   if (!project) throw Errors.notFound('project')
   const members = await listProjectMembers(id)
-  return NextResponse.json({ ...project, members })
+  return NextResponse.json({ ...publicProject(project), members })
 })
 
 export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'project', idStr)
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
     throw Errors.badRequest('invalid_body', 'expected JSON object')
@@ -54,14 +51,13 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   const updated = await updateProject(ctx.workspace.id, id, body, ctx.user.id)
   if (!updated) throw Errors.notFound('project')
   const members = await listProjectMembers(id)
-  return NextResponse.json({ ...updated, members })
+  return NextResponse.json({ ...publicProject(updated), members })
 })
 
 export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'project', idStr)
 
   const mode: DeleteMode = req.nextUrl.searchParams.get('mode') === 'cascade' ? 'cascade' : 'detach'
   const ok = await deleteProject(ctx.workspace.id, id, ctx.user.id, mode)

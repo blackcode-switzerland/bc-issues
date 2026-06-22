@@ -25,7 +25,6 @@ type User struct {
 
 type Project struct {
 	ID          int     `json:"id" yaml:"id"`
-	Seq         *int    `json:"seq" yaml:"seq"`
 	Name        string  `json:"name" yaml:"name"`
 	Summary     *string `json:"summary" yaml:"summary"`
 	Description *string `json:"description" yaml:"description"`
@@ -57,7 +56,6 @@ type IssueLabel struct {
 
 type Issue struct {
 	ID              int             `json:"id" yaml:"id"`
-	Seq             *int            `json:"seq" yaml:"seq"`
 	WorkspaceID     *int            `json:"workspace_id,omitempty" yaml:"workspace_id,omitempty"`
 	ProjectID       int             `json:"project_id" yaml:"project_id"`
 	TaskID     *int            `json:"task_id" yaml:"task_id"`
@@ -129,7 +127,6 @@ type ProjectMember struct {
 
 type Task struct {
 	ID              int     `json:"id" yaml:"id"`
-	Seq             *int    `json:"seq" yaml:"seq"`
 	ProjectID       int     `json:"project_id" yaml:"project_id"`
 	Name            string  `json:"name" yaml:"name"`
 	Description     *string `json:"description" yaml:"description"`
@@ -450,12 +447,4 @@ type RestoreTrashResponse struct {
 type PurgeTrashRequest struct {
 	BatchID *int             `json:"batch_id,omitempty"`
 	Items   []TrashEntityRef `json:"items,omitempty"`
-}
-
-// LocateResult resolves a globally-unique entity id to its owning workspace.
-type LocateResult struct {
-	Type          string `json:"type" yaml:"type"`
-	ID            int    `json:"id" yaml:"id"`
-	WorkspaceID   int    `json:"workspace_id" yaml:"workspace_id"`
-	WorkspaceSlug string `json:"workspace_slug" yaml:"workspace_slug"`
 }

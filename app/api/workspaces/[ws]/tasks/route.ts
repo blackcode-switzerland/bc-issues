@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList, publicTask } from '@/lib/api'
 import {
   createTask,
+  getTaskInWorkspace,
   listTasksInWorkspace,
 } from '@/lib/db/queries/tasks'
-import { getProjectInWorkspace } from '@/lib/db/queries/projects'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -15,20 +15,17 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const ctx = await resolveWorkspace(req, ws)
   const sp = req.nextUrl.searchParams
 
+  // project_id filter is a workspace #number (seq); 'null' = standalone tasks.
   let projectId: number | null | undefined
   const raw = sp.get('project_id')
   if (raw === 'null') projectId = null
-  else if (raw) {
-    const n = parseInt(raw)
-    if (Number.isNaN(n)) throw Errors.badRequest('invalid_project_id', 'project_id must be integer or "null"')
-    projectId = n
-  }
+  else if (raw) projectId = await resolveEntityId(ctx.workspace.id, 'project', raw)
 
   const data = await listTasksInWorkspace(ctx.workspace.id, {
     projectId,
     search: sp.get('search') ?? undefined,
   })
-  return jsonList(data)
+  return jsonList(data.map(publicTask))
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -43,14 +40,13 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (!name) throw Errors.badRequest('invalid_name', 'name is required')
   if (name.length > 100) throw Errors.badRequest('name_too_long', 'name max 100 chars')
 
+  // project_id is a workspace #number (seq) → resolve to the internal id.
   let projectId: number | null = null
   if (body.project_id != null) {
     if (typeof body.project_id !== 'number') {
       throw Errors.badRequest('invalid_project_id', 'project_id must be an integer or null')
     }
-    const proj = await getProjectInWorkspace(ctx.workspace.id, body.project_id)
-    if (!proj) throw Errors.notFound('project')
-    projectId = body.project_id
+    projectId = await resolveEntityId(ctx.workspace.id, 'project', String(body.project_id))
   }
 
   const task = await createTask({
@@ -62,5 +58,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     lead_user_id: typeof body.lead_user_id === 'number' ? body.lead_user_id : ctx.user.id,
     actorUserId: ctx.user.id,
   })
-  return NextResponse.json(task, { status: 201 })
+  // Re-fetch the joined row so project_id (FK) serializes to the project seq.
+  const full = await getTaskInWorkspace(ctx.workspace.id, task.id)
+  return NextResponse.json(publicTask(full ?? task), { status: 201 })
 })

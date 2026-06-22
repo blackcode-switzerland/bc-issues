@@ -1,25 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, publicIssue } from '@/lib/api'
 import {
   createIssue,
+  getIssueInWorkspace,
   listIssuesInWorkspace,
 } from '@/lib/db/queries/issues'
 import { getMembership } from '@/lib/db/queries/workspaces'
-import { getProjectInWorkspace } from '@/lib/db/queries/projects'
 
 interface Params {
   params: Promise<{ ws: string }>
 }
 
-const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 200
-
-function parseNullableInt(raw: string | null, name: string): number | null | undefined {
+// project_id / task_id query params are workspace #numbers (seq). 'null' filters
+// for unscoped issues; absent = no filter. Returns the internal id to filter on.
+async function seqFilter(
+  workspaceId: number,
+  type: 'project' | 'task',
+  raw: string | null
+): Promise<number | null | undefined> {
   if (raw === null) return undefined
   if (raw === 'null') return null
-  const n = parseInt(raw)
-  if (Number.isNaN(n)) throw Errors.badRequest(`invalid_${name}`, `${name} must be integer or "null"`)
-  return n
+  return resolveEntityId(workspaceId, type, raw)
 }
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -27,22 +28,8 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const ctx = await resolveWorkspace(req, ws)
   const sp = req.nextUrl.searchParams
 
-  const limitRaw = sp.get('limit')
-  let limit = DEFAULT_LIMIT
-  if (limitRaw !== null) {
-    const n = parseInt(limitRaw)
-    if (!Number.isNaN(n) && n >= 1) limit = Math.min(n, MAX_LIMIT)
-  }
-  const cursorRaw = sp.get('cursor')
-  let cursor: number | null = null
-  if (cursorRaw !== null) {
-    const n = parseInt(cursorRaw)
-    cursor = Number.isNaN(n) ? null : n
-  }
-
   // Assignee filter: ?assignee_id=null (unassigned), ?assignee_id=1 (single),
-  // or ?assignee_ids=1&assignee_ids=2 (multi). assignee_id is kept for
-  // backward compatibility with the CLI and any external integrations.
+  // or ?assignee_ids=1&assignee_ids=2 (multi). Assignees are user ids.
   let assigneeIds: number[] | null | undefined
   const assigneeIdRaw = sp.get('assignee_id')
   const assigneeIdsRaw = sp.getAll('assignee_ids')
@@ -56,17 +43,14 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
 
   const page = await listIssuesInWorkspace(ctx.workspace.id, {
-    projectId: parseNullableInt(sp.get('project_id'), 'project_id'),
-    taskId: parseNullableInt(sp.get('task_id'), 'task_id'),
+    projectId: await seqFilter(ctx.workspace.id, 'project', sp.get('project_id')),
+    taskId: await seqFilter(ctx.workspace.id, 'task', sp.get('task_id')),
     assigneeIds,
     status: sp.get('status') ?? undefined,
     priority: sp.get('priority') ? parseInt(sp.get('priority')!) || undefined : undefined,
     search: sp.get('search') ?? undefined,
-    seq: sp.get('seq') ? parseInt(sp.get('seq')!) || undefined : undefined,
-    limit,
-    cursor,
   })
-  return NextResponse.json(page)
+  return NextResponse.json({ data: page.data.map(publicIssue), total: page.total })
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -82,17 +66,24 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (!title) throw Errors.badRequest('invalid_title', 'title is required')
   if (title.length > 200) throw Errors.badRequest('title_too_long', 'title max 200 chars')
 
+  // project_id / task_id in the body are workspace #numbers (seq) → resolve to
+  // the internal id (also validates they exist in this workspace).
   let projectId: number | null = null
   if (body.project_id != null) {
     if (typeof body.project_id !== 'number') {
       throw Errors.badRequest('invalid_project_id', 'project_id must be an integer or null')
     }
-    const proj = await getProjectInWorkspace(ctx.workspace.id, body.project_id)
-    if (!proj) throw Errors.notFound('project')
-    projectId = body.project_id
+    projectId = await resolveEntityId(ctx.workspace.id, 'project', String(body.project_id))
+  }
+  let taskId: number | null = null
+  if (body.task_id != null) {
+    if (typeof body.task_id !== 'number') {
+      throw Errors.badRequest('invalid_task_id', 'task_id must be an integer or null')
+    }
+    taskId = await resolveEntityId(ctx.workspace.id, 'task', String(body.task_id))
   }
 
-  // Accept assignee_ids (preferred) or legacy assignee_id (single).
+  // Accept assignee_ids (preferred) or legacy assignee_id (single). User ids.
   const rawAssigneeIds: number[] = []
   if (Array.isArray(body.assignee_ids)) {
     for (const v of body.assignee_ids) {
@@ -105,16 +96,13 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     }
     rawAssigneeIds.push(body.assignee_id)
   }
-  // Validate each assignee is a workspace member.
   for (const uid of rawAssigneeIds) {
     const member = await getMembership(ctx.workspace.id, uid)
     if (!member) throw Errors.badRequest('assignee_not_member', `User ${uid} is not a workspace member`)
   }
 
-  // Labels: existing ids via label_ids, and/or names via labels (existing matched
-  // case-insensitively, unknown ones created on the fly). Reject bad shapes loudly
-  // instead of silently dropping them — agents that send names in label_ids used to
-  // get an issue with no labels and no error.
+  // Labels: existing ids via label_ids, and/or names via labels. Label ids are
+  // their own (workspace-scoped) ids, not seq.
   let labelIds: number[] | undefined
   if (body.label_ids !== undefined) {
     if (!Array.isArray(body.label_ids) || !body.label_ids.every((n: unknown) => typeof n === 'number')) {
@@ -138,14 +126,14 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
 
   try {
-    const issue = await createIssue({
+    const created = await createIssue({
       workspaceId: ctx.workspace.id,
       title,
       description: typeof body.description === 'string' ? body.description : null,
       status: typeof body.status === 'string' ? body.status : undefined,
       priority: typeof body.priority === 'number' ? body.priority : undefined,
       assigneeIds: rawAssigneeIds,
-      taskId: typeof body.task_id === 'number' ? body.task_id : null,
+      taskId,
       projectId,
       startDate: typeof body.start_date === 'string' ? body.start_date : null,
       dueDate: typeof body.due_date === 'string' ? body.due_date : null,
@@ -155,7 +143,9 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       reporterId: ctx.user.id,
       actorUserId: ctx.user.id,
     })
-    return NextResponse.json(issue, { status: 201 })
+    // Re-fetch the joined row so the response carries parent seqs for FK fields.
+    const full = await getIssueInWorkspace(ctx.workspace.id, created.id)
+    return NextResponse.json(publicIssue(full ?? created), { status: 201 })
   } catch (err) {
     const m = (err as Error)?.message
     if (m === 'invalid_status') throw Errors.badRequest('invalid_status', 'invalid status value')

@@ -312,6 +312,15 @@ change or the build breaks.
 
 ### Workspace-scoped (canonical)
 
+> **`{id}` for projects/tasks/issues = the workspace `seq` (the `#N` shown in the
+> app), not the global PK.** Route handlers resolve `(workspace, seq) → internal
+> id` via `resolveEntityId` (`lib/api`); responses serialize through
+> `publicProject`/`publicTask`/`publicIssue` (`lib/api/serialize.ts`) so the
+> global id is never emitted and FK fields (`project_id`/`task_id`) are the
+> parent's seq. List endpoints return everything (no cursor). See
+> `docs/api-changelog.md`. Sub-entities (comments/labels/attachments/updates)
+> keep their own ids.
+
 ```
 GET    /api/workspaces                          list my workspaces
 POST   /api/workspaces                          create workspace
@@ -342,8 +351,6 @@ POST   /api/workspaces/{ws}/projects/{id}/updates    post update (status + body)
 DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}   delete (author)
 POST   /api/workspaces/{ws}/projects/reorder    update display order (drag-and-drop)
 
-GET    /api/workspaces/{ws}/resolve?type=&seq=   resolve a workspace #number (seq) → global id (powers /dashboard/{ws}/{type}/{seq} pages)
-
 GET    /api/workspaces/{ws}/tasks          list / POST create
 GET    /api/workspaces/{ws}/tasks/{id}?preview=1   child counts for delete dialog
 PATCH  /api/workspaces/{ws}/tasks/{id}     update
@@ -351,12 +358,12 @@ DELETE /api/workspaces/{ws}/tasks/{id}?mode=cascade|detach   move to Trash (defa
 GET    /api/workspaces/{ws}/tasks/{id}/comments  list / POST
 
 GET    /api/workspaces/{ws}/issues              list (filters) / POST create
-                                               (filters: project_id, task_id, assignee_id(s), status,
-                                                priority, search, seq, limit, cursor. seq= returns the single
-                                                issue with that workspace-facing number — used by the CLI to
-                                                resolve #seq → global id.
-                                                create accepts label_ids (existing) and labels: string[] —
-                                                names matched case-insensitively, unknown ones created on the fly)
+                                               (filters: project_id, task_id (workspace #numbers),
+                                                assignee_id(s) (user ids), status, priority, search.
+                                                Returns { data, total } — every match, no pagination.
+                                                create accepts project_id/task_id as #numbers; label_ids
+                                                (existing) and labels: string[] — names matched
+                                                case-insensitively, unknown ones created on the fly)
 GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH
 DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
 GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
@@ -414,7 +421,6 @@ POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
 GET      /api/me                                current user (+ active_workspace_id, via, is_super_admin)
 POST     /api/me/active-workspace                set active workspace
-GET      /api/me/locate?type=&id=                resolve a GLOBAL entity id → { workspace_id, workspace_slug, seq } (membership-gated; powers legacy /dashboard/{type}/{id} redirects)
 GET      /api/me/inbox                            list inbox  (?unread, ?limit)
 POST     /api/me/inbox/mark-read                  mark read (ids | all)
 POST     /api/me/inbox/archive                    archive ids

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId } from '@/lib/api'
 import { deleteProjectUpdate } from '@/lib/db/queries/project-updates'
 
 interface Params {
@@ -8,12 +8,10 @@ interface Params {
 
 export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr, updateId: updStr } = await params
-  const id = parseInt(idStr)
   const updateId = parseInt(updStr)
-  if (Number.isNaN(id) || Number.isNaN(updateId)) {
-    throw Errors.badRequest('invalid_id', 'id must be an integer')
-  }
+  if (Number.isNaN(updateId)) throw Errors.badRequest('invalid_id', 'updateId must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'project', idStr)
   try {
     const ok = await deleteProjectUpdate(ctx.workspace.id, id, updateId, ctx.user.id)
     if (!ok) throw Errors.notFound('project_update')

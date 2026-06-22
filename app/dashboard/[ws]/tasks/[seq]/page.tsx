@@ -1,4 +1,4 @@
-import { SeqDetail } from '@/components/seq-detail'
+import { TaskDetailView } from '@/components/task-detail-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,5 +8,5 @@ export default async function TaskDetailPage({
   params: Promise<{ ws: string; seq: string }>
 }) {
   const { ws, seq } = await params
-  return <SeqDetail ws={ws} type="task" seq={parseInt(seq)} />
+  return <TaskDetailView taskId={parseInt(seq)} workspaceSlug={ws} />
 }

@@ -35,7 +35,9 @@ export interface AssigneeInfo {
 export interface IssueListRow extends Issue {
   assignees: AssigneeInfo[]
   task_name?: string | null
+  task_seq?: number | null
   project_name?: string | null
+  project_seq?: number | null
   project_icon?: string | null
   project_color?: string | null
   comment_count?: number
@@ -52,9 +54,11 @@ const issueListSelect = sql`
     WHERE ia.issue_id = i.id
   ), '[]'::json) AS assignees,
   m.name AS task_name,
+  m.seq AS task_seq,
   p.name AS project_name,
   p.icon AS project_icon,
   p.color AS project_color,
+  p.seq AS project_seq,
   (SELECT COUNT(*)::int FROM comments c WHERE c.issue_id = i.id) AS comment_count,
   (SELECT COUNT(*)::int FROM attachments a WHERE a.issue_id = i.id) AS attachment_count,
   COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM issue_labels il JOIN labels lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
@@ -80,15 +84,10 @@ export interface IssuesPage {
   total: number
 }
 
-const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 200
-
 export async function listIssuesInWorkspace(
   workspaceId: number,
   opts: ListIssuesOptions = {}
 ): Promise<IssuesPage> {
-  const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
-
   const projectFilter =
     opts.projectId === null
       ? sql`AND i.project_id IS NULL`
@@ -124,30 +123,19 @@ export async function listIssuesInWorkspace(
       }
   `
 
-  const [result, countResult] = await Promise.all([
-    db.execute(sql`
-      SELECT ${issueListSelect}
-      FROM issues i
-      LEFT JOIN tasks m ON m.id = i.task_id
-      LEFT JOIN projects p ON p.id = i.project_id
-      ${whereClause}
-      ${opts.cursor ? sql`AND i.id < ${opts.cursor}` : sql``}
-      ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
-      LIMIT ${limit + 1}
-    `),
-    db.execute(sql`
-      SELECT COUNT(*)::int AS total
-      FROM issues i
-      ${whereClause}
-    `),
-  ])
+  // The listing returns every matching issue in one shot (consistent with
+  // projects/tasks). No cursor pagination — see docs/api-changelog.md.
+  const result = await db.execute(sql`
+    SELECT ${issueListSelect}
+    FROM issues i
+    LEFT JOIN tasks m ON m.id = i.task_id
+    LEFT JOIN projects p ON p.id = i.project_id
+    ${whereClause}
+    ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
+  `)
 
-  const rows = result.rows as unknown as IssueListRow[]
-  const hasMore = rows.length > limit
-  const data = hasMore ? rows.slice(0, limit) : rows
-  const next_cursor = hasMore ? data[data.length - 1].id : null
-  const total = Number((countResult.rows[0] as { total: number } | undefined)?.total ?? 0)
-  return { data, next_cursor, total }
+  const data = result.rows as unknown as IssueListRow[]
+  return { data, next_cursor: null, total: data.length }
 }
 
 export async function getIssueInWorkspace(
@@ -612,23 +600,23 @@ export async function getKanbanView(projectId: number) {
 }
 
 // Persist manual ordering for a status group. Assigns positions 1..N in the
-// given order. Only updates issues that belong to this workspace and have the
-// matching status, so cross-status positions don't collide.
+// given order. `orderedSeqs` are workspace #numbers (the public id). Only
+// updates issues in this workspace + status, so cross-status positions don't collide.
 export async function reorderIssues(
   workspaceId: number,
   status: string,
-  orderedIds: number[]
+  orderedSeqs: number[]
 ): Promise<void> {
-  if (orderedIds.length === 0) return
+  if (orderedSeqs.length === 0) return
   await db.transaction(async (tx) => {
-    for (let i = 0; i < orderedIds.length; i++) {
+    for (let i = 0; i < orderedSeqs.length; i++) {
       await tx
         .update(issues)
         .set({ position: i + 1 })
         .where(
           and(
             eq(issues.workspace_id, workspaceId),
-            eq(issues.id, orderedIds[i]),
+            eq(issues.seq, orderedSeqs[i]),
             eq(issues.status, status),
             isNull(issues.deleted_at)
           )

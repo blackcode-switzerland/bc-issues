@@ -115,6 +115,14 @@ export function InboxView() {
   })
 
   const selectedMessage = data?.data.find((m) => m.id === selectedId) ?? null
+  // Detail views address by the workspace #number (seq). Inbox payloads carry it
+  // as entity_seq (any type) or issue_seq (issue notifications).
+  const previewSeq = selectedMessage
+    ? ((selectedMessage.payload?.entity_seq as number | null | undefined) ??
+       (selectedMessage.payload?.issue_seq as number | null | undefined) ??
+       null)
+    : null
+  const previewSlug = selectedMessage?.workspace_id != null ? String(selectedMessage.workspace_id) : undefined
 
   const markRead = useMutation({
     mutationFn: async (opts: { ids?: number[]; all?: boolean }) => {
@@ -370,21 +378,12 @@ export function InboxView() {
               <X size={16} />
             </button>
             <div className="flex-1 overflow-y-auto">
-              {selectedMessage.entity_type === 'issue' && selectedMessage.entity_id ? (
-                <IssueDetailView
-                  issueId={selectedMessage.entity_id}
-                  workspaceSlug={selectedMessage.workspace_id != null ? String(selectedMessage.workspace_id) : undefined}
-                />
-              ) : selectedMessage.entity_type === 'project' && selectedMessage.entity_id ? (
-                <ProjectDetailView
-                  projectId={selectedMessage.entity_id}
-                  workspaceSlug={selectedMessage.workspace_id != null ? String(selectedMessage.workspace_id) : undefined}
-                />
-              ) : selectedMessage.entity_type === 'task' && selectedMessage.entity_id ? (
-                <TaskDetailView
-                  taskId={selectedMessage.entity_id}
-                  workspaceSlug={selectedMessage.workspace_id != null ? String(selectedMessage.workspace_id) : undefined}
-                />
+              {selectedMessage.entity_type === 'issue' && previewSeq != null ? (
+                <IssueDetailView issueId={previewSeq} workspaceSlug={previewSlug} />
+              ) : selectedMessage.entity_type === 'project' && previewSeq != null ? (
+                <ProjectDetailView projectId={previewSeq} workspaceSlug={previewSlug} />
+              ) : selectedMessage.entity_type === 'task' && previewSeq != null ? (
+                <TaskDetailView taskId={previewSeq} workspaceSlug={previewSlug} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   <InboxIcon size={28} className="mb-3 text-muted-foreground" />

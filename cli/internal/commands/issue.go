@@ -132,10 +132,10 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 
 	return output.Render(format, out, func(w io.Writer) error {
 		tw := output.Tabwriter(w)
-		fmt.Fprintln(tw, "#\tID\tPRIORITY\tSTATUS\tTITLE\tASSIGNEE")
+		fmt.Fprintln(tw, "#\tPRIORITY\tSTATUS\tTITLE\tASSIGNEE")
 		for _, i := range filtered {
-			fmt.Fprintf(tw, "%s\t%d\tP%d\t%s\t%s\t%s\n",
-				issueRef(&i), i.ID, i.Priority, i.Status, truncate(i.Title, 60), issueAssigneeLabel(i.Assignees))
+			fmt.Fprintf(tw, "%s\tP%d\t%s\t%s\t%s\n",
+				issueRef(&i), i.Priority, i.Status, truncate(i.Title, 60), issueAssigneeLabel(i.Assignees))
 		}
 		if err := tw.Flush(); err != nil {
 			return err
@@ -960,35 +960,22 @@ func truncate(s string, n int) string {
 //
 // seq is resolved to the global id via the active (or --ws) workspace, so the
 // number a human reads anywhere is the number the CLI takes.
-func resolveIssueArg(c *client.Client, ref string) (int, error) {
+// The issue id is the workspace #number shown everywhere (a leading "#" is
+// accepted). The API addresses by it directly, so no resolution is needed.
+func resolveIssueArg(_ *client.Client, ref string) (int, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return 0, fmt.Errorf("missing issue number")
 	}
-	if strings.HasPrefix(strings.ToLower(ref), "id:") {
-		n, err := strconv.Atoi(strings.TrimSpace(ref[3:]))
-		if err != nil {
-			return 0, fmt.Errorf("invalid global id %q", ref)
-		}
-		return n, nil
-	}
-	seq, err := strconv.Atoi(strings.TrimPrefix(ref, "#"))
+	n, err := strconv.Atoi(strings.TrimPrefix(ref, "#"))
 	if err != nil {
-		return 0, fmt.Errorf("invalid issue number %q — pass the #seq shown in the app, or id:<globalid>", ref)
+		return 0, fmt.Errorf("invalid issue number %q — pass the #number shown in the app", ref)
 	}
-	iss, err := c.GetIssueBySeq(seq)
-	if err != nil {
-		return 0, err
-	}
-	return iss.ID, nil
+	return n, nil
 }
 
-// issueRef formats an issue's user-facing identifier for output: "#<seq>" when
-// the seq is known, falling back to the global id.
+// issueRef formats an issue's user-facing identifier: "#<id>" (the workspace number).
 func issueRef(iss *client.Issue) string {
-	if iss.Seq != nil {
-		return fmt.Sprintf("#%d", *iss.Seq)
-	}
 	return fmt.Sprintf("#%d", iss.ID)
 }
 

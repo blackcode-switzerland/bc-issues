@@ -257,8 +257,8 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
           Tasks
         </Link>
         <ChevronRight size={13} className="text-muted-foreground/50" />
-        {data.seq != null ? (
-          <span className="font-mono text-xs text-muted-foreground">#{data.seq}</span>
+        {data.id != null ? (
+          <span className="font-mono text-xs text-muted-foreground">#{data.id}</span>
         ) : null}
         <span className="max-w-[36ch] truncate font-medium">{data.name}</span>
         <div className="ml-auto flex items-center gap-1">

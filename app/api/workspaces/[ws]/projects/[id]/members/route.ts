@@ -7,7 +7,7 @@
 // (owner/admin may add/remove members).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
 import {
   getProjectMembers,
   addProjectMember,
@@ -24,11 +24,9 @@ interface Params {
 const VALID_ROLES = ['owner', 'admin', 'member', 'viewer']
 
 async function resolveProject(ws: string, idStr: string, req: NextRequest) {
-  const projectId = parseInt(idStr)
-  if (Number.isNaN(projectId)) throw Errors.badRequest('invalid_id', 'project id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
-  const project = await getProjectInWorkspace(ctx.workspace.id, projectId)
-  if (!project) throw Errors.notFound('project')
+  // idStr is the workspace #number (seq); resolve to the internal project id.
+  const projectId = await resolveEntityId(ctx.workspace.id, 'project', idStr)
   return { ctx, projectId }
 }
 

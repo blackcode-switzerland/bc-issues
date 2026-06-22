@@ -143,7 +143,10 @@ export const openApiSpec = {
       'AI-native issue tracker. Everything is workspace-scoped: resolve a workspace ' +
       '(slug or id) and operate under /api/workspaces/{ws}/…. Authenticate with a ' +
       '`bk_live_…` bearer token (create one in Settings → API Tokens or via `bk login`). ' +
-      'Lists return { data, next_cursor }; errors return { error, code, suggestion?, details? }. ' +
+      'Project/task/issue ids are the workspace #number shown in the app (unique per ' +
+      'workspace) — address everything by it; the global db id is never exposed. ' +
+      'Breaking changes are listed in docs/api-changelog.md. ' +
+      'Lists return { data, total }; errors return { error, code, suggestion?, details? }. ' +
       'Call GET /api/meta first to discover the active workspace and the valid status/priority vocabulary. ' +
       'Rich-text fields (issue/project descriptions, comments, project updates) accept **Markdown or HTML** ' +
       'and are stored as sanitized HTML — send real newlines, not the literal characters "\\n".',
@@ -289,7 +292,6 @@ export const openApiSpec = {
       Project: entity(
         {
           id: { type: 'integer' },
-          seq: { type: ['integer', 'null'], description: 'Workspace-scoped #number shown in the UI/URL.' },
           workspace_id: { type: 'integer' },
           name: { type: 'string' },
           summary: { type: ['string', 'null'] },
@@ -325,7 +327,6 @@ export const openApiSpec = {
       Task: entity(
         {
           id: { type: 'integer' },
-          seq: { type: ['integer', 'null'], description: 'Workspace-scoped #number shown in the UI/URL.' },
           workspace_id: { type: 'integer' },
           project_id: { type: ['integer', 'null'] },
           name: { type: 'string' },
@@ -534,34 +535,6 @@ export const openApiSpec = {
         tags: ['Account'], operationId: 'setActiveWorkspace', summary: 'Set my active workspace',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['workspace_id'], properties: { workspace_id: { type: 'integer' } } } } } },
         responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Updated'), ...errors(400, 401, 404) },
-      },
-    },
-    '/api/me/locate': {
-      get: {
-        tags: ['Account'], operationId: 'locateEntity', summary: 'Resolve an entity id to its workspace',
-        description:
-          'Issue/task/project ids are globally unique, so a shared deep link can be ' +
-          'resolved to its owning workspace from the id alone. Gates on membership: ' +
-          'non-members (and missing entities) get 404.',
-        parameters: [
-          { name: 'type', in: 'query', required: true, schema: { type: 'string', enum: ['issue', 'task', 'project'] } },
-          { name: 'id', in: 'query', required: true, schema: { type: 'integer' } },
-        ],
-        responses: {
-          '200': jsonShape(
-            {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['issue', 'task', 'project'] },
-                id: { type: 'integer' },
-                workspace_id: { type: 'integer' },
-                workspace_slug: { type: 'string' },
-              },
-            },
-            'The owning workspace.'
-          ),
-          ...errors(400, 401, 404),
-        },
       },
     },
     '/api/me/inbox': {
@@ -868,34 +841,6 @@ export const openApiSpec = {
     '/api/workspaces/{ws}/projects/{id}/updates/{updateId}': {
       parameters: [wsParam, idParam(), idParam('updateId', 'Project update id.')],
       delete: { tags: ['Projects'], operationId: 'deleteProjectUpdate', summary: 'Delete a project update (author)', responses: { '200': deletedResponse, ...errors(401, 403, 404) } },
-    },
-    '/api/workspaces/{ws}/resolve': {
-      parameters: [wsParam],
-      get: {
-        tags: ['Meta'], operationId: 'resolveSeq', summary: 'Resolve a workspace #number (seq) to its global id',
-        description:
-          'URLs use the workspace-scoped #number (seq); the rest of the API uses the ' +
-          'global id. This maps (type, seq) → id within the workspace.',
-        parameters: [
-          { name: 'type', in: 'query', required: true, schema: { type: 'string', enum: ['issue', 'task', 'project'] } },
-          { name: 'seq', in: 'query', required: true, schema: { type: 'integer' } },
-        ],
-        responses: {
-          '200': jsonShape(
-            {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['issue', 'task', 'project'] },
-                seq: { type: 'integer' },
-                id: { type: 'integer' },
-                workspace_slug: { type: 'string' },
-              },
-            },
-            'The resolved global id.'
-          ),
-          ...errors(400, 401, 404),
-        },
-      },
     },
     '/api/workspaces/{ws}/tasks': {
       parameters: [wsParam],

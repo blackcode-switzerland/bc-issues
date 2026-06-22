@@ -555,8 +555,8 @@ function ProjectRowItem({
         {/* Name — navigates */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={26} />
-          {p.seq != null ? (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{p.seq}</span>
+          {p.id != null ? (
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{p.id}</span>
           ) : null}
           <span className="truncate text-sm font-medium">{p.name}</span>
         </div>

@@ -24,6 +24,7 @@ export const AGENT_MANIFEST = {
     context: '/api/meta',
     openapi: '/api/openapi.json',
     docs: '/api/docs',
+    changelog: '/docs/api-changelog.md',
   },
   cli: {
     package: '@blackcode_sa/bc-issues',
@@ -44,6 +45,7 @@ This is a rendered web page, but everything here is also available over an HTTP 
 - Start here: GET /api/meta  (your context + the valid status/priority values)
 - Full spec: GET /api/openapi.json  (OpenAPI 3.1; human-browsable at /api/docs)
 - CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
+- Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Breaking changes: /docs/api-changelog.md
 - Lists return { data, next_cursor }; errors return { error, code, suggestion?, details? }
 - Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n
 - Developer/agent guide: /AGENTS.md

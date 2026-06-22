@@ -45,6 +45,8 @@ Exit codes (stable; for branching in scripts/agents):
   5 not-found(404)   6 validation(400)   7 user-aborted
 
 Conventions for agents:
+  • a project/issue/task is addressed by its #number (the value shown in the
+    app), unique per workspace — there is no separate global id. See docs/api-changelog.md.
   • set BK_NO_PROMPT=1 in env to skip every "are you sure?" prompt
     (delete / remove-member / detach / undo). --yes per-command also works.
   • long bodies (--description, --body) accept three forms:
@@ -102,7 +104,6 @@ func NewRoot() *cobra.Command {
 		newMemberCmd(),
 		newInviteCmd(),
 		newInboxCmd(),
-		newLocateCmd(),
 		newTokenCmd(),
 		newActivityCmd(),
 		newAnalyticsCmd(),

@@ -5,21 +5,18 @@
 // it via getIssueInWorkspace (no implicit active-workspace resolution).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
 import { createAttachment, getAttachments } from '@/lib/db/queries/attachments'
-import { getIssueInWorkspace } from '@/lib/db/queries/issues'
 
 interface Params {
   params: Promise<{ ws: string; id: string }>
 }
 
 async function resolveIssue(ws: string, idStr: string, req: NextRequest) {
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'issue id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
-  const issue = await getIssueInWorkspace(ctx.workspace.id, id)
-  if (!issue) throw Errors.notFound('issue')
-  return { ctx, issueId: id }
+  // idStr is the workspace #number (seq); resolve to the internal issue id.
+  const issueId = await resolveEntityId(ctx.workspace.id, 'issue', idStr)
+  return { ctx, issueId }
 }
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {

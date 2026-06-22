@@ -78,9 +78,6 @@ func newTaskViewCmd() *cobra.Command {
 			}
 			return output.Render(format, m, func(w io.Writer) error {
 				fmt.Fprintf(w, "ID:          %d\n", m.ID)
-				if m.Seq != nil {
-					fmt.Fprintf(w, "Number:      #%d\n", *m.Seq)
-				}
 				fmt.Fprintf(w, "Name:        %s\n", m.Name)
 				fmt.Fprintf(w, "Project:     #%d %s\n", m.ProjectID, derefOr(m.ProjectName, ""))
 				fmt.Fprintf(w, "Description: %s\n", derefOr(m.Description, "—"))

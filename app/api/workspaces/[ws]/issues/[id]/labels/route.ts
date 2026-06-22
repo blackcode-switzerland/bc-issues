@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
 import { attachLabel, getOrCreateLabels, listIssueLabels } from '@/lib/db/queries/labels'
 import { getIssueInWorkspace } from '@/lib/db/queries/issues'
 
@@ -9,9 +9,8 @@ interface Params {
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'issue', idStr)
   const issue = await getIssueInWorkspace(ctx.workspace.id, id)
   if (!issue) throw Errors.notFound('issue')
   const data = await listIssueLabels(id)
@@ -20,9 +19,8 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'issue', idStr)
 
   // Validate the issue belongs to this workspace before resolving/creating any
   // label, so a bad issue id can't leave an orphan label behind.

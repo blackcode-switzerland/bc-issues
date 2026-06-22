@@ -465,8 +465,8 @@ function TaskRowItem({
         {/* Name */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Target size={18} className="shrink-0 text-muted-foreground" />
-          {m.seq != null ? (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{m.seq}</span>
+          {m.id != null ? (
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{m.id}</span>
           ) : null}
           <span className="truncate text-sm font-medium">{m.name}</span>
         </div>

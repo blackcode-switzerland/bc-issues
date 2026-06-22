@@ -10,6 +10,8 @@ import { db } from '../client'
 import {
   issueWatchers,
   issues,
+  tasks,
+  projects,
   users,
   workspaceMembers,
   workspaces,
@@ -406,6 +408,15 @@ async function fanOutMentioned(tx: Tx, event: Event): Promise<void> {
     issueTitle = issueRow[0]?.title ?? null
   }
 
+  // entity_seq = the entity's workspace #number, so the inbox preview can open
+  // the detail view (which addresses by seq). Covers task/project mentions too.
+  let entitySeq: number | null = issueSeq
+  if (entitySeq == null && (event.entity_type === 'task' || event.entity_type === 'project')) {
+    const tbl = event.entity_type === 'task' ? tasks : projects
+    const r = await tx.select({ seq: tbl.seq }).from(tbl).where(eq(tbl.id, event.entity_id)).limit(1)
+    entitySeq = r[0]?.seq ?? null
+  }
+
   await createInboxMessage(tx, {
     userId: meta.mentioned_user_id,
     eventId: event.id,
@@ -419,6 +430,7 @@ async function fanOutMentioned(tx: Tx, event: Event): Promise<void> {
       workspace_name: ws[0]?.name ?? '',
       issue_id: event.entity_type === 'issue' ? event.entity_id : null,
       issue_seq: issueSeq,
+      entity_seq: entitySeq,
       issue_title: issueTitle,
       parent_type: event.entity_type,
       parent_id: event.entity_id,

@@ -102,18 +102,18 @@ export async function pageProjectsInWorkspace(opts: {
 // (not per-status) so list view and kanban share the same ordering.
 export async function reorderProjects(
   workspaceId: number,
-  orderedIds: number[]
+  orderedSeqs: number[]
 ): Promise<void> {
-  if (orderedIds.length === 0) return
+  if (orderedSeqs.length === 0) return
   await db.transaction(async (tx) => {
-    for (let i = 0; i < orderedIds.length; i++) {
+    for (let i = 0; i < orderedSeqs.length; i++) {
       await tx
         .update(projects)
         .set({ position: i + 1 })
         .where(
           and(
             eq(projects.workspace_id, workspaceId),
-            eq(projects.id, orderedIds[i]),
+            eq(projects.seq, orderedSeqs[i]),
             isNull(projects.deleted_at)
           )
         )

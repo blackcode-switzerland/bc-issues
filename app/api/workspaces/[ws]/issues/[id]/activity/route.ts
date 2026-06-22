@@ -4,7 +4,7 @@
 // verified to belong to the resolved workspace before its activity is returned.
 
 import { NextRequest } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
 import { getIssueInWorkspace } from '@/lib/db/queries/issues'
 import { getIssueActivity } from '@/lib/db'
 
@@ -14,9 +14,8 @@ interface Params {
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'issue id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'issue', idStr)
   const issue = await getIssueInWorkspace(ctx.workspace.id, id)
   if (!issue) throw Errors.notFound('issue')
   const activity = await getIssueActivity(id)

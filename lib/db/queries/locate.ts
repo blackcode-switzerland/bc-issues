@@ -1,39 +1,14 @@
-// Cross-workspace entity location + seq resolution.
+// seq → internal id resolution.
 //
-// Every work item now has two identifiers:
-//   - `id`   — global serial PK, backend-only (FKs, sub-resource lookups)
-//   - `seq`  — workspace-scoped #number shown in the UI and URL
-//
-// URLs are /dashboard/{ws}/{type}/{seq}. The detail page resolves (ws, seq) →
-// id via resolveSeqToId. Old /dashboard/{type}/{id} links resolve the other
-// way (id → ws + seq) via locateEntity and 301 to the canonical URL.
+// Every work item has two identifiers: the global serial primary key (`id`,
+// used only inside the DB for FKs/joins) and the workspace-scoped number
+// (`seq`) which is the only id the API/CLI/URLs ever expose. Route handlers
+// receive a seq and call this to get the internal id for the query layer.
 
 import { sql } from 'drizzle-orm'
 import { db } from '../client'
 
 export type LocatableType = 'issue' | 'task' | 'project'
-
-export interface EntityLocation {
-  workspace_id: number
-  seq: number | null
-}
-
-// id (global) → { workspace_id, seq }. null if missing / in the recycle bin.
-// Membership is NOT checked here — the caller gates via getWorkspaceForUser.
-export async function locateEntity(
-  type: LocatableType,
-  id: number
-): Promise<EntityLocation | null> {
-  const query =
-    type === 'issue'
-      ? sql`SELECT workspace_id, seq FROM issues WHERE id = ${id} AND deleted_at IS NULL LIMIT 1`
-      : type === 'task'
-        ? sql`SELECT workspace_id, seq FROM tasks WHERE id = ${id} AND deleted_at IS NULL LIMIT 1`
-        : sql`SELECT workspace_id, seq FROM projects WHERE id = ${id} AND deleted_at IS NULL LIMIT 1`
-  const result = await db.execute(query)
-  const row = result.rows[0] as unknown as EntityLocation | undefined
-  return row ?? null
-}
 
 // (workspace, seq) → global id. null if no such #number in the workspace.
 export async function resolveSeqToId(

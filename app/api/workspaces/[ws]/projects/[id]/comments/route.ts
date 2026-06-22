@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId } from '@/lib/api'
 import { createComment, listComments, verifyCommentParent } from '@/lib/db/queries/comments'
 
 interface Params {
@@ -8,9 +8,8 @@ interface Params {
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'project', idStr)
   if (!(await verifyCommentParent(ctx.workspace.id, 'project', id))) {
     throw Errors.notFound('project')
   }
@@ -20,9 +19,8 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id: idStr } = await params
-  const id = parseInt(idStr)
-  if (Number.isNaN(id)) throw Errors.badRequest('invalid_id', 'id must be an integer')
   const ctx = await resolveWorkspace(req, ws)
+  const id = await resolveEntityId(ctx.workspace.id, 'project', idStr)
   if (!(await verifyCommentParent(ctx.workspace.id, 'project', id))) {
     throw Errors.notFound('project')
   }

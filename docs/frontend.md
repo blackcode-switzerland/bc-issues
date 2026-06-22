@@ -364,21 +364,19 @@ membership (redirect to `/dashboard` if not a member) and `PersistActiveWorkspac
 records it as the default. The bare `/dashboard` redirects to the default
 workspace.
 
-**seq → id.** Detail pages render `components/seq-detail.tsx`, which calls
-`GET /api/workspaces/{ws}/resolve?type=&seq=` to map the #number to the global
-`id` the detail views fetch by. The views (`IssueDetailView` / `TaskDetailView` /
-`ProjectDetailView`) take an optional `workspaceSlug` prop and fetch against
-`workspaceSlug ?? activeWorkspace.slug`.
+**The `{seq}` IS the id.** The API addresses projects/tasks/issues by the
+workspace #number directly (the server resolves seq→internal id), so detail
+pages just render the view with the seq — no preflight, no second id. The views
+(`IssueDetailView` / `TaskDetailView` / `ProjectDetailView`) take the seq as
+their `issueId`/`taskId`/`projectId` and an optional `workspaceSlug`, and fetch
+`/api/workspaces/{ws}/{type}/{seq}` (+ sub-resources by the same seq). See
+`docs/api-changelog.md`.
 
-**Legacy links** keep working: `/dashboard/issues/{id}`, `/dashboard/tasks/{id}`,
-and old `/dashboard/{projectId}` resolve the global id → canonical
-`/dashboard/{ws}/{type}/{seq}` and 301-style redirect (via `locateEntity`; the
-project case is handled by the `[ws]` layout's numeric fallback).
+There is **no legacy id mapping** — old global-id links are not redirected.
 
-**Inbox** is cross-workspace. Because `resolveWorkspace` accepts a numeric
-workspace id as `{ws}`, the inbox passes each message's `workspace_id` as
-`workspaceSlug` to the embedded detail view — previews render for items in any
-workspace, with no workspace switch on preview.
+**Inbox** is cross-workspace: each message's `workspace_id` is passed as
+`workspaceSlug`, and the entity's seq (`payload.entity_seq` / `payload.issue_seq`)
+as the id, so previews open for items in any workspace with no workspace switch.
 
 ## State & data fetching
 

@@ -18,6 +18,7 @@ export interface TaskListItem extends Task {
   project_name: string | null
   project_icon: string | null
   project_color: string | null
+  project_seq: number | null
   lead_name: string | null
   lead_email: string | null
   lead_avatar: string | null
@@ -41,6 +42,7 @@ export async function listTasksInWorkspace(
       p.name AS project_name,
       p.icon AS project_icon,
       p.color AS project_color,
+      p.seq AS project_seq,
       lead.name AS lead_name,
       lead.email AS lead_email,
       lead.avatar_url AS lead_avatar,
@@ -65,7 +67,7 @@ export async function listTasksInWorkspace(
           ? sql`AND (m.name ILIKE ${'%' + opts.search + '%'} OR m.description ILIKE ${'%' + opts.search + '%'})`
           : sql``
       }
-    GROUP BY m.id, p.name, p.icon, p.color, lead.name, lead.email, lead.avatar_url
+    GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
     ORDER BY m.due_date ASC NULLS LAST, m.id DESC
   `)
   return result.rows as unknown as TaskListItem[]
@@ -81,6 +83,7 @@ export async function getTaskInWorkspace(
       p.name AS project_name,
       p.icon AS project_icon,
       p.color AS project_color,
+      p.seq AS project_seq,
       lead.name AS lead_name,
       lead.email AS lead_email,
       lead.avatar_url AS lead_avatar,
@@ -91,7 +94,7 @@ export async function getTaskInWorkspace(
     LEFT JOIN users lead ON lead.id = m.lead_id
     LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.workspace_id = ${workspaceId} AND m.deleted_at IS NULL
-    GROUP BY m.id, p.name, p.icon, p.color, lead.name, lead.email, lead.avatar_url
+    GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
   `)
   return (result.rows[0] as unknown as TaskListItem) ?? null
 }

@@ -1,48 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, jsonList, publicProject } from '@/lib/api'
 import {
   createProject,
   listProjectsInWorkspace,
-  pageProjectsInWorkspace,
 } from '@/lib/db/queries/projects'
 
 interface Params {
   params: Promise<{ ws: string }>
 }
 
-const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 200
-
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
   const ctx = await resolveWorkspace(req, ws)
   const sp = req.nextUrl.searchParams
 
-  const rawLimit = sp.get('limit')
-  const rawCursor = sp.get('cursor')
-  if (rawLimit !== null || rawCursor !== null) {
-    let limit = DEFAULT_LIMIT
-    if (rawLimit !== null) {
-      const n = parseInt(rawLimit)
-      if (!Number.isNaN(n) && n >= 1) limit = Math.min(n, MAX_LIMIT)
-    }
-    let cursor: number | null = null
-    if (rawCursor !== null) {
-      const n = parseInt(rawCursor)
-      cursor = Number.isNaN(n) ? null : n
-    }
-    const result = await pageProjectsInWorkspace({
-      workspaceId: ctx.workspace.id,
-      limit,
-      cursor,
-    })
-    return NextResponse.json(result)
-  }
-
+  // Returns every matching project in one shot (no cursor) — see api-changelog.
   const status = sp.get('status') ?? undefined
   const search = sp.get('search') ?? undefined
   const data = await listProjectsInWorkspace(ctx.workspace.id, { status, search })
-  return jsonList(data)
+  return jsonList(data.map(publicProject))
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -76,5 +52,5 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     member_ids: memberIds,
     actorUserId: ctx.user.id,
   })
-  return NextResponse.json(project, { status: 201 })
+  return NextResponse.json(publicProject(project), { status: 201 })
 })

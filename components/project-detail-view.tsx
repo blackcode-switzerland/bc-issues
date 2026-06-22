@@ -355,8 +355,8 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
           Projects
         </Link>
         <ChevronRight size={13} className="text-muted-foreground/50" />
-        {data.seq != null ? (
-          <span className="font-mono text-xs text-muted-foreground">#{data.seq}</span>
+        {data.id != null ? (
+          <span className="font-mono text-xs text-muted-foreground">#{data.id}</span>
         ) : null}
         <ProjectIcon icon={data.icon} color={data.color} name={data.name} size={18} />
         <span className="max-w-[32ch] truncate font-medium">{data.name}</span>

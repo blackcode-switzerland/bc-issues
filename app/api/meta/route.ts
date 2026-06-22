@@ -13,7 +13,7 @@
 // the full surface.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors } from '@/lib/api'
+import { apiHandler, Errors, publicProject } from '@/lib/api'
 import { resolveAuth } from '@/lib/auth/resolve'
 import { getUserById } from '@/lib/db/queries/users'
 import { getWorkspaceForUser, listWorkspaceMembers } from '@/lib/db/queries/workspaces'
@@ -73,8 +73,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
       project_priorities: PROJECT_PRIORITIES,
       project_update_health: PROJECT_UPDATE_STATUSES,
     },
+    // The `id` of a project/task/issue is its workspace #number (the value shown
+    // in the app), unique per workspace. Address everything by it. Breaking
+    // changes are listed in docs/api-changelog.md.
+    conventions: {
+      id: 'workspace-scoped number (the #N shown in the UI); address items by it',
+      changelog: '/docs/api-changelog.md',
+    },
     labels,
-    projects,
+    projects: projects.map(publicProject),
     members,
   })
 })

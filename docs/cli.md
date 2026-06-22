@@ -230,7 +230,6 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk login [--server URL] [--token]` | Browser flow, or headless `--token` (reads token from stdin). |
 | `bk logout` | Clear local config. |
 | `bk whoami` | Show current user (id, email, name, role, via). |
-| `bk locate <issue\|task\|project> <id>` | Resolve a globally-unique entity id to its workspace (`GET /api/me/locate`). Works across workspaces; errors if you're not a member. |
 | `bk version` | Print version, commit, build date. |
 
 ### Workspaces
