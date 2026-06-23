@@ -8,6 +8,22 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-06-23 — Activity feed `entity_id` is the #number
+
+`GET /api/workspaces/{ws}/activity` used to return `entity_id` as the **internal**
+serial for issue/task/project events. It now returns the workspace `#number` (the
+value you address entities by), resolved per row (trashed items included; a purged
+item whose `#number` can't be recovered returns `null`). Other entity types
+(comment/label/attachment/workspace/member/invitation) are unchanged — their
+`entity_id` is that entity's own id. This also fixes entity-scoped activity on the
+web detail pages, which filter by `#number`.
+
+`bk activity` was realigned to the actual event shape at the same time: columns
+are now `WHEN / WHO / ACTION / ENTITY / ID` (was the stale
+`OPERATION / TABLE / RECORD`, which read fields the endpoint never returned).
+
+---
+
 ## 2026-06-23 — Secondary entities no longer leak internal ids
 
 Comments, attachments, and project updates used to return the **internal** serial
@@ -26,8 +42,8 @@ id of the work item they belong to, contradicting the "one id = the workspace
 Migration: if you parsed `issue_id`/`parent_id` from these responses as a global
 id, treat it as the `#number` now (and read comments via `parent_type`+`parent_id`).
 The `bk` CLI's legacy `Comment` shape drops `issue_id` in favour of
-`parent_type`/`parent_id`. The activity feed's `entity_id` is unchanged (internal
-audit handle).
+`parent_type`/`parent_id`. (The activity feed's `entity_id` was given the same
+treatment — see the entry above.)
 
 ---
 

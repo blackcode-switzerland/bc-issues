@@ -17,26 +17,9 @@ the files that content referenced and removes any that nothing else points at
 (`sweepOrphanedUrls`, `lib/blob-gc.ts`), gated by the same live system-wide
 reference scan. Removing a file from a body via editing still never deletes bytes
 (undo/restore safe) — those become "Unused" orphans the owner clears from the
-Storage page. Remaining work, in priority order:
+Storage page. Remaining work:
 
-1. **Reconcile pre-ledger files (priority: medium).** The Storage page lists
-   files from the `uploads` ledger, which only captures uploads made *after* the
-   ledger shipped. Files uploaded earlier (already-leaked orphans) aren't in it.
-   Add a reconcile pass that calls `@vercel/blob` `list()`, diffs against the
-   ledger, and backfills/surfaces the missing files so they can be cleaned up
-   too. Attribute each to a workspace where possible (e.g. by scanning which
-   workspace's content references it).
-
-2. **Background sweep for the remaining orphans (priority: low).** Auto-GC now
-   fires on the terminal delete events (comment/reply delete, trash purge). What
-   it does NOT cover: files orphaned by *editing* them out of a still-living body
-   (kept on purpose, for undo/restore), files referenced only by non-cascading
-   project/task comments left behind after a purge, and pre-ledger files. A
-   periodic cron that sweeps confirmed orphans (0 references for N days) via the
-   same `isUrlReferencedAnywhere` gate would mop these up. Keep it best-effort and
-   log every deletion.
-
-3. **Storage quota enforcement (priority: low).** The base exists —
+1. **Storage quota enforcement (priority: low).** The base exists —
    `workspaces.storage_limit_bytes` (nullable, unenforced) and
    `computeWorkspaceStorageUsage()`. To enforce, compare usage + incoming size at
    upload time (in `/api/upload` and the `/api/upload/blob` token handshake) and
@@ -92,20 +75,6 @@ Lower priority; capture so they aren't lost.
   media tags an agent might send are stripped (no matching TipTap node). Either
   document this hard rule for agents (done in the changelog/manifest) or add real
   support for native media/embeds later.
-
-- **Activity feed still exposes internal ids (priority: low).** The comment,
-  attachment, and project-update serializers now map their parent FK to the
-  workspace `#number` (`publicComment` / `publicAttachment` / `publicProjectUpdate`
-  in `lib/api/serialize.ts`, shipped 2026-06-23). The one remaining leak is the
-  workspace **activity feed** (`GET …/activity`, backed by `listEvents`), which
-  emits `entity_id` as the internal serial — it's a polymorphic audit log, so
-  mapping each row to a `#number` needs per-row, per-type seq resolution. Decide:
-  resolve it (join seq per entity_type) or document `entity_id` as an internal
-  audit handle. Watchers (`…/watch`) return only `{ watching }` — no leak.
-
-- **CLI direct-Blob upload is pinned to Vercel's wire protocol** (`x-api-version: 7`
-  in `cli/internal/client/client.go` `uploadViaBlob`). If `@vercel/blob` bumps its
-  protocol, the Go path must follow. Maintenance liability, not a bug.
 
 - **No standalone server upload convenience for raw API.** Direct-API agents do
   two calls (upload, then reference the url). Fine as a REST pattern, but a

@@ -9,7 +9,7 @@
 
 import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { events, users, type Event, type NewEvent } from '../schema'
+import { events, users, issues, tasks, projects, type Event, type NewEvent } from '../schema'
 import { fanOutEvent } from './fanout'
 
 export type EntityType =
@@ -159,6 +159,41 @@ export async function listEvents(filter: ListEventsFilter): Promise<EventsPage> 
   }))
   const next_cursor = hasMore ? data[data.length - 1].id : null
   return { data, next_cursor }
+}
+
+// Resolve the workspace #number (seq) for the issue/task/project entities a page
+// of events points at, so the API can expose `entity_id` as the #number instead
+// of the internal serial. Other entity types (comment/label/attachment/workspace/
+// member/invitation) keep their own-domain id, so they're skipped here.
+// Trashed rows are included (events for binned items still resolve); purged rows
+// are simply absent from the map (caller falls back to meta.seq or null).
+export async function resolveEventEntitySeqs(
+  rows: Array<{ entity_type: string; entity_id: number }>
+): Promise<Map<string, number>> {
+  const ids: Record<'issue' | 'task' | 'project', Set<number>> = {
+    issue: new Set(),
+    task: new Set(),
+    project: new Set(),
+  }
+  for (const r of rows) {
+    if (r.entity_type === 'issue' || r.entity_type === 'task' || r.entity_type === 'project') {
+      ids[r.entity_type].add(r.entity_id)
+    }
+  }
+  const tables = { issue: issues, task: tasks, project: projects } as const
+  const map = new Map<string, number>()
+  for (const type of ['issue', 'task', 'project'] as const) {
+    const list = [...ids[type]]
+    if (list.length === 0) continue
+    const found = await db
+      .select({ id: tables[type].id, seq: tables[type].seq })
+      .from(tables[type])
+      .where(inArray(tables[type].id, list))
+    for (const f of found) {
+      if (f.seq != null) map.set(`${type}:${f.id}`, f.seq)
+    }
+  }
+  return map
 }
 
 // Entity-scoped history (used by issue detail page, member achievements, etc.)

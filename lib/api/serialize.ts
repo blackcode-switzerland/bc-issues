@@ -64,3 +64,20 @@ export function publicProjectUpdate(input: object, projectSeq: number | null): R
   const { project_id: _internal, ...rest } = input as Row
   return { ...rest, project_id: projectSeq ?? null }
 }
+
+// Activity events reference a polymorphic entity via (entity_type, entity_id).
+// For work items (issue/task/project) `entity_id` must be the #number, not the
+// internal serial — resolved via a batch seq map (build it with
+// resolveEventEntitySeqs). Purged items aren't in the map, so we fall back to the
+// seq snapshotted in `meta` at delete time, else null. Other entity types
+// (comment/label/attachment/workspace/member/invitation) keep their own-domain id.
+export function publicEvent(input: object, seqMap: Map<string, number>): Row {
+  const row = input as Row
+  const type = row.entity_type as string
+  const eid = row.entity_id as number | null
+  if ((type === 'issue' || type === 'task' || type === 'project') && eid != null) {
+    const meta = row.meta as { seq?: number } | null
+    return { ...row, entity_id: seqMap.get(`${type}:${eid}`) ?? meta?.seq ?? null }
+  }
+  return row
+}

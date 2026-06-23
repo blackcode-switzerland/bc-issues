@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
-import { listEvents, type EntityType, type EventAction } from '@/lib/db/queries/events'
+import { apiHandler, Errors, resolveWorkspace, publicEvent } from '@/lib/api'
+import {
+  listEvents,
+  resolveEventEntitySeqs,
+  type EntityType,
+  type EventAction,
+} from '@/lib/db/queries/events'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -100,5 +105,10 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     limit,
   })
 
-  return NextResponse.json(page)
+  // Expose entity_id as the #number for work-item events (never the internal id).
+  const seqMap = await resolveEventEntitySeqs(page.data)
+  return NextResponse.json({
+    data: page.data.map((e) => publicEvent(e, seqMap)),
+    next_cursor: page.next_cursor,
+  })
 })

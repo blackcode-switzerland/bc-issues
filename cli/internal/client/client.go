@@ -33,6 +33,15 @@ var (
 // for curl.
 var Verbose bool
 
+// blobAPIVersion is Vercel Blob's client-upload wire-protocol version, sent as
+// the x-api-version header on the direct PUT in uploadViaBlob. The JS SDK
+// (@vercel/blob) tracks this internally and bumps it when Vercel changes the
+// protocol; the Go CLI can't use that SDK, so we pin it here. If Vercel retires
+// this version, the direct PUT starts failing with a 4xx — bump this to match
+// the value the current @vercel/blob release sends (grep its source for
+// BLOB_API_VERSION) and ship a new CLI. This is the ONE place to change.
+const blobAPIVersion = "7"
+
 // OutdatedError is returned by every request when the running CLI version is
 // below the minimum version the API still supports (X-BK-CLI-Min). Commands
 // fail fast with this so the user is forced to upgrade.
@@ -719,7 +728,8 @@ func (c *Client) uploadMultipart(f *os.File, base, ctype string) (*UploadRespons
 // uploadViaBlob mirrors the @vercel/blob client-upload flow for non-JS clients:
 // (1) ask our /api/upload/blob handshake for a short-lived client token, then
 // (2) PUT the bytes straight to Blob storage. The PUT headers + api-version
-// track @vercel/blob's wire protocol (pinned to v7); keep in sync if that bumps.
+// track @vercel/blob's wire protocol; the version is pinned in blobAPIVersion
+// (see its doc comment) and a 4xx on the PUT surfaces a clear "bump me" error.
 func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse, error) {
 	// File metadata + target workspace travel in clientPayload so the server can
 	// record the upload ledger row in onUploadCompleted. Marshalled (not
@@ -776,7 +786,7 @@ func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse,
 	}
 	preq.ContentLength = fi.Size()
 	preq.Header.Set("authorization", "Bearer "+hs.ClientToken)
-	preq.Header.Set("x-api-version", "7")
+	preq.Header.Set("x-api-version", blobAPIVersion)
 	preq.Header.Set("x-content-type", ctype)
 	preq.Header.Set("x-add-random-suffix", "1")
 
@@ -787,7 +797,18 @@ func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse,
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("blob upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		msg := strings.TrimSpace(string(b))
+		// A 4xx on the direct PUT most often means Vercel retired the pinned
+		// wire-protocol version (blobAPIVersion). Point the user at the fix
+		// instead of leaving a cryptic HTTP error.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return nil, fmt.Errorf(
+				"blob upload rejected (%d): %s\n"+
+					"this can mean the CLI's Vercel Blob protocol version (x-api-version=%s) is outdated — "+
+					"update bk to the latest release; if it persists, the pin in client.go (blobAPIVersion) needs bumping",
+				resp.StatusCode, msg, blobAPIVersion)
+		}
+		return nil, fmt.Errorf("blob upload failed (%d): %s", resp.StatusCode, msg)
 	}
 	var blobResp struct {
 		URL string `json:"url"`

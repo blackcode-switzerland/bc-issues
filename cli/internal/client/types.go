@@ -174,15 +174,16 @@ type activityFeedEnvelope struct {
 }
 
 type ActivityFeedItem struct {
-	ID            int             `json:"id" yaml:"id"`
-	OperationType string          `json:"operation_type" yaml:"operation_type"`
-	TableName     string          `json:"table_name" yaml:"table_name"`
-	RecordID      *int            `json:"record_id" yaml:"record_id"`
-	UserID        *int            `json:"user_id" yaml:"user_id"`
-	UserName      *string         `json:"user_name,omitempty" yaml:"user_name,omitempty"`
-	OldData       json.RawMessage `json:"old_data,omitempty" yaml:"-"`
-	NewData       json.RawMessage `json:"new_data,omitempty" yaml:"-"`
-	CreatedAt     *string         `json:"created_at" yaml:"created_at"`
+	ID          int             `json:"id" yaml:"id"`
+	EntityType  string          `json:"entity_type" yaml:"entity_type"`
+	EntityID    *int            `json:"entity_id" yaml:"entity_id"` // #number for issue/task/project, own id otherwise; null if purged
+	Action      string          `json:"action" yaml:"action"`
+	ActorUserID *int            `json:"actor_user_id" yaml:"actor_user_id"`
+	ActorName   *string         `json:"actor_name,omitempty" yaml:"actor_name,omitempty"`
+	ActorEmail  *string         `json:"actor_email,omitempty" yaml:"actor_email,omitempty"`
+	Diff        json.RawMessage `json:"diff,omitempty" yaml:"-"`
+	Meta        json.RawMessage `json:"meta,omitempty" yaml:"-"`
+	OccurredAt  *string         `json:"occurred_at" yaml:"occurred_at"`
 }
 
 type CreateIssueRequest struct {

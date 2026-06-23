@@ -461,7 +461,7 @@ export const openApiSpec = {
         {
           id: { type: 'integer' },
           entity_type: { type: 'string' },
-          entity_id: { type: 'integer' },
+          entity_id: { type: ['integer', 'null'], description: "For issue/task/project events this is the entity's #number (not the internal id); for other entity types it's that entity's own id. null if the entity was purged and its #number can't be recovered." },
           action: { type: 'string' },
           actor_user_id: { type: ['integer', 'null'] },
           occurred_at: { type: 'string', format: 'date-time' },

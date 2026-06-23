@@ -46,15 +46,21 @@ func newActivityCmd() *cobra.Command {
 					return nil
 				}
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "WHEN\tWHO\tOPERATION\tTABLE\tRECORD")
+				fmt.Fprintln(tw, "WHEN\tWHO\tACTION\tENTITY\tID")
 				for _, a := range items {
-					recID := "—"
-					if a.RecordID != nil {
-						recID = fmt.Sprintf("%d", *a.RecordID)
+					entID := "—"
+					if a.EntityID != nil {
+						// issue/task/project ids are the workspace #number
+						switch a.EntityType {
+						case "issue", "task", "project":
+							entID = fmt.Sprintf("#%d", *a.EntityID)
+						default:
+							entID = fmt.Sprintf("%d", *a.EntityID)
+						}
 					}
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-						derefOr(a.CreatedAt, ""), derefOr(a.UserName, "—"),
-						a.OperationType, a.TableName, recID)
+						derefOr(a.OccurredAt, ""), derefOr(a.ActorName, "—"),
+						a.Action, a.EntityType, entID)
 				}
 				if err := tw.Flush(); err != nil {
 					return err

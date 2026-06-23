@@ -343,8 +343,11 @@ change or the build breaks.
 > `project_id` as the `#number`. These go through `publicComment` /
 > `publicAttachment` / `publicProjectUpdate` (`lib/api/serialize.ts`), which take
 > the parent's seq from the request path (or resolve it for by-id routes). The
-> one place that still emits an internal serial is the activity feed's
-> `entity_id` (a polymorphic audit handle) — see `docs/improvements.md`.
+> activity feed (`GET …/activity`) likewise maps `entity_id` to the `#number` for
+> issue/task/project events (`publicEvent` + `resolveEventEntitySeqs`, batch seq
+> lookup incl. trashed rows; purged → `meta.seq` fallback or `null`); other
+> entity types (comment/label/attachment/workspace/member/invitation) keep their
+> own-domain id. No route emits an internal work-item serial.
 
 ```
 GET    /api/workspaces                          list my workspaces
