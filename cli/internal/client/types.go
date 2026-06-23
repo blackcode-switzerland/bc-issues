@@ -254,7 +254,8 @@ type UpdateTaskRequest struct {
 }
 
 type CreateCommentRequest struct {
-	Content string `json:"content"`
+	Content         string `json:"content"`
+	ParentCommentID int    `json:"parent_comment_id,omitempty"`
 }
 
 type UndoResponse struct {

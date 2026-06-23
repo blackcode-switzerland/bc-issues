@@ -244,17 +244,8 @@ func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
 	if opts.ProjectID > 0 {
 		q.Set("project_id", fmt.Sprint(opts.ProjectID))
 	}
-	if opts.Limit > 0 {
-		q.Set("limit", fmt.Sprint(opts.Limit))
-	}
-	if opts.Cursor != nil {
-		q.Set("cursor", fmt.Sprint(*opts.Cursor))
-	}
 	if strings.TrimSpace(opts.Search) != "" {
 		q.Set("search", opts.Search)
-	}
-	if opts.Seq > 0 {
-		q.Set("seq", fmt.Sprint(opts.Seq))
 	}
 
 	path, err := c.wsPath("issues")
@@ -276,36 +267,6 @@ type ListIssuesOpts struct {
 	ProjectID int
 	Status    string
 	Search    string
-	Seq       int
-	Limit     int
-	Cursor    *int
-}
-
-type ListProjectsOpts struct {
-	Limit  int
-	Cursor *int
-}
-
-func (c *Client) ListProjectsPage(opts ListProjectsOpts) (*ProjectsPage, error) {
-	q := url.Values{}
-	if opts.Limit > 0 {
-		q.Set("limit", fmt.Sprint(opts.Limit))
-	}
-	if opts.Cursor != nil {
-		q.Set("cursor", fmt.Sprint(*opts.Cursor))
-	}
-	path, err := c.wsPath("projects")
-	if err != nil {
-		return nil, err
-	}
-	if len(q) > 0 {
-		path += "?" + q.Encode()
-	}
-	var page ProjectsPage
-	if err := c.get(path, &page); err != nil {
-		return nil, err
-	}
-	return &page, nil
 }
 
 func (c *Client) ListUsers() ([]User, error) {
@@ -618,20 +579,6 @@ func (c *Client) GetIssue(id int) (*Issue, error) {
 	return &iss, nil
 }
 
-// GetIssueBySeq resolves the workspace-facing issue number (the #seq users see)
-// to the full issue via the list endpoint's ?seq= filter. Returns a not-found
-// error when no issue in the active workspace has that seq.
-func (c *Client) GetIssueBySeq(seq int) (*Issue, error) {
-	page, err := c.ListIssues(ListIssuesOpts{Seq: seq, Limit: 1})
-	if err != nil {
-		return nil, err
-	}
-	if len(page.Data) == 0 {
-		return nil, fmt.Errorf("no issue with number #%d in this workspace", seq)
-	}
-	return &page.Data[0], nil
-}
-
 func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 	path, err := c.wsPath("issues")
 	if err != nil {
@@ -796,6 +743,22 @@ func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse,
 		Size:        int(fi.Size()),
 		ContentType: ctype,
 	}, nil
+}
+
+// EmbedMarkdown returns a Markdown reference to an uploaded file that the server
+// renders inline: images become previews, video/audio become players, and
+// everything else becomes a download card. The server (lib/rich-text.ts)
+// recognizes our upload URLs and upgrades them to the right node, so callers only
+// ever need to emit plain Markdown — no app-specific markup.
+func EmbedMarkdown(up *UploadResponse) string {
+	name := up.Filename
+	if name == "" {
+		name = "file"
+	}
+	if strings.HasPrefix(up.ContentType, "image/") {
+		return fmt.Sprintf("![%s](%s)", name, up.URL)
+	}
+	return fmt.Sprintf("[%s](%s)", name, up.URL)
 }
 
 func (c *Client) AttachToIssue(issueID int, up *UploadResponse) (*Attachment, error) {

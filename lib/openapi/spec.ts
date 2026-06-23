@@ -77,6 +77,26 @@ function jsonList(itemRef: string, description = 'A page of results') {
   }
 }
 
+// Response for non-paginated lists that return every matching row in one shot
+// plus a total count (e.g. issues): { data, total } with no next_cursor.
+function jsonListTotal(itemRef: string, description = 'All matching rows') {
+  return {
+    description,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          required: ['data'],
+          properties: {
+            data: { type: 'array', items: { $ref: `#/components/schemas/${itemRef}` } },
+            total: { type: 'integer', description: 'Total matching rows.' },
+          },
+        },
+      },
+    },
+  }
+}
+
 // Inline response for the handful of action endpoints that return a small ad-hoc
 // object (or a raw array) rather than an entity / list envelope.
 function jsonShape(schema: Record<string, unknown>, description = 'Success') {
@@ -149,7 +169,11 @@ export const openApiSpec = {
       'Lists return { data, total }; errors return { error, code, suggestion?, details? }. ' +
       'Call GET /api/meta first to discover the active workspace and the valid status/priority vocabulary. ' +
       'Rich-text fields (issue/project descriptions, comments, project updates) accept **Markdown or HTML** ' +
-      'and are stored as sanitized HTML — send real newlines, not the literal characters "\\n".',
+      'and are stored as sanitized HTML — send real newlines, not the literal characters "\\n". ' +
+      'To embed a file/image: POST it to /api/upload (multipart, field "file") to get a { url }, then ' +
+      'reference that url in any rich-text field as `![name](url)` for images or `[name](url)` for any ' +
+      'other file. Uploaded urls are rendered inline automatically (image preview, video/audio player, ' +
+      'or download card); external urls are left as plain links/images. Max file size 100MB.',
   },
   servers: [{ url: '/', description: 'Same origin' }],
   security: [{ bearerAuth: [] }],
@@ -235,11 +259,10 @@ export const openApiSpec = {
       ),
       Issue: entity(
         {
-          id: { type: 'integer' },
-          seq: { type: 'integer', description: 'Per-workspace issue number.' },
+          id: { type: 'integer', description: 'The workspace #number shown in the app; address the issue by it.' },
           workspace_id: { type: 'integer' },
-          project_id: { type: ['integer', 'null'] },
-          task_id: { type: ['integer', 'null'] },
+          project_id: { type: ['integer', 'null'], description: "Parent project's #number, or null." },
+          task_id: { type: ['integer', 'null'], description: "Parent task's #number, or null." },
           title: { type: 'string' },
           description: { type: ['string', 'null'] },
           status: { type: 'string', enum: ISSUE_STATUS_VALUES },
@@ -259,7 +282,7 @@ export const openApiSpec = {
         additionalProperties: false,
         properties: {
           title: { type: 'string', maxLength: 200 },
-          description: { type: 'string', description: 'Markdown or HTML; stored as sanitized HTML. Use real newlines, not literal "\\n".' },
+          description: { type: 'string', description: 'Markdown or HTML; stored as sanitized HTML. Use real newlines, not literal "\\n". Embed an uploaded file with ![name](url) (image) or [name](url) (any file) — see /api/upload.' },
           status: { type: 'string', enum: ISSUE_STATUS_VALUES },
           priority: { type: 'integer', enum: ISSUE_PRIORITY_VALUES },
           project_id: { type: ['integer', 'null'] },
@@ -366,7 +389,7 @@ export const openApiSpec = {
         required: ['content'],
         additionalProperties: false,
         properties: {
-          content: { type: 'string', description: 'Non-empty. Markdown or HTML; stored as sanitized HTML. Use real newlines, not literal "\\n".' },
+          content: { type: 'string', description: 'Non-empty. Markdown or HTML; stored as sanitized HTML. Use real newlines, not literal "\\n". Embed an uploaded file with ![name](url) (image) or [name](url) (any file) — see /api/upload.' },
           parent_comment_id: { type: 'integer', description: 'Set to reply to another comment.' },
         },
       },
@@ -689,10 +712,8 @@ export const openApiSpec = {
           { name: 'status', in: 'query', schema: { type: 'string', enum: ISSUE_STATUS_VALUES } },
           { name: 'priority', in: 'query', schema: { type: 'integer', enum: ISSUE_PRIORITY_VALUES } },
           { name: 'search', in: 'query', schema: { type: 'string' } },
-          { name: 'seq', in: 'query', schema: { type: 'integer' }, description: 'Look up the single issue by its workspace-facing number (the #seq shown in the UI/CLI).' },
-          limitParam, cursorParam,
         ],
-        responses: { '200': jsonList('Issue'), ...errors(400, 401, 404) },
+        responses: { '200': jsonListTotal('Issue', 'All matching issues (not paginated)'), ...errors(400, 401, 404) },
       },
       post: {
         tags: ['Issues'], operationId: 'createIssue', summary: 'Create an issue',
@@ -770,7 +791,6 @@ export const openApiSpec = {
         parameters: [
           { name: 'status', in: 'query', schema: { type: 'string', enum: PROJECT_STATUS_VALUES } },
           { name: 'search', in: 'query', schema: { type: 'string' } },
-          limitParam, cursorParam,
         ],
         responses: { '200': jsonList('Project'), ...errors(401, 404) },
       },
@@ -1007,7 +1027,14 @@ export const openApiSpec = {
     '/api/upload': {
       get: { tags: ['System'], operationId: 'getUploadInfo', summary: 'Upload constraints/info', responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Upload info'), ...errors(401) } },
       post: {
-        tags: ['System'], operationId: 'upload', summary: 'Upload a file',
+        tags: ['System'], operationId: 'upload', summary: 'Upload a file (then embed its url in a description/comment)',
+        description:
+          'Multipart upload (field "file", max 100MB, any type except SVG). Returns { url }. ' +
+          'To show the file inside an issue/task/project description or a comment, put that url in the ' +
+          'rich-text body as ![name](url) for images or [name](url) for any other file — the server ' +
+          'renders uploaded urls inline (preview/player/download card). ' +
+          'Large files in production should be uploaded client-direct (see GET /api/upload -> { blob }); ' +
+          'this multipart route is capped by the serverless request-body limit (~4.5MB).',
         requestBody: { required: true, content: { 'multipart/form-data': { schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } } } },
         responses: { '200': jsonShape({ type: 'object', required: ['url'], properties: { url: { type: 'string' }, filename: { type: 'string' }, size: { type: 'integer' }, contentType: { type: 'string' } } }, 'Uploaded'), ...errors(400, 401) },
       },

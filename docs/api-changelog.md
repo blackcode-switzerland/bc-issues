@@ -8,6 +8,58 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-06-23 — CLI cleanup: removed dead pagination flags
+
+Finishing the 2026-06-22 single-id refactor. The issue/project/task list
+endpoints already returned every matching row in one response, but the CLI still
+advertised pagination flags that the server ignored. Removed:
+
+- `bk issue list` — dropped `--all`, `--limit`, `--cursor` (output is unchanged:
+  it already returned everything; `total` and the `showing X of N` footer stay).
+- `bk project list` / `bk project issues` — dropped `--limit`, `--cursor`.
+
+Real keyset pagination is unaffected: `bk activity`, `bk trash list`, and
+`bk super-admin errors list` still take `--limit`/`--cursor` with `next_cursor`.
+Also removed the long-dead `id:<globalid>` reference form from CLI help/docs (the
+form itself stopped working on 2026-06-22) — address items by their `#number`.
+
+---
+
+## 2026-06-23 — Embed uploaded files inline from the CLI / API
+
+You can now attach files **inside** a description or comment (image previews,
+video/audio players, file-download cards) from any client — the same result the
+web drag-and-drop produces — without knowing any app-specific markup.
+
+**How.** Upload a file, then reference its returned url in the body with plain
+Markdown:
+
+- `![name](url)` — images render as inline previews.
+- `[name](url)` — any other file (video, audio, pdf, zip, …) renders as a
+  player or a download card.
+
+The server (`toRichTextHtml`) recognizes urls that came out of **our** upload
+pipeline (Vercel Blob / `/uploads`) and upgrades them to the right rich-text
+node automatically. External urls are left as ordinary links/images, so nothing
+else changes. Works in `description`, `content` (comments), project summaries,
+and project-update bodies.
+
+**CLI shortcuts** (do upload + embed in one call, repeatable):
+
+```
+bk issue   create --project 4 --title "Bug"   --file ./screenshot.png --file ./trace.log
+bk task    create --project 4 --name  "Spike"  --file ./design.pdf
+bk project create --name "Q3"                  --file ./brief.pdf
+bk issue   comment 248 --body "see clip" --file ./demo.mp4
+bk issue   comment 248 --reply-to 991 --body "thanks"     # threaded reply
+```
+
+Note: `bk issue create --attach <file>` is unchanged — it adds to the issue's
+**attachments list** (sidebar), which is separate from embedding in the body.
+Use `--file` to embed inline; use `--attach` for the attachments list.
+
+---
+
 ## 2026-06-23 — Uploads up to 100 MB on every client
 
 - The file-size cap is now **100 MB** (was 50 MB), defined once in `lib/upload.ts`.

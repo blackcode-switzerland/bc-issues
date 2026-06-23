@@ -27,7 +27,7 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 | Property | Value |
 |---|---|
 | Language | Go (see `go.mod`; currently 1.26) |
-| Module | `github.com/mustneerar7/blackcode-issues/cli` |
+| Module | `github.com/blackcode-switzerland/bc-issues/cli` |
 | Binary | `bk` |
 | Framework | [cobra](https://github.com/spf13/cobra) |
 | Auth | Bearer API tokens (same `api_tokens` table the web uses) |
@@ -245,12 +245,12 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk project list [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/projects` | Cursor-paged when `--limit`/`--cursor` set; otherwise a flat list. |
+| `bk project list` | `GET /api/workspaces/:ws/projects` | Returns every project in one response (not paginated). |
 | `bk project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
 | `bk project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
-| `bk project issues <id> [--status S] [--assignee REF] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
+| `bk project issues <id> [--status S] [--assignee REF]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
 | `bk project tasks <id>` | `GET /api/workspaces/:ws/tasks?project_id=:id` | |
-| `bk project create --name N [--description D \| --description-file F]` | `POST /api/workspaces/:ws/projects` | |
+| `bk project create --name N [--description D \| --description-file F] [--file F ...]` | `POST /api/workspaces/:ws/projects` | `--file` uploads + embeds inline (repeatable). |
 | `bk project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/workspaces/:ws/projects/:id` | |
 | `bk project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached tasks/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
 | `bk project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/workspaces/:ws/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
@@ -258,28 +258,26 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 ### Issues
 
-> **Issue identifier — `#seq`, not the global id.** Issues have two numbers: the
-> per-workspace **`seq`** (what the web UI shows as `#234`) and a global **`id`**
-> (e.g. `441`). Issue commands take the **`seq`** — the number you see in the app —
-> so `bk issue view 234` and `bk issue view #234` both work. The list/view output
-> shows the `#seq` in the `#` column and the global id in the `ID` column. To
-> address the global id directly (back-compat / scripts), prefix it: `id:441`.
+> **Issue identifier — the `#number`.** Every issue has a single id: the
+> per-workspace **`#number`** shown in the app (e.g. `#234`). Commands take that
+> number directly, so `bk issue view 234` and `bk issue view #234` both work.
+> There is no separate global id — the API addresses items by this number too.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT] [--all] [--limit N] [--cursor ID]` | `GET /api/workspaces/:ws/issues` | `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description). `--all` auto-paginates every page. Output footer shows `showing X of N` and the next `--cursor`. |
-| `bk issue view <#seq\|id:globalid>` | `GET /api/workspaces/:ws/issues/:id` | Resolves `#seq` → global id via `?seq=`. |
+| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description); status/assignee filters are client-side. Footer shows `showing X of N`. |
+| `bk issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | `id` is the `#number` shown in the app (a leading `#` is accepted). |
 | `bk issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
-| `bk issue edit <#seq> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
-| `bk issue assign <#seq> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
-| `bk issue unassign <#seq> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
-| `bk issue delete <#seq> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
-| `bk issue comment <#seq> --body "..." \| --body - \| --body-file F` | `POST /api/workspaces/:ws/issues/:id/comments` | Body must be non-empty. |
-| `bk issue comments <#seq>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
-| `bk issue activity <#seq>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
-| `bk issue attach <#seq> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Two-step upload + attach. |
-| `bk issue attachments <#seq>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
-| `bk issue detach <#seq> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
+| `bk issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
+| `bk issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
+| `bk issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
+| `bk issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
+| `bk issue comment <id> --body "..." \| --body - \| --body-file F [--reply-to C] [--file F ...]` | `POST /api/workspaces/:ws/issues/:id/comments` | Body or `--file` required. `--reply-to` threads under comment id C. `--file` uploads + embeds inline. |
+| `bk issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
+| `bk issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
+| `bk issue attach <id> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Adds to the **attachments list** (sidebar), not the body. To embed inline use `--file` on `create`/`comment`. |
+| `bk issue attachments <id>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
+| `bk issue detach <id> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
 
 **`issue create` flags**:
 
@@ -295,10 +293,13 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 --start-date YYYY-MM-DD
 --due-date YYYY-MM-DD
 --label NAME            label name; repeatable — existing labels matched, unknown ones created on the fly
---attach FILE           uploads + attaches in one step after the issue is created
+--attach FILE           adds FILE to the issue's attachments list (sidebar), separate from the body
+--file FILE             uploads FILE and embeds it inline in the description (repeatable)
 ```
 
 > `--status` is free-form on the CLI side and validated server-side. The canonical issue statuses are `backlog`, `todo`, `in_progress`, `done`, and `cancelled`.
+
+> **`--file` vs `--attach`.** `--file` uploads and embeds the file **inline in the body** (image preview, video/audio player, or download card) — the same result as web drag-and-drop; it's available on `issue/task/project create` and `issue comment`. `--attach` is issue-only and adds the file to the separate **attachments list**. Embedding works because the server rewrites uploaded urls referenced as `![name](url)` / `[name](url)` into rich-text nodes, so embedding from raw API is just: `POST /api/upload` → put the returned url in the body as Markdown.
 
 **`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--task`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--task`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
 
@@ -310,7 +311,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 |---|---|
 | `bk task list [--project N]` | `GET /api/workspaces/:ws/tasks[?project_id=N]` |
 | `bk task view <id> [--include-issues]` | `GET /api/workspaces/:ws/tasks/:id[?includeIssues=true]` |
-| `bk task create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD]` | `POST /api/workspaces/:ws/tasks` |
+| `bk task create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD] [--file F ...]` | `POST /api/workspaces/:ws/tasks` | `--file` uploads + embeds inline (repeatable). |
 | `bk task edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/tasks/:id` |
 | `bk task delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/tasks/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
 
@@ -535,8 +536,8 @@ Pretty-printed with 2-space indent. Paginated responses are wrapped:
 
 ```json
 {
-  "data":        [ … ],
-  "next_cursor": 42
+  "data":  [ … ],
+  "total": 128
 }
 ```
 
@@ -548,7 +549,7 @@ Same shape, YAML-formatted (2-space indent).
 
 ### Pagination
 
-`bk issue list` and `bk project list` accept `--limit` / `--cursor`. The wire shape is `{ "data": [...], "next_cursor": <id|null> }`. In **table** mode, when a `next_cursor` is present, the CLI prints `next page: --cursor=42` to stderr — handy for scripting (`bk issue list --json | jq '.next_cursor'`). Without `--limit`/`--cursor`, a flat array is returned instead of the envelope.
+The main list commands (`bk issue list`, `bk project list`, `bk task list`) are **not paginated** — they return every matching item in one response (`bk issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`, `bk trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
 
 ---
 

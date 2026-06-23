@@ -35,7 +35,6 @@ func newProjectCmd() *cobra.Command {
 }
 
 func newProjectListCmd() *cobra.Command {
-	var limit, cursor int
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List projects you are a member of",
@@ -48,24 +47,16 @@ func newProjectListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			opts := client.ListProjectsOpts{Limit: limit}
-			if cmd.Flags().Changed("cursor") {
-				opts.Cursor = &cursor
-			}
-			page, err := c.ListProjectsPage(opts)
+			// The projects endpoint returns every project in one response.
+			projects, err := c.ListProjects()
 			if err != nil {
 				return err
 			}
 
-			data := any(page.Data)
-			if format != output.FormatTable && page.NextCursor != nil {
-				data = page
-			}
-
-			return output.Render(format, data, func(w io.Writer) error {
+			return output.Render(format, projects, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
 				fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tROLE\tISSUES (OPEN/TOTAL)")
-				for _, p := range page.Data {
+				for _, p := range projects {
 					status := derefOr(p.Status, "—")
 					role := derefOr(p.MemberRole, "—")
 					open := intOr(p.OpenIssues, 0)
@@ -75,18 +66,13 @@ func newProjectListCmd() *cobra.Command {
 				if err := tw.Flush(); err != nil {
 					return err
 				}
-				if len(page.Data) == 0 {
+				if len(projects) == 0 {
 					fmt.Fprintln(cmd.ErrOrStderr(), "(no projects)")
-				}
-				if page.NextCursor != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "next page: --cursor=%d\n", *page.NextCursor)
 				}
 				return nil
 			})
 		},
 	}
-	cmd.Flags().IntVar(&limit, "limit", 0, "Page size (paginated mode)")
-	cmd.Flags().IntVar(&cursor, "cursor", 0, "Cursor (last id seen) for pagination")
 	return cmd
 }
 
@@ -169,7 +155,6 @@ func newProjectMembersCmd() *cobra.Command {
 
 func newProjectIssuesCmd() *cobra.Command {
 	var status, assignee string
-	var limit, cursor int
 	cmd := &cobra.Command{
 		Use:   "issues <project-id>",
 		Short: "List issues for a project (optionally filter by status/assignee)",
@@ -183,15 +168,11 @@ func newProjectIssuesCmd() *cobra.Command {
 				projectID: id,
 				status:    status,
 				assignee:  assignee,
-				limit:     limit,
-				cursor:    cursor,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&status, "status", "", "Filter by status (client-side)")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee id, email, or 'me' (client-side)")
-	cmd.Flags().IntVar(&limit, "limit", 50, "Page size")
-	cmd.Flags().IntVar(&cursor, "cursor", 0, "Cursor for pagination")
 	return cmd
 }
 
@@ -225,6 +206,7 @@ func newProjectTasksCmd() *cobra.Command {
 func newProjectCreateCmd() *cobra.Command {
 	var name, summary, description, descriptionFile string
 	var priority, visibility, color, startDate, dueDate string
+	var files []string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new project",
@@ -241,6 +223,10 @@ func newProjectCreateCmd() *cobra.Command {
 				return err
 			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			body, err = embedFiles(c, body, files)
 			if err != nil {
 				return err
 			}
@@ -283,6 +269,7 @@ func newProjectCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
+	AddFileFlag(cmd, &files)
 	return cmd
 }
 

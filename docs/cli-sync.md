@@ -89,6 +89,7 @@ Anything that breaks one of these contracts:
 5. **A field's JSON type.** Go decodes strictly — turning an `int` into a `string` will fail at decode time.
 6. **The auth scheme.** If you change the header name, the token prefix, or the validation logic, `client.do()` and possibly `login.go` need to follow.
 7. **The upload contract.** The CLI's `UploadFile` checks `GET /api/upload` (`{blob}`): with a Blob store it uploads **client-direct** (token handshake at `POST /api/upload/blob`, then a single PUT straight to `blob.vercel-storage.com`, mirroring `@vercel/blob`'s wire protocol — pinned to `x-api-version: 7`); otherwise it POSTs multipart (`file` field) to `/api/upload`. Both read back `{url, filename, size, contentType}`. If the Blob wire protocol bumps (api-version/headers), `uploadViaBlob` in `client.go` must follow. Size cap (100 MB) lives in `lib/upload.ts`.
+8. **Inline file embedding.** The `--file` flag (on `issue/task/project create` and `issue comment`) uploads via `UploadFile`, then appends `client.EmbedMarkdown(up)` to the body — `![name](url)` for images, `[name](url)` otherwise. The server's `toRichTextHtml` (`upgradeUploadedMedia`) rewrites uploaded-origin urls into TipTap nodes, so embedding stays markup-free on the client. If the embed Markdown shape or the server's url-detection changes, keep `EmbedMarkdown` (Go) and `upgradeUploadedMedia` (`lib/rich-text.ts`) in sync. `--attach` (issue-only) is unchanged — it writes to the attachments table, not the body.
 
 ---
 

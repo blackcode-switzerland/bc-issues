@@ -13,7 +13,13 @@ async function saveLocally(file: File, baseName: string): Promise<{ url: string 
   const uploadsDir = resolve(process.cwd(), LOCAL_UPLOAD_DIR)
   await mkdir(uploadsDir, { recursive: true })
 
-  const finalName = `${baseName}-${randomBytes(4).toString('hex')}`
+  // Insert the random suffix BEFORE the extension so the URL keeps a real file
+  // extension (…-ab12cd34.pdf, not …pdf-ab12cd34) — the rich-text layer detects
+  // media type from that extension. Mirrors Vercel Blob's addRandomSuffix.
+  const suffix = randomBytes(4).toString('hex')
+  const dot = baseName.lastIndexOf('.')
+  const finalName =
+    dot >= 0 ? `${baseName.slice(0, dot)}-${suffix}${baseName.slice(dot)}` : `${baseName}-${suffix}`
   const destPath = resolve(uploadsDir, finalName)
   // Defense-in-depth against path traversal even though baseName is sanitized upstream
   if (!destPath.startsWith(uploadsDir + sep)) {

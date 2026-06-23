@@ -62,6 +62,35 @@ func ReadBody(literal, fromFile string) (string, error) {
 	return literal, nil
 }
 
+// embedFiles uploads each path and appends a Markdown reference to body so the
+// uploaded file renders inline in the description/comment (image preview,
+// video/audio player, or download card) — the same result as a web drag-and-drop.
+// Progress is reported on stderr so it never pollutes JSON/YAML stdout output.
+func embedFiles(c *client.Client, body string, files []string) (string, error) {
+	for _, f := range files {
+		up, err := c.UploadFile(f)
+		if err != nil {
+			return "", fmt.Errorf("upload %s: %w", f, err)
+		}
+		snippet := client.EmbedMarkdown(up)
+		if strings.TrimSpace(body) == "" {
+			body = snippet
+		} else {
+			body = body + "\n\n" + snippet
+		}
+		fmt.Fprintf(os.Stderr, "uploaded %s -> %s\n", up.Filename, up.URL)
+	}
+	return body, nil
+}
+
+// AddFileFlag attaches the repeatable --file flag used to embed uploaded files
+// inline in a description or comment body.
+func AddFileFlag(cmd *cobra.Command, target *[]string) {
+	cmd.Flags().StringArrayVar(target, "file", nil,
+		"Upload a file and embed it inline in the body (repeatable). "+
+			"Images preview, video/audio play, other files show a download card.")
+}
+
 // ResolveUserRef turns a user reference (numeric id, email, name, or "me")
 // into a numeric user id. Empty input returns (0, nil) so callers can
 // distinguish "not provided".

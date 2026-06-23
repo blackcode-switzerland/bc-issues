@@ -104,6 +104,27 @@ printf '## Plan\n- item\n' | ./bk issue create --project 6 --title "..." --descr
 ./bk issue comment 42 --body-file ./review.md
 ```
 
+## Attaching files
+
+`--file` uploads a local file and embeds it **inline** in the description/comment
+body — images preview, video/audio get players, everything else gets a download
+card (the same result as web drag-and-drop). It's repeatable and works on
+`issue/task/project create` and `issue comment`:
+
+```sh
+./bk issue   create --project 6 --title "Crash" --file ./screenshot.png --file ./trace.log
+./bk issue   comment 42 --body "see clip" --file ./demo.mp4
+./bk project create --name "Q3 brief" --file ./brief.pdf
+```
+
+Under the hood this uploads (max 100 MB) and writes the returned url into the
+body as Markdown; the server renders uploaded urls inline. Doing it by hand over
+the raw API is the same two steps: `POST /api/upload`, then put the url in the
+body as `![name](url)` (image) or `[name](url)` (any file).
+
+> `bk issue attach` is different: it adds a file to the issue's **attachments
+> list** (sidebar), not the body. Use `--file` to embed inline, `attach` for the list.
+
 ## Commands
 
 ### Auth / session
@@ -124,11 +145,10 @@ bk workspace use <slug|id>             set active workspace
 
 ### Projects
 ```
-bk project list [--limit N] [--cursor N]
+bk project list
 bk project view <id>
 bk project members <id>
 bk project issues <id> [--status S] [--assignee <id|email|name|me>]
-                       [--limit N] [--cursor N]
 bk project tasks <id>
 
 bk project create --name N [--description D | --description-file F]
@@ -142,8 +162,7 @@ bk project remove-member <id> --user <id|email|name> [--yes]
 ### Issues
 ```
 bk issue list [--project N] [--status S]
-              [--assignee <id|email|name|me>] [--mine]
-              [--limit N] [--cursor N]
+              [--assignee <id|email|name|me>] [--mine] [--search TEXT]
 bk issue view <id>
 
 bk issue create --project N --title "..."
@@ -151,7 +170,8 @@ bk issue create --project N --title "..."
                 [--priority 1-5] [--status S]
                 [--assignee <id|email|name|me>] [--task N]
                 [--start-date YYYY-MM-DD] [--due-date YYYY-MM-DD]
-                [--attach FILE]
+                [--attach FILE]      add to the attachments list (sidebar)
+                [--file FILE ...]    upload + embed inline in the description
 
 bk issue edit <id> [--title T] [--description D | --description-file F]
                    [--status S] [--priority N]
@@ -165,10 +185,12 @@ bk issue unassign <id>             clear assignee
 bk issue delete <id> [--yes]       move to Trash (restore with `bk trash`)
 
 bk issue comment <id> --body "..." | --body-file F | --body -
+                      [--reply-to COMMENT_ID]   threaded reply
+                      [--file FILE ...]         upload + embed inline
 bk issue comments <id>
 bk issue activity <id>             comments + change history
 
-bk issue attach <id> --file F      upload + attach a file
+bk issue attach <id> --file F      add to attachments list (sidebar; not the body)
 bk issue attachments <id>
 bk issue detach <issue-id> <attachment-id> [--yes]
 ```
@@ -254,7 +276,7 @@ bk user view <id|email>            show one user (filtered client-side)
 
 ### Activity / Analytics / Undo
 ```
-bk activity [--limit N] [--offset N]   global change feed
+bk activity [--limit N] [--cursor N]   global change feed (keyset-paginated)
 bk analytics [flags]                    workspace analytics (summary + filters)
 bk undo [--count N] [--yes]             roll back your last N writes (1-10)
 ```
@@ -308,11 +330,14 @@ with `bk project members <id>`, `bk member list`, and `bk whoami`.
 
 ## Pagination
 
-`bk issue list --limit N` and `bk project list --limit N` switch to envelope
-mode. In `--json` / `--yaml` output the envelope is
-`{ "data": [...], "next_cursor": <id|null> }`. In table output the next cursor is
-printed to stderr as `next page: --cursor=X`. Without `--limit`/`--cursor`, the
-flat array shape is preserved.
+The main list commands (`bk issue list`, `bk project list`, `bk task list`)
+return every matching item in one response — no pagination. `bk issue list`
+includes a server-side `total` in `--json` / `--yaml` output.
+
+Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`,
+`bk trash list`, and `bk super-admin errors list`. Their envelope is
+`{ "data": [...], "next_cursor": <id|null> }`, and in table output the next
+cursor is printed to stderr as `next page: --cursor=X` when more rows remain.
 
 ## Environment
 

@@ -15,10 +15,12 @@ export const AGENT_MANIFEST = {
     workspace_scoped_routes: '/api/workspaces/{workspace_slug_or_id}/...',
     auth: 'HTTP header — Authorization: Bearer bk_live_<token>',
     get_a_token: 'Mint at /dashboard/settings/tokens, or run: bk login',
-    list_envelope: '{ data: [...], next_cursor: number | null }',
+    list_envelope: '{ data: [...], next_cursor?: number | null, total?: number }',
     error_envelope: '{ error, code, suggestion?, details? }',
-    pagination: 'cursor-based via ?limit= and ?cursor=',
+    pagination: 'Most lists (issues, projects, tasks) return everything in one response (no cursor); issues add a total. Only the keyset feeds paginate via ?limit=&?cursor=: activity, trash, super-admin errors.',
     rich_text: 'Description/comment/body fields accept Markdown or HTML (stored as sanitized HTML); send real newlines, not literal \\n.',
+    file_uploads:
+      'To embed a file/image in a description or comment: (1) POST the file to /api/upload (multipart, field "file") to get back { url }; (2) reference that url in the body with Markdown — an image as ![name](url), any other file as [name](url). The server auto-renders uploaded urls inline (image preview, video/audio player, or download card). Max 100MB. CLI: bk issue|task|project create --file ./x and bk issue comment <id> --file ./x do both steps for you.',
   },
   discovery: {
     context: '/api/meta',
@@ -46,8 +48,9 @@ This is a rendered web page, but everything here is also available over an HTTP 
 - Full spec: GET /api/openapi.json  (OpenAPI 3.1; human-browsable at /api/docs)
 - CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
 - Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Breaking changes: /docs/api-changelog.md
-- Lists return { data, next_cursor }; errors return { error, code, suggestion?, details? }
+- Lists return { data } in one response (issues/projects/tasks aren't paginated; issues add total); only activity/trash/super-admin errors paginate via ?limit=&?cursor= with next_cursor. Errors return { error, code, suggestion?, details? }
 - Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n
+- Files/images: POST to /api/upload (multipart "file") -> { url }, then put the url in the body as ![name](url) (image) or [name](url) (any file); it renders inline. CLI: bk ... create --file ./x
 - Developer/agent guide: /AGENTS.md
 A structured version of this note is in the <script type="application/json" id="agent-manifest"> element on this page.
 `.trim()

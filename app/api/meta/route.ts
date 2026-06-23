@@ -79,6 +79,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
     conventions: {
       id: 'workspace-scoped number (the #N shown in the UI); address items by it',
       changelog: '/docs/api-changelog.md',
+      rich_text: 'description/comment/body fields accept Markdown or HTML, stored as sanitized HTML',
+      file_embeds:
+        'POST a file to /api/upload (multipart field "file") -> { url }, then reference it in a body as ![name](url) for images or [name](url) for any other file; uploaded urls render inline (preview/player/download card). Max 100MB.',
     },
     labels,
     projects: projects.map(publicProject),

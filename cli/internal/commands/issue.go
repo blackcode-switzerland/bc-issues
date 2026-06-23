@@ -47,10 +47,6 @@ type issueListFlags struct {
 	assignee  string
 	mine      bool
 	search    string
-	all       bool
-	limit     int
-	cursor    int
-	cursorSet bool
 }
 
 func newIssueListCmd() *cobra.Command {
@@ -59,7 +55,6 @@ func newIssueListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			f.cursorSet = cmd.Flags().Changed("cursor")
 			return runIssueList(cmd, f)
 		},
 	}
@@ -68,9 +63,6 @@ func newIssueListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me' (client-side)")
 	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user")
 	cmd.Flags().StringVar(&f.search, "search", "", "Full-text search on title/description (server-side)")
-	cmd.Flags().BoolVar(&f.all, "all", false, "Fetch every page (auto-paginate) instead of one page")
-	cmd.Flags().IntVar(&f.limit, "limit", 50, "Page size (1-200)")
-	cmd.Flags().IntVar(&f.cursor, "cursor", 0, "Cursor (last id seen) for pagination")
 	return cmd
 }
 
@@ -85,49 +77,26 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 	}
 	c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
 
-	opts := client.ListIssuesOpts{ProjectID: f.projectID, Limit: f.limit, Search: f.search}
-	if f.cursorSet {
-		opts.Cursor = &f.cursor
-	}
-
-	// Fetch a single page, or every page when --all is set. total is the
-	// server-side count for the current filter (ignores client-side filters).
-	var collected []client.Issue
-	var total *int
-	var nextCursor *int
-	for {
-		page, err := c.ListIssues(opts)
-		if err != nil {
-			return err
-		}
-		if total == nil {
-			total = page.Total
-		}
-		collected = append(collected, page.Data...)
-		nextCursor = page.NextCursor
-		if !f.all || page.NextCursor == nil {
-			break
-		}
-		opts.Cursor = page.NextCursor
-	}
-
-	filtered, err := filterIssues(c, cfg, collected, f)
+	// The issues endpoint returns every matching issue in one response (no
+	// pagination); total is the server-side count for the current filter (before
+	// client-side --status/--assignee/--mine filtering).
+	page, err := c.ListIssues(client.ListIssuesOpts{ProjectID: f.projectID, Search: f.search})
 	if err != nil {
 		return err
 	}
+	total := page.Total
 
-	showCursor := nextCursor
-	if f.all {
-		showCursor = nil // fully drained
+	filtered, err := filterIssues(c, cfg, page.Data, f)
+	if err != nil {
+		return err
 	}
 
 	out := any(filtered)
 	if format != output.FormatTable {
 		out = struct {
-			Data       []client.Issue `json:"data" yaml:"data"`
-			NextCursor *int           `json:"next_cursor" yaml:"next_cursor"`
-			Total      *int           `json:"total,omitempty" yaml:"total,omitempty"`
-		}{filtered, showCursor, total}
+			Data  []client.Issue `json:"data" yaml:"data"`
+			Total *int           `json:"total,omitempty" yaml:"total,omitempty"`
+		}{filtered, total}
 	}
 
 	return output.Render(format, out, func(w io.Writer) error {
@@ -145,9 +114,6 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 		}
 		if total != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "showing %d of %d\n", len(filtered), *total)
-		}
-		if showCursor != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "more available — use --cursor=%d or --all\n", *showCursor)
 		}
 		return nil
 	})
@@ -226,8 +192,8 @@ func filterIssues(c *client.Client, cfg *config.Config, issues []client.Issue, f
 
 func newIssueViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <#seq|id:globalid>",
-		Short: "Show a single issue (by the #seq shown in the app, or id:<globalid>)",
+		Use:   "view <id>",
+		Short: "Show a single issue by its #number (the id shown in the app)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -247,7 +213,7 @@ func newIssueViewCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "Issue:       %s  (global id %d)\n", issueRef(iss), iss.ID)
+				fmt.Fprintf(w, "Issue:       %s\n", issueRef(iss))
 				fmt.Fprintf(w, "Title:       %s\n", iss.Title)
 				fmt.Fprintf(w, "Project:     #%d %s\n", iss.ProjectID, derefOr(iss.ProjectName, ""))
 				fmt.Fprintf(w, "Status:      %s\n", iss.Status)
@@ -275,7 +241,7 @@ func newIssueCreateCmd() *cobra.Command {
 	var projectID, priority int
 	var title, description, descriptionFile, status, attach string
 	var assignee, task, startDate, dueDate string
-	var labels []string
+	var labels, files []string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create an issue",
@@ -296,6 +262,11 @@ func newIssueCreateCmd() *cobra.Command {
 				return err
 			}
 			c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
+
+			body, err = embedFiles(c, body, files)
+			if err != nil {
+				return err
+			}
 
 			req := client.CreateIssueRequest{
 				ProjectID:   projectID,
@@ -347,7 +318,7 @@ func newIssueCreateCmd() *cobra.Command {
 			}
 
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "created %s (global id %d) %q\n", issueRef(iss), iss.ID, iss.Title)
+				fmt.Fprintf(w, "created %s %q\n", issueRef(iss), iss.Title)
 				return nil
 			})
 		},
@@ -358,7 +329,8 @@ func newIssueCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
 	cmd.Flags().StringVar(&status, "status", "", "Status (backlog/todo/in_progress/done/cancelled)")
 	cmd.Flags().IntVar(&priority, "priority", 0, "Priority 1-5 (1=urgent)")
-	cmd.Flags().StringVar(&attach, "attach", "", "Path to a file to attach")
+	cmd.Flags().StringVar(&attach, "attach", "", "Path to a file to add to the issue's attachments list (separate from the body; --file embeds inline instead)")
+	AddFileFlag(cmd, &files)
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, or 'me')")
 	cmd.Flags().StringVar(&task, "task", "", "Task id")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
@@ -372,7 +344,7 @@ func newIssueEditCmd() *cobra.Command {
 	var priority int
 	var assignee, task, startDate, dueDate string
 	cmd := &cobra.Command{
-		Use:   "edit <#seq|id:globalid>",
+		Use:   "edit <id>",
 		Short: "Edit an issue (status, title, priority, description, assignee, task, dates)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -456,7 +428,7 @@ func newIssueEditCmd() *cobra.Command {
 func newIssueDeleteCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <#seq|id:globalid>",
+		Use:   "delete <id>",
 		Short: "Delete an issue (project owners/admins only)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -474,7 +446,7 @@ func newIssueDeleteCmd() *cobra.Command {
 			if err := c.DeleteIssue(id); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "deleted issue %s (global id %d)\n", strings.TrimPrefix(args[0], "#"), id)
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted issue #%d\n", id)
 			return nil
 		},
 	}
@@ -484,7 +456,7 @@ func newIssueDeleteCmd() *cobra.Command {
 
 func newIssueAssignCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "assign <#seq|id:globalid> <user>",
+		Use:   "assign <id> <user>",
 		Short: "Assign an issue (user is id, email, name, or 'me')",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -540,7 +512,7 @@ func newIssueAssignCmd() *cobra.Command {
 
 func newIssueUnassignCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unassign <#seq|id:globalid>",
+		Use:   "unassign <id>",
 		Short: "Clear the assignee on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -570,17 +542,16 @@ func newIssueUnassignCmd() *cobra.Command {
 
 func newIssueCommentCmd() *cobra.Command {
 	var body, bodyFile string
+	var replyTo int
+	var files []string
 	cmd := &cobra.Command{
-		Use:   "comment <#seq|id:globalid>",
-		Short: "Post a comment on an issue (use --body \"-\" for stdin)",
+		Use:   "comment <id>",
+		Short: "Post a comment on an issue (use --body \"-\" for stdin; --reply-to to reply; --file to attach)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content, err := ReadBody(body, bodyFile)
 			if err != nil {
 				return err
-			}
-			if strings.TrimSpace(content) == "" {
-				return fmt.Errorf("comment body is empty")
 			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -594,7 +565,14 @@ func newIssueCommentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cm, err := c.CreateComment(id, client.CreateCommentRequest{Content: content})
+			content, err = embedFiles(c, content, files)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(content) == "" {
+				return fmt.Errorf("comment body is empty (provide --body or --file)")
+			}
+			cm, err := c.CreateComment(id, client.CreateCommentRequest{Content: content, ParentCommentID: replyTo})
 			if err != nil {
 				return err
 			}
@@ -606,6 +584,8 @@ func newIssueCommentCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&body, "body", "", "Comment text (use \"-\" for stdin)")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from a file")
+	cmd.Flags().IntVar(&replyTo, "reply-to", 0, "Reply under an existing comment id (creates a threaded reply)")
+	AddFileFlag(cmd, &files)
 	return cmd
 }
 
@@ -748,7 +728,7 @@ func newIssueUnwatchCmd() *cobra.Command {
 func newIssueAttachCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "attach <#seq|id:globalid>",
+		Use:   "attach <id>",
 		Short: "Upload and attach a file to an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -788,7 +768,7 @@ func newIssueAttachCmd() *cobra.Command {
 func newIssueDetachCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "detach <#seq|id:globalid> <attachment-id>",
+		Use:   "detach <id> <attachment-id>",
 		Short: "Delete an attachment from an issue",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -820,7 +800,7 @@ func newIssueDetachCmd() *cobra.Command {
 
 func newIssueCommentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <#seq|id:globalid>",
+		Use:   "comments <id>",
 		Short: "List comments on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -858,7 +838,7 @@ func newIssueCommentsCmd() *cobra.Command {
 
 func newIssueActivityCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "activity <#seq|id:globalid>",
+		Use:   "activity <id>",
 		Short: "Show activity (comments + changes) on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -904,7 +884,7 @@ func newIssueActivityCmd() *cobra.Command {
 
 func newIssueAttachmentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "attachments <#seq|id:globalid>",
+		Use:   "attachments <id>",
 		Short: "List attachments on an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -952,16 +932,10 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// resolveIssueArg turns a user-facing issue reference into the global issue id
-// the API addresses by. Accepted forms:
-//
-//	234  or  #234   the workspace-facing number shown in the UI/CLI (seq) — default
-//	id:441          the global issue id (escape hatch / back-compat)
-//
-// seq is resolved to the global id via the active (or --ws) workspace, so the
-// number a human reads anywhere is the number the CLI takes.
-// The issue id is the workspace #number shown everywhere (a leading "#" is
-// accepted). The API addresses by it directly, so no resolution is needed.
+// resolveIssueArg parses a user-facing issue reference into its id. The id is the
+// workspace #number shown everywhere in the app (a leading "#" is accepted, e.g.
+// "234" or "#234"). The API addresses items by this number directly, so there is
+// no lookup — the number a human reads is the number the CLI and API take.
 func resolveIssueArg(_ *client.Client, ref string) (int, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {

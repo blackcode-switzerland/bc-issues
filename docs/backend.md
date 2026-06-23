@@ -283,6 +283,18 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   every surface benefits. Markdown is converted (and a common agent mistake —
   literal `\n` instead of real newlines — is tolerated); existing HTML (web
   editor) is passed through and sanitized again at render by the display layer.
+- **Embedding uploaded files in rich text.** `toRichTextHtml` also runs
+  `upgradeUploadedMedia`: a reference to a file uploaded through our own pipeline
+  (Vercel Blob, or `/uploads` in dev) — written as a Markdown image `![](url)` or
+  a link `[name](url)` — is rewritten into the TipTap node the editor uses (an
+  `<img>`, or a `<div data-type="file-attachment" data-file-url data-filename
+  data-content-type>` for video/audio/other). Media type is inferred from the
+  url's extension. This is what lets the CLI/API embed files inline with plain
+  Markdown — they never construct app-specific markup. **Only our upload-origin
+  urls are upgraded**; external links/images are left untouched. The render-layer
+  DOMPurify whitelists the same `data-*` attributes, and the server sanitizer
+  allowlist permits the `div` node, so the embed survives end-to-end. Covered by
+  `lib/rich-text.test.ts`.
 
 ### Discovery (for agents & tooling)
 

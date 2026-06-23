@@ -8,6 +8,12 @@ It took ~10 steps and a fallback to raw `curl` to answer, because of the gaps be
 > task is now a one-liner: `bk issue list --ws 3 --search CRM` (or, once the API
 > change is deployed, `bk issue view 234 --ws 3`). This file is kept as a record of
 > what was wrong and how it was addressed.
+>
+> **⚠️ Superseded (2026-06-22).** Some mechanisms named below — the `?seq=` list
+> filter, `GetIssueBySeq`, and the `id:<globalid>` / `id:441` escape hatch — were
+> removed by the single-id refactor. Items are now addressed only by their
+> workspace `#number` (which *is* the `id`); there is no global id. This file is
+> historical; for current behavior see `docs/api-changelog.md`.
 
 ## TL;DR of the struggle
 The issue exists and is perfectly fine in the web UI (`#234`, the "CRM — Contacts

@@ -105,6 +105,7 @@ func newTaskViewCmd() *cobra.Command {
 func newTaskCreateCmd() *cobra.Command {
 	var projectID int
 	var name, description, descriptionFile, dueDate string
+	var files []string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a task",
@@ -121,6 +122,10 @@ func newTaskCreateCmd() *cobra.Command {
 				return err
 			}
 			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			body, err = embedFiles(c, body, files)
 			if err != nil {
 				return err
 			}
@@ -147,6 +152,7 @@ func newTaskCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Description (\"-\" for stdin)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
+	AddFileFlag(cmd, &files)
 	return cmd
 }
 
