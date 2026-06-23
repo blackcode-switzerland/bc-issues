@@ -5,9 +5,9 @@ import { put } from '@vercel/blob'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '@/lib/upload'
 
 const LOCAL_UPLOAD_DIR = 'public/uploads'
-const MAX_SIZE = 50 * 1024 * 1024 // 50MB
 
 async function saveLocally(file: File, baseName: string): Promise<{ url: string }> {
   const uploadsDir = resolve(process.cwd(), LOCAL_UPLOAD_DIR)
@@ -32,7 +32,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const file = formData.get('file') as File | null
 
   if (!file) throw Errors.badRequest('no_file', 'Include a file in the form data under the "file" field')
-  if (file.size > MAX_SIZE) throw Errors.badRequest('file_too_large', 'Maximum file size is 50MB')
+  if (file.size > MAX_UPLOAD_BYTES) throw Errors.badRequest('file_too_large', `Maximum file size is ${MAX_UPLOAD_LABEL}`)
   // Block SVG due to XSS risk; allow everything else.
   if (file.type === 'image/svg+xml') {
     throw Errors.badRequest('file_type_not_allowed', 'SVG files are not allowed for security reasons')
@@ -71,7 +71,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
   return NextResponse.json({
     message: 'Upload API endpoint',
     usage: 'POST with multipart/form-data containing a "file" field',
-    maxSize: '50MB',
+    maxSize: MAX_UPLOAD_LABEL,
+    // When true, large files should be uploaded client-direct via /api/upload/blob
+    // (bypasses the serverless body limit). When false (local dev), use this route.
+    blob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     note: 'All content types accepted except image/svg+xml (blocked for XSS safety)',
   })
 })

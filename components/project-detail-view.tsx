@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
+import { uploadFile } from '@/lib/upload'
 import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { ProjectIcon } from './project-icon'
@@ -453,14 +454,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                     variant="seamless"
                     minHeight="80px"
                     mentionItems={mentionItems}
-                    onFileUpload={async (file) => {
-                      const fd = new FormData()
-                      fd.append('file', file)
-                      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-                      if (!res.ok) throw new Error('upload failed')
-                      const j = await res.json()
-                      return j.url
-                    }}
+                    onFileUpload={uploadFile}
                   />
                   <div className="mt-2 flex justify-end gap-2">
                     <button
@@ -581,14 +575,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
               variant="seamless"
               minHeight="100px"
               mentionItems={mentionItems}
-              onFileUpload={async (file) => {
-                const fd = new FormData()
-                fd.append('file', file)
-                const res = await fetch('/api/upload', { method: 'POST', body: fd })
-                if (!res.ok) throw new Error('upload failed')
-                const j = await res.json()
-                return j.url
-              }}
+              onFileUpload={uploadFile}
             />
 
             {/* Tasks */}

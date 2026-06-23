@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { CornerDownRight, Edit3, MessageSquare, Reply, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { uploadFile } from '@/lib/upload'
 import { RichTextDisplay, RichTextEditor } from './rich-text-editor'
 import type { MentionItem } from './rich-text-editor'
 import { MemberAvatar } from '@/components/ui/member-avatar'
@@ -128,14 +129,7 @@ export function CommentSection({
           hideToolbar
           mentionItems={mentionItems}
           minHeight="72px"
-          onFileUpload={async (file) => {
-            const fd = new FormData()
-            fd.append('file', file)
-            const res = await fetch('/api/upload', { method: 'POST', body: fd })
-            if (!res.ok) throw new Error('upload failed')
-            const j = await res.json()
-            return j.url
-          }}
+          onFileUpload={uploadFile}
         />
         <div className="flex items-center justify-end border-t border-border px-3 py-2">
           <button
@@ -349,14 +343,7 @@ function CommentRow({
                 hideToolbar
                 mentionItems={mentionItems}
                 minHeight="60px"
-                onFileUpload={async (file) => {
-                  const fd = new FormData()
-                  fd.append('file', file)
-                  const res = await fetch('/api/upload', { method: 'POST', body: fd })
-                  if (!res.ok) throw new Error('upload failed')
-                  const j = await res.json()
-                  return j.url
-                }}
+                onFileUpload={uploadFile}
               />
               <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
                 <button
@@ -476,14 +463,7 @@ function ReplyComposer({
             hideToolbar
             mentionItems={mentionItems}
             minHeight="56px"
-            onFileUpload={async (file) => {
-              const fd = new FormData()
-              fd.append('file', file)
-              const res = await fetch('/api/upload', { method: 'POST', body: fd })
-              if (!res.ok) throw new Error('upload failed')
-              const j = await res.json()
-              return j.url
-            }}
+            onFileUpload={uploadFile}
           />
           <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
             <button

@@ -10,7 +10,7 @@ import {
   ReactNodeViewRenderer,
 } from '@tiptap/react'
 import { Node, mergeAttributes, Extension } from '@tiptap/core'
-import { TextSelection } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import Suggestion from '@tiptap/suggestion'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
@@ -34,6 +34,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { ImageLightbox } from '@/components/image-lightbox'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import {
   Bold,
@@ -57,6 +58,8 @@ import {
   FileText,
   FileVideo,
   FileAudio,
+  Loader2,
+  Maximize2,
   X,
 } from 'lucide-react'
 
@@ -224,56 +227,66 @@ function FileAttachmentView({ node, deleteNode, editor, selected }: FileAttachme
 
   const ringClass = selected ? 'ring-2 ring-primary' : ''
 
+  // Shared icon-button style so file actions match the media (image) overlay.
+  const actionBtn =
+    'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground'
+
+  const viewBtn = isPdf ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" title="View" className={actionBtn} onClick={(e) => e.stopPropagation()}>
+      <Eye size={14} />
+    </a>
+  ) : null
+  const downloadBtn = (
+    <a href={href} download={filename} title="Download" className={actionBtn} onClick={(e) => e.stopPropagation()}>
+      <Download size={14} />
+    </a>
+  )
+  const removeBtn = editor.isEditable ? (
+    <button
+      type="button"
+      onMouseDown={(e) => {
+        e.preventDefault()
+        deleteNode()
+      }}
+      title="Remove attachment"
+      className={actionBtn}
+    >
+      <X size={14} />
+    </button>
+  ) : null
+  const actions = (
+    <div className="flex shrink-0 items-center gap-1">
+      {viewBtn}
+      {downloadBtn}
+      {removeBtn}
+    </div>
+  )
+
   return (
     <NodeViewWrapper>
       <div
         className={`group relative my-2 overflow-hidden rounded-lg border border-border bg-secondary/20 ${ringClass}`}
         contentEditable={false}
       >
-        {editor.isEditable && (
-          <button
-            onMouseDown={(e) => {
-              e.preventDefault()
-              deleteNode()
-            }}
-            title="Remove attachment"
-            className="absolute right-1 top-1 z-10 hidden rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground group-hover:flex"
-            type="button"
-          >
-            <X size={12} />
-          </button>
-        )}
-
         {isVideo ? (
           <div>
             <video src={href} controls className="max-h-72 w-full bg-black" />
             <div className="flex items-center gap-2 border-t border-border px-3 py-1.5">
               <FileVideo size={13} className="shrink-0 text-muted-foreground" />
               <span className="flex-1 truncate text-[12px] text-muted-foreground">{filename}</span>
-              <a
-                href={href}
-                download={filename}
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Download size={12} /> Download
-              </a>
+              {actions}
             </div>
           </div>
         ) : isAudio ? (
-          <div className="flex items-center gap-2.5 px-3 py-2.5">
-            <FileAudio size={16} className="shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-[13px]">{filename}</span>
-            <audio src={href} controls className="h-7 w-44 shrink-0" />
-            <a
-              href={href}
-              download={filename}
-              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              title="Download"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Download size={14} />
-            </a>
+          <div>
+            <div className="p-2">
+              <audio src={href} controls className="w-full" />
+            </div>
+            <div className="flex items-center gap-2 border-t border-border px-3 py-1.5">
+              <FileAudio size={13} className="shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate text-[12px] text-muted-foreground">{filename}</span>
+              {actions}
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -283,25 +296,7 @@ function FileAttachmentView({ node, deleteNode, editor, selected }: FileAttachme
               <Paperclip size={16} className="shrink-0 text-muted-foreground" />
             )}
             <span className="min-w-0 flex-1 truncate text-[13px]">{filename}</span>
-            {isPdf && (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Eye size={12} /> View
-              </a>
-            )}
-            <a
-              href={href}
-              download={filename}
-              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Download size={12} /> Download
-            </a>
+            {actions}
           </div>
         )}
       </div>
@@ -347,6 +342,127 @@ function buildFileAttachment() {
     addNodeView() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return ReactNodeViewRenderer(FileAttachmentView as React.FC<any>)
+    },
+  })
+}
+
+/* ------------------------- upload placeholder --------------------------- */
+// A transient inline block shown while a file uploads. It's inserted at the drop
+// point immediately and replaced with the real image/attachment on success (or
+// removed on failure). Never persisted: parseHTML matches nothing, so even if a
+// blur saves mid-upload, it's dropped on reload.
+
+function UploadPlaceholderView({ node }: { node: { attrs: { filename: string } } }) {
+  return (
+    <NodeViewWrapper>
+      <div
+        className="my-2 flex items-center gap-2.5 rounded-lg border border-dashed border-border bg-secondary/20 px-3 py-2.5"
+        contentEditable={false}
+      >
+        <Loader2 size={15} className="shrink-0 animate-spin text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
+          Uploading {node.attrs.filename}…
+        </span>
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
+function buildUploadPlaceholder() {
+  return Node.create({
+    name: 'uploadPlaceholder',
+    group: 'block',
+    atom: true,
+    selectable: false,
+    draggable: false,
+    addAttributes() {
+      return {
+        uploadId: { default: '' },
+        filename: { default: 'file' },
+      }
+    },
+    parseHTML() {
+      return [] // transient — never re-hydrated from saved HTML
+    },
+    renderHTML() {
+      return ['div', { 'data-type': 'upload-placeholder' }]
+    },
+    addNodeView() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ReactNodeViewRenderer(UploadPlaceholderView as React.FC<any>)
+    },
+  })
+}
+
+/* ------------------------------- image ---------------------------------- */
+// Image with a hover overlay (fullscreen, download, remove) in the editor, plus
+// click-to-zoom everywhere via the shared lightbox.
+
+interface ImageNodeViewProps {
+  node: { attrs: { src: string; alt?: string | null } }
+  deleteNode: () => void
+  editor: { isEditable: boolean }
+  selected: boolean
+}
+
+function ImageNodeView({ node, deleteNode, editor, selected }: ImageNodeViewProps) {
+  const { src, alt } = node.attrs
+  const [zoom, setZoom] = useState(false)
+  const ring = selected ? 'ring-2 ring-primary' : ''
+  const filename = alt || 'Image'
+  // Same icon-button style as the file/video/audio cards.
+  const actionBtn =
+    'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground'
+
+  return (
+    <NodeViewWrapper>
+      <div
+        className={`group relative my-2 overflow-hidden rounded-lg border border-border bg-secondary/20 ${ring}`}
+        contentEditable={false}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt ?? ''}
+          className="max-h-96 w-full cursor-zoom-in bg-black object-contain !m-0"
+          onClick={() => setZoom(true)}
+        />
+        <div className="flex items-center gap-2 border-t border-border px-3 py-1.5">
+          <ImageIcon size={13} className="shrink-0 text-muted-foreground" />
+          <span className="flex-1 truncate text-[12px] text-muted-foreground">{filename}</span>
+          <div className="flex shrink-0 items-center gap-1">
+            <button type="button" onClick={() => setZoom(true)} title="Full screen" className={actionBtn}>
+              <Maximize2 size={14} />
+            </button>
+            <a href={src} download={filename} title="Download" className={actionBtn} onClick={(e) => e.stopPropagation()}>
+              <Download size={14} />
+            </a>
+            {editor.isEditable ? (
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  deleteNode()
+                }}
+                title="Remove image"
+                className={actionBtn}
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {zoom ? <ImageLightbox src={src} alt={alt ?? undefined} onClose={() => setZoom(false)} /> : null}
+    </NodeViewWrapper>
+  )
+}
+
+function buildImage() {
+  return Image.extend({
+    addNodeView() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ReactNodeViewRenderer(ImageNodeView as React.FC<any>)
     },
   })
 }
@@ -672,7 +788,11 @@ function SelectionMenu({ editor, onSetLink }: { editor: Editor; onSetLink: () =>
     <BubbleMenu
       editor={editor}
       tippyOptions={{ duration: 120, placement: 'top', maxWidth: 'none' }}
-      shouldShow={({ editor: ed, from, to }) => from !== to && !ed.isActive('image')}
+      shouldShow={({ state, from, to }) =>
+        // Only for real text selections — never when an atom node (image, file,
+        // video/audio attachment, upload placeholder) is selected.
+        from !== to && !(state.selection as { node?: unknown }).node
+      }
     >
       <div className="flex items-center gap-0 rounded-lg border border-border bg-popover px-1 py-1 shadow-xl">
         <MenuButton
@@ -831,16 +951,70 @@ export function RichTextEditor({
 
   const [slashCommandExt] = useState(() => buildSlashCommand(slashCallbacksRef))
   const [fileAttachmentExt] = useState(() => buildFileAttachment())
+  const [uploadPlaceholderExt] = useState(() => buildUploadPlaceholder())
 
-  const uploadAndInsert = useCallback(
-    async (file: File, insertFn: (url: string) => void) => {
+  // Insert an inline "uploading…" placeholder immediately, upload in the
+  // background, then swap it for the real image/attachment (or remove it on
+  // failure). A toast mirrors the outcome. Works off the ProseMirror view so the
+  // same path serves paste, drop, slash, and the toolbar file picker.
+  const uploadWithPlaceholder = useCallback(
+    (view: EditorView, file: File, atPos?: number) => {
       if (!onFileUpload) return
-      try {
-        const url = await onFileUpload(file)
-        insertFn(url)
-      } catch {
-        toast.error('Upload failed')
+      const isImage = file.type.startsWith('image/')
+      const label = file.name || 'file'
+      const uploadId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${performance.now()}`
+
+      const schema = view.state.schema
+      const placeholder = schema.nodes.uploadPlaceholder.create({ uploadId, filename: label })
+      const insertTr =
+        typeof atPos === 'number'
+          ? view.state.tr.insert(atPos, placeholder)
+          : view.state.tr.replaceSelectionWith(placeholder)
+      view.dispatch(insertTr)
+
+      // Locate the placeholder by id in the *current* doc (positions may shift).
+      const findPlaceholder = (): number => {
+        let pos = -1
+        view.state.doc.descendants((n, p) => {
+          if (pos === -1 && n.type.name === 'uploadPlaceholder' && n.attrs.uploadId === uploadId) pos = p
+          return pos === -1
+        })
+        return pos
       }
+
+      const toastId = toast.loading(`Uploading ${label}…`)
+      onFileUpload(file)
+        .then((url) => {
+          const pos = findPlaceholder()
+          if (pos === -1) return
+          const ph = view.state.doc.nodeAt(pos)
+          if (!ph) return
+          const real = isImage
+            ? schema.nodes.image.create({ src: url, alt: file.name })
+            : schema.nodes.fileAttachment.create({ href: url, filename: file.name, contentType: file.type })
+          let tr = view.state.tr.replaceWith(pos, pos + ph.nodeSize, real)
+          // Keep a trailing paragraph after a file card so the cursor has somewhere to go.
+          if (!isImage) {
+            const after = pos + real.nodeSize
+            const next = tr.doc.nodeAt(after)
+            if (!next) tr = tr.insert(after, schema.nodes.paragraph.create())
+          }
+          view.dispatch(tr)
+          toast.success(`Uploaded ${label}`, { id: toastId })
+        })
+        .catch((err: unknown) => {
+          const pos = findPlaceholder()
+          if (pos !== -1) {
+            const ph = view.state.doc.nodeAt(pos)
+            if (ph) view.dispatch(view.state.tr.delete(pos, pos + ph.nodeSize))
+          }
+          // Surface the real reason (e.g. "too large") instead of a generic failure.
+          const reason = err instanceof Error && err.message ? err.message : `Couldn't upload ${label}`
+          toast.error(reason, { id: toastId })
+        })
     },
     [onFileUpload]
   )
@@ -851,7 +1025,7 @@ export function RichTextEditor({
       Underline,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Image.configure({
+      buildImage().configure({
         HTMLAttributes: {
           class: 'max-w-full rounded-lg cursor-pointer transition-all',
         },
@@ -864,6 +1038,7 @@ export function RichTextEditor({
       ...(mentionsEnabled ? [buildMention(mentionItemsRef)] : []),
       slashCommandExt,
       fileAttachmentExt,
+      uploadPlaceholderExt,
     ],
     content,
     editable,
@@ -888,31 +1063,7 @@ export function RichTextEditor({
             const file = item.getAsFile()
             if (!file) continue
             event.preventDefault()
-            if (file.type.startsWith('image/')) {
-              uploadAndInsert(file, (url) => {
-                view.dispatch(
-                  view.state.tr.replaceSelectionWith(
-                    view.state.schema.nodes.image.create({ src: url })
-                  )
-                )
-              })
-            } else {
-              uploadAndInsert(file, (url) => {
-                const node = view.state.schema.nodes.fileAttachment?.create({
-                  href: url,
-                  filename: file.name,
-                  contentType: file.type,
-                })
-                if (node) {
-                  const para = view.state.schema.nodes.paragraph.create()
-                  let tr = view.state.tr.replaceSelectionWith(node)
-                  const afterNode = tr.selection.to
-                  tr = tr.insert(afterNode, para)
-                  try { view.dispatch(tr.setSelection(TextSelection.create(tr.doc, afterNode + 1))) }
-                  catch { view.dispatch(tr) }
-                }
-              })
-            }
+            uploadWithPlaceholder(view, file)
             return true
           }
         }
@@ -927,38 +1078,7 @@ export function RichTextEditor({
         for (let i = 0; i < files.length; i++) {
           const file = files[i]
           const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
-          if (file.type.startsWith('image/')) {
-            uploadAndInsert(file, (url) => {
-              const node = view.state.schema.nodes.image.create({ src: url })
-              if (coordinates) {
-                view.dispatch(view.state.tr.insert(coordinates.pos, node))
-              } else {
-                view.dispatch(view.state.tr.replaceSelectionWith(node))
-              }
-            })
-          } else {
-            uploadAndInsert(file, (url) => {
-              const node = view.state.schema.nodes.fileAttachment?.create({
-                href: url,
-                filename: file.name,
-                contentType: file.type,
-              })
-              if (!node) return
-              const para = view.state.schema.nodes.paragraph.create()
-              let tr: ReturnType<typeof view.state.tr.insert>
-              let afterNode: number
-              if (coordinates) {
-                tr = view.state.tr.insert(coordinates.pos, node)
-                afterNode = coordinates.pos + node.nodeSize
-              } else {
-                tr = view.state.tr.replaceSelectionWith(node)
-                afterNode = tr.selection.to
-              }
-              tr = tr.insert(afterNode, para)
-              try { tr = tr.setSelection(TextSelection.create(tr.doc, afterNode + 1)) } catch {}
-              view.dispatch(tr)
-            })
-          }
+          uploadWithPlaceholder(view, file, coordinates?.pos)
         }
         return true
       },
@@ -1012,25 +1132,13 @@ export function RichTextEditor({
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files
       if (!files || files.length === 0 || !onFileUpload || !editor) return
+      editor.commands.focus()
       for (const file of Array.from(files)) {
-        if (file.type.startsWith('image/')) {
-          uploadAndInsert(file, (url) => {
-            editor.chain().focus().setImage({ src: url }).run()
-          })
-        } else {
-          uploadAndInsert(file, (url) => {
-            editor.chain()
-              .insertContent([
-                { type: 'fileAttachment', attrs: { href: url, filename: file.name, contentType: file.type } },
-                { type: 'paragraph' },
-              ])
-              .run()
-          })
-        }
+        uploadWithPlaceholder(editor.view, file)
       }
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
-    [editor, onFileUpload, uploadAndInsert]
+    [editor, onFileUpload, uploadWithPlaceholder]
   )
 
   // Keep slash command callbacks in sync
@@ -1094,24 +1202,12 @@ export function RichTextEditor({
       if (!onFileUpload || !editor || e.defaultPrevented) return
       e.preventDefault()
       const files = Array.from(e.dataTransfer?.files ?? [])
+      editor.commands.focus()
       for (const file of files) {
-        if (file.type.startsWith('image/')) {
-          uploadAndInsert(file, (url) => {
-            editor.chain().focus().setImage({ src: url }).run()
-          })
-        } else {
-          uploadAndInsert(file, (url) => {
-            editor.chain()
-              .insertContent([
-                { type: 'fileAttachment', attrs: { href: url, filename: file.name, contentType: file.type } },
-                { type: 'paragraph' },
-              ])
-              .run()
-          })
-        }
+        uploadWithPlaceholder(editor.view, file)
       }
     },
-    [editor, hideOverlay, onFileUpload, uploadAndInsert]
+    [editor, hideOverlay, onFileUpload, uploadWithPlaceholder]
   )
 
   if (!editor) {

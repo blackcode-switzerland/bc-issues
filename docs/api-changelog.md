@@ -8,6 +8,25 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-06-23 — Uploads up to 100 MB on every client
+
+- The file-size cap is now **100 MB** (was 50 MB), defined once in `lib/upload.ts`.
+- **Large files no longer go through the serverless function** (which caps request
+  bodies at ~4.5 MB). All clients upload **client-direct to Vercel Blob** in
+  production:
+  - **Web / JS** (`@vercel/blob/client`) and the **`bk` CLI** do a token
+    handshake at `POST /api/upload/blob`, then PUT straight to Blob storage.
+  - **Direct REST consumers** can do the same: `POST /api/upload/blob` with
+    `{ "type": "blob.generate-client-token", "payload": { "pathname", "callbackUrl",
+    "clientPayload", "multipart": false } }` (Bearer auth) → returns `{ clientToken }`,
+    then PUT the bytes to `https://blob.vercel-storage.com/{pathname}` with
+    `authorization: Bearer <clientToken>`, `x-api-version: 7`, `x-content-type`,
+    `x-add-random-suffix: 1`.
+- **Local dev** (no Blob store) still uses multipart `POST /api/upload`.
+- Clients pick the path from `GET /api/upload` → `{ blob: boolean }`.
+
+---
+
 ## 2026-06-22 — One id per item (workspace `seq`); global id removed
 
 **What changed.** Projects, tasks, and issues are now addressed and returned by

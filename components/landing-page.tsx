@@ -78,7 +78,7 @@ const FEATURES: Feature[] = [
     icon: Boxes,
     title: 'File attachments',
     description:
-      'Paste, drag, or attach any file type (SVG excluded for safety) up to 50 MB. Stored on Vercel Blob in production, on the local disk in development.',
+      'Paste, drag, or attach any file type (SVG excluded for safety) up to 100 MB. Stored on Vercel Blob in production, on the local disk in development.',
     status: 'live',
   },
   {

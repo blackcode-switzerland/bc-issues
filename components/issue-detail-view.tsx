@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
 import { toast } from 'sonner'
+import { uploadFile } from '@/lib/upload'
 import { Bell, BellOff, ChevronRight, Plus, Tag, Target, Trash2, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useActiveWorkspace } from './listings/use-active-workspace'
@@ -477,14 +478,7 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
               variant="seamless"
               mentionItems={mentionItems}
               minHeight="120px"
-              onFileUpload={async (file) => {
-                const fd = new FormData()
-                fd.append('file', file)
-                const res = await fetch('/api/upload', { method: 'POST', body: fd })
-                if (!res.ok) throw new Error('upload failed')
-                const j = await res.json()
-                return j.url
-              }}
+              onFileUpload={uploadFile}
             />
 
             {/* Activity */}

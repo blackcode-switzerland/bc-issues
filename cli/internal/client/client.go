@@ -672,6 +672,30 @@ func (c *Client) UploadFile(filePath string) (*UploadResponse, error) {
 		ctype = strings.TrimSpace(ctype[:i])
 	}
 
+	// When the server has a Blob store (production), upload client-direct so we
+	// aren't capped by the serverless ~4.5MB request-body limit. Otherwise
+	// (local dev) POST multipart through the function.
+	if c.blobEnabled() {
+		return c.uploadViaBlob(f, base, ctype)
+	}
+	return c.uploadMultipart(f, base, ctype)
+}
+
+func (c *Client) blobEnabled() bool {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/upload", nil)
+	if err != nil {
+		return false
+	}
+	var meta struct {
+		Blob bool `json:"blob"`
+	}
+	if err := c.do(req, &meta); err != nil {
+		return false
+	}
+	return meta.Blob
+}
+
+func (c *Client) uploadMultipart(f *os.File, base, ctype string) (*UploadResponse, error) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 	h := make(textproto.MIMEHeader)
@@ -699,6 +723,79 @@ func (c *Client) UploadFile(filePath string) (*UploadResponse, error) {
 		return nil, err
 	}
 	return &up, nil
+}
+
+// uploadViaBlob mirrors the @vercel/blob client-upload flow for non-JS clients:
+// (1) ask our /api/upload/blob handshake for a short-lived client token, then
+// (2) PUT the bytes straight to Blob storage. The PUT headers + api-version
+// track @vercel/blob's wire protocol (pinned to v7); keep in sync if that bumps.
+func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse, error) {
+	// 1. Token handshake (authenticated via c.do).
+	handshake := map[string]any{
+		"type": "blob.generate-client-token",
+		"payload": map[string]any{
+			"pathname":      base,
+			"callbackUrl":   c.BaseURL + "/api/upload/blob",
+			"clientPayload": fmt.Sprintf(`{"contentType":%q}`, ctype),
+			"multipart":     false,
+		},
+	}
+	body, err := json.Marshal(handshake)
+	if err != nil {
+		return nil, err
+	}
+	hreq, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/upload/blob", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	hreq.Header.Set("Content-Type", "application/json")
+	var hs struct {
+		ClientToken string `json:"clientToken"`
+	}
+	if err := c.do(hreq, &hs); err != nil {
+		return nil, err
+	}
+	if hs.ClientToken == "" {
+		return nil, fmt.Errorf("upload token request returned no token")
+	}
+
+	// 2. Direct PUT to Vercel Blob.
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	putURL := "https://blob.vercel-storage.com/" + url.PathEscape(base)
+	preq, err := http.NewRequest(http.MethodPut, putURL, f)
+	if err != nil {
+		return nil, err
+	}
+	preq.ContentLength = fi.Size()
+	preq.Header.Set("authorization", "Bearer "+hs.ClientToken)
+	preq.Header.Set("x-api-version", "7")
+	preq.Header.Set("x-content-type", ctype)
+	preq.Header.Set("x-add-random-suffix", "1")
+
+	resp, err := http.DefaultClient.Do(preq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("blob upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	var blobResp struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&blobResp); err != nil {
+		return nil, err
+	}
+	return &UploadResponse{
+		URL:         blobResp.URL,
+		Filename:    base,
+		Size:        int(fi.Size()),
+		ContentType: ctype,
+	}, nil
 }
 
 func (c *Client) AttachToIssue(issueID int, up *UploadResponse) (*Attachment, error) {

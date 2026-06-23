@@ -88,7 +88,7 @@ Anything that breaks one of these contracts:
 4. **A required field** on a request the CLI sends. If the server now requires `priority` on `POST /api/issues`, the CLI's `CreateIssueRequest` must include it and the command must accept a flag.
 5. **A field's JSON type.** Go decodes strictly — turning an `int` into a `string` will fail at decode time.
 6. **The auth scheme.** If you change the header name, the token prefix, or the validation logic, `client.do()` and possibly `login.go` need to follow.
-7. **The upload contract.** The CLI uploads via `POST /api/upload` as multipart with the field name `file`, then reads back `{url, filename, size, contentType}`. Any change to that round-trip needs a CLI change.
+7. **The upload contract.** The CLI's `UploadFile` checks `GET /api/upload` (`{blob}`): with a Blob store it uploads **client-direct** (token handshake at `POST /api/upload/blob`, then a single PUT straight to `blob.vercel-storage.com`, mirroring `@vercel/blob`'s wire protocol — pinned to `x-api-version: 7`); otherwise it POSTs multipart (`file` field) to `/api/upload`. Both read back `{url, filename, size, contentType}`. If the Blob wire protocol bumps (api-version/headers), `uploadViaBlob` in `client.go` must follow. Size cap (100 MB) lives in `lib/upload.ts`.
 
 ---
 

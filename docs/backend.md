@@ -436,7 +436,8 @@ GET/POST /api/tokens                             list / mint API tokens
 DELETE   /api/tokens/{id}                         revoke
 POST     /api/cli/authorize                       mint a token for the CLI
 
-POST     /api/upload                              file upload (Blob or local)
+POST     /api/upload                              multipart file upload (local dev / small files)
+POST     /api/upload/blob                          Vercel Blob client-upload token handshake (prod; large files)
 GET/POST /api/undo                                transaction history / rollback
 GET      /api/status                              public health probe
 GET      /api/status/errors , /errors/{id}        error log (owner-gated detail)
@@ -532,12 +533,24 @@ inbox — don't write to `inbox_messages` directly from a route.
 `old_data`, inserts are deleted) and marks them `rolled_back`. This log is
 separate from the event spine.
 
-### File uploads (`app/api/upload/route.ts`)
+### File uploads (`app/api/upload/route.ts`, `app/api/upload/blob/route.ts`)
 
-Requires an authenticated user. If `BLOB_READ_WRITE_TOKEN` is set, stores via
-**Vercel Blob**; otherwise writes to `public/uploads/` for local dev. Validates
-size (≤50 MB) and accepts any content type **except** `image/svg+xml` (blocked
-for XSS safety). Returns `{ url, filename, size, contentType }`.
+Two paths, chosen by the client (`lib/upload.ts` → `uploadFile`, the single
+helper used by every editor/avatar uploader). The size cap (`MAX_UPLOAD_BYTES`,
+**100 MB**) lives in `lib/upload.ts` and is imported by both routes.
+
+- **Production (Blob configured)** — `uploadFile` uploads **client-direct** to
+  Vercel Blob; only the token handshake hits `POST /api/upload/blob`
+  (`@vercel/blob/client` `handleUpload`). This bypasses the serverless ~4.5 MB
+  request-body limit, so files up to 100 MB work in prod. The handshake auths the
+  user, blocks SVG, and sets `maximumSizeInBytes` (Blob enforces it).
+- **Local dev (no `BLOB_READ_WRITE_TOKEN`)** — `uploadFile` POSTs multipart to
+  `POST /api/upload`, which writes to `public/uploads/`.
+
+The client picks the path from `GET /api/upload` (`{ blob: boolean }`, memoized).
+Both reject `image/svg+xml` (XSS). `POST /api/upload` returns
+`{ url, filename, size, contentType }`. No new env var is needed —
+`BLOB_READ_WRITE_TOKEN` (already required for Blob) activates the prod path.
 
 ### Email (`lib/email/`)
 

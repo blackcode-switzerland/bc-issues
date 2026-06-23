@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow, isPast, isToday } from 'date-fns'
 import { toast } from 'sonner'
+import { uploadFile } from '@/lib/upload'
 import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
@@ -329,14 +330,7 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
                 variant="seamless"
                 minHeight="100px"
                 mentionItems={mentionItems}
-                onFileUpload={async (file) => {
-                  const fd = new FormData()
-                  fd.append('file', file)
-                  const res = await fetch('/api/upload', { method: 'POST', body: fd })
-                  if (!res.ok) throw new Error('upload failed')
-                  const j = await res.json()
-                  return j.url
-                }}
+                onFileUpload={uploadFile}
               />
             </div>
 

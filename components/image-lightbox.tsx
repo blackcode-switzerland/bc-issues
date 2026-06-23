@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X, ZoomIn, ZoomOut, Download } from 'lucide-react'
 
 interface ImageLightboxProps {
@@ -42,9 +43,11 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
     document.body.removeChild(link)
   }
 
-  return (
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xs"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xs"
       onClick={onClose}
     >
       {/* Controls */}
@@ -112,7 +115,8 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
         Press Esc to close, +/- to zoom
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

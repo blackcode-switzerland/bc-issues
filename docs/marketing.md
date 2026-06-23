@@ -131,7 +131,7 @@ Title, rich-text description, status (`backlog` / `todo` / `in_progress` / `done
 A TipTap editor with a slash menu, a selection bubble toolbar, headings, lists, checklists, code blocks, links, `@mentions`, and inline media (paste / drag / attach). HTML is sanitized before save. Comments work the same way on issues, projects, and tasks.
 
 **File attachments**
-Paste, drag, or attach **any file type except SVG** (blocked for XSS safety), up to **50 MB**. Stored on Vercel Blob in production; served from `public/uploads/` in local development so you can iterate offline.
+Paste, drag, or attach **any file type except SVG** (blocked for XSS safety), up to **100 MB**. Stored on Vercel Blob in production; served from `public/uploads/` in local development so you can iterate offline.
 
 **Activity feed & inbox**
 Every mutation is recorded on an append-only **event spine**. That powers a per-issue history, a workspace-wide activity feed, and a per-user **inbox** of mentions, assignments, and changes.
@@ -401,7 +401,7 @@ A compact table for laying out a feature grid.
 | Kanban | "Kanban board" | Live |
 | Gantt / timeline + list | "Timeline & list views" | Live |
 | Rich-text issues & comments | "Rich-text issues & comments" | Live |
-| File attachments (50 MB) | "File attachments" | Live |
+| File attachments (100 MB) | "File attachments" | Live |
 | Activity feed & inbox | "Activity feed & inbox" | Live |
 | Self-describing API (OpenAPI/meta) | "Self-describing API" | Live |
 | Trash & restore | "Trash & restore" | Live |

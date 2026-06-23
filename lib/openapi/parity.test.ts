@@ -20,6 +20,7 @@ const EXCLUDED_PATHS = new Set([
   '/api/openapi.json', // the spec itself
   '/api/status/errors', // super-admin error triage is exposed via /api/super-admin/errors
   '/api/status/errors/{id}',
+  '/api/upload/blob', // internal Vercel Blob client-upload token handshake (not a REST resource)
 ])
 
 function walk(dir: string): string[] {
