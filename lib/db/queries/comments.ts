@@ -17,6 +17,8 @@ import {
 } from '../schema'
 import { recordEvent } from './events'
 import { toRichTextHtml } from '@/lib/rich-text'
+import { extractUploadedUrls } from '@/lib/blob-refs'
+import { sweepOrphanedUrls } from '@/lib/blob-gc'
 
 const MENTION_RE = /@([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g
 
@@ -91,6 +93,18 @@ export async function listComments(
     author_avatar: r.author_avatar,
     parent_comment_id: r.c.parent_comment_id ?? null,
   }))
+}
+
+// Resolve a polymorphic parent's workspace #number (seq) from its internal id.
+// Used when serializing a comment fetched by its own id (the parent's #number
+// isn't in the request path). Returns null if the parent no longer exists.
+export async function resolveParentSeq(
+  parentType: CommentParentType,
+  parentId: number
+): Promise<number | null> {
+  const table = parentType === 'issue' ? issues : parentType === 'task' ? tasks : projects
+  const rows = await db.select({ seq: table.seq }).from(table).where(eq(table.id, parentId)).limit(1)
+  return rows[0]?.seq ?? null
 }
 
 // Verify a polymorphic parent exists in the given workspace. Used by the
@@ -264,14 +278,14 @@ export async function deleteComment(
   id: number,
   actorUserId: number
 ): Promise<boolean> {
-  return await db.transaction(async (tx) => {
+  const { deleted, content } = await db.transaction(async (tx) => {
     const beforeRows = await tx
       .select()
       .from(comments)
       .where(and(eq(comments.id, id), eq(comments.workspace_id, workspaceId)))
       .limit(1)
     const before = beforeRows[0]
-    if (!before) return false
+    if (!before) return { deleted: false, content: null as string | null }
     if (before.user_id !== actorUserId) {
       throw new Error('forbidden')
     }
@@ -289,8 +303,15 @@ export async function deleteComment(
     const result = await tx
       .delete(comments)
       .where(and(eq(comments.id, id), eq(comments.workspace_id, workspaceId)))
-    return (result.rowCount ?? 0) > 0
+    return { deleted: (result.rowCount ?? 0) > 0, content: before.content }
   })
+
+  // After the comment is gone, auto-remove any files it embedded that nothing
+  // else references (best-effort; never affects the delete result).
+  if (deleted && content) {
+    await sweepOrphanedUrls(extractUploadedUrls(content))
+  }
+  return deleted
 }
 
 // Keep void to silence unused warning if sql is removed; left for future helpers.

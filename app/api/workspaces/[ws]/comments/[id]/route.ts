@@ -1,8 +1,8 @@
 // Edit + delete a single comment by id (author-only, enforced in the query).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
-import { deleteComment, updateComment } from '@/lib/db/queries/comments'
+import { apiHandler, Errors, resolveWorkspace, publicComment } from '@/lib/api'
+import { deleteComment, updateComment, resolveParentSeq } from '@/lib/db/queries/comments'
 
 interface Params {
   params: Promise<{ ws: string; id: string }>
@@ -19,7 +19,11 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   try {
     const updated = await updateComment(ctx.workspace.id, id, content, ctx.user.id)
     if (!updated) throw Errors.notFound('comment')
-    return NextResponse.json(updated)
+    const parentSeq =
+      updated.parent_type && updated.parent_id != null
+        ? await resolveParentSeq(updated.parent_type as 'issue' | 'task' | 'project', updated.parent_id)
+        : null
+    return NextResponse.json(publicComment(updated, parentSeq))
   } catch (err) {
     if ((err as Error)?.message === 'forbidden') {
       throw Errors.forbidden('Only the comment author can edit it')

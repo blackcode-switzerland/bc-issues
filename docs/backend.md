@@ -190,7 +190,8 @@ for exact column types, indexes, and check constraints.
 | `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
-| `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by` |
+| `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by`. Issues-only; written via API/CLI (`bk issue attach`) |
+| `uploads` | **upload ledger** — one row per file stored through our pipeline, written at upload time: `workspace_id` (nullable), unique `url`, `pathname`, `filename`, `size` (bigint), `mime_type`, `uploaded_by`. Metadata only — never the authority for deletion (a live reference scan is); source for the Storage page |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
 | `issue_labels` / `project_labels` | join tables (composite PKs) linking workspace labels to issues / projects |
 | `project_members` | the project's "people working on it" list (not access control); `(project_id, user_id)` unique |
@@ -294,7 +295,11 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   urls are upgraded**; external links/images are left untouched. The render-layer
   DOMPurify whitelists the same `data-*` attributes, and the server sanitizer
   allowlist permits the `div` node, so the embed survives end-to-end. Covered by
-  `lib/rich-text.test.ts`.
+  `lib/rich-text.test.ts`. The node's wire format (tag, `data-type` marker, and
+  `data-*` attribute names) lives in **one** place — `lib/file-attachment.ts` —
+  imported by both the server emitter/sanitizer (`lib/rich-text.ts`) and the
+  editor's parse/render + DOMPurify allowlist (`components/rich-text-editor.tsx`),
+  so the two sides can't drift.
 
 ### Discovery (for agents & tooling)
 
@@ -331,7 +336,15 @@ change or the build breaks.
 > global id is never emitted and FK fields (`project_id`/`task_id`) are the
 > parent's seq. List endpoints return everything (no cursor). See
 > `docs/api-changelog.md`. Sub-entities (comments/labels/attachments/updates)
-> keep their own ids.
+> keep their own ids — but any FK that points **back** at a work item is also
+> mapped to that item's `#number`, never the internal id: comments expose
+> `parent_id` (+ `parent_type`) and drop the legacy internal `issue_id`;
+> attachments expose `issue_id` as the `#number`; project updates expose
+> `project_id` as the `#number`. These go through `publicComment` /
+> `publicAttachment` / `publicProjectUpdate` (`lib/api/serialize.ts`), which take
+> the parent's seq from the request path (or resolve it for by-id routes). The
+> one place that still emits an internal serial is the activity feed's
+> `entity_id` (a polymorphic audit handle) — see `docs/improvements.md`.
 
 ```
 GET    /api/workspaces                          list my workspaces
@@ -397,9 +410,33 @@ GET    /api/workspaces/{ws}/analytics           analytics (view/target/range/int
 
 GET    /api/workspaces/{ws}/trash               list binned items (?type=issue|project|task)
 POST   /api/workspaces/{ws}/trash/restore       restore items ({items:[{type,id}]|batch_id, dry_run?, resolutions?})
-DELETE /api/workspaces/{ws}/trash/purge         permanent delete — owner only ({items|batch_id})
-POST   /api/workspaces/{ws}/trash/empty         hard-delete everything in the bin — owner only
+DELETE /api/workspaces/{ws}/trash/purge         permanent delete — owner only ({items|batch_id}); auto-frees unreferenced files
+POST   /api/workspaces/{ws}/trash/empty         hard-delete everything in the bin — owner only; auto-frees unreferenced files
+
+GET    /api/workspaces/{ws}/storage             list uploaded files w/ references + usage — owner only
+DELETE /api/workspaces/{ws}/storage/{id}        delete an orphaned file — owner only (409 if referenced)
+GET    /api/workspaces/{ws}/attachments         workspace-wide attachments table view — owner only
 ```
+
+**Storage / file cleanup.** Uploaded files are recorded in the `uploads` ledger
+(written at upload time on every path — multipart `/api/upload`, the client-direct
+`/api/upload/blob` handshake's `onUploadCompleted`, all attributed to an explicit
+workspace or the user's active one). Blob removal happens in exactly two places,
+both gated by `isUrlReferencedAnywhere` (`lib/blob-refs.ts`) — a live, system-wide
+scan of all content bodies + attachment rows, **including trashed items**:
+
+1. **Owner-confirmed delete** — the `storage` routes / Storage page, for any
+   0-reference file (including orphans left by editing).
+2. **Automatic GC** (`sweepOrphanedUrls`, `lib/blob-gc.ts`) — fires on terminal
+   deletes: `deleteComment` (comment/reply) and `purgeItems` (trash purge/batch/
+   empty, via `purgeBatch`/`emptyTrash`). It gathers the URLs the removed content
+   embedded (bodies, issue attachments, project updates, cascaded comments),
+   then, after the rows are gone, deletes each file nothing else references.
+
+Both call `removeBlobBytes` (`@vercel/blob` `del()`, or `fs.rm` for local
+`/uploads`). *Editing* a file out of a still-living body never deletes bytes
+(undo/restore stay safe); all blob deletion is best-effort and never fails the
+user's action.
 
 ### Super admin (requires `SUPER_ADMINS` env var)
 
@@ -497,7 +534,8 @@ these; they never write SQL inline.
 | `issues.ts` | issue CRUD, seq allocation, field-level events, auto-watchers |
 | `comments.ts` | polymorphic comments + `@email` mention resolution |
 | `labels.ts` | workspace labels; case-insensitive unique names |
-| `attachments.ts` | issue attachments |
+| `attachments.ts` | issue attachments; `getWorkspaceAttachments` (owner-wide view) |
+| `uploads.ts` | upload ledger: `recordUpload` (idempotent on url), `listWorkspaceUploads`, `getUpload`, `deleteUploadRow`, `computeWorkspaceStorageUsage` |
 | `watchers.ts` | issue watchers (manual/assigned/reporter) |
 | `events.ts` | the event spine — `recordEvent`, `EntityType`/`EventAction` |
 | `fanout.ts` | event → per-user inbox materialization |

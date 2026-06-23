@@ -77,11 +77,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // in the app), unique per workspace. Address everything by it. Breaking
     // changes are listed in docs/api-changelog.md.
     conventions: {
-      id: 'workspace-scoped number (the #N shown in the UI); address items by it',
+      id: 'workspace-scoped number (the #N shown in the UI); address items by it. References back to a work item (comment.parent_id, attachment.issue_id, project_update.project_id) are this #number too — the internal db id is never exposed',
       changelog: '/docs/api-changelog.md',
       rich_text: 'description/comment/body fields accept Markdown or HTML, stored as sanitized HTML',
       file_embeds:
         'POST a file to /api/upload (multipart field "file") -> { url }, then reference it in a body as ![name](url) for images or [name](url) for any other file; uploaded urls render inline (preview/player/download card). Max 100MB.',
+      storage:
+        'Uploaded files are tracked per workspace. The owner can review/clean them: GET /api/workspaces/{ws}/storage lists every file with what references it + total usage; DELETE /api/workspaces/{ws}/storage/{id} removes an orphan (refused with 409 if anything, including trashed items, still references it). Cleanup is also automatic on terminal deletes: hard-deleting a comment/reply or purging an item from Trash frees the files that content referenced once nothing else references them. Editing a file out of a body (without deleting the item) does NOT delete the bytes — that orphan is cleared via the owner Storage delete.',
     },
     labels,
     projects: projects.map(publicProject),

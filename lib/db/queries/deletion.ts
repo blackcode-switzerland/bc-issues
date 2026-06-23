@@ -22,8 +22,10 @@
 
 import { and, desc, eq, inArray, isNull, isNotNull, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { deletionBatches, issues, tasks, projects } from '../schema'
+import { deletionBatches, issues, tasks, projects, comments, attachments, projectUpdates } from '../schema'
 import { recordEvent } from './events'
+import { extractUploadedUrls } from '@/lib/blob-refs'
+import { sweepOrphanedUrls } from '@/lib/blob-gc'
 
 export type TrashType = 'issue' | 'project' | 'task'
 export type DeleteMode = 'cascade' | 'detach'
@@ -659,16 +661,68 @@ export async function purgeItems(
   refs: EntityRef[],
   actorUserId: number
 ): Promise<{ purged: number }> {
-  return await db.transaction(async (tx) => {
+  // URLs embedded in the purged content (bodies, attachments, cascaded comments
+  // and project updates), gathered before the hard delete so we can free their
+  // storage afterwards.
+  const candidateUrls: string[] = []
+  const out = await db.transaction(async (tx) => {
     let purged = 0
     const order: TrashType[] = ['issue', 'task', 'project']
     const sorted = [...refs].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
     for (const ref of sorted) {
-      const ok = await purgeOne(tx, workspaceId, ref.type, ref.id, actorUserId)
-      if (ok) purged++
+      const res = await purgeOne(tx, workspaceId, ref.type, ref.id, actorUserId)
+      if (res.ok) {
+        purged++
+        candidateUrls.push(...res.urls)
+      }
     }
     return { purged }
   })
+
+  // After the rows are permanently gone, auto-remove any files they referenced
+  // that nothing else points at (best-effort; never affects the purge result).
+  if (candidateUrls.length > 0) {
+    try {
+      await sweepOrphanedUrls(candidateUrls)
+    } catch (err) {
+      console.error('[purge] orphan sweep failed (non-fatal):', err)
+    }
+  }
+  return out
+}
+
+// Gather every uploaded-file URL embedded in an entity that the purge will
+// permanently remove: its own body (+ project summary), its issue attachments,
+// its project updates, and its comments. Read inside the same tx, BEFORE the
+// hard delete, so the rows still exist. Over-collecting is safe — sweepOrphanedUrls
+// re-checks each URL and skips any still referenced.
+async function collectPurgeUrls(
+  tx: Tx,
+  workspaceId: number,
+  type: TrashType,
+  id: number,
+  before: Record<string, unknown>
+): Promise<string[]> {
+  const urls: string[] = []
+  urls.push(...extractUploadedUrls(before.description as string | null))
+  if (type === 'project') {
+    urls.push(...extractUploadedUrls(before.summary as string | null))
+    const ups = await tx.select({ body: projectUpdates.body }).from(projectUpdates).where(eq(projectUpdates.project_id, id))
+    for (const u of ups) urls.push(...extractUploadedUrls(u.body))
+  }
+  if (type === 'issue') {
+    const atts = await tx.select({ url: attachments.file_url }).from(attachments).where(eq(attachments.issue_id, id))
+    for (const a of atts) if (a.url) urls.push(a.url)
+    const legacy = await tx.select({ content: comments.content }).from(comments).where(and(eq(comments.workspace_id, workspaceId), eq(comments.issue_id, id)))
+    for (const c of legacy) urls.push(...extractUploadedUrls(c.content))
+  }
+  // Polymorphic comments attached to this entity (any type).
+  const cmts = await tx
+    .select({ content: comments.content })
+    .from(comments)
+    .where(and(eq(comments.workspace_id, workspaceId), eq(comments.parent_type, type), eq(comments.parent_id, id)))
+  for (const c of cmts) urls.push(...extractUploadedUrls(c.content))
+  return urls
 }
 
 async function purgeOne(
@@ -677,14 +731,17 @@ async function purgeOne(
   type: TrashType,
   id: number,
   actorUserId: number
-): Promise<boolean> {
+): Promise<{ ok: boolean; urls: string[] }> {
   const table = type === 'issue' ? issues : type === 'task' ? tasks : projects
   const [before] = await tx
     .select()
     .from(table)
     .where(and(eq(table.id, id), eq(table.workspace_id, workspaceId), isNotNull(table.deleted_at)))
     .limit(1)
-  if (!before) return false
+  if (!before) return { ok: false, urls: [] }
+
+  // Gather embedded file URLs before the hard delete cascades them away.
+  const urls = await collectPurgeUrls(tx, workspaceId, type, id, before as Record<string, unknown>)
 
   // Record the purge BEFORE the hard delete so the FK cascade can't wipe it
   // (events cascade with the workspace, not with these entities).
@@ -698,7 +755,7 @@ async function purgeOne(
   })
 
   const result = await tx.delete(table).where(and(eq(table.id, id), eq(table.workspace_id, workspaceId)))
-  return (result.rowCount ?? 0) > 0
+  return { ok: (result.rowCount ?? 0) > 0, urls }
 }
 
 export async function purgeBatch(

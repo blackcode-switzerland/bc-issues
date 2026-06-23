@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { AlertTriangle, ArrowLeft, Crown, Loader2, Save, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Crown, HardDrive, Loader2, Save, Trash2, Upload } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { avatarColor } from '@/components/ui/member-avatar'
 
@@ -276,6 +276,26 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
           ) : null}
         </div>
       </section>
+
+      {isOwner ? (
+        <section className="mb-8 border-t border-border pt-8">
+          <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
+            <HardDrive size={15} />
+            Storage
+          </h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Review all files uploaded into this workspace, see what references each one, and delete
+            unused files to free space.
+          </p>
+          <Link
+            href={`/dashboard/workspaces/${ws.slug}/storage`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+          >
+            <HardDrive size={14} />
+            Manage storage
+          </Link>
+        </section>
+      ) : null}
 
       {isOwner && otherMembers.length > 0 ? (
         <section className="mb-8 border-t border-border pt-8">

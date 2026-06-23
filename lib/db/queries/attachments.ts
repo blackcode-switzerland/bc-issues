@@ -43,6 +43,25 @@ export async function deleteAttachment(id: number) {
   await db.delete(attachments).where(eq(attachments.id, id))
 }
 
+// All attachment rows in a workspace, joined to their issue (#number + title)
+// and uploader — the owner-facing "attachments table" view.
+export async function getWorkspaceAttachments(workspaceId: number) {
+  const result = await db.execute(sql`
+    SELECT
+      a.*,
+      i.seq AS issue_seq,
+      i.title AS issue_title,
+      u.name AS uploader_name,
+      u.avatar_url AS uploader_avatar
+    FROM attachments a
+    JOIN issues i ON i.id = a.issue_id
+    LEFT JOIN users u ON u.id = a.uploaded_by
+    WHERE a.workspace_id = ${workspaceId}
+    ORDER BY a.created_at DESC
+  `)
+  return result.rows
+}
+
 export async function getAttachment(id: number): Promise<Attachment | null> {
   const rows = await db.select().from(attachments).where(eq(attachments.id, id)).limit(1)
   return rows[0] ?? null

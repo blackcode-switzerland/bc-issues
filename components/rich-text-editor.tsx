@@ -37,6 +37,13 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageLightbox } from '@/components/image-lightbox'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import {
+  FA_ATTR,
+  FILE_ATTACHMENT_ATTRS,
+  FILE_ATTACHMENT_SELECTOR,
+  FILE_ATTACHMENT_TAG,
+  FILE_ATTACHMENT_TYPE,
+} from '@/lib/file-attachment'
+import {
   Bold,
   Italic,
   List,
@@ -315,28 +322,28 @@ function buildFileAttachment() {
       return {
         href: {
           default: null,
-          parseHTML: (el) => el.getAttribute('data-file-url'),
-          renderHTML: (attrs) => ({ 'data-file-url': attrs.href }),
+          parseHTML: (el) => el.getAttribute(FA_ATTR.url),
+          renderHTML: (attrs) => ({ [FA_ATTR.url]: attrs.href }),
         },
         filename: {
           default: 'file',
-          parseHTML: (el) => el.getAttribute('data-filename'),
-          renderHTML: (attrs) => ({ 'data-filename': attrs.filename }),
+          parseHTML: (el) => el.getAttribute(FA_ATTR.filename),
+          renderHTML: (attrs) => ({ [FA_ATTR.filename]: attrs.filename }),
         },
         contentType: {
           default: 'application/octet-stream',
-          parseHTML: (el) => el.getAttribute('data-content-type'),
-          renderHTML: (attrs) => ({ 'data-content-type': attrs.contentType }),
+          parseHTML: (el) => el.getAttribute(FA_ATTR.contentType),
+          renderHTML: (attrs) => ({ [FA_ATTR.contentType]: attrs.contentType }),
         },
       }
     },
 
     parseHTML() {
-      return [{ tag: 'div[data-type="file-attachment"]' }]
+      return [{ tag: FILE_ATTACHMENT_SELECTOR }]
     },
 
     renderHTML({ HTMLAttributes }) {
-      return ['div', mergeAttributes({ 'data-type': 'file-attachment' }, HTMLAttributes)]
+      return [FILE_ATTACHMENT_TAG, mergeAttributes({ [FA_ATTR.type]: FILE_ATTACHMENT_TYPE }, HTMLAttributes)]
     },
 
     addNodeView() {
@@ -1316,7 +1323,7 @@ export function RichTextDisplay({ content, onImageClick }: RichTextDisplayProps)
   const sanitizedContent =
     typeof window !== 'undefined'
       ? DOMPurify.sanitize(content, {
-          ADD_ATTR: ['data-type', 'data-file-url', 'data-filename', 'data-content-type'],
+          ADD_ATTR: [...FILE_ATTACHMENT_ATTRS],
         })
       : content
 

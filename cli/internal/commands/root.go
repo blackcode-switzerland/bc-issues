@@ -108,6 +108,7 @@ func NewRoot() *cobra.Command {
 		newActivityCmd(),
 		newAnalyticsCmd(),
 		newUploadCmd(),
+		newStorageCmd(),
 		newTrashCmd(),
 		newUndoCmd(),
 		newSuperAdminCmd(),

@@ -187,7 +187,10 @@ func newTrashPurgeCmd() *cobra.Command {
 		Use:   "purge [<type:id>...]",
 		Short: "Permanently delete items from the recycle bin (owner only)",
 		Long: "Permanently delete binned items. This cannot be undone and requires the\n" +
-			"workspace owner role. Pass refs like `issue:42`, or --batch <id>.",
+			"workspace owner role. Pass refs like `issue:42`, or --batch <id>.\n\n" +
+			"Any files embedded in the deleted items are automatically removed from\n" +
+			"storage once nothing else in the workspace references them (same safety\n" +
+			"check the Storage page uses).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -236,6 +239,10 @@ func newTrashEmptyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "empty",
 		Short: "Permanently delete everything in the recycle bin (owner only)",
+		Long: "Permanently delete everything in the workspace recycle bin. Owner only.\n\n" +
+			"Any files embedded in the deleted items are automatically removed from\n" +
+			"storage once nothing else in the workspace references them (same safety\n" +
+			"check the Storage page uses).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {

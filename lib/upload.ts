@@ -36,12 +36,18 @@ export async function uploadFile(file: File): Promise<string> {
   }
 
   if (await isBlobEnabled()) {
-    // Client-direct to Blob; the token handshake hits /api/upload/blob.
+    // Client-direct to Blob; the token handshake hits /api/upload/blob. The
+    // payload carries file metadata so the server can record the upload ledger
+    // row (the workspace is resolved server-side from the active workspace).
     const blob = await upload(file.name, file, {
       access: 'public',
       handleUploadUrl: '/api/upload/blob',
       contentType: file.type || undefined,
-      clientPayload: JSON.stringify({ contentType: file.type }),
+      clientPayload: JSON.stringify({
+        contentType: file.type,
+        filename: file.name,
+        size: file.size,
+      }),
     })
     return blob.url
   }

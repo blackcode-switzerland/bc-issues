@@ -188,6 +188,7 @@ export const openApiSpec = {
     { name: 'Insights', description: 'Activity feed and analytics.' },
     { name: 'Tokens', description: 'API token management (session-only).' },
     { name: 'Trash', description: 'Soft-deleted resources: browse, restore, purge.' },
+    { name: 'Storage', description: 'Workspace file storage: list uploaded files, review usage, delete orphans. Owner only.' },
     { name: 'System', description: 'Cross-cutting utilities: undo, upload, users, health.' },
     { name: 'Super admin', description: 'Platform administration. Requires a SUPER_ADMINS email.' },
     { name: 'Auth', description: 'Public authentication: register, password reset, CLI authorize.' },
@@ -376,7 +377,7 @@ export const openApiSpec = {
         {
           id: { type: 'integer' },
           parent_type: { type: 'string', enum: ['issue', 'task', 'project'] },
-          parent_id: { type: 'integer' },
+          parent_id: { type: 'integer', description: "The parent issue/task/project's #number (not the internal id)." },
           user_id: { type: 'integer' },
           content: { type: 'string' },
           parent_comment_id: { type: ['integer', 'null'] },
@@ -405,7 +406,7 @@ export const openApiSpec = {
       Attachment: entity(
         {
           id: { type: 'integer' },
-          issue_id: { type: 'integer' },
+          issue_id: { type: 'integer', description: "The issue's #number (not the internal id)." },
           filename: { type: 'string' },
           file_url: { type: 'string' },
           file_size: { type: ['integer', 'null'] },
@@ -413,6 +414,48 @@ export const openApiSpec = {
           uploaded_by: { type: 'integer' },
         },
         'An issue attachment.'
+      ),
+      WorkspaceAttachment: entity(
+        {
+          id: { type: 'integer' },
+          issue_id: { type: 'integer', description: 'The issue #number (same as issue_seq; the internal id is never exposed).' },
+          issue_seq: { type: ['integer', 'null'], description: 'The issue #number.' },
+          issue_title: { type: ['string', 'null'] },
+          filename: { type: 'string' },
+          file_url: { type: 'string' },
+          file_size: { type: ['integer', 'null'] },
+          mime_type: { type: ['string', 'null'] },
+          uploaded_by: { type: ['integer', 'null'] },
+          uploader_name: { type: ['string', 'null'] },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+        'An attachment row with its issue and uploader (workspace-wide view).'
+      ),
+      StorageReference: entity(
+        {
+          type: { type: 'string', enum: ['issue', 'task', 'project', 'comment', 'project_update', 'attachment'] },
+          id: { type: 'integer', description: 'Internal id of the referencing entity.' },
+          seq: { type: ['integer', 'null'], description: 'The #number where one applies (issue/task/project).' },
+          label: { type: ['string', 'null'], description: 'Title/name of the referencing entity, where available.' },
+          trashed: { type: 'boolean', description: 'True if the referencing item is in the recycle bin (still restorable).' },
+        },
+        'One thing that references a stored file.'
+      ),
+      StorageFile: entity(
+        {
+          id: { type: 'integer', description: 'uploads.id — address deletes by this.' },
+          url: { type: 'string' },
+          filename: { type: 'string' },
+          size: { type: ['integer', 'null'] },
+          mime_type: { type: ['string', 'null'] },
+          uploaded_by: { type: ['integer', 'null'] },
+          uploader_name: { type: ['string', 'null'] },
+          uploader_avatar: { type: ['string', 'null'] },
+          created_at: { type: 'string', format: 'date-time' },
+          reference_count: { type: 'integer', description: '0 = orphan, safe to delete.' },
+          references: { type: 'array', items: { $ref: '#/components/schemas/StorageReference' } },
+        },
+        'A file in workspace storage with its live references.'
       ),
       ActivityEvent: entity(
         {
@@ -475,7 +518,7 @@ export const openApiSpec = {
       ProjectUpdate: entity(
         {
           id: { type: 'integer' },
-          project_id: { type: 'integer' },
+          project_id: { type: 'integer', description: "The project's #number (not the internal id)." },
           author_id: { type: 'integer' },
           status: { type: 'string', enum: PROJECT_UPDATE_STATUS_VALUES, description: 'Project health at the time of the update.' },
           body: { type: 'string' },
@@ -784,6 +827,48 @@ export const openApiSpec = {
       post: { tags: ['Issues'], operationId: 'watchIssue', summary: 'Watch an issue', responses: { '200': jsonShape({ type: 'object', required: ['watching'], properties: { watching: { type: 'boolean' } } }, 'Now watching'), ...errors(401, 404) } },
       delete: { tags: ['Issues'], operationId: 'unwatchIssue', summary: 'Unwatch an issue', responses: { '200': jsonShape({ type: 'object', required: ['watching'], properties: { watching: { type: 'boolean' } } }, 'No longer watching'), ...errors(401, 404) } },
     },
+    '/api/workspaces/{ws}/attachments': {
+      parameters: [wsParam],
+      get: { tags: ['Storage'], operationId: 'listWorkspaceAttachments', summary: 'List all attachment rows in the workspace (owner only)', responses: { '200': jsonList('WorkspaceAttachment'), ...errors(401, 403, 404) } },
+    },
+    '/api/workspaces/{ws}/storage': {
+      parameters: [wsParam],
+      get: {
+        tags: ['Storage'],
+        operationId: 'listStorage',
+        summary: 'List uploaded files with references + usage (owner only)',
+        description:
+          'Every file uploaded into the workspace, each with the live list of things that reference it (issue/task/project/comment/project-update bodies and attachment rows, including items in the recycle bin). A file with reference_count = 0 is an orphan and can be deleted. Also returns total usage_bytes and the workspace storage limit (limit_bytes, null = unlimited).',
+        responses: {
+          '200': jsonShape(
+            {
+              type: 'object',
+              required: ['data', 'next_cursor', 'total', 'usage_bytes', 'limit_bytes'],
+              properties: {
+                data: { type: 'array', items: { $ref: '#/components/schemas/StorageFile' } },
+                next_cursor: { type: ['integer', 'null'] },
+                total: { type: 'integer' },
+                usage_bytes: { type: 'integer', description: 'Sum of all recorded file sizes.' },
+                limit_bytes: { type: ['integer', 'null'], description: 'Storage quota in bytes; null = unlimited (no enforcement yet).' },
+              },
+            },
+            'Files, references, and usage'
+          ),
+          ...errors(401, 403, 404),
+        },
+      },
+    },
+    '/api/workspaces/{ws}/storage/{id}': {
+      parameters: [wsParam, idParam('id', 'Numeric id of the stored file (uploads.id).')],
+      delete: {
+        tags: ['Storage'],
+        operationId: 'deleteStorageFile',
+        summary: 'Permanently delete an orphaned file (owner only)',
+        description:
+          'Deletes the underlying bytes from storage and removes the ledger row. Gated by a live, system-wide reference scan: if anything still references the file (including trashed items), the request is refused with 409 file_in_use. Irreversible on success.',
+        responses: { '200': deletedResponse, ...errors(400, 401, 403, 404, 409) },
+      },
+    },
     '/api/workspaces/{ws}/projects': {
       parameters: [wsParam],
       get: {
@@ -930,7 +1015,7 @@ export const openApiSpec = {
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['content'], properties: { content: { type: 'string' } } } } } },
         responses: { '200': jsonObject('Comment'), ...errors(400, 401, 403, 404) },
       },
-      delete: { tags: ['Issues'], operationId: 'deleteComment', summary: 'Delete a comment (author)', responses: { '200': deletedResponse, ...errors(401, 403, 404) } },
+      delete: { tags: ['Issues'], operationId: 'deleteComment', summary: 'Delete a comment (author)', description: 'Permanently deletes the comment (and reply). Any files it embedded are automatically removed from storage if nothing else references them (same live system-wide scan as the Storage delete; trashed items still count as references).', responses: { '200': deletedResponse, ...errors(401, 403, 404) } },
     },
     '/api/workspaces/{ws}/activity': {
       parameters: [wsParam],
@@ -997,7 +1082,7 @@ export const openApiSpec = {
     '/api/workspaces/{ws}/trash/purge': {
       parameters: [wsParam],
       delete: {
-        tags: ['Trash'], operationId: 'purgeTrash', summary: 'Permanently delete trashed items (owner)',
+        tags: ['Trash'], operationId: 'purgeTrash', summary: 'Permanently delete trashed items (owner)', description: 'Permanently deletes one or more trashed items (or a whole batch). Any files embedded in the deleted content are automatically removed from storage once nothing else references them (including items still in the recycle bin). Irreversible.',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: true, properties: {
           items: { type: 'array', items: { type: 'object', required: ['type', 'id'], properties: { type: { type: 'string', enum: ['issue', 'project', 'task'] }, id: { type: 'integer' } } } },
           batch_id: { type: 'string' },
@@ -1008,7 +1093,7 @@ export const openApiSpec = {
     '/api/workspaces/{ws}/trash/empty': {
       parameters: [wsParam],
       post: {
-        tags: ['Trash'], operationId: 'emptyTrash', summary: 'Empty the Trash entirely (owner)',
+        tags: ['Trash'], operationId: 'emptyTrash', summary: 'Empty the Trash entirely (owner)', description: 'Permanently deletes everything in the workspace recycle bin. Any files embedded in the deleted content are automatically removed from storage once nothing else references them. Irreversible.',
         requestBody: { content: { 'application/json': { schema: { type: 'object', additionalProperties: false } } } },
         responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Emptied'), ...errors(401, 403, 404) },
       },

@@ -656,7 +656,10 @@ func newIssueDeleteCommentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete-comment <issue-id> <comment-id>",
 		Short: "Delete a comment (author only)",
-		Args:  cobra.ExactArgs(2),
+		Long: "Permanently delete a comment (author only). Any files the comment\n" +
+			"embedded are automatically removed from storage if nothing else in the\n" +
+			"workspace references them.",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// args[0] (the issue ref) is accepted for symmetry but the API
 			// addresses comments by their own id, so it isn't resolved here.

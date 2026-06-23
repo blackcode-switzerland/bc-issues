@@ -156,7 +156,8 @@ URLs" above). Detail pages use the workspace #number (`seq`); labels use the id.
 | `/dashboard/super-admin/*` | Super-admin pages (unscoped) |
 | `/dashboard/workspaces` | Workspace manager (`WorkspacesView`) — list + switch; **Manage** shown to owners only |
 | `/dashboard/workspaces/new` | Create-workspace page (`WorkspaceCreateView`) — replaces the old modal in this flow |
-| `/dashboard/workspaces/[slug]` | Per-workspace settings (`WorkspaceSettingsView`) |
+| `/dashboard/workspaces/[slug]` | Per-workspace settings (`WorkspaceSettingsView`) — owners get a **Manage storage** link |
+| `/dashboard/workspaces/[slug]/storage` | Storage management (`StorageView`) — owner only; lists every uploaded file with its references + usage, deletes unused (0-reference) files. Removing a file from a body never deletes bytes; only an owner-confirmed delete here does (server re-checks references). |
 
 Legacy `/dashboard`, `/dashboard/issues/[id]`, `/dashboard/tasks/[id]`, and old
 `/dashboard/{projectId}` paths still resolve — they redirect to the canonical
@@ -239,7 +240,8 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   `/dashboard/trash`), `workspaces-view` (workspace manager at
   `/dashboard/workspaces`).
 - **Settings:** `profile-settings-view`, `account-settings-view`,
-  `api-tokens-settings`, `workspace-settings-view`.
+  `api-tokens-settings`, `workspace-settings-view`, `storage-view` (owner-only
+  workspace file management at `/dashboard/workspaces/[slug]/storage`).
 - **Super admin:** `super-admin-users-view` (platform-wide member table with workspace count),
   `super-admin-whitelist-view` (add/remove allowed domains and emails),
   `super-admin-errors-view` (error log with status/level/date filters, stat cards,

@@ -363,6 +363,12 @@ All deletes (issues, projects, tasks) are soft — rows move to a per-workspace 
 | `bk trash purge --batch <id> [--yes]` | same | Purge a whole batch. |
 | `bk trash empty [--yes]` | `POST /api/workspaces/:ws/trash/empty` | Hard-delete everything in the bin. **Owner only.** |
 
+**Automatic file cleanup.** When you permanently delete a trashed item (`bk trash
+purge` / `bk trash empty`), any files embedded in that content are automatically
+removed from storage once nothing else in the workspace references them — so
+storage is freed without owner action. (Same for `bk issue delete-comment`.) See
+[Storage](#storage-workspace-scoped-owner-only).
+
 Restore conflict flags: `--restore-parents` (also restore the parent when a child's parent is still binned) and `--standalone` (restore the child with the parent link cleared). If neither is passed and conflicts exist, the command reports them and exits non-zero.
 
 ### Labels (workspace-scoped)
@@ -422,6 +428,18 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk upload <file> [<file> ...]` | `POST /api/upload` | Uploads file(s) (max 100MB), prints the url(s). Table mode prints bare urls (pipeable); `--json` returns `[{url,filename,size,contentType}]`. Does **not** create a sidebar attachment. See [Embedding files](#embedding-files-in-descriptions--comments). |
+
+### Storage (workspace-scoped, owner only)
+
+Every file uploaded into the workspace is tracked. Removing a file from a
+description/comment does **not** delete the stored bytes (so undo and
+trash-restore stay safe) — use these to review usage and delete unused files.
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk storage list` | `GET /api/workspaces/:ws/storage` | Files with `REFS` (how many things reference each, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. |
+| `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Irreversible. |
+| `bk storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issue attach` row), joined to its issue + uploader. |
 
 ### Activity / analytics / undo
 

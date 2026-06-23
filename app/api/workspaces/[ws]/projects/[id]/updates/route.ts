@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, resolveEntityId } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, publicProjectUpdate } from '@/lib/api'
 import {
   PROJECT_UPDATE_STATUSES,
   createProjectUpdate,
@@ -20,7 +20,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.notFound('project')
   }
   const data = await listProjectUpdates(id)
-  return NextResponse.json({ data })
+  return NextResponse.json({ data: data.map((u) => publicProjectUpdate(u, Number(idStr))) })
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -45,5 +45,5 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     status: status as ProjectUpdateStatus,
     body: rawBody || null,
   })
-  return NextResponse.json(update, { status: 201 })
+  return NextResponse.json(publicProjectUpdate(update, Number(idStr)), { status: 201 })
 })

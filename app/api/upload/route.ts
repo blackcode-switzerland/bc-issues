@@ -6,8 +6,26 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '@/lib/upload'
+import { recordUpload } from '@/lib/db/queries/uploads'
+import { getWorkspaceForUser } from '@/lib/db/queries/workspaces'
+import type { User } from '@/lib/db/schema'
 
 const LOCAL_UPLOAD_DIR = 'public/uploads'
+
+// Resolve which workspace an upload belongs to, for the ledger. Prefer an
+// explicit slug/id the client passed; otherwise the user's active workspace.
+// Never throws — attribution is best-effort and must not break an upload.
+async function attributeWorkspace(user: User, explicit?: string | null): Promise<number | null> {
+  if (explicit) {
+    try {
+      const ws = await getWorkspaceForUser(explicit, user.id)
+      if (ws) return ws.id
+    } catch {
+      /* fall through to active workspace */
+    }
+  }
+  return user.active_workspace_id ?? null
+}
 
 async function saveLocally(file: File, baseName: string): Promise<{ url: string }> {
   const uploadsDir = resolve(process.cwd(), LOCAL_UPLOAD_DIR)
@@ -51,15 +69,40 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN)
 
   let url: string
+  let pathname: string
   if (hasBlobToken) {
     const blob = await put(filename, file, { access: 'public', addRandomSuffix: true })
     url = blob.url
+    pathname = blob.pathname
   } else if (process.env.NODE_ENV !== 'production') {
     // Local-dev fallback: store under public/uploads and serve via Next.js static.
     const local = await saveLocally(file, filename)
     url = local.url
+    pathname = local.url
   } else {
     throw Errors.internal('Blob storage is not configured (set BLOB_READ_WRITE_TOKEN)')
+  }
+
+  // Record the upload in the ledger (best-effort: a ledger failure must never
+  // fail the upload itself). `workspace` may be passed to attribute the file;
+  // otherwise it falls back to the user's active workspace.
+  try {
+    const workspaceField = formData.get('workspace')
+    const workspaceId = await attributeWorkspace(
+      user,
+      typeof workspaceField === 'string' ? workspaceField : null
+    )
+    await recordUpload({
+      url,
+      pathname,
+      filename: file.name,
+      size: file.size,
+      mime_type: file.type || null,
+      workspace_id: workspaceId,
+      uploaded_by: user.id,
+    })
+  } catch (err) {
+    console.error('[upload] ledger record failed (non-fatal):', err)
   }
 
   return NextResponse.json({

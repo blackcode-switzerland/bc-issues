@@ -6,6 +6,7 @@ export type {
   Issue,
   Comment,
   Attachment,
+  Upload,
   Label,
   ProjectMember,
   TransactionLogEntry,
@@ -19,6 +20,7 @@ export * from './db/queries/issues'
 export * from './db/queries/tasks'
 export * from './db/queries/comments'
 export * from './db/queries/attachments'
+export * from './db/queries/uploads'
 export * from './db/queries/members'
 export * from './db/queries/transaction'
 export * from './db/queries/analytics'

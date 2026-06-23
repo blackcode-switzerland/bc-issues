@@ -8,6 +8,42 @@ pick them up. Newest first. When an item ships, move a one-line note to
 
 ---
 
+## Storage cleanup — follow-ups  ·  noted 2026-06-23
+
+The owner-facing Storage page + ledger + reference engine + `bk storage` shipped
+2026-06-23, and **automatic cleanup runs on terminal deletes**: hard-deleting a
+comment/reply or purging an item from Trash (single, batch, or empty) now sweeps
+the files that content referenced and removes any that nothing else points at
+(`sweepOrphanedUrls`, `lib/blob-gc.ts`), gated by the same live system-wide
+reference scan. Removing a file from a body via editing still never deletes bytes
+(undo/restore safe) — those become "Unused" orphans the owner clears from the
+Storage page. Remaining work, in priority order:
+
+1. **Reconcile pre-ledger files (priority: medium).** The Storage page lists
+   files from the `uploads` ledger, which only captures uploads made *after* the
+   ledger shipped. Files uploaded earlier (already-leaked orphans) aren't in it.
+   Add a reconcile pass that calls `@vercel/blob` `list()`, diffs against the
+   ledger, and backfills/surfaces the missing files so they can be cleaned up
+   too. Attribute each to a workspace where possible (e.g. by scanning which
+   workspace's content references it).
+
+2. **Background sweep for the remaining orphans (priority: low).** Auto-GC now
+   fires on the terminal delete events (comment/reply delete, trash purge). What
+   it does NOT cover: files orphaned by *editing* them out of a still-living body
+   (kept on purpose, for undo/restore), files referenced only by non-cascading
+   project/task comments left behind after a purge, and pre-ledger files. A
+   periodic cron that sweeps confirmed orphans (0 references for N days) via the
+   same `isUrlReferencedAnywhere` gate would mop these up. Keep it best-effort and
+   log every deletion.
+
+3. **Storage quota enforcement (priority: low).** The base exists —
+   `workspaces.storage_limit_bytes` (nullable, unenforced) and
+   `computeWorkspaceStorageUsage()`. To enforce, compare usage + incoming size at
+   upload time (in `/api/upload` and the `/api/upload/blob` token handshake) and
+   reject over-limit uploads with a clear error. Add an owner UI to set the limit.
+
+---
+
 ## Full table support in rich text  ·  noted 2026-06-23  ·  priority: medium
 
 **Goal.** Tables should round-trip and render everywhere (web editor, read-only
@@ -57,23 +93,15 @@ Lower priority; capture so they aren't lost.
   document this hard rule for agents (done in the changelog/manifest) or add real
   support for native media/embeds later.
 
-- **Several API responses expose the internal (global) issue id.** Confirmed on
-  two surfaces, both contradicting the "one id = the workspace #number" contract:
-  - **Attachments** — `bk issue attach … --json` / `POST …/attachments` returns
-    `"issue_id": <internal id>` (observed `482` for issue `#25`).
-  - **Comments** — `POST …/issues/{id}/comments` returns `"parent_id"` **and**
-    `"issue_id"` as the internal id (observed `485` for issue `#28`, 2026-06-23).
-  Fix: the comment + attachment serializers should map the parent reference to the
-  workspace `#number` (or drop the raw internal field). Audit the rest of the
-  secondary entities (project updates, watchers, activity) for the same leak —
-  grep responses for `issue_id` / `parent_id` / `project_id` that aren't run
-  through the public serializer (`lib/api/serialize.ts`).
-
-- **`fileAttachment` node markup is defined in two places.** The server emits it
-  (`upgradeUploadedMedia` in `lib/rich-text.ts`) and the editor parses it
-  (`buildFileAttachment` in `components/rich-text-editor.tsx`). They must stay in
-  sync (attribute names + `data-content-type` branching). Consider a single
-  shared constant/spec if it grows.
+- **Activity feed still exposes internal ids (priority: low).** The comment,
+  attachment, and project-update serializers now map their parent FK to the
+  workspace `#number` (`publicComment` / `publicAttachment` / `publicProjectUpdate`
+  in `lib/api/serialize.ts`, shipped 2026-06-23). The one remaining leak is the
+  workspace **activity feed** (`GET …/activity`, backed by `listEvents`), which
+  emits `entity_id` as the internal serial — it's a polymorphic audit log, so
+  mapping each row to a `#number` needs per-row, per-type seq resolution. Decide:
+  resolve it (join seq per entity_type) or document `entity_id` as an internal
+  audit handle. Watchers (`…/watch`) return only `{ watching }` — no leak.
 
 - **CLI direct-Blob upload is pinned to Vercel's wire protocol** (`x-api-version: 7`
   in `cli/internal/client/client.go` `uploadViaBlob`). If `@vercel/blob` bumps its

@@ -5,7 +5,7 @@
 // it via getIssueInWorkspace (no implicit active-workspace resolution).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList, publicAttachment } from '@/lib/api'
 import { createAttachment, getAttachments } from '@/lib/db/queries/attachments'
 
 interface Params {
@@ -23,7 +23,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws, id } = await params
   const { issueId } = await resolveIssue(ws, id, req)
   const attachments = await getAttachments(issueId)
-  return jsonList(attachments)
+  return jsonList(attachments.map((a) => publicAttachment(a, Number(id))))
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -47,5 +47,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     mime_type,
     uploaded_by: ctx.user.id,
   })
-  return NextResponse.json(attachment, { status: 201 })
+  return NextResponse.json(attachment ? publicAttachment(attachment, Number(id)) : attachment, {
+    status: 201,
+  })
 })

@@ -517,6 +517,45 @@ func (c *Client) DeleteAttachment(issueID, attachmentID int) error {
 	return c.deleteJSON(path, nil, nil)
 }
 
+// --- Storage (owner-only) ---
+
+// ListStorage returns every uploaded file in the active workspace with its live
+// references and the workspace's total usage.
+func (c *Client) ListStorage() (*StorageListing, error) {
+	path, err := c.wsPath("storage")
+	if err != nil {
+		return nil, err
+	}
+	var out StorageListing
+	if err := c.get(path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeleteStorageFile permanently removes an orphaned file (refused by the server
+// with 409 if anything still references it).
+func (c *Client) DeleteStorageFile(id int) error {
+	path, err := c.wsPath(fmt.Sprintf("storage/%d", id))
+	if err != nil {
+		return err
+	}
+	return c.deleteJSON(path, nil, nil)
+}
+
+// ListWorkspaceAttachments returns the owner-only workspace-wide attachments view.
+func (c *Client) ListWorkspaceAttachments() ([]WorkspaceAttachment, error) {
+	path, err := c.wsPath("attachments")
+	if err != nil {
+		return nil, err
+	}
+	var env workspaceAttachmentsEnvelope
+	if err := c.get(path, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
 func (c *Client) CreateTask(req CreateTaskRequest) (*Task, error) {
 	path, err := c.wsPath("tasks")
 	if err != nil {
@@ -655,6 +694,11 @@ func (c *Client) uploadMultipart(f *os.File, base, ctype string) (*UploadRespons
 	if _, err := io.Copy(fw, f); err != nil {
 		return nil, err
 	}
+	// Attribute the upload to the active workspace for the ledger (best-effort;
+	// the server falls back to the user's active workspace if empty).
+	if c.WorkspaceSlug != "" {
+		_ = w.WriteField("workspace", c.WorkspaceSlug)
+	}
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
@@ -677,13 +721,27 @@ func (c *Client) uploadMultipart(f *os.File, base, ctype string) (*UploadRespons
 // (2) PUT the bytes straight to Blob storage. The PUT headers + api-version
 // track @vercel/blob's wire protocol (pinned to v7); keep in sync if that bumps.
 func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse, error) {
+	// File metadata + target workspace travel in clientPayload so the server can
+	// record the upload ledger row in onUploadCompleted. Marshalled (not
+	// hand-built) so filenames with quotes/specials can't corrupt the JSON.
+	var size int64
+	if fi, err := f.Stat(); err == nil {
+		size = fi.Size()
+	}
+	clientPayload, _ := json.Marshal(map[string]any{
+		"contentType": ctype,
+		"filename":    base,
+		"size":        size,
+		"workspace":   c.WorkspaceSlug, // may be empty → server uses active workspace
+	})
+
 	// 1. Token handshake (authenticated via c.do).
 	handshake := map[string]any{
 		"type": "blob.generate-client-token",
 		"payload": map[string]any{
 			"pathname":      base,
 			"callbackUrl":   c.BaseURL + "/api/upload/blob",
-			"clientPayload": fmt.Sprintf(`{"contentType":%q}`, ctype),
+			"clientPayload": string(clientPayload),
 			"multipart":     false,
 		},
 	}

@@ -36,3 +36,31 @@ export function publicIssue(input: object): Row {
   } = base(input as Row) as Row & { project_seq?: number | null; task_seq?: number | null }
   return { ...rest, project_id: project_seq ?? null, task_id: task_seq ?? null }
 }
+
+// --- Secondary entities (comments, attachments, project updates) ---
+//
+// These aren't work items, so their own `id` is a private-domain id that passes
+// through unchanged (like user/label ids). But the FK that points BACK at a work
+// item must be translated to that work item's #number, never the global serial.
+// The caller already knows the parent's #number (it's in the request path), so
+// it passes it in rather than us re-querying.
+
+// Comments reference a polymorphic parent (issue/task/project). Expose the
+// parent's #number as `parent_id`; drop the legacy internal `issue_id` mirror
+// (parent_type + parent_id fully describe the parent).
+export function publicComment(input: object, parentSeq: number | null): Row {
+  const { issue_id: _legacy, parent_id: _internal, ...rest } = input as Row
+  return { ...rest, parent_id: parentSeq ?? null }
+}
+
+// Attachments belong to an issue. Expose the issue's #number as `issue_id`.
+export function publicAttachment(input: object, issueSeq: number | null): Row {
+  const { issue_id: _internal, ...rest } = input as Row
+  return { ...rest, issue_id: issueSeq ?? null }
+}
+
+// Project updates belong to a project. Expose the project's #number.
+export function publicProjectUpdate(input: object, projectSeq: number | null): Row {
+  const { project_id: _internal, ...rest } = input as Row
+  return { ...rest, project_id: projectSeq ?? null }
+}

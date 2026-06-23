@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
+import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList, publicComment } from '@/lib/api'
 import { createComment, listComments, verifyCommentParent } from '@/lib/db/queries/comments'
 
 interface Params {
@@ -14,7 +14,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.notFound('issue')
   }
   const data = await listComments('issue', id)
-  return jsonList(data)
+  return jsonList(data.map((c) => publicComment(c, Number(idStr))))
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
@@ -37,5 +37,5 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     content,
     parentCommentId,
   })
-  return NextResponse.json(comment, { status: 201 })
+  return NextResponse.json(publicComment(comment, Number(idStr)), { status: 201 })
 })

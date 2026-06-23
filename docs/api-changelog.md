@@ -8,6 +8,65 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-06-23 — Secondary entities no longer leak internal ids
+
+Comments, attachments, and project updates used to return the **internal** serial
+id of the work item they belong to, contradicting the "one id = the workspace
+`#number`" contract. They now expose the `#number` like everything else:
+
+- **Comments** — `parent_id` is now the parent issue/task/project `#number`. The
+  legacy internal `issue_id` field is **no longer returned** (use
+  `parent_type` + `parent_id`). Affects `GET`/`POST …/{issues,tasks,projects}/{id}/comments`
+  and `PATCH …/comments/{id}`.
+- **Attachments** — `issue_id` is now the issue `#number` (was the internal id).
+  Affects `GET`/`POST …/issues/{id}/attachments` and `GET …/attachments`.
+- **Project updates** — `project_id` is now the project `#number`. Affects
+  `GET`/`POST …/projects/{id}/updates`.
+
+Migration: if you parsed `issue_id`/`parent_id` from these responses as a global
+id, treat it as the `#number` now (and read comments via `parent_type`+`parent_id`).
+The `bk` CLI's legacy `Comment` shape drops `issue_id` in favour of
+`parent_type`/`parent_id`. The activity feed's `entity_id` is unchanged (internal
+audit handle).
+
+---
+
+## 2026-06-23 — Workspace storage management (uploads ledger + owner cleanup)
+
+Uploaded files are now tracked and can be reviewed and cleaned up. Previously
+nothing ever deleted stored files — every upload lived in Blob storage forever.
+
+**New (owner-only) endpoints:**
+
+- `GET /api/workspaces/{ws}/storage` — every file uploaded into the workspace,
+  each with `reference_count` + `references` (the issue/task/project/comment/
+  project-update bodies and attachment rows that point at it, **including items
+  in the recycle bin**), plus `usage_bytes` and `limit_bytes`.
+- `DELETE /api/workspaces/{ws}/storage/{id}` — permanently delete a file. Gated
+  by a live, system-wide reference scan: refused with **409 `file_in_use`** if
+  anything still references it. Only genuine orphans (`reference_count` 0) can be
+  removed. Irreversible.
+- `GET /api/workspaces/{ws}/attachments` — the workspace-wide attachments table
+  (every `attachments` row joined to its issue + uploader).
+
+**CLI:** `bk storage list`, `bk storage rm <id>`, `bk storage attachments`.
+
+**Automatic cleanup.** Hard-deleting a comment/reply or purging an item from
+Trash (single, batch, or empty) now automatically removes any file that content
+referenced **once nothing else references it** (same live system-wide scan). So
+permanently destroying content also frees its storage — no owner action needed.
+
+**Behaviour to know.** *Editing* a file out of a description/comment (without
+deleting the item) still does **not** delete the stored bytes — that's
+deliberate, so undo and trash-restore stay safe; those files become "Unused"
+orphans the owner clears from the Storage page. Uploads made before this shipped
+aren't in the ledger yet (a reconcile pass is planned — see improvements.md).
+
+**Internal:** new `uploads` ledger table (written at upload time on every path),
+nullable `workspaces.storage_limit_bytes` (base for future quotas, unenforced).
+
+---
+
 ## 2026-06-23 — CLI: `bk upload` + local-file embedding in descriptions
 
 Two CLI ergonomics additions for attaching files (no API change — both use the

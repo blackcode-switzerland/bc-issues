@@ -10,6 +10,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { resolveUser } from '@/lib/auth/resolve'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload'
+import { recordUpload } from '@/lib/db/queries/uploads'
+import { getWorkspaceForUser } from '@/lib/db/queries/workspaces'
+import type { User } from '@/lib/db/schema'
+
+// Attribute an upload to a workspace for the ledger. Prefer an explicit slug/id
+// from the client payload, else the user's active workspace. Never throws.
+async function attributeWorkspace(user: User, explicit?: string | null): Promise<number | null> {
+  if (explicit) {
+    try {
+      const ws = await getWorkspaceForUser(explicit, user.id)
+      if (ws) return ws.id
+    } catch {
+      /* fall through */
+    }
+  }
+  return user.active_workspace_id ?? null
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody
@@ -23,26 +40,55 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const user = await resolveUser(request)
         if (!user) throw new Error('Authentication required')
 
-        // Block SVG (XSS) — content type is forwarded by the client.
-        let contentType: string | undefined
+        // The client forwards file metadata in clientPayload (contentType,
+        // filename, size) and may name a target workspace (slug/id).
+        let payload: { contentType?: string; filename?: string; size?: number; workspace?: string } = {}
         try {
-          contentType = clientPayload ? (JSON.parse(clientPayload).contentType as string) : undefined
+          payload = clientPayload ? JSON.parse(clientPayload) : {}
         } catch {
-          contentType = undefined
+          payload = {}
         }
-        if (contentType === 'image/svg+xml') {
+
+        // Block SVG (XSS) — content type is forwarded by the client.
+        if (payload.contentType === 'image/svg+xml') {
           throw new Error('SVG files are not allowed for security reasons')
         }
+
+        const workspaceId = await attributeWorkspace(user, payload.workspace ?? null)
 
         return {
           addRandomSuffix: true,
           // Blob enforces this server-side during the direct upload.
           maximumSizeInBytes: MAX_UPLOAD_BYTES,
+          // Forwarded verbatim to onUploadCompleted to write the ledger row.
+          tokenPayload: JSON.stringify({
+            workspace_id: workspaceId,
+            uploaded_by: user.id,
+            filename: payload.filename ?? null,
+            size: payload.size ?? null,
+            contentType: payload.contentType ?? null,
+          }),
         }
       },
-      // Fires server-to-server after the upload completes. Nothing to do — the
-      // client receives the URL directly and inserts it into the document.
-      onUploadCompleted: async () => {},
+      // Fires server-to-server after the upload completes (production only — not
+      // on localhost, which uses the multipart route). Record the ledger row;
+      // never throw, a ledger failure must not fail the upload.
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        try {
+          const meta = tokenPayload ? JSON.parse(tokenPayload) : {}
+          await recordUpload({
+            url: blob.url,
+            pathname: blob.pathname,
+            filename: meta.filename || blob.pathname,
+            size: meta.size ?? null,
+            mime_type: meta.contentType ?? blob.contentType ?? null,
+            workspace_id: meta.workspace_id ?? null,
+            uploaded_by: meta.uploaded_by ?? null,
+          })
+        } catch (err) {
+          console.error('[upload/blob] ledger record failed (non-fatal):', err)
+        }
+      },
     })
 
     return NextResponse.json(result)

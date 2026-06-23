@@ -2,6 +2,7 @@ import {
   pgTable,
   serial,
   bigserial,
+  bigint,
   varchar,
   text,
   integer,
@@ -53,6 +54,11 @@ export const workspaces = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deleted_at: timestamp('deleted_at', { withTimezone: true }),
+    // Future-proofing for storage quotas: a hard cap (in bytes) on the total
+    // size of files uploaded into this workspace. NULL = unlimited (the only
+    // behaviour today — nothing enforces this yet). Current usage is the SUM of
+    // `uploads.size`; enforcement, when added, compares the two at upload time.
+    storage_limit_bytes: bigint('storage_limit_bytes', { mode: 'number' }),
   },
   (t) => ({
     slugUniq: uniqueIndex('uq_workspaces_slug').on(t.slug),
@@ -326,6 +332,42 @@ export const attachments = pgTable(
   },
   (t) => ({
     issueIdx: index('idx_attachments_issue').on(t.issue_id),
+  })
+)
+
+// Upload ledger — one row per file stored through our upload pipeline (Vercel
+// Blob in prod, public/uploads in dev), written at upload time. This is the
+// authoritative record of "a file exists in storage and which workspace it
+// belongs to"; it is the source for the owner-facing Storage page.
+//
+// IMPORTANT: this ledger is metadata only. It is NEVER the authority for whether
+// a file may be deleted — deletion is gated by a live reference scan over the
+// content tables (see lib/blob-refs.ts), so a stale/missing ledger row can never
+// cause data loss. `url` is unique so re-recording the same upload is a no-op.
+export const uploads = pgTable(
+  'uploads',
+  {
+    id: serial('id').primaryKey(),
+    // Nullable: an upload whose workspace couldn't be determined is still
+    // recorded (never lost) — it just won't appear under a workspace until
+    // attributed. ON DELETE CASCADE: dropping a workspace clears its ledger.
+    workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    // The public URL stored in content bodies / attachments — the join key for
+    // reference counting. Unique so recordUpload is idempotent.
+    url: text('url').notNull(),
+    // Blob pathname (or local /uploads path) — kept for storage-side operations.
+    pathname: text('pathname'),
+    filename: varchar('filename', { length: 255 }).notNull(),
+    // bigint: files are capped at 100MB today but the column shouldn't be the
+    // limiting factor if that grows. NULL when the size wasn't reported.
+    size: bigint('size', { mode: 'number' }),
+    mime_type: varchar('mime_type', { length: 100 }),
+    uploaded_by: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    urlUniq: uniqueIndex('uq_uploads_url').on(t.url),
+    workspaceIdx: index('idx_uploads_workspace').on(t.workspace_id),
   })
 )
 
@@ -659,6 +701,8 @@ export type Comment = typeof comments.$inferSelect
 export type ProjectUpdate = typeof projectUpdates.$inferSelect
 export type NewProjectUpdate = typeof projectUpdates.$inferInsert
 export type Attachment = typeof attachments.$inferSelect
+export type Upload = typeof uploads.$inferSelect
+export type NewUpload = typeof uploads.$inferInsert
 export type Label = typeof labels.$inferSelect
 export type IssueAssignee = typeof issueAssignees.$inferSelect
 export type ProjectMember = typeof projectMembers.$inferSelect

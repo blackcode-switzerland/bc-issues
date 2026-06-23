@@ -6,6 +6,13 @@ export { sanitize, truncate } from './sanitize'
 export { resolveWorkspace, requireOwner } from './workspace-context'
 export type { WorkspaceContext } from './workspace-context'
 export { resolveEntityId } from './resolve-entity'
-export { publicProject, publicTask, publicIssue } from './serialize'
+export {
+  publicProject,
+  publicTask,
+  publicIssue,
+  publicComment,
+  publicAttachment,
+  publicProjectUpdate,
+} from './serialize'
 export { parseAnalyticsParams } from './analytics-params'
 export type { ParsedAnalyticsParams } from './analytics-params'

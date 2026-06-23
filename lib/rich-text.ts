@@ -28,6 +28,7 @@
 
 import { marked } from 'marked'
 import sanitizeHtml from 'sanitize-html'
+import { FILE_ATTACHMENT_ATTRS, renderFileAttachmentHtml } from './file-attachment'
 
 const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -46,7 +47,7 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
     // The file-attachment node emitted by upgradeUploadedMedia(). These are inert
     // data attributes (no script), and the render layer (DOMPurify) whitelists the
     // same set, so they survive end-to-end.
-    div: ['data-type', 'data-file-url', 'data-filename', 'data-content-type'],
+    div: [...FILE_ATTACHMENT_ATTRS],
     '*': ['class'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
@@ -114,7 +115,7 @@ const EXT_MIME: Record<string, string> = {
 // True only for URLs that came out of OUR upload pipeline — Vercel Blob in
 // production or the /uploads static dir in local dev. We never rewrite arbitrary
 // external links into embeds.
-function isUploadedAsset(url: string): boolean {
+export function isUploadedAsset(url: string): boolean {
   if (!url) return false
   if (url.startsWith('/uploads/')) return true
   try {
@@ -134,11 +135,11 @@ function extOf(url: string): string {
   return /^[a-z0-9]{1,5}$/.test(ext) ? ext : ''
 }
 
-function mimeForUrl(url: string): string {
+export function mimeForUrl(url: string): string {
   return EXT_MIME[extOf(url)] || 'application/octet-stream'
 }
 
-function fallbackName(url: string): string {
+export function fallbackName(url: string): string {
   const path = url.split(/[?#]/)[0]
   let base = path.slice(path.lastIndexOf('/') + 1)
   try {
@@ -158,12 +159,7 @@ function escapeAttr(s: string): string {
 }
 
 function attachmentNode(url: string, name: string, mime: string): string {
-  return (
-    `<div data-type="file-attachment"` +
-    ` data-file-url="${escapeAttr(url)}"` +
-    ` data-filename="${escapeAttr(name)}"` +
-    ` data-content-type="${escapeAttr(mime)}"></div>`
-  )
+  return renderFileAttachmentHtml(url, name, mime)
 }
 
 function imageNode(url: string, alt: string): string {

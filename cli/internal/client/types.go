@@ -143,7 +143,8 @@ type Task struct {
 
 type Comment struct {
 	ID           int     `json:"id" yaml:"id"`
-	IssueID      int     `json:"issue_id" yaml:"issue_id"`
+	ParentType   *string `json:"parent_type,omitempty" yaml:"parent_type,omitempty"`
+	ParentID     *int    `json:"parent_id,omitempty" yaml:"parent_id,omitempty"`
 	UserID       *int    `json:"user_id" yaml:"user_id"`
 	Content      string  `json:"content" yaml:"content"`
 	AuthorName   *string `json:"author_name,omitempty" yaml:"author_name,omitempty"`
@@ -280,6 +281,55 @@ type Attachment struct {
 	MimeType   string  `json:"mime_type" yaml:"mime_type"`
 	UploadedBy *int    `json:"uploaded_by,omitempty" yaml:"uploaded_by,omitempty"`
 	CreatedAt  *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+}
+
+// WorkspaceAttachment is one row of the owner-only workspace-wide attachments
+// view (the `attachments` table joined to its issue + uploader).
+type WorkspaceAttachment struct {
+	ID           int     `json:"id" yaml:"id"`
+	IssueID      int     `json:"issue_id" yaml:"issue_id"`
+	IssueSeq     *int    `json:"issue_seq" yaml:"issue_seq"`
+	IssueTitle   *string `json:"issue_title" yaml:"issue_title"`
+	Filename     string  `json:"filename" yaml:"filename"`
+	FileURL      string  `json:"file_url" yaml:"file_url"`
+	FileSize     *int    `json:"file_size" yaml:"file_size"`
+	MimeType     *string `json:"mime_type" yaml:"mime_type"`
+	UploaderName *string `json:"uploader_name,omitempty" yaml:"uploader_name,omitempty"`
+	CreatedAt    *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+}
+
+type workspaceAttachmentsEnvelope struct {
+	Data []WorkspaceAttachment `json:"data" yaml:"data"`
+}
+
+// StorageReference is one thing that references a stored file.
+type StorageReference struct {
+	Type    string  `json:"type" yaml:"type"`
+	ID      int     `json:"id" yaml:"id"`
+	Seq     *int    `json:"seq" yaml:"seq"`
+	Label   *string `json:"label" yaml:"label"`
+	Trashed bool    `json:"trashed" yaml:"trashed"`
+}
+
+// StorageFile is one file in workspace storage with its live references.
+type StorageFile struct {
+	ID             int                `json:"id" yaml:"id"`
+	URL            string             `json:"url" yaml:"url"`
+	Filename       string             `json:"filename" yaml:"filename"`
+	Size           *int               `json:"size" yaml:"size"`
+	MimeType       *string            `json:"mime_type" yaml:"mime_type"`
+	UploaderName   *string            `json:"uploader_name,omitempty" yaml:"uploader_name,omitempty"`
+	CreatedAt      *string            `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+	ReferenceCount int                `json:"reference_count" yaml:"reference_count"`
+	References     []StorageReference `json:"references" yaml:"references"`
+}
+
+// StorageListing is the GET /storage response: files + workspace usage.
+type StorageListing struct {
+	Data       []StorageFile `json:"data" yaml:"data"`
+	Total      int           `json:"total" yaml:"total"`
+	UsageBytes int64         `json:"usage_bytes" yaml:"usage_bytes"`
+	LimitBytes *int64        `json:"limit_bytes" yaml:"limit_bytes"`
 }
 
 // AnalyticsPayload is a partial view of the analytics API response — enough to
