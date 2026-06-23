@@ -299,7 +299,42 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 > `--status` is free-form on the CLI side and validated server-side. The canonical issue statuses are `backlog`, `todo`, `in_progress`, `done`, and `cancelled`.
 
-> **`--file` vs `--attach`.** `--file` uploads and embeds the file **inline in the body** (image preview, video/audio player, or download card) — the same result as web drag-and-drop; it's available on `issue/task/project create` and `issue comment`. `--attach` is issue-only and adds the file to the separate **attachments list**. Embedding works because the server rewrites uploaded urls referenced as `![name](url)` / `[name](url)` into rich-text nodes, so embedding from raw API is just: `POST /api/upload` → put the returned url in the body as Markdown.
+#### Embedding files in descriptions & comments
+
+There are three ways to put a file **inline in the body** (image preview,
+video/audio player, or download card — the same result as web drag-and-drop).
+All work because the server rewrites uploaded-file urls into rich-text nodes.
+
+1. **`--file FILE` (repeatable)** — uploads and **appends** the file to the body.
+   Best when placement at the end is fine. Available on `issue/task/project
+   create` and `issue comment`.
+
+2. **Reference a local file path in the body** — for a *structured* doc (files
+   under specific headings), just reference local paths in `--description` /
+   `--description-file` (and `--body`); the CLI uploads each and rewrites it in
+   place:
+
+   ```md
+   ## Demo video
+   ![](./out.png)                         <!-- image -->
+   [](<~/clips/screen recording (1).mov>) <!-- see angle-bracket note below -->
+   ```
+
+   A reference is only uploaded when the target has no `http(s)://` scheme and
+   resolves to a real file on disk; everything else is left untouched. Empty
+   link text is auto-filled from the filename. **No sidebar record is created.**
+
+   > **Paths with spaces or parentheses must be angle-bracketed**: `[](</abs/my
+   > file (2).mp4>)`. Plain Markdown stops the destination at the first `)`, so
+   > `[](/a/foo(1).mp3)` would silently truncate.
+
+3. **`bk upload FILE...`** — uploads and prints just the url(s) (no sidebar
+   record), for scripting: `URL=$(bk upload ./x.png --json | jq -r '.[0].url')`,
+   then drop `![](URL)` into the body yourself.
+
+> **`--file` vs `bk issue attach`.** `--file` (and the methods above) embed in the
+> **body**. `bk issue attach` is different — it's issue-only and adds the file to
+> the separate **attachments list** (sidebar), not the body.
 
 **`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--task`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--task`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
 
@@ -381,6 +416,12 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 |---|---|---|
 | `bk user list` | `GET /api/users` | |
 | `bk user view <id\|email>` | `GET /api/users` + client-side filter | No single-user endpoint; the CLI filters the list. |
+
+### Files
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk upload <file> [<file> ...]` | `POST /api/upload` | Uploads file(s) (max 100MB), prints the url(s). Table mode prints bare urls (pipeable); `--json` returns `[{url,filename,size,contentType}]`. Does **not** create a sidebar attachment. See [Embedding files](#embedding-files-in-descriptions--comments). |
 
 ### Activity / analytics / undo
 

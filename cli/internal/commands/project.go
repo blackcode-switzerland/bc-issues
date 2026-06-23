@@ -226,6 +226,10 @@ func newProjectCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			body, err = resolveBodyMedia(c, body)
+			if err != nil {
+				return err
+			}
 			body, err = embedFiles(c, body, files)
 			if err != nil {
 				return err
@@ -324,6 +328,13 @@ func newProjectEditCmd() *cobra.Command {
 			c, err := newClient()
 			if err != nil {
 				return err
+			}
+			if req.Description != nil {
+				resolved, err := resolveBodyMedia(c, *req.Description)
+				if err != nil {
+					return err
+				}
+				req.Description = &resolved
 			}
 			p, err := c.UpdateProject(id, req)
 			if err != nil {
@@ -561,6 +572,10 @@ func newProjectUpdatesAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			content, err = resolveBodyMedia(c, content)
+			if err != nil {
+				return err
+			}
 			req := client.CreateProjectUpdateRequest{Status: status}
 			if content != "" {
 				req.Body = &content
@@ -645,6 +660,10 @@ func newProjectCommentCmd() *cobra.Command {
 				return err
 			}
 			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			content, err = resolveBodyMedia(c, content)
 			if err != nil {
 				return err
 			}

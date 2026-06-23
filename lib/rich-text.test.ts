@@ -68,6 +68,32 @@ describe('upgradeUploadedMedia — uploaded files render inline', () => {
   })
 })
 
+describe('toRichTextHtml — HTML input (direct-API agents sending HTML)', () => {
+  it('upgrades an uploaded-asset <a> link inside HTML to a file-attachment node', () => {
+    const out = toRichTextHtml(`<p>clip: <a href="${BLOB}/1-demo.mp4">demo</a></p>`)
+    expect(out).toContain('data-type="file-attachment"')
+    expect(out).toContain('video/mp4')
+  })
+
+  it('keeps an uploaded <img> in HTML as an image', () => {
+    const out = toRichTextHtml(`<p><img src="${BLOB}/1-pic.png"></p>`)
+    expect(out).toContain('<img')
+    expect(out).toContain(`${BLOB}/1-pic.png`)
+  })
+
+  it('passes a hand-authored file-attachment node through unchanged', () => {
+    const node = `<div data-type="file-attachment" data-file-url="${BLOB}/1-a.pdf" data-filename="a.pdf" data-content-type="application/pdf"></div>`
+    expect(toRichTextHtml(node)).toBe(node)
+  })
+
+  it('treats markdown-with-a-stray-HTML-tag as HTML (no markdown conversion)', () => {
+    // A single tag flips the whole string to the HTML path: the "##" stays literal.
+    const out = toRichTextHtml('## Heading <b>x</b>')
+    expect(out).toContain('## Heading')
+    expect(out).not.toContain('<h2')
+  })
+})
+
 describe('toRichTextHtml — end to end embedding', () => {
   it('renders an uploaded image from markdown image syntax', () => {
     const out = toRichTextHtml(`Here: ![diagram](${BLOB}/1-diagram.png)`)

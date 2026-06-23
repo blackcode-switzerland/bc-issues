@@ -117,13 +117,34 @@ card (the same result as web drag-and-drop). It's repeatable and works on
 ./bk project create --name "Q3 brief" --file ./brief.pdf
 ```
 
-Under the hood this uploads (max 100 MB) and writes the returned url into the
-body as Markdown; the server renders uploaded urls inline. Doing it by hand over
-the raw API is the same two steps: `POST /api/upload`, then put the url in the
-body as `![name](url)` (image) or `[name](url)` (any file).
+`--file` *appends* to the body. For a **structured** doc (files under specific
+headings), reference local file paths directly in `--description` /
+`--description-file` (or `--body`) and the CLI uploads + rewrites them in place:
 
-> `bk issue attach` is different: it adds a file to the issue's **attachments
-> list** (sidebar), not the body. Use `--file` to embed inline, `attach` for the list.
+```sh
+cat > doc.md <<'MD'
+## Screenshot
+![](./shot.png)
+## Recording
+[](<~/clips/screen recording (1).mov>)
+MD
+./bk issue create --project 6 --title "Bug" --description-file doc.md
+```
+
+A path is only uploaded when it has no `http(s)://` scheme and exists on disk;
+empty link text is auto-filled from the filename. **Paths with spaces or
+parentheses must be angle-bracketed** — `[](</abs/my file (2).mp4>)` — because
+plain Markdown stops the link destination at the first `)`.
+
+Need just a url (e.g. for scripting)? `bk upload`:
+
+```sh
+URL=$(./bk upload ./diagram.png --json | jq -r '.[0].url')
+```
+
+`bk upload` and the local-path method create **no** sidebar attachment record.
+`bk issue attach` is the opposite: it adds a file to the issue's **attachments
+list** (sidebar), not the body.
 
 ## Commands
 
@@ -272,6 +293,11 @@ bk inbox archive <id> [id ...]     archive messages
 ```
 bk user list                       list every user on the server
 bk user view <id|email>            show one user (filtered client-side)
+```
+
+### Files
+```
+bk upload <file> [<file> ...]   upload file(s), print url(s) (no sidebar record)
 ```
 
 ### Activity / Analytics / Undo

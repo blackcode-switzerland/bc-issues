@@ -263,6 +263,10 @@ func newIssueCreateCmd() *cobra.Command {
 			}
 			c := client.New(cfg.Server, cfg.Token, clientWorkspaceSlug(cfg))
 
+			body, err = resolveBodyMedia(c, body)
+			if err != nil {
+				return err
+			}
 			body, err = embedFiles(c, body, files)
 			if err != nil {
 				return err
@@ -377,6 +381,13 @@ func newIssueEditCmd() *cobra.Command {
 			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
+			}
+			if req.Description != nil {
+				resolved, err := resolveBodyMedia(c, *req.Description)
+				if err != nil {
+					return err
+				}
+				req.Description = &resolved
 			}
 			if cmd.Flags().Changed("assignee") {
 				if strings.EqualFold(assignee, "none") || strings.EqualFold(assignee, "null") || strings.EqualFold(assignee, "clear") || strings.EqualFold(assignee, "unset") {
@@ -562,6 +573,10 @@ func newIssueCommentCmd() *cobra.Command {
 				return err
 			}
 			id, err := resolveIssueArg(c, args[0])
+			if err != nil {
+				return err
+			}
+			content, err = resolveBodyMedia(c, content)
 			if err != nil {
 				return err
 			}

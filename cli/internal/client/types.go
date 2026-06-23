@@ -265,10 +265,10 @@ type UndoResponse struct {
 }
 
 type UploadResponse struct {
-	URL         string `json:"url"`
-	Filename    string `json:"filename"`
-	Size        int    `json:"size"`
-	ContentType string `json:"contentType"`
+	URL         string `json:"url" yaml:"url"`
+	Filename    string `json:"filename" yaml:"filename"`
+	Size        int    `json:"size" yaml:"size"`
+	ContentType string `json:"contentType" yaml:"contentType"`
 }
 
 type Attachment struct {

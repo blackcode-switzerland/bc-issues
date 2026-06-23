@@ -125,6 +125,10 @@ func newTaskCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			body, err = resolveBodyMedia(c, body)
+			if err != nil {
+				return err
+			}
 			body, err = embedFiles(c, body, files)
 			if err != nil {
 				return err
@@ -188,6 +192,13 @@ func newTaskEditCmd() *cobra.Command {
 			c, err := newClient()
 			if err != nil {
 				return err
+			}
+			if req.Description != nil {
+				resolved, err := resolveBodyMedia(c, *req.Description)
+				if err != nil {
+					return err
+				}
+				req.Description = &resolved
 			}
 			m, err := c.UpdateTask(id, req)
 			if err != nil {
@@ -281,6 +292,10 @@ func newTaskCommentCmd() *cobra.Command {
 				return err
 			}
 			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			content, err = resolveBodyMedia(c, content)
 			if err != nil {
 				return err
 			}

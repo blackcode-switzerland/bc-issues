@@ -8,6 +8,28 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-06-23 — CLI: `bk upload` + local-file embedding in descriptions
+
+Two CLI ergonomics additions for attaching files (no API change — both use the
+existing `POST /api/upload`):
+
+- **`bk upload <file>...`** — uploads file(s) and prints the url(s). Table output
+  is bare urls (pipeable); `--json` returns `[{url,filename,size,contentType}]`.
+  Unlike `bk issue attach`, it creates **no** sidebar attachment record.
+- **Local-file references in the body** — `--description` / `--description-file`
+  (and `--body`, project-update bodies, comments) may reference local file paths
+  directly; the CLI uploads each and rewrites it inline. Lets you build a
+  *structured* doc (files under specific headings) without harvesting urls by
+  hand. Empty link text is auto-filled from the filename.
+  - **Paths with spaces or parentheses must be angle-bracketed**:
+    `[](</abs/my file (2).mp4>)`. Plain Markdown stops the link destination at
+    the first `)`, so `[](/a/foo(1).mp3)` would silently truncate.
+
+This removes the previous awkwardness where the only way to get a url for inline
+placement was `bk issue attach` (which also added a sidebar record).
+
+---
+
 ## 2026-06-23 — CLI cleanup: removed dead pagination flags
 
 Finishing the 2026-06-22 single-id refactor. The issue/project/task list
