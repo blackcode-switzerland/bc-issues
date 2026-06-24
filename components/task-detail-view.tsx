@@ -326,7 +326,7 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
                     descModifiedRef.current = false
                   }
                 }}
-                placeholder="Add description… type / to format, @ to mention"
+                placeholder="Add description…"
                 variant="seamless"
                 minHeight="100px"
                 mentionItems={mentionItems}

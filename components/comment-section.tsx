@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { CornerDownRight, Edit3, MessageSquare, Reply, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { uploadFile } from '@/lib/upload'
+import { richTextHasContent } from '@/lib/file-attachment'
 import { RichTextDisplay, RichTextEditor } from './rich-text-editor'
 import type { MentionItem } from './rich-text-editor'
 import { MemberAvatar } from '@/components/ui/member-avatar'
@@ -124,7 +125,7 @@ export function CommentSection({
           key={`root-${composerKey}`}
           content=""
           onChange={setDraft}
-          placeholder="Leave a comment… type / to format, @ to mention"
+          placeholder="Leave a comment…"
           variant="bordered"
           hideToolbar
           mentionItems={mentionItems}
@@ -134,9 +135,9 @@ export function CommentSection({
         <div className="flex items-center justify-end border-t border-border px-3 py-2">
           <button
             onClick={() => {
-              if (draft.replace(/<[^>]*>/g, '').trim()) createRoot.mutate(draft)
+              if (richTextHasContent(draft)) createRoot.mutate(draft)
             }}
-            disabled={createRoot.isPending || !draft.replace(/<[^>]*>/g, '').trim()}
+            disabled={createRoot.isPending || !richTextHasContent(draft)}
             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {createRoot.isPending ? 'Posting…' : 'Comment'}
@@ -283,8 +284,7 @@ function CommentRow({
   }
 
   function saveEdit() {
-    const text = editDraft.replace(/<[^>]*>/g, '').trim()
-    if (text) editMutation.mutate(editDraft)
+    if (richTextHasContent(editDraft)) editMutation.mutate(editDraft)
   }
 
   async function handleDelete() {
@@ -354,9 +354,7 @@ function CommentRow({
                 </button>
                 <button
                   onClick={saveEdit}
-                  disabled={
-                    editMutation.isPending || !editDraft.replace(/<[^>]*>/g, '').trim()
-                  }
+                  disabled={editMutation.isPending || !richTextHasContent(editDraft)}
                   className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
                   {editMutation.isPending ? 'Saving…' : 'Save'}
@@ -458,7 +456,7 @@ function ReplyComposer({
             key={`reply-${parentCommentId}-${editorKey}`}
             content=""
             onChange={setDraft}
-            placeholder="Write a reply… type / to format, @ to mention"
+            placeholder="Write a reply…"
             variant="bordered"
             hideToolbar
             mentionItems={mentionItems}
@@ -475,9 +473,9 @@ function ReplyComposer({
             </button>
             <button
               onClick={() => {
-                if (draft.replace(/<[^>]*>/g, '').trim()) reply.mutate(draft)
+                if (richTextHasContent(draft)) reply.mutate(draft)
               }}
-              disabled={reply.isPending || !draft.replace(/<[^>]*>/g, '').trim()}
+              disabled={reply.isPending || !richTextHasContent(draft)}
               className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {reply.isPending ? 'Replying…' : 'Reply'}

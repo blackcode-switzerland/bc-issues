@@ -1216,7 +1216,7 @@ function IssueDetailModal({
               <RichTextEditor
                 content={description}
                 onChange={handleDescriptionChange}
-                placeholder="Add description… type / to format"
+                placeholder="Add description…"
                 onFileUpload={handleFileUpload}
                 hideToolbar={true}
                 minHeight="300px"

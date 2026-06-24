@@ -450,7 +450,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                     key={`update-${updateBodyKey}`}
                     content=""
                     onChange={setUpdateBody}
-                    placeholder="Write an update… type / to format, @ to mention"
+                    placeholder="Write an update…"
                     variant="seamless"
                     minHeight="80px"
                     mentionItems={mentionItems}
@@ -571,7 +571,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                 }
                 descTouchedRef.current = false
               }}
-              placeholder="Add description… type / to format, @ to mention"
+              placeholder="Add description…"
               variant="seamless"
               minHeight="100px"
               mentionItems={mentionItems}

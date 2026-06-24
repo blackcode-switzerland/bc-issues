@@ -322,7 +322,7 @@ export function CreateIssueModal({
               <RichTextEditor
                 content={description}
                 onChange={setDescription}
-                placeholder="Add description… type / to format, @ to mention"
+                placeholder="Add description…"
                 onFileUpload={handleFileUpload}
                 hideToolbar
                 minHeight={isExpanded ? '350px' : '200px'}

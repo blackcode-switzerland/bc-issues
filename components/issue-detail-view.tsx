@@ -474,7 +474,7 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
               content={data.description ?? ''}
               onChange={onDescriptionChange}
               onBlur={flushDescription}
-              placeholder="Add description… type / to format, @ to mention"
+              placeholder="Add description…"
               variant="seamless"
               mentionItems={mentionItems}
               minHeight="120px"

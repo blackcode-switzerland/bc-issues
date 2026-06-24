@@ -40,6 +40,7 @@ import { toast } from 'sonner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageLightbox } from '@/components/image-lightbox'
 import { MemberAvatar } from '@/components/ui/member-avatar'
+import { VoiceRecorderModal } from '@/components/voice-recorder-modal'
 import {
   FA_ATTR,
   FILE_ATTACHMENT_ATTRS,
@@ -64,6 +65,7 @@ import {
   UnderlineIcon,
   ListChecks,
   Paperclip,
+  Mic,
   Download,
   Eye,
   FileText,
@@ -78,6 +80,14 @@ import {
   Rows3,
   Plus,
 } from 'lucide-react'
+
+// Platform-correct label for the voice-note shortcut. Computed lazily (client
+// only) so it never lands in SSR markup — avoids a hydration mismatch.
+function voiceShortcutLabel(): string {
+  if (typeof navigator === 'undefined') return ''
+  const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent)
+  return isMac ? '⇧⌘M' : 'Ctrl+Shift+M'
+}
 
 // Validate URL to prevent javascript: protocol XSS attacks
 function isValidUrl(url: string): boolean {
@@ -512,6 +522,7 @@ interface SlashItem {
 interface SlashCommandCallbacks {
   setLink: () => void
   triggerAttach: () => void
+  triggerVoiceNote: () => void
   hasFileUpload: boolean
 }
 
@@ -654,6 +665,16 @@ function buildSlashItems(callbacksRef: React.MutableRefObject<SlashCommandCallba
         callbacksRef.current.triggerAttach()
       },
     },
+    {
+      id: 'voice',
+      label: 'Voice note',
+      keywords: ['voice', 'record', 'audio', 'mic', 'note', 'recording'],
+      icon: <Mic size={15} />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        callbacksRef.current.triggerVoiceNote()
+      },
+    },
   ]
 }
 
@@ -723,6 +744,24 @@ const SlashCommandList = forwardRef<SlashListHandle, SlashListProps>(function Sl
   )
 })
 
+// Keyboard shortcut to open the voice recorder, mirroring the slash/mention
+// entry points. Mod-Shift-M (⌘⇧M on macOS, Ctrl+Shift+M elsewhere). No-op when
+// the editor has no upload handler (voice notes need one).
+function buildVoiceShortcut(callbacksRef: React.MutableRefObject<SlashCommandCallbacks>) {
+  return Extension.create({
+    name: 'voiceShortcut',
+    addKeyboardShortcuts() {
+      return {
+        'Mod-Shift-m': () => {
+          if (!callbacksRef.current.hasFileUpload) return false
+          callbacksRef.current.triggerVoiceNote()
+          return true
+        },
+      }
+    },
+  })
+}
+
 function buildSlashCommand(callbacksRef: React.MutableRefObject<SlashCommandCallbacks>) {
   const allItems = buildSlashItems(callbacksRef)
 
@@ -742,7 +781,7 @@ function buildSlashCommand(callbacksRef: React.MutableRefObject<SlashCommandCall
             const q = query.toLowerCase().trim()
             const items = callbacksRef.current.hasFileUpload
               ? allItems
-              : allItems.filter((i) => i.id !== 'attach')
+              : allItems.filter((i) => i.id !== 'attach' && i.id !== 'voice')
             if (!q) return items
             return items.filter(
               (item) =>
@@ -1052,7 +1091,7 @@ interface RichTextEditorProps {
 export function RichTextEditor({
   content,
   onChange,
-  placeholder = 'Add description… type / to format, @ to mention',
+  placeholder = 'Add description…',
   editable = true,
   onFileUpload,
   hideToolbar = false,
@@ -1072,13 +1111,17 @@ export function RichTextEditor({
   }, [mentionItems])
   const [mentionsEnabled] = useState(() => mentionItems !== undefined)
 
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
+
   const slashCallbacksRef = useRef<SlashCommandCallbacks>({
     setLink: () => {},
     triggerAttach: () => {},
+    triggerVoiceNote: () => {},
     hasFileUpload: !!onFileUpload,
   })
 
   const [slashCommandExt] = useState(() => buildSlashCommand(slashCallbacksRef))
+  const [voiceShortcutExt] = useState(() => buildVoiceShortcut(slashCallbacksRef))
   const [fileAttachmentExt] = useState(() => buildFileAttachment())
   const [uploadPlaceholderExt] = useState(() => buildUploadPlaceholder())
 
@@ -1163,10 +1206,26 @@ export function RichTextEditor({
         openOnClick: false,
         HTMLAttributes: { class: 'text-primary underline hover:no-underline' },
       }),
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({
+        // Compose one consistent hint from the base text plus only the entry
+        // points this editor actually has: `<base>… / format, @ mention, ⇧⌘M
+        // voice note`. Function form so the platform label resolves client-side
+        // (no hydration mismatch); the voice clause is dropped when there's no
+        // upload handler and @ mention when mentions are disabled.
+        placeholder: () => {
+          const parts = ['/ format']
+          if (mentionsEnabled) parts.push('@ mention')
+          if (onFileUpload) {
+            const combo = voiceShortcutLabel()
+            if (combo) parts.push(`${combo} voice note`)
+          }
+          return `${placeholder} ${parts.join(', ')}`
+        },
+      }),
       ...(mentionsEnabled ? [buildMention(mentionItemsRef)] : []),
       ...tableExtensions({ editable: true }),
       slashCommandExt,
+      voiceShortcutExt,
       fileAttachmentExt,
       uploadPlaceholderExt,
     ],
@@ -1276,6 +1335,7 @@ export function RichTextEditor({
     slashCallbacksRef.current = {
       setLink,
       triggerAttach: () => fileInputRef.current?.click(),
+      triggerVoiceNote: () => setShowVoiceRecorder(true),
       hasFileUpload: !!onFileUpload,
     }
   }, [setLink, onFileUpload])
@@ -1387,6 +1447,15 @@ export function RichTextEditor({
             multiple
             className="hidden"
           />
+          {onFileUpload && (
+            <VoiceRecorderModal
+              open={showVoiceRecorder}
+              onClose={() => setShowVoiceRecorder(false)}
+              onRecorded={(file) => {
+                if (editor) uploadWithPlaceholder(editor.view, file)
+              }}
+            />
+          )}
         </>
       ) : null}
       {editable && !hideToolbar && variant === 'bordered' ? (
@@ -1425,6 +1494,11 @@ export function RichTextEditor({
           <MenuButton onClick={addFile} title="Attach file">
             {onFileUpload ? <Paperclip size={15} /> : <ImageIcon size={15} />}
           </MenuButton>
+          {onFileUpload ? (
+            <MenuButton onClick={() => setShowVoiceRecorder(true)} title="Voice note">
+              <Mic size={15} />
+            </MenuButton>
+          ) : null}
         </div>
       ) : null}
       <EditorContent editor={editor} />

@@ -354,6 +354,16 @@ kanban, detail pages, modals) rendering work-item state identically.
     **uploaded** asset is rewritten server-side into the inline player (same as a
     drag-drop upload); external media and `<iframe>` embeds are still stripped on
     render (security). Embed external media by uploading it via `/api/upload`.
+  - **Voice notes** — when `onFileUpload` is set, users can record audio inline
+    via the `/voice note` slash command, the toolbar mic button, or the
+    **⌘⇧M / Ctrl+Shift+M** shortcut (`buildVoiceShortcut`). The empty-editor
+    placeholder advertises the shortcut alongside the `/` and `@` hints
+    (`components/voice-recorder-modal.tsx`, `MediaRecorder` + `getUserMedia`). The
+    modal handles mic-permission/secure-context failures with guidance, lets the
+    user preview/re-record, then hands the recording to the **same**
+    `uploadWithPlaceholder` path as any other attachment — it lands as a standard
+    `audio/*` file-attachment (no new node type, no backend changes). webm/opus on
+    Chrome·Firefox, mp4 on Safari.
   - `RichTextDisplay({ content })` — read-only render.
   - `MentionItem` — the mention item type.
 

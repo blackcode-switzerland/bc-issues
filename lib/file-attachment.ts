@@ -42,6 +42,16 @@ function escapeAttr(s: string): string {
     .replace(/>/g, '&gt;')
 }
 
+// Whether rich-text HTML carries anything postable. Plain `strip tags && trim`
+// treats attachment-only content as empty (an <img> or file-attachment <div>
+// has no text), which would wrongly disable "Comment"/"Reply"/"Save". So we also
+// count embedded media: images, file attachments, and raw audio/video tags.
+export function richTextHasContent(html: string | null | undefined): boolean {
+  if (!html) return false
+  if (html.replace(/<[^>]*>/g, '').trim()) return true
+  return new RegExp(`<img\\b|<video\\b|<audio\\b|${FA_ATTR.type}="${FILE_ATTACHMENT_TYPE}"`, 'i').test(html)
+}
+
 // Serialize a file-attachment to its canonical stored HTML. The server emits
 // this; the editor parses it back via FILE_ATTACHMENT_SELECTOR.
 export function renderFileAttachmentHtml(url: string, filename: string, contentType: string): string {
