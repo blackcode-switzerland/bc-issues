@@ -343,7 +343,7 @@
 /* Task list (checklist) */
 .prose ul[data-type="taskList"] { @apply list-none pl-0; }
 .prose ul[data-type="taskList"] li { @apply flex items-start gap-2 mb-1; }
-.prose ul[data-type="taskList"] li > label { @apply flex items-center mt-0.5; }
+.prose ul[data-type="taskList"] li > label { @apply flex items-center shrink-0; height: 1.7em; }
 .prose ul[data-type="taskList"] li > label input[type="checkbox"] {
   @apply h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer;
 }
