@@ -10,6 +10,8 @@ export const AGENT_MANIFEST = {
   project: 'blackcode issues',
   summary:
     'AI-native issue tracker. The same workspace data is available through a web UI, a Go CLI (bk), and an HTTP API.',
+  recommended_interface:
+    'For programmatic/agent access we recommend the bk CLI over direct HTTP API calls. The CLI wraps the same API but handles auth, JSON-body encoding, pagination, file upload+embed, and gives stable exit codes — which makes agent runs markedly more reliable. The raw HTTP API stays fully supported; reach for it when the CLI cannot cover a case (e.g. an urgent one-off). Not required, just the more dependable path.',
   programmatic_access: {
     api_base: '/api',
     workspace_scoped_routes: '/api/workspaces/{workspace_slug_or_id}/...',
@@ -32,6 +34,7 @@ export const AGENT_MANIFEST = {
     changelog: '/docs/api-changelog.md',
   },
   cli: {
+    recommended: 'Preferred interface for agents — more reliable than calling the HTTP API directly (see recommended_interface).',
     package: '@blackcode_sa/bc-issues',
     install: 'npm install -g @blackcode_sa/bc-issues',
     login: 'bk login',
@@ -45,6 +48,7 @@ export const AGENT_MANIFEST = {
 export const AGENT_MANIFEST_NOTE = `
 blackcode issues — programmatic access
 This is a rendered web page, but everything here is also available over an HTTP API and a CLI.
+- RECOMMENDED: use the bk CLI rather than calling the HTTP API directly. It wraps the same API but handles auth, JSON encoding, pagination, file upload+embed and stable exit codes, so agent runs are more reliable. The HTTP API stays supported for cases the CLI can't cover — it's a recommendation, not a requirement.
 - API base: /api  (tenant data is workspace-scoped under /api/workspaces/{ws}/...)
 - Auth: send  Authorization: Bearer bk_live_<token>  (mint at /dashboard/settings/tokens, or run: bk login)
 - Start here: GET /api/meta  (your context + the valid status/priority values)

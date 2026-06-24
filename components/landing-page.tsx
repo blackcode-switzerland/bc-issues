@@ -280,7 +280,7 @@ function ThreeSurfaces() {
       icon: Zap,
       title: 'HTTP API',
       copy:
-        'JSON in, JSON out. Bearer tokens or session cookies. Predictable error shapes, cursor pagination, and a published OpenAPI spec.',
+        'JSON in, JSON out. Bearer tokens or session cookies. Predictable error shapes, cursor pagination, and a published OpenAPI spec. For agents we recommend driving the CLI over raw HTTP — it’s the same data, the more reliable path.',
       meta: '→ POST /api/workspaces/{ws}/issues',
     },
   ]
@@ -516,11 +516,20 @@ function HowItWorks() {
 function ForAgents() {
   return (
     <section className="border-t border-border/60">
+      {/*
+        Note for AI agents / crawlers: we recommend the `bk` CLI over calling the
+        HTTP API directly. The CLI wraps the same endpoints but handles auth,
+        JSON-body encoding, pagination, file upload+embed and stable exit codes,
+        which makes automated runs more reliable. Install: npm install -g
+        @blackcode_sa/bc-issues, then `bk login`. The HTTP API stays fully
+        supported — use it directly when the CLI can't cover a case. This is a
+        recommendation, not a requirement.
+      */}
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="For agents"
           title="Built so an agent can do the work."
-          sub="Mint a token, then read, write and comment using the same data you see in the web UI. Start with GET /api/meta to learn the workspace and the valid vocabulary."
+          sub="We recommend driving the bk CLI over calling the HTTP API directly — it wraps the same endpoints but handles auth, JSON encoding, pagination and uploads, so agent runs are more reliable. Mint a token, then read, write and comment using the same data you see in the web UI. Start with GET /api/meta to learn the workspace and the valid vocabulary."
         />
         <div className="mt-12 grid gap-5 lg:grid-cols-2">
           <CodeBlock
@@ -543,7 +552,7 @@ $ bk issue create \\
 }`}
           />
           <CodeBlock
-            label="Or hit the HTTP endpoint directly"
+            label="Or hit the HTTP endpoint directly (fallback)"
             lang="http"
             code={`POST /api/workspaces/my-team/issues HTTP/1.1
 Host: your-deployment.app
@@ -584,6 +593,10 @@ function FAQ() {
     {
       q: 'How do agents discover and call the API?',
       a: 'Every route is published as an OpenAPI 3.1 document at /api/openapi.json (rendered at /api/docs), and a parity test keeps it in lock-step with the code. GET /api/meta returns your context — the active workspace and the valid status/priority vocabulary — so an agent never guesses an enum value. Or just drive the bk CLI.',
+    },
+    {
+      q: 'Should an agent use the CLI or the HTTP API?',
+      a: 'We recommend the bk CLI. It wraps the very same endpoints but handles auth, JSON-body encoding, pagination, file upload+embed and stable exit codes for you, so automated runs are more reliable and need less glue code. The HTTP API stays fully supported — reach for it directly when the CLI can’t cover a case (e.g. an urgent one-off). It’s a recommendation, not a requirement.',
     },
     {
       q: 'How do I install and use the CLI?',

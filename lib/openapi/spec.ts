@@ -160,6 +160,13 @@ export const openApiSpec = {
     title: 'Blackcode Issues API',
     version: '1.1.0',
     description:
+      '**Recommended:** for programmatic/agent use, prefer the `bk` CLI over calling ' +
+      'this HTTP API directly. The CLI wraps the very same endpoints but handles auth, ' +
+      'JSON-body encoding, pagination, file upload+embed and stable exit codes for you, ' +
+      'which makes automated/agent runs noticeably more reliable (install: ' +
+      '`npm install -g @blackcode_sa/bc-issues`, then `bk login`). This API stays fully ' +
+      'supported — use it directly when the CLI cannot cover a case (e.g. an urgent ' +
+      'one-off). It is a recommendation, not a requirement.\n\n' +
       'AI-native issue tracker. Everything is workspace-scoped: resolve a workspace ' +
       '(slug or id) and operate under /api/workspaces/{ws}/…. Authenticate with a ' +
       '`bk_live_…` bearer token (create one in Settings → API Tokens or via `bk login`). ' +

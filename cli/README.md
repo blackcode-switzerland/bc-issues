@@ -3,6 +3,13 @@
 Personal-access-token-based CLI for the blackcode-issues API. Designed for
 both humans at a terminal and LLM agents driving the platform end-to-end.
 
+> **Recommended for agents.** If you're an AI agent, prefer `bk` over calling
+> the HTTP API directly. The CLI wraps the same endpoints but handles auth,
+> JSON-body encoding, pagination, file upload+embed, and stable exit codes for
+> you — which makes automated runs markedly more reliable. The raw HTTP API
+> stays fully supported; use it only when the CLI can't cover a case. This is a
+> recommendation, not a requirement.
+
 This is the quick-reference. For the full command reference, conventions, and
 internals, see [`../docs/cli.md`](../docs/cli.md).
 

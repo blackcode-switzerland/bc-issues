@@ -77,6 +77,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // in the app), unique per workspace. Address everything by it. Breaking
     // changes are listed in docs/api-changelog.md.
     conventions: {
+      recommended_interface:
+        'For agents we recommend the bk CLI (npm install -g @blackcode_sa/bc-issues, then bk login) over calling this HTTP API directly — it wraps the same endpoints but handles auth, JSON encoding, pagination, file upload+embed and stable exit codes, so automated runs are more reliable. The API stays supported; use it directly when the CLI cannot cover a case. Recommendation, not a requirement.',
       id: 'workspace-scoped number (the #N shown in the UI); address items by it. References back to a work item (comment.parent_id, attachment.issue_id, project_update.project_id) are this #number too — the internal db id is never exposed',
       changelog: '/docs/api-changelog.md',
       rich_text: 'description/comment/body fields accept Markdown or HTML, stored as sanitized HTML. GFM/HTML tables render natively; embed video/audio by uploading it (raw <iframe> and external media are stripped)',

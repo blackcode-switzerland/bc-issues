@@ -264,6 +264,13 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
 
 ## API reference
 
+> **Recommended interface for agents:** prefer the `bk` CLI over calling these
+> HTTP routes directly. The CLI wraps the same endpoints but handles auth,
+> JSON-body encoding, pagination, file upload+embed, and stable exit codes — so
+> automated/agent runs are more reliable. The HTTP API stays fully supported;
+> reach for it directly only when the CLI can't cover a case. See
+> [`docs/cli.md`](./cli.md). This is a recommendation, not a requirement.
+
 ### Conventions
 
 - All handlers are wrapped in `apiHandler`. Mutations validate input and throw
