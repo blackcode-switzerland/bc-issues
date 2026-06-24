@@ -170,10 +170,12 @@ export const openApiSpec = {
       'Call GET /api/meta first to discover the active workspace and the valid status/priority vocabulary. ' +
       'Rich-text fields (issue/project descriptions, comments, project updates) accept **Markdown or HTML** ' +
       'and are stored as sanitized HTML — send real newlines, not the literal characters "\\n". ' +
+      'GFM Markdown tables (and HTML <table>) render as real tables. ' +
       'To embed a file/image: POST it to /api/upload (multipart, field "file") to get a { url }, then ' +
       'reference that url in any rich-text field as `![name](url)` for images or `[name](url)` for any ' +
       'other file. Uploaded urls are rendered inline automatically (image preview, video/audio player, ' +
-      'or download card); external urls are left as plain links/images. Max file size 100MB.',
+      'or download card); external urls are left as plain links/images, and raw <iframe>/external media ' +
+      'are stripped. Max file size 100MB.',
   },
   servers: [{ url: '/', description: 'Same origin' }],
   security: [{ bearerAuth: [] }],

@@ -8,6 +8,23 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-06-24 — Tables render natively; uploaded video/audio embeds
+
+Rich-text fields (descriptions, comments, project-update bodies) now render
+**tables** end-to-end. No API/CLI change is required — a **GFM Markdown table**
+(or an HTML `<table>`) sent in any body now displays as a real table in the web
+UI, the same way images and file attachments already did. The server and
+render-layer sanitizers were widened to keep the table markup (`colgroup`/`col`,
+`colspan`/`rowspan`).
+
+Also: a raw HTML5 `<video>`/`<audio>` tag that points at an **uploaded** asset
+(`/api/upload` url) is now rewritten into the inline player, matching how
+`![](url)` / `[name](url)` already embed. Unchanged hard rules: `<iframe>` and
+external (non-uploaded) media are still stripped on render — upload media to
+embed it.
+
+---
+
 ## 2026-06-23 — Activity feed `entity_id` is the #number
 
 `GET /api/workspaces/{ws}/activity` used to return `entity_id` as the **internal**

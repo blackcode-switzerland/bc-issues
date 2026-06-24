@@ -34,8 +34,9 @@ See memory file `design-system.md` for full details. Short version:
 
 `components/rich-text-editor.tsx` — TipTap-based, used everywhere for descriptions and comments.
 
-- **Slash command** (`/`): H1–H4, Bold, Italic, Strike, Underline, Link, Quote, Code block, Bullet list, Numbered list, Checklist, Attach file.
+- **Slash command** (`/`): H1–H4, Bold, Italic, Strike, Underline, Link, Quote, Code block, Bullet list, Numbered list, Checklist, Table, Attach file.
 - **BubbleMenu** (on text selection): full formatting bar — B, I, Strike, Underline, Code, H1–H4, Bullet, Numbered, Checklist, Quote, Link.
+- **Table menu** (cursor inside a table, no selection): add/delete row & column, toggle header row, delete table. Tables round-trip everywhere (editor, read-only display, gfm Markdown, HTML, CLI/API) via `@tiptap/extension-table*`; the server (`lib/rich-text.ts`) and render-layer (DOMPurify) sanitizers both whitelist the table markup.
 - `variant="bordered"` for modals/forms; `variant="seamless"` for detail-page descriptions.
 - `hideToolbar` — create-issue-modal sets this; formatting via slash + bubble menus only.
 - `onFileUpload?: (file: File) => Promise<string>` — pass `/api/upload` handler to enable paste/drag-drop/slash-attach for **any file type**. Images/video/audio preview inline; PDF gets View+Download; other files get a Download card. After upload, cursor moves to a new line below the attachment.

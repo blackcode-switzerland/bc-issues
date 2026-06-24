@@ -66,6 +66,49 @@ describe('upgradeUploadedMedia — uploaded files render inline', () => {
     const img = '<img src="https://example.com/a.png" alt="a">'
     expect(upgradeUploadedMedia(img)).toBe(img)
   })
+
+  it('promotes a raw <video> tag (uploaded asset) to a file-attachment node', () => {
+    const out = upgradeUploadedMedia(`<video src="${BLOB}/1-clip.mp4" controls></video>`)
+    expect(out).toContain('data-type="file-attachment"')
+    expect(out).toContain('data-content-type="video/mp4"')
+  })
+
+  it('promotes a <audio> tag with a nested <source> (uploaded asset)', () => {
+    const out = upgradeUploadedMedia(
+      `<audio controls><source src="${BLOB}/1-song.mp3" type="audio/mpeg"></audio>`
+    )
+    expect(out).toContain('data-type="file-attachment"')
+    expect(out).toContain('data-content-type="audio/mpeg"')
+  })
+
+  it('leaves an external <video> untouched', () => {
+    const v = '<video src="https://example.com/x.mp4" controls></video>'
+    expect(upgradeUploadedMedia(v)).toBe(v)
+  })
+})
+
+describe('toRichTextHtml — tables', () => {
+  it('converts a GFM Markdown table into table HTML', () => {
+    const md = '| A | B |\n| --- | --- |\n| 1 | 2 |'
+    const out = toRichTextHtml(md)
+    expect(out).toContain('<table')
+    expect(out).toContain('<thead')
+    expect(out).toContain('<td')
+    expect(out).toContain('<th')
+  })
+
+  it('keeps editor table HTML (colgroup/col, colspan/rowspan) intact', () => {
+    // The web editor / an HTML-sending client posts table markup directly; it
+    // takes the HTML pass-through path, so the geometry must survive untouched.
+    const html =
+      '<table><colgroup><col style="width: 120px"></colgroup><tbody>' +
+      '<tr><th colspan="2">Head</th></tr><tr><td rowspan="2">x</td><td>y</td></tr>' +
+      '</tbody></table>'
+    const out = toRichTextHtml(html)
+    expect(out).toContain('colspan="2"')
+    expect(out).toContain('rowspan="2"')
+    expect(out).toContain('<colgroup')
+  })
 })
 
 describe('toRichTextHtml — HTML input (direct-API agents sending HTML)', () => {

@@ -339,6 +339,21 @@ kanban, detail pages, modals) rendering work-item state identically.
     for modals/composers. A **bubble menu** appears on selection and a **floating
     menu** on empty lines. Passing `mentionItems` (`{ id, label, avatarUrl? }[]`)
     enables `@mentions` (tippy dropdown; the `.mention` chip styles it).
+  - **Tables** — TipTap `Table/TableRow/TableHeader/TableCell` are wired into
+    **both** the editing editor and `RichTextDisplay`. Insert via the `/table`
+    slash command (3×3 with a header row); a **table bubble menu** (cursor in a
+    table, no text selection) adds/deletes rows & columns, toggles the header
+    row, and deletes the table. Columns are resizable in the editor. gfm
+    Markdown tables and pasted/POSTed HTML tables parse into the same node, so
+    tables authored from the CLI/API render identically. Styling lives in
+    `app/globals.css` under `.prose table` (fixed layout, horizontal scroll on
+    narrow viewports). Storage-safe because both the server sanitizer
+    (`lib/rich-text.ts`) and the render-layer DOMPurify whitelist the table
+    markup (incl. `colgroup/col`, `colspan/rowspan`).
+  - **Native media** — a raw HTML5 `<video>`/`<audio>` tag pointing at an
+    **uploaded** asset is rewritten server-side into the inline player (same as a
+    drag-drop upload); external media and `<iframe>` embeds are still stripped on
+    render (security). Embed external media by uploading it via `/api/upload`.
   - `RichTextDisplay({ content })` — read-only render.
   - `MentionItem` — the mention item type.
 

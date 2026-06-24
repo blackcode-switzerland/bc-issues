@@ -18,7 +18,7 @@ export const AGENT_MANIFEST = {
     list_envelope: '{ data: [...], next_cursor?: number | null, total?: number }',
     error_envelope: '{ error, code, suggestion?, details? }',
     pagination: 'Most lists (issues, projects, tasks) return everything in one response (no cursor); issues add a total. Only the keyset feeds paginate via ?limit=&?cursor=: activity, trash, super-admin errors.',
-    rich_text: 'Description/comment/body fields accept Markdown or HTML (stored as sanitized HTML); send real newlines, not literal \\n.',
+    rich_text: 'Description/comment/body fields accept Markdown or HTML (stored as sanitized HTML); send real newlines, not literal \\n. GFM Markdown tables (and HTML <table>) render natively. To embed video/audio, upload it (see file_uploads) and reference the url — raw <iframe> and external (non-uploaded) media are stripped.',
     json_bodies: 'Build request bodies with a real JSON encoder, not string concatenation. Embedded urls and Markdown like ![](url) contain () and special chars that break hand-built JSON/shell strings — encode, then POST the file (e.g. curl --data @body.json).',
     file_uploads:
       'To embed a file/image in a description or comment: (1) POST the file to /api/upload (multipart, field "file") to get back { url }; (2) reference that url in the body with Markdown — an image as ![name](url), any other file as [name](url). The server auto-renders uploaded urls inline (image preview, video/audio player, or download card). Max 100MB. CLI shortcuts: `bk upload <file>` prints the url; `bk issue|task|project create --file ./x` (and `bk issue comment <id> --file ./x`) upload+embed in one step; or reference a local path directly in --description/--description-file (wrap paths with spaces/parens in angle brackets, e.g. [](</abs/my file (2).mp4>)) and the CLI uploads+rewrites it.',
@@ -52,7 +52,7 @@ This is a rendered web page, but everything here is also available over an HTTP 
 - CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
 - Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Breaking changes: /docs/api-changelog.md
 - Lists return { data } in one response (issues/projects/tasks aren't paginated; issues add total); only activity/trash/super-admin errors paginate via ?limit=&?cursor= with next_cursor. Errors return { error, code, suggestion?, details? }
-- Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n
+- Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n. GFM/HTML tables render natively; embed video/audio by uploading it (raw <iframe>/external media are stripped)
 - Files/images: POST to /api/upload (multipart "file") -> { url }, then put the url in the body as ![name](url) (image) or [name](url) (any file); it renders inline. CLI: bk ... create --file ./x
 - File storage is tracked per workspace. Deleting a comment/reply or purging from Trash auto-frees referenced files (when nothing else references them); editing a file out of a body never deletes the bytes. Owner review/cleanup: GET /api/workspaces/{ws}/storage (files + references + usage), DELETE /api/workspaces/{ws}/storage/{id}. CLI: bk storage list|rm|attachments
 - Build JSON bodies with a real encoder, not string concatenation — urls + Markdown like ![](url) contain () and special chars that break hand-built JSON/shell strings (POST via curl --data @file.json)

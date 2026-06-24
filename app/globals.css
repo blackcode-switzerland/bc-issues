@@ -350,6 +350,33 @@
 .prose ul[data-type="taskList"] li > div { @apply flex-1; }
 .prose ul[data-type="taskList"] li[data-checked="true"] > div { @apply line-through text-muted-foreground; }
 
+/* Tables (rich text) — render the same in the editor and read-only display. */
+.prose table {
+  @apply w-full my-4 border-collapse text-sm;
+  table-layout: fixed;
+}
+.prose table td,
+.prose table th {
+  @apply border border-border px-3 py-1.5 align-top;
+  min-width: 3rem;
+  position: relative;
+}
+.prose table th {
+  @apply bg-secondary/40 font-semibold text-left;
+}
+.prose table p { @apply mb-0; }
+/* Horizontal scroll on narrow viewports instead of overflow. */
+.prose .tableWrapper { @apply overflow-x-auto; }
+/* Column-resize affordances (editor only). */
+.prose table .column-resize-handle {
+  @apply absolute top-0 bottom-0 -right-0.5 w-1 bg-primary/60 pointer-events-none;
+}
+.ProseMirror.resize-cursor { cursor: col-resize; }
+.prose table .selectedCell::after {
+  content: '';
+  @apply absolute inset-0 bg-primary/15 pointer-events-none;
+}
+
 /* TipTap editor — required for placeholder support */
 .ProseMirror { @apply focus:outline-none; }
 .ProseMirror p.is-editor-empty:first-child::before {

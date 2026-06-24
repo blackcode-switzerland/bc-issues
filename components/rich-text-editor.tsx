@@ -20,6 +20,10 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
+import Table from '@tiptap/extension-table'
+import TableRow from '@tiptap/extension-table-row'
+import TableHeader from '@tiptap/extension-table-header'
+import TableCell from '@tiptap/extension-table-cell'
 import type { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion'
 import type { Range } from '@tiptap/core'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
@@ -68,6 +72,11 @@ import {
   Loader2,
   Maximize2,
   X,
+  Table as TableIcon,
+  Trash2,
+  Columns3,
+  Rows3,
+  Plus,
 } from 'lucide-react'
 
 // Validate URL to prevent javascript: protocol XSS attacks
@@ -474,6 +483,22 @@ function buildImage() {
   })
 }
 
+/* ------------------------------- tables --------------------------------- */
+// Shared by the editing editor and the read-only RichTextDisplay so a stored
+// table renders identically in both. `resizable` adds drag handles + the
+// colgroup/col width markup; the server sanitizer and the render-layer DOMPurify
+// both whitelist that markup (see lib/rich-text.ts), so it survives storage.
+// GFM Markdown tables (from the CLI / API) parse into these same nodes.
+
+function tableExtensions(opts: { editable: boolean }) {
+  return [
+    Table.configure({ resizable: opts.editable, HTMLAttributes: { class: 'rte-table' } }),
+    TableRow,
+    TableHeader,
+    TableCell,
+  ]
+}
+
 /* ----------------------------- slash command ---------------------------- */
 
 interface SlashItem {
@@ -605,6 +630,19 @@ function buildSlashItems(callbacksRef: React.MutableRefObject<SlashCommandCallba
       icon: <ListChecks size={15} />,
       command: ({ editor, range }) =>
         editor.chain().focus().deleteRange(range).toggleTaskList().run(),
+    },
+    {
+      id: 'table',
+      label: 'Table',
+      keywords: ['table', 'grid', 'rows', 'columns', 'spreadsheet'],
+      icon: <TableIcon size={15} />,
+      command: ({ editor, range }) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+          .run(),
     },
     {
       id: 'attach',
@@ -794,6 +832,7 @@ function SelectionMenu({ editor, onSetLink }: { editor: Editor; onSetLink: () =>
   return (
     <BubbleMenu
       editor={editor}
+      pluginKey="formatMenu"
       tippyOptions={{ duration: 120, placement: 'top', maxWidth: 'none' }}
       shouldShow={({ state, from, to }) =>
         // Only for real text selections — never when an atom node (image, file,
@@ -898,6 +937,89 @@ function SelectionMenu({ editor, onSetLink }: { editor: Editor; onSetLink: () =>
         <div className="mx-1 h-4 w-px bg-border" />
         <MenuButton onClick={onSetLink} isActive={editor.isActive('link')} title="Add link">
           <LinkIcon size={15} />
+        </MenuButton>
+      </div>
+    </BubbleMenu>
+  )
+}
+
+/* ---------------------------- table controls ---------------------------- */
+// Shows when the cursor sits in a table (collapsed selection). Selecting text in
+// a cell yields the normal formatting bubble instead, so the two never overlap.
+
+function TableMenu({ editor }: { editor: Editor }) {
+  return (
+    <BubbleMenu
+      editor={editor}
+      pluginKey="tableMenu"
+      tippyOptions={{ duration: 120, placement: 'top', maxWidth: 'none' }}
+      shouldShow={({ from, to }) => editor.isActive('table') && from === to}
+    >
+      <div className="flex items-center gap-0 rounded-lg border border-border bg-popover px-1 py-1 shadow-xl">
+        <MenuButton
+          onClick={() => editor.chain().focus().addColumnBefore().run()}
+          title="Add column before"
+        >
+          <span className="flex items-center">
+            <Plus size={11} />
+            <Columns3 size={15} />
+          </span>
+        </MenuButton>
+        <MenuButton
+          onClick={() => editor.chain().focus().addColumnAfter().run()}
+          title="Add column after"
+        >
+          <span className="flex items-center">
+            <Columns3 size={15} />
+            <Plus size={11} />
+          </span>
+        </MenuButton>
+        <MenuButton
+          onClick={() => editor.chain().focus().deleteColumn().run()}
+          title="Delete column"
+        >
+          <span className="flex items-center text-destructive">
+            <Columns3 size={15} />
+            <X size={11} />
+          </span>
+        </MenuButton>
+        <div className="mx-1 h-4 w-px bg-border" />
+        <MenuButton
+          onClick={() => editor.chain().focus().addRowBefore().run()}
+          title="Add row above"
+        >
+          <span className="flex items-center">
+            <Plus size={11} />
+            <Rows3 size={15} />
+          </span>
+        </MenuButton>
+        <MenuButton
+          onClick={() => editor.chain().focus().addRowAfter().run()}
+          title="Add row below"
+        >
+          <span className="flex items-center">
+            <Rows3 size={15} />
+            <Plus size={11} />
+          </span>
+        </MenuButton>
+        <MenuButton onClick={() => editor.chain().focus().deleteRow().run()} title="Delete row">
+          <span className="flex items-center text-destructive">
+            <Rows3 size={15} />
+            <X size={11} />
+          </span>
+        </MenuButton>
+        <div className="mx-1 h-4 w-px bg-border" />
+        <MenuButton
+          onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+          isActive={editor.isActive('tableHeader')}
+          title="Toggle header row"
+        >
+          <TableIcon size={15} />
+        </MenuButton>
+        <MenuButton onClick={() => editor.chain().focus().deleteTable().run()} title="Delete table">
+          <span className="text-destructive">
+            <Trash2 size={15} />
+          </span>
         </MenuButton>
       </div>
     </BubbleMenu>
@@ -1043,6 +1165,7 @@ export function RichTextEditor({
       }),
       Placeholder.configure({ placeholder }),
       ...(mentionsEnabled ? [buildMention(mentionItemsRef)] : []),
+      ...tableExtensions({ editable: true }),
       slashCommandExt,
       fileAttachmentExt,
       uploadPlaceholderExt,
@@ -1255,6 +1378,7 @@ export function RichTextEditor({
       {editable ? (
         <>
           <SelectionMenu editor={editor} onSetLink={setLink} />
+          <TableMenu editor={editor} />
           <input
             type="file"
             ref={fileInputRef}
@@ -1323,7 +1447,9 @@ export function RichTextDisplay({ content, onImageClick }: RichTextDisplayProps)
   const sanitizedContent =
     typeof window !== 'undefined'
       ? DOMPurify.sanitize(content, {
-          ADD_ATTR: [...FILE_ATTACHMENT_ATTRS],
+          // Keep the file-attachment data-* attrs and the table markup TipTap
+          // emits (colgroup/col widths, colspan/rowspan) so tables survive render.
+          ADD_ATTR: [...FILE_ATTACHMENT_ATTRS, 'colspan', 'rowspan', 'colwidth', 'style'],
         })
       : content
 
@@ -1343,6 +1469,7 @@ export function RichTextDisplay({ content, onImageClick }: RichTextDisplayProps)
         HTMLAttributes: { class: 'text-primary underline hover:no-underline' },
       }),
       Mention.configure({ HTMLAttributes: { class: 'mention' } }),
+      ...tableExtensions({ editable: false }),
       fileAttachmentExt,
     ],
     content: sanitizedContent,

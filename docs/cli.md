@@ -332,6 +332,10 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
    record), for scripting: `URL=$(bk upload ./x.png --json | jq -r '.[0].url')`,
    then drop `![](URL)` into the body yourself.
 
+> Bodies are Markdown (or HTML), stored as sanitized HTML. **GFM tables**
+> (`| a | b |` …) render as real tables. To embed video/audio, upload it and
+> reference the url (above) — raw `<iframe>` and external media are stripped.
+
 > **`--file` vs `bk issue attach`.** `--file` (and the methods above) embed in the
 > **body**. `bk issue attach` is different — it's issue-only and adds the file to
 > the separate **attachments list** (sidebar), not the body.

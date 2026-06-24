@@ -17,8 +17,9 @@
 //
 // On BOTH paths it also runs upgradeUploadedMedia(): a reference to a file that
 // was uploaded through our own pipeline (Vercel Blob in prod, /uploads in dev) —
-// whether written as a Markdown image `![](url)` or a link `[name](url)` — is
-// rewritten into the exact TipTap node the editor uses, so it renders inline
+// whether written as a Markdown image `![](url)`, a link `[name](url)`, or a raw
+// HTML5 `<video>`/`<audio>` tag — is rewritten into the exact TipTap node the
+// editor uses, so it renders inline
 // just like a web drag-and-drop (image preview, video/audio player, or a file
 // download card). This is what lets the CLI / API embed files without knowing
 // any app-specific markup: they only ever send the uploaded URL in Markdown.
@@ -38,7 +39,9 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
     'code', 'pre',
     'ul', 'ol', 'li',
     'a', 'img',
-    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    // Tables: gfm Markdown emits table/thead/tbody/tr/th/td; the TipTap editor
+    // additionally emits colgroup/col (column widths) when resizing is used.
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
     'span', 'div',
   ],
   allowedAttributes: {
@@ -48,6 +51,10 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
     // data attributes (no script), and the render layer (DOMPurify) whitelists the
     // same set, so they survive end-to-end.
     div: [...FILE_ATTACHMENT_ATTRS],
+    // Table cell/column geometry (inert layout attrs, no script).
+    td: ['colspan', 'rowspan', 'colwidth'],
+    th: ['colspan', 'rowspan', 'colwidth'],
+    col: ['span', 'width'],
     '*': ['class'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
@@ -192,6 +199,18 @@ export function upgradeUploadedMedia(html: string): string {
       return attachmentNode(src, alt, mime)
     }
     return whole
+  })
+  // Native HTML5 media: a client that sends raw <video>/<audio> (e.g. an agent
+  // posting HTML) gets the same inline player as a drag-and-drop upload — but
+  // only for OUR uploaded assets. The src can be on the tag itself or a nested
+  // <source>. External media is left as-is (and the render layer drops it).
+  html = html.replace(/<(video|audio)\b[^>]*>([\s\S]*?)<\/\1>/gi, (whole) => {
+    const src =
+      (whole.match(/<(?:video|audio)\b[^>]*\bsrc="([^"]+)"/i) || [])[1] ||
+      (whole.match(/<source\b[^>]*\bsrc="([^"]+)"/i) || [])[1] ||
+      ''
+    if (!isUploadedAsset(src)) return whole
+    return attachmentNode(src, fallbackName(src), mimeForUrl(src))
   })
   return html
 }
