@@ -276,7 +276,7 @@ For a public "What's next" section. Groupings, not specific dates.
 ### Realtime & integration
 - Webhooks / event stream over the existing event spine
 - Saved filters and views
-- Full-text search
+- Ranked full-text search (relevance + typo tolerance) — substring + #id search across lists, API and CLI already ships
 
 ### Product polish
 - Notifications beyond the in-app inbox
@@ -403,6 +403,7 @@ A compact table for laying out a feature grid.
 | Rich-text issues & comments | "Rich-text issues & comments" | Live |
 | File attachments (100 MB) | "File attachments" | Live |
 | Activity feed & inbox | "Activity feed & inbox" | Live |
+| Search (lists, API & CLI; by name or #id) | "Search everything" | Live |
 | Self-describing API (OpenAPI/meta) | "Self-describing API" | Live |
 | Trash & restore | "Trash & restore" | Live |
 | Workspace analytics | "Workspace analytics" | Live |
@@ -413,7 +414,6 @@ A compact table for laying out a feature grid.
 | Per-scope API tokens | "Scoped tokens" | **Coming soon** |
 | Notifications | "Notifications" | **Coming soon** |
 | Saved filters | "Saved views" | **Coming soon** |
-| Search | "Search" | **Coming soon** |
 | Mobile UI | "Mobile" | **Coming soon** |
 
 ---

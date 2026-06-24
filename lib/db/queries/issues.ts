@@ -12,6 +12,7 @@
 // dredging through diff jsonb.
 
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { searchClause } from './search'
 import { db } from '../client'
 import { issueAssignees, issueLabels, issues, labels, type Issue } from '../schema'
 import { recordEvent } from './events'
@@ -116,11 +117,7 @@ export async function listIssuesInWorkspace(
       ${opts.status ? sql`AND i.status = ${opts.status}` : sql``}
       ${opts.priority ? sql`AND i.priority = ${opts.priority}` : sql``}
       ${opts.seq !== undefined ? sql`AND i.seq = ${opts.seq}` : sql``}
-      ${
-        opts.search
-          ? sql`AND (i.title ILIKE ${'%' + opts.search + '%'} OR i.description ILIKE ${'%' + opts.search + '%'})`
-          : sql``
-      }
+      ${searchClause(opts.search, { text: [sql`i.title`, sql`i.description`], seq: sql`i.seq` })}
   `
 
   // The listing returns every matching issue in one shot (consistent with

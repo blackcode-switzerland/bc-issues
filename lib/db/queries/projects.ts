@@ -7,6 +7,7 @@
 // Every mutation records an event in the same transaction.
 
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm'
+import { searchClause } from './search'
 import { db } from '../client'
 import { projects, type Project } from '../schema'
 import { recordEvent } from './events'
@@ -52,11 +53,7 @@ export async function listProjectsInWorkspace(
     WHERE p.workspace_id = ${workspaceId}
       AND p.deleted_at IS NULL
       ${options.status ? sql`AND p.status = ${options.status}` : sql``}
-      ${
-        options.search
-          ? sql`AND (p.name ILIKE ${'%' + options.search + '%'} OR p.description ILIKE ${'%' + options.search + '%'})`
-          : sql``
-      }
+      ${searchClause(options.search, { text: [sql`p.name`, sql`p.description`], seq: sql`p.seq` })}
     GROUP BY p.id, lead.name, lead.email, lead.avatar_url, upd.status, upd.created_at
     ORDER BY COALESCE(p.position, 0) ASC, p.id DESC
   `)

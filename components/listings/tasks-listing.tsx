@@ -18,6 +18,7 @@ import { PropertySelect } from '@/components/ui/property-select'
 import { DatePicker } from '@/components/ui/date-picker'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
+import { matchSearch, buildHaystack, idTokens, stripTags } from '@/lib/listing-search'
 import {
   EmptyState,
   TaskSkeletonRow,
@@ -61,6 +62,20 @@ interface Member {
   email: string
   name: string | null
   avatar_url: string | null
+}
+
+// One lowercased searchable string per task — identifier, name, description,
+// status, project name and lead.
+function taskHaystack(m: TaskRow): string {
+  return buildHaystack([
+    ...idTokens(m.seq),
+    m.name,
+    stripTags(m.description),
+    m.status,
+    m.project_name,
+    m.lead_name,
+    m.lead_email,
+  ])
 }
 
 export function TasksListing() {
@@ -121,12 +136,13 @@ export function TasksListing() {
   const clearFilters = () => { setSearch(''); setProjectIds([]); setLeadIds([]); setSort(SORT_MANUAL) }
 
   const tasks = useQuery({
-    queryKey: ['ws-tasks-listing', ws?.slug, { search, projectIds }],
+    queryKey: ['ws-tasks-listing', ws?.slug, { projectIds }],
     enabled: !!ws,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      // Search is applied client-side (see `filtered`) so it stays instant and can
+      // match identifiers/lead/description — it is intentionally not sent here.
       const params = new URLSearchParams()
-      if (search) params.set('search', search)
       if (projectIds.length === 1) {
         params.set('project_id', String(projectIds[0]))
       }
@@ -139,6 +155,7 @@ export function TasksListing() {
 
   const filtered = useMemo(() => {
     let data = tasks.data ?? []
+    if (search.trim()) data = data.filter((m) => matchSearch(search, taskHaystack(m)))
     if (projectIds.length > 1) {
       data = data.filter((m) => {
         if (projectIds.includes('null')) return m.project_id == null || projectIds.includes(m.project_id ?? -1)
@@ -152,7 +169,7 @@ export function TasksListing() {
       )
     }
     return data
-  }, [tasks.data, projectIds, leadIds])
+  }, [tasks.data, search, projectIds, leadIds])
 
   const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
 

@@ -7,6 +7,7 @@
 //   - listTasksInWorkspace(ws, {})                     everything in the workspace
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
+import { searchClause } from './search'
 import { db } from '../client'
 import { tasks, type Task } from '../schema'
 import { recordEvent } from './events'
@@ -62,11 +63,7 @@ export async function listTasksInWorkspace(
             : sql``
       }
       ${opts.status ? sql`AND m.status = ${opts.status}` : sql``}
-      ${
-        opts.search
-          ? sql`AND (m.name ILIKE ${'%' + opts.search + '%'} OR m.description ILIKE ${'%' + opts.search + '%'})`
-          : sql``
-      }
+      ${searchClause(opts.search, { text: [sql`m.name`, sql`m.description`], seq: sql`m.seq` })}
     GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
     ORDER BY m.due_date ASC NULLS LAST, m.id DESC
   `)

@@ -224,10 +224,13 @@ func (c *Client) Whoami() (*Me, error) {
 	return &me, nil
 }
 
-func (c *Client) ListProjects() ([]Project, error) {
+func (c *Client) ListProjects(search string) ([]Project, error) {
 	path, err := c.wsPath("projects")
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(search) != "" {
+		path += "?search=" + url.QueryEscape(search)
 	}
 	var page ProjectsPage
 	if err := c.get(path, &page); err != nil {
@@ -334,13 +337,20 @@ func (c *Client) ListIssueAttachments(issueID int) ([]Attachment, error) {
 	return env.Data, nil
 }
 
-func (c *Client) ListTasks(projectID int) ([]Task, error) {
+func (c *Client) ListTasks(projectID int, search string) ([]Task, error) {
 	path, err := c.wsPath("tasks")
 	if err != nil {
 		return nil, err
 	}
+	q := url.Values{}
 	if projectID > 0 {
-		path += "?project_id=" + fmt.Sprint(projectID)
+		q.Set("project_id", fmt.Sprint(projectID))
+	}
+	if strings.TrimSpace(search) != "" {
+		q.Set("search", search)
+	}
+	if len(q) > 0 {
+		path += "?" + q.Encode()
 	}
 	var env tasksEnvelope
 	if err := c.get(path, &env); err != nil {

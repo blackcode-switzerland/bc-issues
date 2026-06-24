@@ -30,6 +30,7 @@ func newTaskCmd() *cobra.Command {
 
 func newTaskListCmd() *cobra.Command {
 	var projectID int
+	var search string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tasks (optionally filter by --project)",
@@ -42,7 +43,7 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ms, err := c.ListTasks(projectID)
+			ms, err := c.ListTasks(projectID, search)
 			if err != nil {
 				return err
 			}
@@ -50,6 +51,7 @@ func newTaskListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&projectID, "project", 0, "Filter by project id")
+	cmd.Flags().StringVar(&search, "search", "", "Search name/description, or the #id (e.g. 123 or #123); server-side")
 	return cmd
 }
 

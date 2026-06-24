@@ -35,6 +35,7 @@ func newProjectCmd() *cobra.Command {
 }
 
 func newProjectListCmd() *cobra.Command {
+	var search string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List projects you are a member of",
@@ -48,7 +49,7 @@ func newProjectListCmd() *cobra.Command {
 				return err
 			}
 			// The projects endpoint returns every project in one response.
-			projects, err := c.ListProjects()
+			projects, err := c.ListProjects(search)
 			if err != nil {
 				return err
 			}
@@ -73,6 +74,7 @@ func newProjectListCmd() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVar(&search, "search", "", "Search name/description, or the #id (e.g. 123 or #123); server-side")
 	return cmd
 }
 
@@ -194,7 +196,7 @@ func newProjectTasksCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ms, err := c.ListTasks(id)
+			ms, err := c.ListTasks(id, "")
 			if err != nil {
 				return err
 			}

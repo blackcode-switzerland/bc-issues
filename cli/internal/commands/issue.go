@@ -62,7 +62,7 @@ func newIssueListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status (client-side)")
 	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me' (client-side)")
 	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user")
-	cmd.Flags().StringVar(&f.search, "search", "", "Full-text search on title/description (server-side)")
+	cmd.Flags().StringVar(&f.search, "search", "", "Search title/description, or the #id (e.g. 123 or #123); server-side")
 	return cmd
 }
 

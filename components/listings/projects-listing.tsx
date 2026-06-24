@@ -35,6 +35,7 @@ import {
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
+import { matchSearch, buildHaystack, idTokens, stripTags } from '@/lib/listing-search'
 
 interface ProjectRow {
   id: number
@@ -79,6 +80,22 @@ const PROJECT_PRIORITY_OPTIONS = PROJECT_PRIORITIES.map((p) => ({
   label: p.label,
   icon: <PriorityIcon priority={projectPriorityKey(p.value)} size={15} />,
 }))
+
+// One lowercased searchable string per project — identifier, name, summary,
+// description, status, priority, lead and health.
+function projectHaystack(p: ProjectRow): string {
+  return buildHaystack([
+    ...idTokens(p.seq),
+    p.name,
+    p.summary,
+    stripTags(p.description),
+    projectStatusLabel(p.status),
+    projectPriorityLabel(p.priority ?? 'P4'),
+    p.lead_name,
+    p.lead_email,
+    p.health ? projectUpdateStatusLabel(p.health) : null,
+  ])
+}
 
 
 export function ProjectsListing() {
@@ -131,12 +148,13 @@ export function ProjectsListing() {
   const clearFilters = () => { setSearch(''); setStatus([]); setPriority([]); setLeadIds([]); setSort(SORT_MANUAL) }
 
   const projects = useQuery({
-    queryKey: ['ws-projects-listing', ws?.slug, { search, status }],
+    queryKey: ['ws-projects-listing', ws?.slug, { status }],
     enabled: !!ws,
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      // Search is applied client-side (see `filtered`) so it stays instant and can
+      // match identifiers/lead/description — it is intentionally not sent here.
       const params = new URLSearchParams()
-      if (search) params.set('search', search)
       if (status.length === 1) params.set('status', String(status[0]))
       const res = await fetch(`/api/workspaces/${ws!.slug}/projects?${params}`)
       if (!res.ok) throw new Error('failed')
@@ -147,6 +165,7 @@ export function ProjectsListing() {
 
   const filtered = useMemo(() => {
     let data = projects.data ?? []
+    if (search.trim()) data = data.filter((p) => matchSearch(search, projectHaystack(p)))
     if (status.length > 1) data = data.filter((p) => status.includes(p.status))
     if (priority.length > 0) data = data.filter((p) => priority.includes(p.priority ?? 'P4'))
     if (leadIds.length > 0) {
@@ -156,7 +175,7 @@ export function ProjectsListing() {
       )
     }
     return data
-  }, [projects.data, status, priority, leadIds])
+  }, [projects.data, search, status, priority, leadIds])
 
   const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
   const dragEnabled = sort === SORT_MANUAL

@@ -20,6 +20,7 @@ import { MultiAssigneeSelect } from '@/components/ui/multi-assignee-select'
 import { PropertySelect } from '@/components/ui/property-select'
 import { ProjectIcon } from '../project-icon'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
+import { matchSearch, buildHaystack, idTokens } from '@/lib/listing-search'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState, IssueSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
 
@@ -89,6 +90,22 @@ interface LabelRow {
 
 const STATUSES = ISSUE_STATUSES.map((s) => ({ value: s.value, label: s.label }))
 const PRIORITIES = ISSUE_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))
+const ISSUE_PRIORITY_LABEL = new Map(ISSUE_PRIORITIES.map((p) => [p.value, p.label]))
+
+// One lowercased searchable string per issue — identifier, title, status,
+// priority, assignees, project/task names and labels.
+function issueHaystack(d: IssueRow): string {
+  return buildHaystack([
+    ...idTokens(d.seq),
+    d.title,
+    issueStatusLabel(d.status),
+    ISSUE_PRIORITY_LABEL.get(d.priority),
+    d.project_name,
+    d.task_name,
+    ...(d.assignees ?? []).flatMap((a) => [a.name, a.email]),
+    ...(d.labels ?? []).map((l) => l.name),
+  ])
+}
 
 export function IssuesListing() {
   const { data: ws } = useActiveWorkspace()
@@ -173,7 +190,7 @@ export function IssuesListing() {
   const clearFilters = () => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setTasks([]); setLabels([]); setLabelMode('any'); setSort(SORT_MANUAL) }
 
   const issuesQuery = useQuery({
-    queryKey: ['ws-issues', ws?.slug, { search, status, priority, assignees, projects, tasks, labels, labelMode }],
+    queryKey: ['ws-issues', ws?.slug, { status, priority, assignees, projects, tasks, labels, labelMode }],
     enabled: !!ws,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -181,8 +198,9 @@ export function IssuesListing() {
       // not just the first page. The API caps a page at 200, so walk the cursor
       // until exhausted (bounded for safety). Counting j.data of one page is what
       // caused the header (200) to disagree with the sidebar total (e.g. 233).
+      // Search is applied client-side (see `filtered`) so it stays instant and can
+      // match identifiers/assignees/labels — it is intentionally not sent here.
       const base = new URLSearchParams()
-      if (search) base.set('search', search)
       if (status.length === 1) base.set('status', String(status[0]))
       if (priority.length === 1) base.set('priority', String(priority[0]))
       if (assignees.length === 1) base.set('assignee_ids', String(assignees[0]))
@@ -208,6 +226,7 @@ export function IssuesListing() {
 
   const filtered = useMemo(() => {
     let data = issuesQuery.data ?? []
+    if (search.trim()) data = data.filter((d) => matchSearch(search, issueHaystack(d)))
     if (status.length > 1) data = data.filter((d) => status.includes(d.status))
     if (priority.length > 1) data = data.filter((d) => priority.includes(d.priority))
     if (assignees.length > 1)
@@ -236,7 +255,7 @@ export function IssuesListing() {
       })
     }
     return data
-  }, [issuesQuery.data, status, priority, assignees, projects, tasks, labels, labelMode])
+  }, [issuesQuery.data, search, status, priority, assignees, projects, tasks, labels, labelMode])
 
   const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
   const dragEnabled = sort === SORT_MANUAL

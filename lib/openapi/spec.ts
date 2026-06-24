@@ -763,7 +763,7 @@ export const openApiSpec = {
           { name: 'assignee_ids', in: 'query', schema: { type: 'array', items: { type: 'integer' } }, style: 'form', explode: true, description: 'Repeatable multi-assignee filter.' },
           { name: 'status', in: 'query', schema: { type: 'string', enum: ISSUE_STATUS_VALUES } },
           { name: 'priority', in: 'query', schema: { type: 'integer', enum: ISSUE_PRIORITY_VALUES } },
-          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Case-insensitive substring match on title/description; also matches the #id (e.g. "123" or "#123").' },
         ],
         responses: { '200': jsonListTotal('Issue', 'All matching issues (not paginated)'), ...errors(400, 401, 404) },
       },
@@ -884,7 +884,7 @@ export const openApiSpec = {
         tags: ['Projects'], operationId: 'listProjects', summary: 'List projects',
         parameters: [
           { name: 'status', in: 'query', schema: { type: 'string', enum: PROJECT_STATUS_VALUES } },
-          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Case-insensitive substring match on name/description; also matches the #id (e.g. "123" or "#123").' },
         ],
         responses: { '200': jsonList('Project'), ...errors(401, 404) },
       },
@@ -962,7 +962,7 @@ export const openApiSpec = {
         tags: ['Tasks'], operationId: 'listTasks', summary: 'List tasks',
         parameters: [
           { name: 'project_id', in: 'query', schema: { type: 'string' }, description: 'Filter by project; "null" for standalone.' },
-          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Case-insensitive substring match on name/description; also matches the #id (e.g. "123" or "#123").' },
         ],
         responses: { '200': jsonList('Task'), ...errors(400, 401, 404) },
       },

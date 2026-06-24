@@ -245,7 +245,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk project list` | `GET /api/workspaces/:ws/projects` | Returns every project in one response (not paginated). |
+| `bk project list [--search TEXT]` | `GET /api/workspaces/:ws/projects` | Returns every project in one response (not paginated). `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
 | `bk project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
 | `bk project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
 | `bk project issues <id> [--status S] [--assignee REF]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
@@ -265,7 +265,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description); status/assignee filters are client-side. Footer shows `showing X of N`. |
+| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description, plus the #id when numeric — e.g. `123` or `#123`); status/assignee filters are client-side. Footer shows `showing X of N`. |
 | `bk issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | `id` is the `#number` shown in the app (a leading `#` is accepted). |
 | `bk issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
 | `bk issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
@@ -348,7 +348,7 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
 
 | Command | Backend call |
 |---|---|
-| `bk task list [--project N]` | `GET /api/workspaces/:ws/tasks[?project_id=N]` |
+| `bk task list [--project N] [--search TEXT]` | `GET /api/workspaces/:ws/tasks[?project_id=N&search=TEXT]` | `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
 | `bk task view <id> [--include-issues]` | `GET /api/workspaces/:ws/tasks/:id[?includeIssues=true]` |
 | `bk task create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD] [--file F ...]` | `POST /api/workspaces/:ws/tasks` | `--file` uploads + embeds inline (repeatable). |
 | `bk task edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/tasks/:id` |

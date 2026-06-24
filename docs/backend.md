@@ -395,6 +395,10 @@ GET    /api/workspaces/{ws}/tasks/{id}/comments  list / POST
 GET    /api/workspaces/{ws}/issues              list (filters) / POST create
                                                (filters: project_id, task_id (workspace #numbers),
                                                 assignee_id(s) (user ids), status, priority, search.
+                                                search = case-insensitive substring on title/description,
+                                                and the #id when the query is numeric (e.g. "123"/"#123");
+                                                same for tasks (name/description) and projects (name/description)
+                                                via lib/db/queries/search.ts.
                                                 Returns { data, total } — every match, no pagination.
                                                 create accepts project_id/task_id as #numbers; label_ids
                                                 (existing) and labels: string[] — names matched
