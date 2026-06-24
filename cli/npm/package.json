@@ -1,6 +1,6 @@
 {
   "name": "@blackcode_sa/bc-issues",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "description": "Blackcode Issues CLI — manage your bc-issues workspace from the terminal",
   "license": "MIT",
   "repository": {
