@@ -10,7 +10,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
 import { tasks, type Task } from '../schema'
-import { recordEvent } from './events'
+import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { softDeleteTask, type DeleteMode } from './deletion'
 import { allocateNextTaskSeq } from './workspaces'
 import { toRichTextHtml } from '@/lib/rich-text'
@@ -242,6 +242,7 @@ export async function updateTask(
         entityId: id,
         action: 'updated',
         diff: { before: beforeSnap, after: afterSnap },
+        coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS,
       })
     }
     return after

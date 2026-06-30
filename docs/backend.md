@@ -228,6 +228,16 @@ according to the event type (assignees, watchers, mentioned users, invitees).
 `lib/db/queries/inbox.ts` writes those rows with a short dedup window so rapid
 status flips don't spam the inbox.
 
+**Coalescing.** Generic `updated` events (title/description/etc. edits on
+issues/tasks/projects) pass `coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS` (10
+min) to `recordEvent`. When the same actor records another `updated` on the same
+entity inside that window, the existing row is merged in place — earliest
+`before`, latest `after`, advanced `occurred_at` — instead of inserting a new
+row. This keeps autosave (which PATCHes every ~1.2s while typing) from flooding
+the activity feed. Only safe for actions that **don't** fan out to the inbox
+(`updated` hits the `default` case in `fanOutEvent`); never enable it for
+discrete events like `status_changed` or `assigned`.
+
 This single spine is read by:
 
 - **Activity feed** (`activity.ts`, `/api/workspaces/{ws}/activity`),

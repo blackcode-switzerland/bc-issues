@@ -67,11 +67,77 @@ export interface RecordEventInput {
   meta?: Record<string, unknown> | null
   idempotencyKey?: string | null
   occurredAt?: Date
+  // When set, consecutive events of the same (entity, actor, action) recorded
+  // within this many milliseconds are merged into the existing row instead of
+  // inserting a new one. Used to collapse autosave-driven `updated` storms in
+  // the activity feed. Only safe for actions that do NOT fan out to the inbox.
+  coalesceWindowMs?: number
 }
 
 type Tx = Pick<typeof db, 'insert' | 'select' | 'update' | 'delete' | 'execute'>
 
+// How long consecutive `updated` edits by the same actor on the same entity are
+// collapsed into one activity row. Long enough to absorb an editing session
+// (autosave fires every ~1.2s while typing), short enough that returning to an
+// item hours later reads as a distinct edit.
+export const UPDATE_COALESCE_WINDOW_MS = 10 * 60 * 1000
+
+// Merge two diff snapshots so the coalesced row keeps the *earliest* `before`
+// value and the *latest* `after` value for every field touched across the run.
+function mergeDiff(
+  existing: { before?: unknown; after?: unknown } | null,
+  next: { before?: unknown; after?: unknown } | null
+): { before: Record<string, unknown>; after: Record<string, unknown> } {
+  const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v)
+  const exBefore = isRecord(existing?.before) ? existing!.before : {}
+  const exAfter = isRecord(existing?.after) ? existing!.after : {}
+  const nxBefore = isRecord(next?.before) ? next!.before : {}
+  const nxAfter = isRecord(next?.after) ? next!.after : {}
+  // before: keep the existing (older) value for keys already seen; otherwise
+  // take this edit's before value as the new baseline for that field.
+  const before: Record<string, unknown> = { ...nxBefore, ...exBefore }
+  // after: the latest edit wins per field.
+  const after: Record<string, unknown> = { ...exAfter, ...nxAfter }
+  return { before, after }
+}
+
 export async function recordEvent(tx: Tx, input: RecordEventInput): Promise<Event> {
+  if (input.coalesceWindowMs && input.coalesceWindowMs > 0 && input.actorUserId != null) {
+    const occurredAt = input.occurredAt ?? new Date()
+    const windowStart = new Date(occurredAt.getTime() - input.coalesceWindowMs)
+    const [prev] = await tx
+      .select()
+      .from(events)
+      .where(
+        and(
+          eq(events.workspace_id, input.workspaceId),
+          eq(events.entity_type, input.entityType),
+          eq(events.entity_id, input.entityId),
+          eq(events.actor_user_id, input.actorUserId),
+          eq(events.action, input.action),
+          gte(events.occurred_at, windowStart)
+        )
+      )
+      .orderBy(desc(events.id))
+      .limit(1)
+    if (prev) {
+      const [merged] = await tx
+        .update(events)
+        .set({
+          diff: mergeDiff(
+            prev.diff as { before?: unknown; after?: unknown } | null,
+            input.diff ?? null
+          ),
+          meta: { ...(prev.meta as object | null), ...(input.meta ?? {}) },
+          occurred_at: occurredAt,
+        })
+        .where(eq(events.id, prev.id))
+        .returning()
+      if (!merged) throw new Error('event coalesce update returned nothing')
+      return merged
+    }
+  }
   const values: NewEvent = {
     workspace_id: input.workspaceId,
     actor_user_id: input.actorUserId ?? null,

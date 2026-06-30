@@ -15,7 +15,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
 import { issueAssignees, issueLabels, issues, labels, type Issue } from '../schema'
-import { recordEvent } from './events'
+import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
@@ -492,6 +492,7 @@ export async function updateIssue(
         action: 'updated',
         diff: { before: beforeSnap, after: afterSnap },
         meta: { seq: after.seq, title: after.title },
+        coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS,
       })
     }
 

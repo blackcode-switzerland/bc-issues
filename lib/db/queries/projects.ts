@@ -10,7 +10,7 @@ import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
 import { projects, type Project } from '../schema'
-import { recordEvent } from './events'
+import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { softDeleteProject, type DeleteMode } from './deletion'
 import { setProjectMembers } from './project-relations'
 import { allocateNextProjectSeq } from './workspaces'
@@ -319,6 +319,7 @@ export async function updateProject(
         entityId: id,
         action: 'updated',
         diff: { before: beforeSnap, after: afterSnap },
+        coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS,
       })
     }
     return after
