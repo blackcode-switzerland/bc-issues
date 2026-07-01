@@ -237,6 +237,11 @@ export const openApiSpec = {
         {
           user: { $ref: '#/components/schemas/Me' },
           active_workspace: { type: ['object', 'null'], additionalProperties: true },
+          workspaces: {
+            type: 'array',
+            description: 'Every workspace the caller belongs to (id, name, slug, role, is_active). Pick the write target by name/slug, not by the opaque numeric id.',
+            items: { type: 'object', additionalProperties: true },
+          },
           vocabulary: {
             type: 'object',
             description: 'Valid enum values for issue/project fields.',
@@ -583,7 +588,7 @@ export const openApiSpec = {
         tags: ['Meta'],
         operationId: 'getMeta',
         summary: 'Bootstrap context + vocabulary',
-        description: 'The first call an agent should make: current user, active workspace, valid enum vocabulary, and the workspace’s labels/projects/members.',
+        description: 'The first call an agent should make: current user, active workspace, the full list of workspaces you belong to (pick the write target by name/slug, not the opaque numeric id), valid enum vocabulary, and the active workspace’s labels/projects/members.',
         responses: { '200': jsonObject('Meta', 'Context'), ...errors(401) },
       },
     },

@@ -224,6 +224,22 @@ func (c *Client) Whoami() (*Me, error) {
 	return &me, nil
 }
 
+// Meta fetches GET /api/meta (the agent bootstrap: identity, active workspace,
+// the full workspaces list, and the enum vocabulary). When ws is non-empty it
+// is passed as ?ws=<slug|id> to preview that workspace's context without
+// changing the active one.
+func (c *Client) Meta(ws string) (*Meta, error) {
+	path := "/api/meta"
+	if strings.TrimSpace(ws) != "" {
+		path += "?ws=" + url.QueryEscape(ws)
+	}
+	var m Meta
+	if err := c.get(path, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
 func (c *Client) ListProjects(search string) ([]Project, error) {
 	path, err := c.wsPath("projects")
 	if err != nil {

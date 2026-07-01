@@ -112,7 +112,9 @@ legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
 `/api/users`, `/api/activity`) remain for the CLI. Full detail in
 [`docs/backend.md`](docs/backend.md).
 
-`{ws}` accepts either a workspace **slug** or numeric **id**.
+`{ws}` accepts either a workspace **slug** or numeric **id** — prefer the slug
+(the numeric id is opaque; agents should choose a workspace by name/slug from
+`GET /api/meta`'s `workspaces` list).
 
 ## Authentication
 

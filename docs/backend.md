@@ -325,14 +325,20 @@ Three unauthenticated-friendly entry points make the API self-describing:
 ```
 GET /api/openapi.json   OpenAPI 3.1 document (public). Source: lib/openapi/spec.ts.
 GET /api/docs           Human-readable API reference (Scalar, renders the spec above).
-GET /api/meta           Authenticated bootstrap: { user, active_workspace, vocabulary,
-                        labels, projects, members }. ?ws=<slug|id> targets a workspace.
+GET /api/meta           Authenticated bootstrap: { user, active_workspace, workspaces,
+                        vocabulary, labels, projects, members }. ?ws=<slug|id> targets
+                        a workspace.
 ```
 
 `GET /api/meta` is the call an agent should make first: it returns the active
-workspace plus the canonical issue/project **vocabulary** (statuses, priorities,
-project-update health — value/label/color, from `lib/work-items.ts`) so the agent
-never guesses an enum value. The OpenAPI spec is hand-authored and covers the
+workspace, the **full `workspaces` list** the caller belongs to (id, name, slug,
+role, `is_active`), plus the canonical issue/project **vocabulary** (statuses,
+priorities, project-update health — value/label/color, from `lib/work-items.ts`)
+so the agent never guesses an enum value. The `workspaces` list exists so an agent
+can pick its write target **by name/slug** — not by the opaque numeric `id`.
+Writing to the wrong workspace (because ids carry no meaning) is the most common
+agent mistake; `active_workspace` is only a default, not necessarily where the
+user intends to write. `GET /api/workspaces` returns the same list on its own. The OpenAPI spec is hand-authored and covers the
 **entire feature surface** — every route under `app/api/**` except true internals
 (the NextAuth handler, the `/api/errors/client` beacon, and the `/api/docs` +
 `/api/openapi.json` discovery routes themselves). It imports the enums from

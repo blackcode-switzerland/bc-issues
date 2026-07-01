@@ -198,7 +198,9 @@ bk workspace use acme             # set the active workspace by slug or numeric 
 bk workspace show                 # details of the active workspace
 ```
 
-The active workspace (id, slug) is stored in the config file and is also set server-side via `POST /api/me/active-workspace`. Workspace-scoped command groups (`label`, `member`, `invite`) require an active workspace and fail with a clear message if none is set. Workspace API paths accept either the **slug** or the **numeric id**.
+The active workspace (id, slug) is stored in the config file and is also set server-side via `POST /api/me/active-workspace`. Workspace-scoped command groups (`label`, `member`, `invite`) require an active workspace and fail with a clear message if none is set. Workspace API paths accept either the **slug** or the **numeric id** — **prefer the slug**.
+
+> **Agents: pick the workspace by name, not by number.** Most accounts belong to more than one workspace, and the numeric id is opaque (a sequential integer that says nothing about which team it is), so selecting by id is the easiest way to write to the wrong place. Run `bk workspace list` (or `GET /api/meta`, which returns the full `workspaces` list), match the user's intent to a workspace by its `name`/`slug`, then `bk workspace use <slug>` (or `--ws <slug>` per command). The active workspace is only a default — confirm it's the intended target before creating anything.
 
 ### Reading another workspace without switching (`--ws`)
 
@@ -230,6 +232,7 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk login [--server URL] [--token]` | Browser flow, or headless `--token` (reads token from stdin). |
 | `bk logout` | Clear local config. |
 | `bk whoami` | Show current user (id, email, name, role, via). |
+| `bk meta` | Agent bootstrap (`GET /api/meta`): current user, active workspace, and **every workspace you belong to** (id, name, slug, role, active marker). Run it first and pick your target by name/slug, not the numeric id. `--ws <slug\|id>` previews another workspace's context without switching. |
 | `bk version` | Print version, commit, build date. |
 
 ### Workspaces

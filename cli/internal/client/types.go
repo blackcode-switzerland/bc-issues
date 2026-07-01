@@ -23,6 +23,41 @@ type User struct {
 	Role      string  `json:"role" yaml:"role"`
 }
 
+// Meta models GET /api/meta — the agent bootstrap. `Workspaces` lists every
+// workspace the caller belongs to so an agent can pick its write target by
+// name/slug (never by the opaque numeric id). `ActiveWorkspace` is only a
+// default. Vocabulary/labels/projects/members are passed through raw.
+type Meta struct {
+	User            MetaUser             `json:"user" yaml:"user"`
+	ActiveWorkspace *MetaActiveWorkspace `json:"active_workspace" yaml:"active_workspace"`
+	Workspaces      []MetaWorkspace      `json:"workspaces" yaml:"workspaces"`
+	Vocabulary      json.RawMessage      `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
+}
+
+type MetaUser struct {
+	ID           int     `json:"id" yaml:"id"`
+	Email        string  `json:"email" yaml:"email"`
+	Name         *string `json:"name" yaml:"name"`
+	AvatarURL    *string `json:"avatar_url" yaml:"avatar_url"`
+	Via          string  `json:"via" yaml:"via"`
+	IsSuperAdmin bool    `json:"is_super_admin" yaml:"is_super_admin"`
+}
+
+type MetaActiveWorkspace struct {
+	ID   int    `json:"id" yaml:"id"`
+	Name string `json:"name" yaml:"name"`
+	Slug string `json:"slug" yaml:"slug"`
+	Role string `json:"role" yaml:"role"`
+}
+
+type MetaWorkspace struct {
+	ID       int    `json:"id" yaml:"id"`
+	Name     string `json:"name" yaml:"name"`
+	Slug     string `json:"slug" yaml:"slug"`
+	Role     string `json:"role" yaml:"role"`
+	IsActive bool   `json:"is_active" yaml:"is_active"`
+}
+
 type Project struct {
 	ID          int     `json:"id" yaml:"id"`
 	Name        string  `json:"name" yaml:"name"`

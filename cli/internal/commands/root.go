@@ -33,8 +33,8 @@ members, tokens, inbox, analytics, and more.
 
 First run:
   bk login --server URL    # opens browser, captures token
-  bk whoami                # confirm identity
-  bk workspace use <slug>  # set active workspace
+  bk meta                  # bootstrap: who am I + every workspace I can write to
+  bk workspace use <slug>  # set active workspace (pick by name/slug, not id)
 
 Output formats (every read command):
   -o table|json|yaml|yml   default: table
@@ -45,6 +45,9 @@ Exit codes (stable; for branching in scripts/agents):
   5 not-found(404)   6 validation(400)   7 user-aborted
 
 Conventions for agents:
+  • run "bk meta" first: it lists every workspace you belong to. Pick your
+    target by NAME/SLUG (not the opaque numeric id) and confirm it before
+    creating anything — the active workspace is only a default.
   • a project/issue/task is addressed by its #number (the value shown in the
     app), unique per workspace — there is no separate global id. See docs/api-changelog.md.
   • set BK_NO_PROMPT=1 in env to skip every "are you sure?" prompt
@@ -94,6 +97,7 @@ func NewRoot() *cobra.Command {
 		newLoginCmd(),
 		newLogoutCmd(),
 		newWhoamiCmd(),
+		newMetaCmd(),
 		newProfileCmd(),
 		newWorkspaceCmd(),
 		newProjectCmd(),

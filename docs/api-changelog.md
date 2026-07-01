@@ -8,6 +8,28 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-07-01 — `GET /api/meta` now lists all your workspaces (pick by name, not id)
+
+`GET /api/meta` gained a **`workspaces`** array: every workspace the caller
+belongs to, each `{ id, name, slug, role, is_active }`. This is additive — no
+existing field changed.
+
+Why: workspace `id`s are opaque sequential integers, so an agent that only knew
+the numeric id had no reliable way to tell which team a workspace was, and could
+create issues in the wrong workspace. Agents should now **choose the target
+workspace by its human-readable `name`/`slug`**, then address it as
+`/api/workspaces/{slug}/…` (the `{ws}` segment still accepts slug or id — prefer
+the slug). `active_workspace` is only a default, not necessarily where the user
+means to write.
+
+The same list is also available on its own at `GET /api/workspaces`, and via the
+new **`bk meta`** CLI command (the CLI mirror of `GET /api/meta`) or
+`bk workspace list` (switch with `bk workspace use <slug>`, or target one command
+with `bk --ws <slug> …`). The embedded agent manifest and the OpenAPI `Meta`
+schema were updated to say the same thing.
+
+---
+
 ## 2026-06-24 — Tables render natively; uploaded video/audio embeds
 
 Rich-text fields (descriptions, comments, project-update bodies) now render

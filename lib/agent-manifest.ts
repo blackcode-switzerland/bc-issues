@@ -29,10 +29,13 @@ export const AGENT_MANIFEST = {
   },
   discovery: {
     context: '/api/meta',
+    workspaces: '/api/workspaces',
     openapi: '/api/openapi.json',
     docs: '/api/docs',
     changelog: '/docs/api-changelog.md',
   },
+  choosing_a_workspace:
+    'All tenant data lives inside a workspace, and most accounts have more than one. Before you create/update anything, decide WHICH workspace. GET /api/meta returns `workspaces` (every workspace you belong to, with id, name, slug, role) plus the current `active_workspace` — or call GET /api/workspaces for the same list. Match the user\'s intent to a workspace by its human-readable `name`/`slug`; do NOT pick by the numeric `id` (ids are opaque sequential numbers and trivial to confuse — writing to the wrong one is the most common agent mistake here). Then address it as /api/workspaces/{slug}/… (the {ws} segment accepts slug or id — prefer the slug). `active_workspace` is just a default, not necessarily where the user means to write. CLI: `bk meta` (mirror of GET /api/meta) or `bk workspace list`, then `bk workspace use <slug>` or a per-command `bk --ws <slug> …`.',
   cli: {
     recommended: 'Preferred interface for agents — more reliable than calling the HTTP API directly (see recommended_interface).',
     package: '@blackcode_sa/bc-issues',
@@ -51,7 +54,8 @@ This is a rendered web page, but everything here is also available over an HTTP 
 - RECOMMENDED: use the bk CLI rather than calling the HTTP API directly. It wraps the same API but handles auth, JSON encoding, pagination, file upload+embed and stable exit codes, so agent runs are more reliable. The HTTP API stays supported for cases the CLI can't cover — it's a recommendation, not a requirement.
 - API base: /api  (tenant data is workspace-scoped under /api/workspaces/{ws}/...)
 - Auth: send  Authorization: Bearer bk_live_<token>  (mint at /dashboard/settings/tokens, or run: bk login)
-- Start here: GET /api/meta  (your context + the valid status/priority values)
+- Start here: GET /api/meta  (your context + the valid status/priority values + the list of every workspace you belong to)
+- Pick the right workspace FIRST: GET /api/meta (or GET /api/workspaces) lists every workspace with its name + slug. Choose the target by NAME/slug, never by the numeric id (ids are opaque and easy to mix up — writing to the wrong workspace is the #1 agent mistake). Then use /api/workspaces/{slug}/... . active_workspace is only a default. CLI: bk workspace list; bk workspace use <slug> (or bk --ws <slug> per command)
 - Full spec: GET /api/openapi.json  (OpenAPI 3.1; human-browsable at /api/docs)
 - CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
 - Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Breaking changes: /docs/api-changelog.md

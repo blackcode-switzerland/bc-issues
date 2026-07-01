@@ -16,7 +16,10 @@ that must always stay in sync**:
 4. **Docs** — `docs/backend.md`, `docs/cli.md`, `docs/frontend.md`.
 
 Plus `GET /api/meta` — the agent bootstrap endpoint (current user, active
-workspace, and the enum vocabulary from `lib/work-items.ts`).
+workspace, the full `workspaces` list you belong to, and the enum vocabulary
+from `lib/work-items.ts`). Agents pick their write target from `workspaces` by
+**name/slug** — never by the opaque numeric id, and `active_workspace` is only a
+default.
 
 ## The one rule that matters most
 
