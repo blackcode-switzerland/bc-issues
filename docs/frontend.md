@@ -411,6 +411,11 @@ There is **no legacy id mapping** — old global-id links are not redirected.
 **Inbox** is cross-workspace: each message's `workspace_id` is passed as
 `workspaceSlug`, and the entity's seq (`payload.entity_seq` / `payload.issue_seq`)
 as the id, so previews open for items in any workspace with no workspace switch.
+Invitation notifications (`entity_type === 'invitation'`) have no issue/project/task
+to preview — the detail pane renders `InvitationDetail` instead, with inline
+Accept/Decline when the invite is still pending (token from
+`/api/me/pending-invitations`) and otherwise a link to `/invitations/[token]`
+(the fanout payload carries `invitation_token`).
 
 ## State & data fetching
 

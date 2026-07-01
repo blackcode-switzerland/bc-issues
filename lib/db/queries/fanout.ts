@@ -15,6 +15,7 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  workspaceInvitations,
   type Event,
 } from '../schema'
 import { createInboxMessage } from './inbox'
@@ -72,6 +73,14 @@ async function fanOutInvitationCreated(tx: Tx, event: Event): Promise<void> {
     .where(eq(workspaces.id, event.workspace_id))
     .limit(1)
 
+  // The accept page lives at /invitations/[token]; carry the token in the
+  // payload so the inbox detail pane can link to it directly.
+  const invite = await tx
+    .select({ token: workspaceInvitations.token })
+    .from(workspaceInvitations)
+    .where(eq(workspaceInvitations.id, event.entity_id))
+    .limit(1)
+
   await createInboxMessage(tx, {
     userId: user[0].id,
     eventId: event.id,
@@ -84,6 +93,7 @@ async function fanOutInvitationCreated(tx: Tx, event: Event): Promise<void> {
       workspace_id: event.workspace_id,
       workspace_name: ws[0]?.name ?? '',
       invitation_id: event.entity_id,
+      invitation_token: invite[0]?.token ?? null,
     },
   })
 }

@@ -384,6 +384,21 @@ export function InboxView() {
                 <ProjectDetailView projectId={previewSeq} workspaceSlug={previewSlug} />
               ) : selectedMessage.entity_type === 'task' && previewSeq != null ? (
                 <TaskDetailView taskId={previewSeq} workspaceSlug={previewSlug} />
+              ) : selectedMessage.entity_type === 'invitation' ? (
+                <InvitationDetail
+                  workspaceName={String(selectedMessage.payload?.workspace_name ?? '')}
+                  invitationId={
+                    typeof selectedMessage.payload?.invitation_id === 'number'
+                      ? selectedMessage.payload.invitation_id
+                      : selectedMessage.entity_id
+                  }
+                  token={
+                    typeof selectedMessage.payload?.invitation_token === 'string'
+                      ? selectedMessage.payload.invitation_token
+                      : null
+                  }
+                  onAccept={accept.mutate}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   <InboxIcon size={28} className="mb-3 text-muted-foreground" />
@@ -471,6 +486,83 @@ function renderMessage(m: InboxMessage): React.ReactNode {
     default:
       return <>{m.type} in {wsName}</>
   }
+}
+
+// Detail-pane view for an invitation notification. Invitations have no
+// issue/project/task entity to preview, so we render invite info here and link
+// to the public accept page (/invitations/[token]), which handles every state
+// (pending / accepted / declined / revoked / expired / email-mismatch).
+function InvitationDetail({
+  workspaceName,
+  invitationId,
+  token,
+  onAccept,
+}: {
+  workspaceName: string
+  invitationId: number | null
+  token: string | null
+  onAccept: (input: { token: string }) => void
+}) {
+  // Pending-invitations returns a live token only while the invite is still
+  // actionable (pending and unexpired). Absence => no inline Accept/Decline.
+  const { data } = useQuery({
+    queryKey: ['pending-invitations'],
+    queryFn: async () => {
+      const res = await fetch('/api/me/pending-invitations')
+      if (!res.ok) return { data: [] }
+      return res.json()
+    },
+  })
+  const inv = invitationId != null
+    ? data?.data?.find((i: { id: number; token: string }) => i.id === invitationId)
+    : undefined
+  const liveToken: string | null = inv?.token ?? token ?? null
+
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+      <span className="mb-4 flex size-11 items-center justify-center rounded-full bg-secondary">
+        <UserPlus size={20} className="text-muted-foreground" />
+      </span>
+      <h1 className="text-lg font-semibold">You&apos;re invited</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        to join <strong className="text-foreground">{workspaceName}</strong>
+      </p>
+
+      {inv ? (
+        <div className="mt-6 flex items-center gap-2">
+          <button
+            onClick={() => onAccept({ token: inv.token })}
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Accept invitation
+          </button>
+          <button
+            onClick={() =>
+              fetch('/api/invitations/decline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: inv.token }),
+              })
+            }
+            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary"
+          >
+            Decline
+          </button>
+        </div>
+      ) : liveToken ? (
+        <a
+          href={`/invitations/${liveToken}`}
+          className="mt-6 rounded-md border border-border bg-card/30 px-3 py-1.5 text-sm text-foreground hover:bg-secondary"
+        >
+          Open invitation →
+        </a>
+      ) : (
+        <p className="mt-6 rounded-lg border border-border bg-card/30 p-4 text-sm text-muted-foreground">
+          This invitation is no longer active.
+        </p>
+      )}
+    </div>
+  )
 }
 
 function InvitationActions({
