@@ -36,6 +36,45 @@ function statusName(value: unknown): string {
 import { IssueDetailView } from './issue-detail-view'
 import { ProjectDetailView } from './project-detail-view'
 import { TaskDetailView } from './task-detail-view'
+import { avatarColor } from '@/components/ui/member-avatar'
+
+// The combined inbox spans every workspace the user belongs to, so each row
+// needs a small marker of which workspace it came from. We resolve that from the
+// user's workspace list (cached under ['me-workspaces'], shared with the sidebar).
+interface WorkspaceLite {
+  id: number
+  name: string
+  slug: string
+  logo_url: string | null
+}
+
+async function fetchWorkspaces(): Promise<WorkspaceLite[]> {
+  const res = await fetch('/api/workspaces')
+  if (!res.ok) throw new Error('failed')
+  const j = await res.json()
+  return j.data
+}
+
+function WorkspaceTag({ ws }: { ws: WorkspaceLite }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+      {ws.logo_url ? (
+        <span className="size-4 shrink-0 overflow-hidden rounded-[4px] bg-zinc-700 ring-1 ring-inset ring-border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={ws.logo_url} alt="" className="size-full object-cover" />
+        </span>
+      ) : (
+        <span
+          className="flex size-4 shrink-0 items-center justify-center rounded-[4px] text-[9px] font-semibold leading-none text-white"
+          style={{ backgroundColor: avatarColor(ws.name) }}
+        >
+          {(ws.name.trim()[0] ?? 'W').toUpperCase()}
+        </span>
+      )}
+      <span className="truncate">{ws.name}</span>
+    </span>
+  )
+}
 
 // Comment excerpts arrive as raw TipTap HTML — render them as plain text.
 function stripHtml(html: string, max = 90): string {
@@ -98,6 +137,9 @@ export function InboxView() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<InboxTab>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+
+  const { data: workspaces } = useQuery({ queryKey: ['me-workspaces'], queryFn: fetchWorkspaces })
+  const workspaceById = new Map((workspaces ?? []).map((w) => [w.id, w]))
 
   const { data, isLoading } = useQuery({
     queryKey: ['inbox', tab],
@@ -302,9 +344,17 @@ export function InboxView() {
                             onAccept={accept.mutate}
                           />
                         ) : null}
-                        <p className="mt-0.5 text-xs text-muted-foreground" suppressHydrationWarning>
-                          {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
-                        </p>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                          {m.workspace_id != null && workspaceById.has(m.workspace_id) ? (
+                            <>
+                              <WorkspaceTag ws={workspaceById.get(m.workspace_id)!} />
+                              <span className="shrink-0 text-muted-foreground/50">·</span>
+                            </>
+                          ) : null}
+                          <span className="shrink-0" suppressHydrationWarning>
+                            {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                          </span>
+                        </div>
                       </div>
                       <div
                         className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
