@@ -22,13 +22,22 @@ import { errorEvents, type NewErrorEvent } from '@/lib/db/schema'
 import { ApiError } from './errors'
 import { sanitize, truncate } from './sanitize'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@/lib/cli-version'
+import { AGENT_MANIFEST } from '@/lib/agent-manifest'
 
-// Advertise the supported bk CLI versions on every API response. The CLI reads
-// these to show a soft "update available" notice and to hard-block when it is
-// below the minimum supported version.
-function withCliVersionHeaders<T extends NextResponse | Response>(res: T): T {
+// Standard headers on EVERY API response (success and error alike):
+//  - X-BK-CLI-Latest / X-BK-CLI-Min: the supported bk CLI versions. The CLI reads
+//    these to show a soft "update available" notice and to hard-block when it is
+//    below the minimum supported version.
+//  - X-BK-Help / X-BK-Changelog: passive breadcrumbs so an agent that hits a wall
+//    can find its own way back — the get-current guide and the changelog. They
+//    sit out-of-band in headers (never in the body), so they cost nothing to a
+//    client that ignores them. Sourced from the agent manifest so they can't
+//    drift from /llms.txt and the per-page manifest.
+function withStandardHeaders<T extends NextResponse | Response>(res: T): T {
   res.headers.set('X-BK-CLI-Latest', CLI_LATEST_VERSION)
   res.headers.set('X-BK-CLI-Min', CLI_MIN_VERSION)
+  res.headers.set('X-BK-Help', AGENT_MANIFEST.discovery.get_up_to_date)
+  res.headers.set('X-BK-Changelog', AGENT_MANIFEST.discovery.changelog)
   return res
 }
 
@@ -44,9 +53,9 @@ export function apiHandler<TCtx extends RouteContext = RouteContext>(
 ): (req: NextRequest, ctx: TCtx) => Promise<NextResponse | Response> {
   return async (req, ctx) => {
     try {
-      return withCliVersionHeaders(await handler(req, ctx))
+      return withStandardHeaders(await handler(req, ctx))
     } catch (err) {
-      return withCliVersionHeaders(await handleError(err, req))
+      return withStandardHeaders(await handleError(err, req))
     }
   }
 }

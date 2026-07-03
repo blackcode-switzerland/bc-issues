@@ -3,10 +3,63 @@
 Breaking and notable changes to the REST API and `bk` CLI. Newest first.
 If a request that used to work now fails, check here first.
 
-Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
-(`/api/docs`), the embedded per-page agent manifest, and `bk --help`.
+A complete snapshot of the whole surface (the pinned **Platform Reference
+baseline**) sits above this log — read it via [`/changelog`](/changelog) or
+`GET /api/changelog`.
+
+Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
+(JSON or `?format=markdown`), `bk changelog`, `GET /api/meta` (`conventions`),
+the OpenAPI description (`/api/docs`), and the embedded per-page agent manifest.
+
+> **Process rule:** every change to a route or user-facing feature must add a
+> dated entry here (and update `docs/platform-reference.md` if the surface
+> itself changed). Timestamp it and describe what changed and how to adapt.
 
 ---
+
+## 2026-07-03 — Self-service recovery hints (breadcrumb headers + CLI hints)
+
+So an agent that hits a wall can find its own way back, every surface now points
+at how to get current — at the moment it's useful, without adding noise to normal
+success paths. All additive.
+
+- **Response headers on every API response** (success and error): **`X-BK-Help`**
+  (→ `/agent-updator`) and **`X-BK-Changelog`** (→ `/changelog`), alongside the
+  existing `X-BK-CLI-Latest` / `X-BK-CLI-Min`. They're out-of-band (never in the
+  body), so a client that ignores them pays nothing. The response envelopes are
+  unchanged.
+- **`bk` prints a one-line `hint:` to stderr** only when you're actually stuck —
+  an auth failure (run `bk login`), a drift-smelling `400`/`404`/`422` (run
+  `bk changelog` / see `/agent-updator`), or an unknown command/flag (likely
+  renamed or removed). stderr only, so `--json` stdout stays clean. Unknown
+  command/flag now also exits `2` (usage) instead of `1`.
+
+## 2026-07-03 — Changelog, platform reference & the agent-updator guide
+
+The changelog is now a first-class, multi-surface product feature instead of a
+plain doc file. Three things shipped, all additive:
+
+- **`/changelog`** — a public web page: a pinned **Platform Reference (baseline)**
+  (`docs/platform-reference.md`) covering the entire API + CLI surface, data
+  types, rules, and warnings at the current release, followed by this dated log.
+  Linked from the site footer.
+- **`GET /api/changelog`** — public, unauthenticated. Returns
+  `{ cli_latest_version, cli_min_version, reference: { markdown, html }, entries:
+  [{ date, title, markdown, html }] }`. `?format=markdown` returns the whole
+  thing as one raw Markdown document.
+- **`bk changelog`** — lists dated changes (`--json`/`--yaml` for machines);
+  `bk changelog --full` prints the whole reference + log; `bk changelog
+  --reference` prints just the baseline.
+
+Also new: **`/agent-updator`** — a public guide that tells an agent (or an
+outdated agent *skill*) how to get current: which interface to use, how to
+install/update the CLI, OS-specific gotchas (Windows UTF-8), and to read the
+changelog and re-check it periodically. Hand this URL to any agent whose
+integration has drifted.
+
+The `GET /api/meta` `conventions.changelog` pointer and the agent manifest now
+point at `/changelog` (the old `/docs/api-changelog.md` url was never actually
+served).
 
 ## 2026-07-03 — Move / copy items between workspaces
 

@@ -328,7 +328,24 @@ GET /api/docs           Human-readable API reference (Scalar, renders the spec a
 GET /api/meta           Authenticated bootstrap: { user, active_workspace, workspaces,
                         vocabulary, labels, projects, members }. ?ws=<slug|id> targets
                         a workspace.
+GET /api/changelog      PUBLIC (no auth). What changed + the current CLI version floor.
 ```
+
+`GET /api/changelog` (`app/api/changelog/route.ts`) is unauthenticated. It
+returns `{ cli_latest_version, cli_min_version, reference: { markdown, html },
+entries: [{ date, title, markdown, html }] }` (entries newest first). Pass
+`?format=markdown` (or `Accept: text/markdown`) to get the whole thing as one raw
+Markdown document instead of JSON. Source of truth is **`lib/changelog.ts`**,
+which reads two authored Markdown files — `docs/platform-reference.md` (the
+pinned baseline complete reference) and `docs/api-changelog.md` (the dated log) —
+and renders/parses them with `marked` (gfm, `breaks:false`) + `sanitize-html`.
+Because those `.md` files must exist at runtime, `next.config.js` sets
+`outputFileTracingIncludes` for `/changelog` and `/api/changelog` so they're
+bundled into the serverless output. The spec covers it with `Changelog` +
+`ChangelogEntry` schemas under the **Meta** tag; `/api/meta`
+(`conventions.changelog`) and `/llms.txt` point at `/changelog`,
+`/api/changelog`, and `/agent-updator` via `lib/agent-manifest.ts`'s `discovery`
+block.
 
 `GET /api/meta` is the call an agent should make first: it returns the active
 workspace, the **full `workspaces` list** the caller belongs to (id, name, slug,
@@ -583,10 +600,10 @@ these; they never write SQL inline.
 
 ## Cross-cutting concerns
 
-### CLI version signaling
+### Response headers (version + self-service breadcrumbs)
 
-`apiHandler` stamps two headers on **every** API response, sourced from
-`lib/cli-version.ts` (override via `BK_CLI_LATEST` / `BK_CLI_MIN` env, no redeploy):
+`apiHandler` (`withStandardHeaders`) stamps four headers on **every** API
+response, success or error:
 
 - `X-BK-CLI-Latest` — newest published `bk` CLI. The CLI shows a throttled
   "update available" notice when the caller is behind it.
@@ -594,6 +611,16 @@ these; they never write SQL inline.
   8) below this. **Raise `CLI_MIN_VERSION` whenever a server change breaks older
   CLIs** (e.g. the milestone→task / key-removal rename) so stale clients get a
   clear "please upgrade" instead of cryptic 404s.
+- `X-BK-Help` — the get-current guide (`/agent-updator`).
+- `X-BK-Changelog` — the changelog (`/changelog`).
+
+The version headers come from `lib/cli-version.ts` (override via `BK_CLI_LATEST` /
+`BK_CLI_MIN` env, no redeploy); the two breadcrumb headers come from
+`lib/agent-manifest.ts` `discovery`, so they can't drift from `/llms.txt`. The
+breadcrumbs are out-of-band (never in the body), so a client that ignores them
+pays nothing — but an agent that hits a wall can follow them back to the
+changelog. The `bk` CLI complements these with a one-line `hint:` on stderr for
+drift-smelling failures (auth, `400`/`404`/`422`, unknown command/flag).
 
 ### Middleware (`middleware.ts`)
 

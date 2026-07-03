@@ -234,6 +234,13 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk whoami` | Show current user (id, email, name, role, via). |
 | `bk meta` | Agent bootstrap (`GET /api/meta`): current user, active workspace, and **every workspace you belong to** (id, name, slug, role, active marker). Run it first and pick your target by name/slug, not the numeric id. `--ws <slug\|id>` previews another workspace's context without switching. |
 | `bk version` | Print version, commit, build date. |
+| `bk changelog [--full] [--reference] [--server URL]` | What changed + the current CLI version floor (`GET /api/changelog`). **Public — works before `bk login`.** |
+
+`bk changelog` is public: it works without authentication. It targets the
+logged-in server if there is one, else `https://bc-issues.vercel.app`;
+`--server URL` overrides the host. Default output is a `DATE`/`CHANGE` table of
+the dated entries; `--full` prints the platform reference plus every entry in
+full; `--reference` prints only the baseline reference.
 
 ### Workspaces
 

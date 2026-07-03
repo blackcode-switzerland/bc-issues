@@ -240,6 +240,16 @@ func (c *Client) Meta(ws string) (*Meta, error) {
 	return &m, nil
 }
 
+// Changelog fetches GET /api/changelog — the platform-reference baseline plus
+// the dated change log. Public (no workspace needed); auth is sent if present.
+func (c *Client) Changelog() (*Changelog, error) {
+	var cl Changelog
+	if err := c.get("/api/changelog", &cl); err != nil {
+		return nil, err
+	}
+	return &cl, nil
+}
+
 func (c *Client) ListProjects(search string) ([]Project, error) {
 	path, err := c.wsPath("projects")
 	if err != nil {

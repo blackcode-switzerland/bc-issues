@@ -55,8 +55,50 @@ func main() {
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		// A one-line breadcrumb, but only at the moments an agent is actually
+		// stuck (auth, drift-smelling 4xx, a command/flag that no longer exists).
+		// stderr only, so --json stdout stays clean.
+		if h := hintFor(err); h != "" {
+			fmt.Fprintln(os.Stderr, "hint:", h)
+		}
 		os.Exit(classify(err))
 	}
+}
+
+// helpBase is the server the help URLs point at: the logged-in server if we have
+// one, else the default host. Trailing slash trimmed.
+func helpBase() string {
+	if cfg, err := config.Load(); err == nil && strings.TrimSpace(cfg.Server) != "" {
+		return strings.TrimRight(cfg.Server, "/")
+	}
+	return "https://bc-issues.vercel.app"
+}
+
+// hintFor returns a short recovery breadcrumb for the failure at hand, or "" when
+// a hint would just be noise (e.g. a plain permission denial). The goal is a
+// self-service loop: hit a wall -> follow the breadcrumb -> `bk changelog` /
+// /agent-updator -> get current -> retry.
+func hintFor(err error) string {
+	if errors.Is(err, config.ErrNotConfigured) {
+		return "run `bk login` to authenticate. New here? " + helpBase() + "/agent-updator"
+	}
+	var ae *client.APIError
+	if errors.As(err, &ae) {
+		switch ae.Status {
+		case 401:
+			return "not authenticated — run `bk login`. New here? " + helpBase() + "/agent-updator"
+		case 400, 404, 422:
+			// The strongest drift signals: a shape or resource that used to work.
+			return "if this used to work, the API may have changed — run `bk changelog`, or see " + helpBase() + "/agent-updator"
+		}
+		return ""
+	}
+	if msg := err.Error(); strings.Contains(msg, "unknown flag") ||
+		strings.Contains(msg, "unknown command") ||
+		strings.Contains(msg, "unknown shorthand") {
+		return "that command or flag may have been renamed or removed — run `bk changelog`, or see " + helpBase() + "/agent-updator"
+	}
+	return ""
 }
 
 // maybeNotifyUpdate prints a once-per-24h "update available" notice to STDERR
@@ -112,7 +154,10 @@ func classify(err error) int {
 	switch {
 	case strings.HasPrefix(msg, "aborted"):
 		return exitAborted
-	case strings.Contains(msg, "required") || strings.HasPrefix(msg, "invalid "):
+	case strings.Contains(msg, "required") || strings.HasPrefix(msg, "invalid "),
+		strings.Contains(msg, "unknown flag"),
+		strings.Contains(msg, "unknown command"),
+		strings.Contains(msg, "unknown shorthand"):
 		return exitUsage
 	}
 	return exitGeneric

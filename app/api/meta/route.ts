@@ -99,7 +99,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
       id: 'workspace-scoped number (the #N shown in the UI); address items by it. References back to a work item (comment.parent_id, attachment.issue_id, project_update.project_id) are this #number too — the internal db id is never exposed',
       workspace_selection:
         'Before creating anything, confirm which workspace you are writing to. The `workspaces` array above lists every workspace you belong to; match the user\'s intent to a workspace by its `name`/`slug`, not its numeric `id` (ids are opaque and easy to confuse). Then target it as /api/workspaces/{slug}/… — the {ws} path segment accepts the slug or the id, but prefer the slug. `active_workspace` is only a default; it is NOT necessarily where the user means to write.',
-      changelog: '/docs/api-changelog.md',
+      changelog:
+        'Read /changelog (a complete platform reference + dated changes, newest first) — JSON at /api/changelog, or `bk changelog`. If a request that used to work now fails, check it first. Getting an outdated integration current: /agent-updator.',
       rich_text: 'description/comment/body fields accept Markdown or HTML, stored as sanitized HTML. GFM/HTML tables render natively; embed video/audio by uploading it (raw <iframe> and external media are stripped)',
       file_embeds:
         'POST a file to /api/upload (multipart field "file") -> { url }, then reference it in a body as ![name](url) for images or [name](url) for any other file; uploaded urls render inline (preview/player/download card). Max 100MB.',

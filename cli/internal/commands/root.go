@@ -49,7 +49,7 @@ Conventions for agents:
     target by NAME/SLUG (not the opaque numeric id) and confirm it before
     creating anything — the active workspace is only a default.
   • a project/issue/task is addressed by its #number (the value shown in the
-    app), unique per workspace — there is no separate global id. See docs/api-changelog.md.
+    app), unique per workspace — there is no separate global id. See "bk changelog".
   • set BK_NO_PROMPT=1 in env to skip every "are you sure?" prompt
     (delete / remove-member / detach / undo). --yes per-command also works.
   • long bodies (--description, --body) accept three forms:
@@ -61,6 +61,9 @@ Conventions for agents:
   • bk undo --count N rolls back your last N writes (max 10).
   • the surface is large — run "bk <group> --help" then
     "bk <group> <cmd> --help" to discover flags before calling.
+  • stuck? if a call fails unexpectedly, a flag is gone, or a request that
+    used to work now errors, the surface may have changed — run
+    "bk changelog" (or visit /agent-updator) to get current, then retry.
 
 Command groups:
   workspace   list, create, edit, transfer, use
@@ -75,6 +78,7 @@ Command groups:
   token       list, create, delete
   profile     view, edit
   inbox       list, read, archive, unarchive
+  changelog   what's changed in the API/CLI (--full, --reference); read to get current
   super-admin users, whitelist, errors (super admins only; platform-wide)`
 
 func NewRoot() *cobra.Command {
@@ -118,6 +122,7 @@ func NewRoot() *cobra.Command {
 		newStorageCmd(),
 		newTrashCmd(),
 		newUndoCmd(),
+		newChangelogCmd(),
 		newSuperAdminCmd(),
 		newVersionCmd(),
 	)

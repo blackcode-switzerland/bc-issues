@@ -15,6 +15,28 @@ type Me struct {
 	IsSuperAdmin    bool    `json:"is_super_admin,omitempty" yaml:"is_super_admin,omitempty"`
 }
 
+// Changelog models GET /api/changelog: a pinned baseline Platform Reference
+// plus the dated log (newest first). Bodies are carried as both Markdown and
+// rendered HTML; the CLI uses the Markdown.
+type Changelog struct {
+	CLILatestVersion string           `json:"cli_latest_version" yaml:"cli_latest_version"`
+	CLIMinVersion    string           `json:"cli_min_version" yaml:"cli_min_version"`
+	Reference        ChangelogDoc     `json:"reference" yaml:"reference"`
+	Entries          []ChangelogEntry `json:"entries" yaml:"entries"`
+}
+
+type ChangelogDoc struct {
+	Markdown string `json:"markdown" yaml:"markdown"`
+	HTML     string `json:"html" yaml:"html"`
+}
+
+type ChangelogEntry struct {
+	Date     string `json:"date" yaml:"date"`
+	Title    string `json:"title" yaml:"title"`
+	Markdown string `json:"markdown" yaml:"markdown"`
+	HTML     string `json:"html" yaml:"html"`
+}
+
 type User struct {
 	ID        int     `json:"id" yaml:"id"`
 	Email     string  `json:"email" yaml:"email"`

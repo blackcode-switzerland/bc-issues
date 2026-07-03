@@ -34,8 +34,12 @@ export const AGENT_MANIFEST = {
     workspaces: '/api/workspaces',
     openapi: '/api/openapi.json',
     docs: '/api/docs',
-    changelog: '/docs/api-changelog.md',
+    changelog: '/changelog',
+    changelog_api: '/api/changelog',
+    get_up_to_date: '/agent-updator',
   },
+  staying_current:
+    'This API and CLI evolve. If a request that used to work now fails, the cause is almost always a change listed in the changelog. Read /changelog (a pinned complete Platform Reference plus dated entries, newest first) — or GET /api/changelog (JSON, or ?format=markdown), or run `bk changelog`. If your integration/skill has drifted, /agent-updator is a short guide to getting current. Every API response carries breadcrumb headers so you can find your way from any failed call: X-BK-Help (/agent-updator) and X-BK-Changelog (/changelog), plus X-BK-CLI-Latest and X-BK-CLI-Min. The CLI is version-floored: an old bk is hard-blocked (exit 8) with an upgrade prompt, and on a stuck call it prints a one-line `hint:` to stderr pointing here. Update with `npm install -g @blackcode_sa/bc-issues@latest`.',
   choosing_a_workspace:
     'All tenant data lives inside a workspace, and most accounts have more than one. Before you create/update anything, decide WHICH workspace. GET /api/meta returns `workspaces` (every workspace you belong to, with id, name, slug, role) plus the current `active_workspace` — or call GET /api/workspaces for the same list. Match the user\'s intent to a workspace by its human-readable `name`/`slug`; do NOT pick by the numeric `id` (ids are opaque sequential numbers and trivial to confuse — writing to the wrong one is the most common agent mistake here). Then address it as /api/workspaces/{slug}/… (the {ws} segment accepts slug or id — prefer the slug). `active_workspace` is just a default, not necessarily where the user means to write. CLI: `bk meta` (mirror of GET /api/meta) or `bk workspace list`, then `bk workspace use <slug>` or a per-command `bk --ws <slug> …`.',
   cli: {
@@ -60,7 +64,7 @@ This is a rendered web page, but everything here is also available over an HTTP 
 - Pick the right workspace FIRST: GET /api/meta (or GET /api/workspaces) lists every workspace with its name + slug. Choose the target by NAME/slug, never by the numeric id (ids are opaque and easy to mix up — writing to the wrong workspace is the #1 agent mistake). Then use /api/workspaces/{slug}/... . active_workspace is only a default. CLI: bk workspace list; bk workspace use <slug> (or bk --ws <slug> per command)
 - Full spec: GET /api/openapi.json  (OpenAPI 3.1; human-browsable at /api/docs)
 - CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
-- Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Breaking changes: /docs/api-changelog.md
+- Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Changelog + full platform reference: /changelog (JSON at /api/changelog, or run: bk changelog). Outdated integration? /agent-updator
 - Lists return { data } in one response (issues/projects/tasks aren't paginated; issues add total); only activity/trash/super-admin errors paginate via ?limit=&?cursor= with next_cursor. Errors return { error, code, suggestion?, details? }
 - Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n. GFM/HTML tables render natively; embed video/audio by uploading it (raw <iframe>/external media are stripped)
 - Files/images: POST to /api/upload (multipart "file") -> { url }, then put the url in the body as ![name](url) (image) or [name](url) (any file); it renders inline. CLI: bk ... create --file ./x

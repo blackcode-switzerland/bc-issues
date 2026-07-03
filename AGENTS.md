@@ -35,6 +35,12 @@ Concretely, when you add / change / remove a route:
   `lib/work-items.ts` — never hardcode them).
 - Update the **CLI** command + client method in `cli/`.
 - Update the relevant **doc** in `docs/`.
+- **Add a dated changelog entry.** Report every route/feature change in
+  `docs/api-changelog.md` as a new `## YYYY-MM-DD — Title` (newest first): what
+  changed, if it's breaking, how to adapt. If the surface itself changed, also
+  update the baseline `docs/platform-reference.md`. This is what lets users' AI
+  agents self-update — it surfaces at `/changelog`, `GET /api/changelog`, and
+  `bk changelog`. See CLAUDE.md → "Changelog rule".
 
 This is enforced: **`lib/openapi/parity.test.ts` (via `npm test`) fails the build
 if the spec and the routes drift apart.**

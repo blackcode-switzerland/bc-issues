@@ -221,6 +221,28 @@ export const openApiSpec = {
         },
         'Canonical error envelope returned by every route.'
       ),
+      ChangelogEntry: entity(
+        {
+          date: { type: 'string', description: 'Entry date, YYYY-MM-DD.' },
+          title: { type: 'string' },
+          markdown: { type: 'string', description: 'Entry body as Markdown.' },
+          html: { type: 'string', description: 'Entry body rendered to sanitized HTML.' },
+        },
+        'A dated changelog entry.'
+      ),
+      Changelog: entity(
+        {
+          cli_latest_version: { type: 'string', description: 'Newest published bk CLI.' },
+          cli_min_version: { type: 'string', description: 'Minimum bk CLI the API still supports.' },
+          reference: {
+            type: 'object',
+            description: 'The pinned Platform Reference baseline.',
+            properties: { markdown: { type: 'string' }, html: { type: 'string' } },
+          },
+          entries: { type: 'array', items: { $ref: '#/components/schemas/ChangelogEntry' } },
+        },
+        'The product changelog: a baseline platform reference plus dated entries, newest first.'
+      ),
       Me: entity(
         {
           id: { type: 'integer' },
@@ -1175,6 +1197,22 @@ export const openApiSpec = {
     },
     '/api/status': {
       get: { tags: ['System'], operationId: 'getStatus', summary: 'Public health probe', security: [], responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Healthy') } },
+    },
+    '/api/changelog': {
+      get: {
+        tags: ['Meta'],
+        operationId: 'getChangelog',
+        summary: 'Product changelog: platform-reference baseline + dated entries',
+        description:
+          'Public. Returns the pinned Platform Reference and the dated change log (newest first). ' +
+          'Pass `?format=markdown` (or `Accept: text/markdown`) to get the whole thing as one raw ' +
+          'Markdown document instead of JSON. Also served by `bk changelog`.',
+        security: [],
+        parameters: [
+          { name: 'format', in: 'query', schema: { type: 'string', enum: ['json', 'markdown', 'md'] }, description: 'Response format (default json).' },
+        ],
+        responses: { '200': jsonObject('Changelog', 'The changelog (or raw Markdown when format=markdown)') },
+      },
     },
     '/api/super-admin/users': {
       get: { tags: ['Super admin'], operationId: 'superAdminListUsers', summary: 'List all users (requires a SUPER_ADMINS email)', responses: { '200': jsonList('User'), ...errors(401, 403) } },

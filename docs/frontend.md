@@ -130,6 +130,8 @@ colors in components — use the token utilities.
 | `/login` | Sign-in / sign-up tabs + password-reset flow |
 | `/blocked` | Shown when a non-whitelisted email tries Google OAuth; professional "not on the list" page |
 | `/privacy`, `/terms` | Legal pages (marketing layout) |
+| `/changelog` | Public changelog (`app/changelog/page.tsx`, marketing layout) — server-rendered; a pinned, collapsible "Platform Reference (baseline)" section followed by dated entries, newest first. Content is authored Markdown in `docs/platform-reference.md` + `docs/api-changelog.md`, rendered via `lib/changelog.ts`. |
+| `/agent-updator` | Public "get an agent current" guide (`app/agent-updator/page.tsx`, marketing layout) — how an AI agent / stale agent skill should connect: recommended interface (`bk` CLI), install/update, auth, integration gotchas, OS-specific notes (Windows UTF-8 / `chcp 65001`, macOS, Linux), why an old CLI is version-floored (exit code 8), and links to discovery endpoints. Pulls its connection facts from `lib/agent-manifest.ts` + `lib/cli-version.ts` so it can't drift. |
 | `/status` | Public health page (DB / blob / app probes + recent errors) |
 | `/status/errors/[id]` | Error detail (owner-gated) |
 | `/invitations/[token]` | Accept/decline a workspace invite |
@@ -262,7 +264,9 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   `/api/errors/client`, feeding the super-admin Errors tab.
 - **Auth & marketing:** `landing-page`, `cli-authorize-form`,
   `password-reset-flow`, `onboarding-create-workspace`,
-  `accept-invitation-button`, `components/marketing/*`.
+  `accept-invitation-button`, `components/marketing/*` (the marketing site
+  footer, `components/marketing/site-footer.tsx`, links to `/changelog` and a
+  "For agents" link to `/agent-updator`).
 - **Helpers:** `rich-text-editor`, `project-icon`, `icon-picker`,
   `image-upload-field`, `image-lightbox`.
 

@@ -92,9 +92,38 @@ When you add / change / remove a route or feature, update every applicable item:
 6. **Per-page agent manifest** — `lib/agent-manifest.ts` (embedded on every page
    via `components/agent-manifest.tsx`) states the auth header, envelope shapes,
    and discovery endpoints. If any of those change, update it too.
+7. **Changelog** — see the Changelog rule below. Every route/feature change gets
+   a dated entry in `docs/api-changelog.md`; if the surface itself changed, also
+   update the baseline `docs/platform-reference.md`.
 
 Before finishing any API/feature change, run: `npx tsc --noEmit`, `npm test`
 (parity), and `cd cli && go build ./...`. See `AGENTS.md` for the short version.
+
+## Changelog rule (MANDATORY)
+
+We publish a changelog so users and their AI agents can keep their integrations
+and skills up to date. It is a product surface, not just a doc — served three
+aligned ways from one source: the **`/changelog`** web page, **`GET
+/api/changelog`** (JSON, or `?format=markdown`), and **`bk changelog`**. All read
+from `lib/changelog.ts`, which renders two authored Markdown files:
+
+- **`docs/api-changelog.md`** — the dated log, **newest first**. The running
+  record of every change.
+- **`docs/platform-reference.md`** — the pinned "Platform Reference (baseline)": a
+  complete snapshot of the whole API + CLI surface, data types, rules, and
+  warnings at the current release.
+
+> **The rule:** any change to an API route or a user-facing feature MUST be
+> reported in `docs/api-changelog.md` in the **same** change, as a new
+> `## YYYY-MM-DD — <clear title>` entry at the top. Write it clearly and in
+> detail: what changed, whether it's breaking, and how a client should adapt
+> (with the new request/response shape and the CLI equivalent). Use a real,
+> absolute date. If the change alters the surface itself (a new/removed endpoint,
+> a changed envelope/vocabulary, a new rule or warning), also update the relevant
+> section of `docs/platform-reference.md` so the baseline stays a true snapshot.
+
+This keeps every consumer able to self-update: point an outdated agent at
+`/agent-updator` (or `/changelog`) and it can bring its skill current.
 
 ## Docs sync rule
 
