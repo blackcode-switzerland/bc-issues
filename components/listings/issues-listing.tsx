@@ -203,7 +203,7 @@ export function IssuesListing() {
       const base = new URLSearchParams()
       if (status.length === 1) base.set('status', String(status[0]))
       if (priority.length === 1) base.set('priority', String(priority[0]))
-      if (assignees.length === 1) base.set('assignee_ids', String(assignees[0]))
+      if (assignees.length === 1 && assignees[0] !== '') base.set('assignee_ids', String(assignees[0]))
       if (projects.length === 1 && projects[0] !== 'null') base.set('project_id', String(projects[0]))
       if (tasks.length === 1 && tasks[0] !== 'null') base.set('task_id', String(tasks[0]))
       base.set('limit', '200')
@@ -229,8 +229,13 @@ export function IssuesListing() {
     if (search.trim()) data = data.filter((d) => matchSearch(search, issueHaystack(d)))
     if (status.length > 1) data = data.filter((d) => status.includes(d.status))
     if (priority.length > 1) data = data.filter((d) => priority.includes(d.priority))
-    if (assignees.length > 1)
-      data = data.filter((d) => (d.assignees ?? []).some((a) => assignees.includes(a.id)))
+    if (assignees.length > 1 || assignees.includes('')) {
+      const hasUnassigned = assignees.includes('')
+      data = data.filter((d) => {
+        const list = d.assignees ?? []
+        return (hasUnassigned && list.length === 0) || list.some((a) => assignees.includes(a.id))
+      })
+    }
     if (projects.length > 1 || projects.includes('null')) {
       const hasNull = projects.includes('null')
       data = data.filter((d) =>

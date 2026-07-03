@@ -171,7 +171,16 @@ export function TasksListing() {
     return data
   }, [tasks.data, search, projectIds, leadIds])
 
-  const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
+  const sorted = useMemo(() => {
+    const ordered = sortItems(filtered, sort)
+    // In manual order, sink fully-completed tasks (100% progress) to the bottom
+    // while preserving their relative manual order. Other sorts stay untouched.
+    if (sort !== SORT_MANUAL) return ordered
+    const isComplete = (m: TaskRow) => m.issue_count > 0 && m.completed_issues >= m.issue_count
+    const active = ordered.filter((m) => !isComplete(m))
+    const complete = ordered.filter(isComplete)
+    return complete.length ? [...active, ...complete] : ordered
+  }, [filtered, sort])
 
   const projectOptions = [
     { value: 'null', label: 'No project', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
