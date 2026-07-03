@@ -33,7 +33,7 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 | Auth | Bearer API tokens (same `api_tokens` table the web uses) |
 | Default server | `http://localhost:3000` |
 
-The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, undo, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
+The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, undo, moving/copying items between workspaces, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
 
 A typical session:
 
@@ -243,6 +243,41 @@ Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--
 | `bk workspace show [slug\|id]` | `GET /api/workspaces/:ref` | Defaults to the active workspace. |
 | `bk workspace create --name N [--use]` | `POST /api/workspaces` | `--use` (default `true`) sets it active after creation. |
 | `bk workspace use <slug\|id>` | `GET /api/workspaces/:ref` + `POST /api/me/active-workspace` | Sets the active workspace. |
+
+### Moving / copying items between workspaces
+
+Transfer projects, tasks, and issues from the **active** workspace into another
+workspace you belong to. The whole transfer is one server-side transaction: the
+items are copied into the target first, then (for `move`) the originals go to the
+recycle bin. If anything fails, nothing is written to the target and the source
+is left untouched — **no data can be lost**.
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk move --to <ws> [--project N ...] [--task N ...] [--issue N ...]` | `POST /api/workspaces/:ws/move` (`mode=move`) | Copies the selected items into `--to`, then bins the source copies. |
+| `bk copy --to <ws> [--project N ...] [--task N ...] [--issue N ...]` | `POST /api/workspaces/:ws/move` (`mode=copy`) | Same, but leaves the source in place — items end up in **both** workspaces. |
+
+- `--project` / `--task` / `--issue` are the workspace **#numbers** and are each repeatable.
+- `--cascade-tasks` (default `true`) also carries a transferred project's tasks; `--cascade-issues` (default `true`) also carries a project's/task's issues. Pass `--cascade-tasks=false` to move a project **without** its tasks, etc.
+- Items receive **new #numbers** in the target (the source numbers are workspace-scoped and would collide). Labels are matched or created by name. Comments, attachments, watchers, assignees, project members, and project updates all come along.
+- Anything the target workspace can't hold is dropped and reported under `adjustments`: a user reference (assignee / reporter / lead / owner / watcher / project member / `@mention`) is kept only if that user is a member of the target workspace. A parent link (project/task) is cleared when the parent isn't part of the same transfer.
+
+```bash
+# Move a whole project (with its tasks + issues) into the "growth" workspace
+bk move --to growth --project 42
+
+# Move only specific issues, leaving everything else behind
+bk move --to growth --issue 108 --issue 106 --issue 105
+
+# Copy a project's structure but not its issues, into another workspace
+bk copy --to growth --project 42 --cascade-issues=false
+```
+
+> ⚠️ **Encoding when scripting a bulk move.** If you drive a transfer by piping
+> text through a shell (e.g. reading titles out with `bk … --json` and feeding
+> them into another command), make sure your terminal is UTF-8. See
+> [Character encoding (UTF-8)](#character-encoding-utf-8) — a non-UTF-8 Windows
+> console will silently corrupt accented characters and dashes (`é`→`Ã©`, `—`→`ΓÇö`).
 
 ### Projects
 
@@ -525,6 +560,46 @@ stores it as sanitized HTML. Send **real newlines** (use `--description-file` or
 `-`/stdin for multi-line); don't hand-build a JSON body with the literal
 characters `\n`, or the line breaks won't render.
 
+### Character encoding (UTF-8)
+
+**All text sent to and from the API is UTF-8.** The CLI reads bodies as raw
+bytes and passes them straight through; it does **not** transcode. This matters
+when you pipe text through a terminal or another program — most often when an AI
+agent or script does a bulk import/export/move.
+
+The classic failure is **mojibake**: correct UTF-8 gets re-decoded as a legacy
+single-byte code page, and every non-ASCII character turns into garbage while
+plain ASCII survives:
+
+| You typed | What gets stored | Cause |
+|---|---|---|
+| `présentation` | `prÃ©sentation` or `pr├─sentation` | `é` (UTF-8 `C3 A9`) read as Latin-1 / CP437 |
+| `stratégie — déploiement` | `stratÃ©gie ΓÇö dÃ©ploiement` | `—` (UTF-8 `E2 80 94`) read as CP437/CP850 |
+
+This is almost always the **environment**, not the CLI or the database (the DB
+stores exactly the bytes it's sent). The usual culprit is a **Windows console**
+whose active code page isn't UTF-8.
+
+**How to avoid it**
+
+- **Windows PowerShell/cmd:** run `chcp 65001` and set
+  `[Console]::OutputEncoding = [Console]::InputEncoding = [System.Text.Encoding]::UTF8`
+  (and `$OutputEncoding` in PowerShell) **before** invoking `bk` in a pipeline.
+  For a Python wrapper, set `PYTHONUTF8=1`.
+- **Prefer the API/JSON path over shell text.** A JSON request body is
+  unambiguously UTF-8 on the wire — moving items with `bk move` / `POST
+  /api/workspaces/:ws/move`, or writing bodies with `--description-file`, avoids
+  round-tripping text through a console entirely.
+- **Never re-feed decoded strings.** Reading text out with `--json`, mangling it
+  in a non-UTF-8 shell, and writing it back is how corruption spreads. Keep the
+  bytes as JSON end-to-end.
+
+> If you already have corrupted rows, the damage is deterministic and
+> reversible: re-encode the visible string to the wrong code page's bytes and
+> decode as UTF-8 (e.g. Python `s.encode("cp437").decode("utf-8")`, falling back
+> to `cp850`/`latin1`). Fix them in place with `bk issue edit`/`bk project edit`
+> — only touch the rows the bad run actually corrupted.
+
 ### Nullable field convention
 
 For `edit` commands on nullable fields (`--assignee`, `--task`, `--start-date`, `--due-date`; `--due-date` on tasks):
@@ -688,9 +763,33 @@ bk issue view 999999 || echo "exit code: $?"
 # exit code: 5   (not found)
 ```
 
+### Move items between workspaces (the safe way)
+
+Don't hand-roll a cross-workspace migration by reading items out and re-creating
+them — that loses satellite data (comments, attachments, labels, watchers) and,
+if you pipe titles/bodies through a non-UTF-8 shell, corrupts the text (see
+[Character encoding (UTF-8)](#character-encoding-utf-8)). Use the built-in
+transfer, which is one atomic server-side transaction:
+
+```bash
+# Move an entire project (its tasks + issues come along) into another workspace
+bk move --to growth --project 42
+
+# Copy specific issues into another workspace, leaving the originals in place
+bk copy --to growth --issue 108 --issue 106
+
+# Move a project's structure but not its issues
+bk move --to growth --project 42 --cascade-issues=false
+```
+
+The response includes an `adjustments` list of anything that couldn't be carried
+as-is (e.g. an assignee who isn't a member of the target). Nothing is lost on
+failure — the source is untouched until the whole copy succeeds.
+
 ### Robust scripting checklist
 
 - Set `BK_NO_PROMPT=1`.
+- To relocate items across workspaces, use `bk move` / `bk copy` (above) — never re-create them by hand.
 - Pick an active workspace first (`bk workspace use …`) before workspace-scoped commands.
 - Always use `--json` for parsing; the table format is for humans.
 - Branch on exit codes, not stderr text.

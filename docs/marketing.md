@@ -117,6 +117,9 @@ Group issues into tasks with optional due dates. A task can stand alone or belon
 **Labels**
 Workspace-wide labels with colors, attachable to issues — managed from a dedicated labels view.
 
+**Move & copy across workspaces**
+Reorganize as you grow: move or copy projects, tasks, and issues between any two workspaces you belong to. It's a single atomic transfer — items get fresh per-workspace numbers, and their labels, comments, attachments, watchers, and members come along. Nothing is lost if it fails, and anything the destination can't hold (like a member who isn't on the other team) is reported back rather than silently changing your data. Available from the `bk` CLI (`bk move` / `bk copy`) and the API.
+
 ### 🟢 Live — Issue workflows
 
 **Issues with the fields that matter**

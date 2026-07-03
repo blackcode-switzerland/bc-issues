@@ -64,6 +64,7 @@ Conventions for agents:
 
 Command groups:
   workspace   list, create, edit, transfer, use
+  move/copy   move (or copy) projects/tasks/issues to another workspace (--to)
   project     list, view, create, edit, delete, members, updates, comment(s)
   issue       list, view, create, edit, delete, assign, watch, comment(s),
               edit-comment, delete-comment, attach, activity
@@ -102,6 +103,8 @@ func NewRoot() *cobra.Command {
 		newWorkspaceCmd(),
 		newProjectCmd(),
 		newIssueCmd(),
+		newMoveCmd(),
+		newCopyCmd(),
 		newUserCmd(),
 		newTaskCmd(),
 		newLabelCmd(),

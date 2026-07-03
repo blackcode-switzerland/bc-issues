@@ -8,6 +8,35 @@ Surfaced at: `GET /api/meta` (`changelog` field), the OpenAPI description
 
 ---
 
+## 2026-07-03 — Move / copy items between workspaces
+
+New endpoint **`POST /api/workspaces/{ws}/move`** transfers projects, tasks, and
+issues (referenced by their `#number`) from `{ws}` (the source) into another
+workspace the caller also belongs to. Additive — no existing behaviour changed.
+
+Body: `{ target, mode: "move" | "copy" (default "move"), projects?: number[],
+tasks?: number[], issues?: number[], cascade_tasks?: boolean (default true),
+cascade_issues?: boolean (default true) }`. `move` copies then bins the source;
+`copy` leaves the source in place.
+
+It runs as a **single transaction** — on any error nothing is written to the
+target and the source is untouched, so no data can be lost. Items get fresh
+`#number`s in the target, labels are matched/created by name, and comments,
+attachments, watchers, assignees, project members and updates all come along.
+User references (assignee/reporter/lead/owner/watcher/member/`@mention`) not in
+the target's membership are dropped and returned under `adjustments`; a parent
+link (project/task) left out of the same transfer is cleared.
+
+CLI: **`bk move --to <ws> --project N …`** and **`bk copy --to <ws> …`**
+(`--project`/`--task`/`--issue` repeatable; `--cascade-tasks` / `--cascade-issues`).
+
+> **Encoding note (agents/scripts):** all API text is UTF-8. When scripting a
+> bulk import/export/move, keep the environment UTF-8 — a non-UTF-8 console
+> (commonly Windows `cmd`/PowerShell without `chcp 65001`) silently corrupts
+> non-ASCII characters into mojibake (`é`→`Ã©`, `—`→`ΓÇö`). Prefer JSON bodies
+> over round-tripping text through a terminal. See `docs/cli.md` →
+> "Character encoding (UTF-8)".
+
 ## 2026-07-01 — `GET /api/meta` now lists all your workspaces (pick by name, not id)
 
 `GET /api/meta` gained a **`workspaces`** array: every workspace the caller

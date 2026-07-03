@@ -883,3 +883,30 @@ func (c *Client) AttachToIssue(issueID int, up *UploadResponse) (*Attachment, er
 	}
 	return &att, nil
 }
+
+// MoveItemsRequest is the body for POST /api/workspaces/{ws}/move. The active
+// workspace (c.WorkspaceSlug) is the source; Target names the destination.
+type MoveItemsRequest struct {
+	Target        string `json:"target"`
+	Mode          string `json:"mode"` // "move" | "copy"
+	Projects      []int  `json:"projects,omitempty"`
+	Tasks         []int  `json:"tasks,omitempty"`
+	Issues        []int  `json:"issues,omitempty"`
+	CascadeTasks  *bool  `json:"cascade_tasks,omitempty"`
+	CascadeIssues *bool  `json:"cascade_issues,omitempty"`
+}
+
+// MoveItems copies or moves the selected items from the active workspace into
+// Target. The response is the transfer report (returned verbatim as a generic
+// map so new fields flow through without a client change).
+func (c *Client) MoveItems(req MoveItemsRequest) (map[string]any, error) {
+	path, err := c.wsPath("move")
+	if err != nil {
+		return nil, err
+	}
+	var report map[string]any
+	if err := c.postJSON(path, req, &report); err != nil {
+		return nil, err
+	}
+	return report, nil
+}

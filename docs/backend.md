@@ -379,6 +379,7 @@ GET    /api/workspaces/{ws}                     workspace detail
 PATCH  /api/workspaces/{ws}                     update (owner)
 DELETE /api/workspaces/{ws}                     delete (owner)
 POST   /api/workspaces/{ws}/transfer            transfer ownership (owner)
+POST   /api/workspaces/{ws}/move                copy/move items to another workspace
 POST   /api/workspaces/{ws}/leave               leave workspace
 
 GET    /api/workspaces/{ws}/members             list members
@@ -573,6 +574,7 @@ these; they never write SQL inline.
 | `activity.ts` | activity feed reads |
 | `analytics.ts` | workspace/project/task/member analytics — see below |
 | `deletion.ts` | soft-delete engine — `softDelete*`, `previewDeletion`, `listTrash`, `previewRestore`, `restoreItems/Batch`, `purgeItems/Batch`, `emptyTrash` |
+| `move.ts` | cross-workspace transfer — `moveItems` (copy or move projects/tasks/issues + all satellite data into another workspace). **One transaction:** copies into the target (fresh `seq`, labels matched/created by name, comments/attachments/watchers/assignees/members/updates carried) then, for `mode='move'`, soft-deletes the source into one recycle-bin batch. Any failure rolls back everything — source untouched, no partial target rows, no data loss. User refs not in the target's membership (assignee/reporter/lead/owner/watcher/member/@mention) are dropped and returned under `adjustments`; a parent link (project/task) not in the same transfer is cleared. Backs `POST /api/workspaces/{ws}/move`. |
 | `transaction.ts` | transaction log + `undoLastOperations` |
 | `error-events.ts` | error log reads (public list redacts; detail is gated) |
 | `password-reset.ts` | OTP issue/verify/consume |

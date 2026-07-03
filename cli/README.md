@@ -171,6 +171,18 @@ bk workspace create --name N [--use]   --use sets active (default true)
 bk workspace use <slug|id>             set active workspace
 ```
 
+### Moving / copying items between workspaces
+```
+bk move --to <ws> [--project N ...] [--task N ...] [--issue N ...]   copy then bin the source
+bk copy --to <ws> [--project N ...] [--task N ...] [--issue N ...]   copy, leave source in place
+      [--cascade-tasks=false]    move a project WITHOUT its tasks
+      [--cascade-issues=false]   move a project/task WITHOUT its issues
+```
+One atomic transfer (no data loss on failure); items get fresh #numbers in the
+target, labels are matched/created by name, and non-member user refs are dropped
+into an `adjustments` report. `--project`/`--task`/`--issue` take #numbers and
+are repeatable.
+
 ### Projects
 ```
 bk project list

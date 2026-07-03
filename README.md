@@ -72,7 +72,10 @@ prompted to create your first workspace.
 ## What's in the box
 
 - **Workspaces** — multi-tenant; every row is `workspace_id`-scoped. Owner +
-  member roles. Issue IDs are a per-workspace sequence.
+  member roles. Issue IDs are a per-workspace sequence. **Move or copy**
+  projects/tasks/issues between two workspaces you belong to — one atomic
+  transaction, fresh #numbers, labels/comments/attachments carried, no data
+  loss (`bk move`/`bk copy`, `POST /api/workspaces/{ws}/move`).
 - **Projects** — status, priority, lead, members, labels, start/target dates,
   icon, and a **status-update feed** (health: on-track / at-risk / off-track).
 - **Issues** — workspace sequence IDs, priority, status, assignee, labels,
@@ -104,6 +107,7 @@ Workspace-scoped routes are canonical:
 /api/workspaces/{ws}/invitations …       GET, POST, DELETE
 /api/workspaces/{ws}/activity            GET
 /api/workspaces/{ws}/analytics           GET
+/api/workspaces/{ws}/move                POST         # copy/move items to another workspace
 ```
 
 Personal/auth routes live under `/api/me/*`, `/api/auth/*`, `/api/tokens/*`,

@@ -736,6 +736,38 @@ export const openApiSpec = {
         responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Transferred'), ...errors(400, 401, 403, 404) },
       },
     },
+    '/api/workspaces/{ws}/move': {
+      parameters: [wsParam],
+      post: {
+        tags: ['Workspaces'],
+        operationId: 'moveItems',
+        summary: 'Copy or move items to another workspace',
+        description:
+          'Transfer projects, tasks and/or issues (referenced by their #number) from this workspace ({ws} = source) into another workspace the caller also belongs to. `mode: "move"` (default) copies then soft-deletes the source; `mode: "copy"` leaves the source intact. The whole operation is a single transaction — on any error nothing is written to the target and the source is untouched. New #numbers are allocated in the target; labels are matched/created by name; user references (assignee/reporter/lead/owner/watcher/member/@mention) are kept only for target members and otherwise dropped and listed under `adjustments`.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['target'],
+                additionalProperties: false,
+                properties: {
+                  target: { type: 'string', description: 'Target workspace slug or id.' },
+                  mode: { type: 'string', enum: ['move', 'copy'], default: 'move' },
+                  projects: { type: 'array', items: { type: 'integer' }, description: 'Project #numbers to transfer.' },
+                  tasks: { type: 'array', items: { type: 'integer' }, description: 'Task #numbers to transfer.' },
+                  issues: { type: 'array', items: { type: 'integer' }, description: 'Issue #numbers to transfer.' },
+                  cascade_tasks: { type: 'boolean', default: true, description: "Also carry a transferred project's tasks." },
+                  cascade_issues: { type: 'boolean', default: true, description: "Also carry a transferred project's/task's issues." },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': jsonShape({ type: 'object', additionalProperties: true }, 'Transfer report'), ...errors(400, 401, 404) },
+      },
+    },
     '/api/workspaces/{ws}/invitations': {
       parameters: [wsParam],
       get: {
