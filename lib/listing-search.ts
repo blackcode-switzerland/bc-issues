@@ -78,7 +78,9 @@ function termFieldScore(term: string, value: string): number {
   }
   // Typo tolerance: only worth checking for terms long enough that a
   // near-miss is meaningful (avoids "a" fuzzy-matching half the alphabet).
-  if (term.length < 3) return 0
+  // Purely numeric terms are excluded too — otherwise a numeric search like
+  // "122" would fuzzy-match unrelated identifiers such as "112" or "12".
+  if (term.length < 3 || /^\d+$/.test(term)) return 0
   const maxDist = term.length <= 5 ? 1 : 2
   let best = 0
   for (const word of value.split(/\s+/)) {
