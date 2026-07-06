@@ -663,11 +663,32 @@ Both reject `image/svg+xml` (XSS). `POST /api/upload` returns
 
 ### Email (`lib/email/`)
 
-Resend client, lazily constructed and **only enabled when both `RESEND_API_KEY`
-and `RESEND_FROM_EMAIL` are set** (`emailEnabled()`). Sending is best-effort —
-failures log a warning and never break the triggering action. Two templates are
-sent: **workspace invitations** and **password-reset OTP**; everything else
-stays in the in-app inbox.
+Resend client (`lib/email/client.ts`), lazily constructed and **only enabled
+when both `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set** (`emailEnabled()`).
+`fromAddress()` sends as `"Blackcode Issues" <RESEND_FROM_EMAIL>` (falls back to
+a bare `no-reply@example.com` if unset — should never happen once configured).
+`lib/email/send.ts` wraps every send in try/catch — sending is always
+best-effort and never breaks the triggering action; failures log a `warn`-level
+`error_events` row (recipient domain only, never the full address) and the
+caller still succeeds. Templates (`lib/email/templates.ts`) are plain
+subject/html/text builders — inline-styled, single shared layout, brand logo
+pulled from `NEXTAUTH_URL`/logo.png — not React Email components.
+
+Three transactional stages send today; everything else (mentions, assignments,
+activity) stays in-app-only via the inbox:
+
+1. **Password reset (logged out)** — `app/api/auth/password-reset/request/route.ts`,
+   from the "forgot password" flow on `/login`. Sends `passwordResetEmail` (OTP
+   + expiry). Always responds `{ ok: true }` regardless of send outcome, to
+   avoid leaking which emails have accounts.
+2. **Password set/change OTP (logged in)** — `app/api/me/password/request-otp/route.ts`,
+   from account settings (including Google-only users adding a password). Same
+   `passwordResetEmail` template.
+3. **Workspace invitation** — `app/api/workspaces/[ws]/invitations/route.ts`,
+   when an owner invites someone by email. The invitation row is committed to
+   the DB first, then `sendInvitationEmail()` fires (workspace name, inviter,
+   accept URL). A bounced email doesn't invalidate the invite — it's still
+   reachable via the in-app inbox or a copyable link.
 
 ### Error responses & sanitization
 

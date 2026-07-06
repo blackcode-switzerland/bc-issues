@@ -126,7 +126,7 @@ colors in components — use the token utilities.
 
 | Path | Renders |
 |------|---------|
-| `/` | Landing page (`LandingPage`) |
+| `/` | Landing page (`LandingPage`). Signed-in visitors are redirected to `/dashboard` unless the URL has `?from=app` (set by the "blackcode" brand link in the dashboard sidebar), which lets them browse the landing page without being bounced back in. |
 | `/login` | Sign-in / sign-up tabs + password-reset flow |
 | `/blocked` | Shown when a non-whitelisted email tries Google OAuth; professional "not on the list" page |
 | `/privacy`, `/terms` | Legal pages (marketing layout) |

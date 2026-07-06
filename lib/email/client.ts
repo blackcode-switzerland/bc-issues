@@ -17,5 +17,6 @@ export function getResend(): Resend | null {
 }
 
 export function fromAddress(): string {
-  return process.env.RESEND_FROM_EMAIL ?? 'no-reply@example.com'
+  const email = process.env.RESEND_FROM_EMAIL ?? 'no-reply@example.com'
+  return `Blackcode Issues <${email}>`
 }

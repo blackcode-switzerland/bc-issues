@@ -111,10 +111,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const sidebar = (
     <div className="flex h-full flex-col">
       {/* Brand */}
-      <div className="flex items-center gap-2 border-b border-sidebar-border px-3.5 py-3">
+      <Link
+        href="/?from=app"
+        className="flex items-center gap-2 border-b border-sidebar-border px-3.5 py-3 transition-colors hover:bg-sidebar-accent/60"
+      >
         <Image src="/logo.png" alt="blackcode" width={22} height={22} className="rounded-md" />
         <span className="text-[15px] font-semibold tracking-tight">blackcode</span>
-      </div>
+      </Link>
 
       {/* Workspace switcher / top */}
       <div className="flex items-center gap-1 px-3 py-3">

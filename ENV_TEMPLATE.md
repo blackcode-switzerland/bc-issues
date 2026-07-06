@@ -34,7 +34,7 @@ SUPER_ADMINS=admin@yourdomain.com
 # copyable accept links, and password reset is unavailable until configured.
 # Both vars must be set; RESEND_FROM_EMAIL must be on a domain verified in Resend.
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=onboarding@resend.dev
+RESEND_FROM_EMAIL=admin@issues.blackcode.ch
 
 # Vercel Blob — file/image uploads in production. If unset, uploads are written
 # to the local `public/uploads/` directory (fine for dev).

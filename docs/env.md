@@ -166,11 +166,13 @@ vercel env add BLOB_READ_WRITE_TOKEN production --value "<new-token>" --yes
 4. Set both vars:
 ```bash
 vercel env add RESEND_API_KEY production --value "re_..." --yes
-vercel env add RESEND_FROM_EMAIL production --value "noreply@yourdomain.com" --yes
+vercel env add RESEND_FROM_EMAIL production --value "admin@issues.blackcode.ch" --yes
 ./devops/release.sh web
 ```
 
 `RESEND_FROM_EMAIL` must be on a domain verified in Resend — `onboarding@resend.dev` works for testing only.
+This project's sending domain (`issues.blackcode.ch`) is verified in Resend; the
+configured sender is `admin@issues.blackcode.ch`.
 
 ---
 
