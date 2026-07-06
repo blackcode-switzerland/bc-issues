@@ -18,7 +18,7 @@ import { PropertySelect } from '@/components/ui/property-select'
 import { DatePicker } from '@/components/ui/date-picker'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
-import { matchSearch, buildHaystack, idTokens, stripTags } from '@/lib/listing-search'
+import { rankSearch, field, idTokens, stripTags } from '@/lib/listing-search'
 import {
   EmptyState,
   TaskSkeletonRow,
@@ -64,18 +64,18 @@ interface Member {
   avatar_url: string | null
 }
 
-// One lowercased searchable string per task — identifier, name, description,
-// status, project name and lead.
-function taskHaystack(m: TaskRow): string {
-  return buildHaystack([
-    ...idTokens(m.seq),
-    m.name,
-    stripTags(m.description),
-    m.status,
-    m.project_name,
-    m.lead_name,
-    m.lead_email,
-  ])
+// Searchable fields per task, weighted by relevance — identifier and name
+// rank above status/project/lead, which rank above the description.
+function taskSearchFields(m: TaskRow): ReturnType<typeof field>[] {
+  return [
+    ...idTokens(m.seq).map((t) => field(t, 5)),
+    field(m.name, 3),
+    field(m.status, 1),
+    field(m.project_name, 1.5),
+    field(m.lead_name, 1),
+    field(m.lead_email, 1),
+    field(stripTags(m.description), 0.5),
+  ]
 }
 
 export function TasksListing() {
@@ -155,7 +155,7 @@ export function TasksListing() {
 
   const filtered = useMemo(() => {
     let data = tasks.data ?? []
-    if (search.trim()) data = data.filter((m) => matchSearch(search, taskHaystack(m)))
+    data = rankSearch(search, data, taskSearchFields)
     if (projectIds.length > 1) {
       data = data.filter((m) => {
         if (projectIds.includes('null')) return m.project_id == null || projectIds.includes(m.project_id ?? -1)

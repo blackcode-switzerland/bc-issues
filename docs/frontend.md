@@ -210,12 +210,18 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   Project / Lead. Both show an inline-editable **Lead** column and the task
   detail sidebar has a **Lead** property — mirrors projects.)
   **Search** on all three listings is client-side (`lib/listing-search.ts`,
-  `matchSearch`/`buildHaystack`/`idTokens`): the full set is already loaded, so the
-  `SearchInput` filters in-memory (instant, no per-keystroke refetch — `search` is
-  intentionally not sent to the API). It matches across the `#seq` identifier
-  (e.g. `#123` or `123`), title/name, description/summary, status, priority,
-  assignees/lead, project/task names and labels. Multiple whitespace-separated
-  terms are ANDed.
+  `rankSearch`/`searchScore`/`field`/`idTokens`): the full set is already loaded,
+  so the `SearchInput` filters+ranks in-memory (instant, no per-keystroke
+  refetch — `search` is intentionally not sent to the API). It matches across
+  the `#seq` identifier (e.g. `#123` or `123`), title/name, description/summary,
+  status, priority, assignees/lead, project/task names and labels. Multiple
+  whitespace-separated terms are ANDed (a term can match a different field than
+  its siblings). Per term/field, matches are scored — exact > prefix >
+  word-boundary substring > mid-word substring > fuzzy (typo-tolerant,
+  bounded-edit-distance) — and fields are weighted (identifier and title/name
+  outrank status/project/lead, which outrank description). Results are sorted
+  best-match-first while the query is non-empty and the Sort control is left on
+  "Manual"; picking an explicit sort overrides relevance ordering as before.
   Filter/search/view state on all three listings persists across navigation via
   `usePersistentState` (`use-persistent-filters.ts`) — an in-memory, per-workspace
   store that survives client-side navigation (open a detail, come back) but

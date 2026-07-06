@@ -17,6 +17,25 @@ the OpenAPI description (`/api/docs`), and the embedded per-page agent manifest.
 
 ---
 
+## 2026-07-06 — Smarter, ranked search on the Issues/Tasks/Projects listings
+
+UI-only change, no API/CLI surface affected (the REST endpoints, OpenAPI spec,
+and `bk` CLI are unchanged — their `?search=` param already does a separate,
+unrelated `ILIKE` match and is not used by these listing pages).
+
+- The listing search box (`lib/listing-search.ts`) now scores matches instead
+  of only filtering: exact > prefix > word-boundary substring > mid-word
+  substring > fuzzy (typo-tolerant) match, per search term per field, with
+  fields weighted so an identifier or title/name hit outranks a hit only in an
+  assignee/lead email or description.
+- Results are sorted best-match-first while searching (with the Sort control
+  left on "Manual"); picking an explicit sort still overrides relevance order.
+- Identifier search (`#123` or `123`) is unchanged in behavior but now scores
+  highest, so searching an ID reliably surfaces that exact item first even
+  when the number also appears elsewhere (e.g. in a title).
+- Typos are now tolerated for terms of 3+ characters via a small bounded edit
+  distance, so e.g. `onboardng` still finds "onboarding".
+
 ## 2026-07-03 — Self-service recovery hints (breadcrumb headers + CLI hints)
 
 So an agent that hits a wall can find its own way back, every surface now points

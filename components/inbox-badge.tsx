@@ -13,7 +13,7 @@ export function InboxBadge() {
   const { data } = useQuery({
     queryKey: ['inbox-unread'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
     refetchOnWindowFocus: true,
   })
   if (!data || data <= 0) return null

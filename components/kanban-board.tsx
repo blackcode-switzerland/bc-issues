@@ -163,7 +163,7 @@ export function KanbanBoard({
     },
     refetchOnWindowFocus: true,
     staleTime: 10000, // Consider data stale after 10 seconds
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 120000, // Refetch every 2 minutes
   })
 
   const updateIssueStatus = useMutation({

@@ -20,7 +20,7 @@ import { MultiAssigneeSelect } from '@/components/ui/multi-assignee-select'
 import { PropertySelect } from '@/components/ui/property-select'
 import { ProjectIcon } from '../project-icon'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
-import { matchSearch, buildHaystack, idTokens } from '@/lib/listing-search'
+import { rankSearch, field, idTokens } from '@/lib/listing-search'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState, IssueSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
 
@@ -92,19 +92,19 @@ const STATUSES = ISSUE_STATUSES.map((s) => ({ value: s.value, label: s.label }))
 const PRIORITIES = ISSUE_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))
 const ISSUE_PRIORITY_LABEL = new Map(ISSUE_PRIORITIES.map((p) => [p.value, p.label]))
 
-// One lowercased searchable string per issue — identifier, title, status,
-// priority, assignees, project/task names and labels.
-function issueHaystack(d: IssueRow): string {
-  return buildHaystack([
-    ...idTokens(d.seq),
-    d.title,
-    issueStatusLabel(d.status),
-    ISSUE_PRIORITY_LABEL.get(d.priority),
-    d.project_name,
-    d.task_name,
-    ...(d.assignees ?? []).flatMap((a) => [a.name, a.email]),
-    ...(d.labels ?? []).map((l) => l.name),
-  ])
+// Searchable fields per issue, weighted by relevance — identifier and title
+// rank above status/priority/project/task, which rank above assignees/labels.
+function issueSearchFields(d: IssueRow): ReturnType<typeof field>[] {
+  return [
+    ...idTokens(d.seq).map((t) => field(t, 5)),
+    field(d.title, 3),
+    field(issueStatusLabel(d.status), 1),
+    field(ISSUE_PRIORITY_LABEL.get(d.priority), 1),
+    field(d.project_name, 1.5),
+    field(d.task_name, 1.5),
+    ...(d.assignees ?? []).flatMap((a) => [field(a.name, 1), field(a.email, 1)]),
+    ...(d.labels ?? []).map((l) => field(l.name, 1)),
+  ]
 }
 
 export function IssuesListing() {
@@ -226,7 +226,7 @@ export function IssuesListing() {
 
   const filtered = useMemo(() => {
     let data = issuesQuery.data ?? []
-    if (search.trim()) data = data.filter((d) => matchSearch(search, issueHaystack(d)))
+    data = rankSearch(search, data, issueSearchFields)
     if (status.length > 1) data = data.filter((d) => status.includes(d.status))
     if (priority.length > 1) data = data.filter((d) => priority.includes(d.priority))
     if (assignees.length > 1 || assignees.includes('')) {

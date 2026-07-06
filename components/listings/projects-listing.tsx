@@ -35,7 +35,7 @@ import {
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
-import { matchSearch, buildHaystack, idTokens, stripTags } from '@/lib/listing-search'
+import { rankSearch, field, idTokens, stripTags } from '@/lib/listing-search'
 
 interface ProjectRow {
   id: number
@@ -81,20 +81,20 @@ const PROJECT_PRIORITY_OPTIONS = PROJECT_PRIORITIES.map((p) => ({
   icon: <PriorityIcon priority={projectPriorityKey(p.value)} size={15} />,
 }))
 
-// One lowercased searchable string per project — identifier, name, summary,
-// description, status, priority, lead and health.
-function projectHaystack(p: ProjectRow): string {
-  return buildHaystack([
-    ...idTokens(p.seq),
-    p.name,
-    p.summary,
-    stripTags(p.description),
-    projectStatusLabel(p.status),
-    projectPriorityLabel(p.priority ?? 'P4'),
-    p.lead_name,
-    p.lead_email,
-    p.health ? projectUpdateStatusLabel(p.health) : null,
-  ])
+// Searchable fields per project, weighted by relevance — identifier and name
+// rank above summary/status/priority/lead/health, which rank above the description.
+function projectSearchFields(p: ProjectRow): ReturnType<typeof field>[] {
+  return [
+    ...idTokens(p.seq).map((t) => field(t, 5)),
+    field(p.name, 3),
+    field(p.summary, 1.5),
+    field(projectStatusLabel(p.status), 1),
+    field(projectPriorityLabel(p.priority ?? 'P4'), 1),
+    field(p.lead_name, 1),
+    field(p.lead_email, 1),
+    field(p.health ? projectUpdateStatusLabel(p.health) : null, 1),
+    field(stripTags(p.description), 0.5),
+  ]
 }
 
 
@@ -165,7 +165,7 @@ export function ProjectsListing() {
 
   const filtered = useMemo(() => {
     let data = projects.data ?? []
-    if (search.trim()) data = data.filter((p) => matchSearch(search, projectHaystack(p)))
+    data = rankSearch(search, data, projectSearchFields)
     if (status.length > 1) data = data.filter((p) => status.includes(p.status))
     if (priority.length > 0) data = data.filter((p) => priority.includes(p.priority ?? 'P4'))
     if (leadIds.length > 0) {
