@@ -68,7 +68,7 @@ interface Member {
 // rank above status/project/lead, which rank above the description.
 function taskSearchFields(m: TaskRow): ReturnType<typeof field>[] {
   return [
-    ...idTokens(m.seq).map((t) => field(t, 5)),
+    ...idTokens(m.seq ?? m.id).map((t) => field(t, 5)),
     field(m.name, 3),
     field(m.status, 1),
     field(m.project_name, 1.5),
@@ -491,9 +491,7 @@ function TaskRowItem({
         {/* Name */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Target size={18} className="shrink-0 text-muted-foreground" />
-          {m.id != null ? (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{m.id}</span>
-          ) : null}
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">#{m.seq ?? m.id}</span>
           <span className="truncate text-sm font-medium">{m.name}</span>
         </div>
 

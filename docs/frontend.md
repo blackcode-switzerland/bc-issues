@@ -213,12 +213,18 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   `rankSearch`/`searchScore`/`field`/`idTokens`): the full set is already loaded,
   so the `SearchInput` filters+ranks in-memory (instant, no per-keystroke
   refetch — `search` is intentionally not sent to the API). It matches across
-  the `#seq` identifier (e.g. `#123` or `123`), title/name, description/summary,
-  status, priority, assignees/lead, project/task names and labels. Multiple
+  the `#N` identifier the row actually displays — `seq ?? id` (e.g. `#123` or
+  `123`; falls back to `id` if `seq` is ever null) — plus title/name,
+  description/summary, status, priority, assignees/lead, project/task names
+  and labels. All three listings display and search the same `seq ?? id`
+  value (issues already did; tasks/projects previously showed raw `id` in the
+  row while search/nav used `seq ?? id`, so the visible number could silently
+  fail to search or even navigate to the wrong item — fixed). Multiple
   whitespace-separated terms are ANDed (a term can match a different field than
   its siblings). Per term/field, matches are scored — exact > prefix >
   word-boundary substring > mid-word substring > fuzzy (typo-tolerant,
-  bounded-edit-distance) — and fields are weighted (identifier and title/name
+  bounded-edit-distance, never applied to purely numeric terms so ID search
+  stays exact) — and fields are weighted (identifier and title/name
   outrank status/project/lead, which outrank description). Results are sorted
   best-match-first while the query is non-empty and the Sort control is left on
   "Manual"; picking an explicit sort overrides relevance ordering as before.

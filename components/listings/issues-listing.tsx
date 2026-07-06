@@ -96,7 +96,7 @@ const ISSUE_PRIORITY_LABEL = new Map(ISSUE_PRIORITIES.map((p) => [p.value, p.lab
 // rank above status/priority/project/task, which rank above assignees/labels.
 function issueSearchFields(d: IssueRow): ReturnType<typeof field>[] {
   return [
-    ...idTokens(d.seq).map((t) => field(t, 5)),
+    ...idTokens(d.seq ?? d.id).map((t) => field(t, 5)),
     field(d.title, 3),
     field(issueStatusLabel(d.status), 1),
     field(ISSUE_PRIORITY_LABEL.get(d.priority), 1),

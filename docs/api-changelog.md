@@ -34,7 +34,14 @@ unrelated `ILIKE` match and is not used by these listing pages).
   highest, so searching an ID reliably surfaces that exact item first even
   when the number also appears elsewhere (e.g. in a title).
 - Typos are now tolerated for terms of 3+ characters via a small bounded edit
-  distance, so e.g. `onboardng` still finds "onboarding".
+  distance, so e.g. `onboardng` still finds "onboarding" — but never for purely
+  numeric terms, so an ID search like `122` can't fuzzy-match an unrelated `112`.
+- **Fixed:** the Tasks and Projects listing rows displayed the raw internal
+  `id` in their `#N` badge, while search and click-through navigation both
+  used `seq ?? id` (the same convention Issues already displayed). Whenever a
+  task/project's `id` and `seq` diverged (the common case — they're allocated
+  from unrelated counters), the number shown on screen couldn't be found via
+  search. All three listings now consistently display and search `seq ?? id`.
 
 ## 2026-07-03 — Self-service recovery hints (breadcrumb headers + CLI hints)
 

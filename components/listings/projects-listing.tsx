@@ -85,7 +85,7 @@ const PROJECT_PRIORITY_OPTIONS = PROJECT_PRIORITIES.map((p) => ({
 // rank above summary/status/priority/lead/health, which rank above the description.
 function projectSearchFields(p: ProjectRow): ReturnType<typeof field>[] {
   return [
-    ...idTokens(p.seq).map((t) => field(t, 5)),
+    ...idTokens(p.seq ?? p.id).map((t) => field(t, 5)),
     field(p.name, 3),
     field(p.summary, 1.5),
     field(projectStatusLabel(p.status), 1),
@@ -574,9 +574,7 @@ function ProjectRowItem({
         {/* Name — navigates */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={26} />
-          {p.id != null ? (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">#{p.id}</span>
-          ) : null}
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">#{p.seq ?? p.id}</span>
           <span className="truncate text-sm font-medium">{p.name}</span>
         </div>
 
