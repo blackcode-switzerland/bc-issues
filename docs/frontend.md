@@ -245,6 +245,23 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   conflicts). Detail-page inline title edits write the new title to the query
   cache optimistically (`setQueryData`) so clearing the draft doesn't flash the
   old title during the PATCH + refetch.
+  **List-view grouping:** the list view (not kanban/timeline) on all three
+  listings renders as collapsible sections over the already filtered+sorted
+  rows — grouping never changes which rows appear or their relative order,
+  only how they're bucketed for display. Issues group by `status` into up to
+  five sections (In Progress / Todo / Backlog / Done / Cancelled, plus any
+  other status value seen). Projects and tasks group into exactly two sections,
+  **In Progress** / **Done**, keyed off completion rather than the `status`
+  column: a project is "Done" when `open_issues === 0 && issue_count > 0`; a
+  task is "Done" when `completed_issues >= issue_count && issue_count > 0`
+  (zero-issue items are "In Progress"). Each section header shows a
+  select-all-in-section checkbox, item count, and a collapse toggle (all
+  sections open by default; collapse state is local, not persisted). Manual-sort
+  drag-to-reorder is confined within a section — cross-section drag is a no-op
+  — matching the issues list's cross-status drag restriction; for projects the
+  `position` column is a single global sequence (shared with kanban), so a
+  same-section drag rewrites the *full* project order with only that section's
+  slots permuted, rather than sending a section-scoped id list.
   `bulk-action-bar` (multi-select toolbar for batch status/delete), and the
   `use-active-workspace` hook.
 - **Detail views:** `project-detail-view`, `issue-detail-view`,

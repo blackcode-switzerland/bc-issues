@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation'
 import { isPast, isToday } from 'date-fns'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Target } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Plus, Target } from 'lucide-react'
 import { useActiveWorkspace } from './use-active-workspace'
 import { usePersistentState } from './use-persistent-filters'
 import { ClearFiltersButton, MultiSelect, SearchInput, SortSelect } from './filter-bar'
 import { sortItems, TASK_SORTS, SORT_MANUAL } from './sort'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
-import { ProgressRing } from '@/components/ui/work-item-icons'
+import { ProgressRing, StatusIcon } from '@/components/ui/work-item-icons'
 import { ProjectIcon } from '@/components/project-icon'
 import { MemberAvatar } from '@/components/ui/member-avatar'
 import { PropertySelect } from '@/components/ui/property-select'
@@ -64,6 +64,18 @@ interface Member {
   avatar_url: string | null
 }
 
+// Tasks are split into two sections by completion, mirroring the issues
+// listing's status accordion — a task is "Done" once every issue in it is
+// resolved (and it has at least one issue), otherwise it's "In Progress".
+const PROGRESS_GROUP_ORDER = ['in_progress', 'done'] as const
+const PROGRESS_GROUP_LABELS: Record<string, string> = { in_progress: 'In Progress', done: 'Done' }
+
+function taskGroupKey(m: TaskRow): 'in_progress' | 'done' {
+  const total = m.issue_count ?? 0
+  const done = m.completed_issues ?? 0
+  return total > 0 && done >= total ? 'done' : 'in_progress'
+}
+
 // Searchable fields per task, weighted by relevance — identifier and name
 // rank above status/project/lead, which rank above the description.
 function taskSearchFields(m: TaskRow): ReturnType<typeof field>[] {
@@ -90,6 +102,8 @@ export function TasksListing() {
   const [leadIds, setLeadIds] = usePersistentState<Array<string | number>>(fk('leadIds'), [])
   const [sort, setSort] = usePersistentState(fk('sort'), SORT_MANUAL)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  // Progress-section accordions are open by default; a group key here is collapsed.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const createTask = useMutation({
     mutationFn: async () => {
@@ -171,16 +185,7 @@ export function TasksListing() {
     return data
   }, [tasks.data, search, projectIds, leadIds])
 
-  const sorted = useMemo(() => {
-    const ordered = sortItems(filtered, sort)
-    // In manual order, sink fully-completed tasks (100% progress) to the bottom
-    // while preserving their relative manual order. Other sorts stay untouched.
-    if (sort !== SORT_MANUAL) return ordered
-    const isComplete = (m: TaskRow) => m.issue_count > 0 && m.completed_issues >= m.issue_count
-    const active = ordered.filter((m) => !isComplete(m))
-    const complete = ordered.filter(isComplete)
-    return complete.length ? [...active, ...complete] : ordered
-  }, [filtered, sort])
+  const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
 
   const projectOptions = [
     { value: 'null', label: 'No project', icon: <span className="size-[15px] rounded-full border border-dashed border-muted-foreground/40" /> },
@@ -271,6 +276,24 @@ export function TasksListing() {
     },
   ]
 
+  function toggleGroupSelect(items: TaskRow[]) {
+    const groupIds = items.map((m) => m.id)
+    const allSelected = groupIds.every((id) => selectedIds.has(id))
+    const next = new Set(selectedIds)
+    if (allSelected) groupIds.forEach((id) => next.delete(id))
+    else groupIds.forEach((id) => next.add(id))
+    setSelectedIds(next)
+  }
+
+  function toggleCollapseGroup(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const anySelected = selectedIds.size > 0
   const router = useRouter()
 
@@ -352,36 +375,94 @@ export function TasksListing() {
             <span className="hidden w-12 shrink-0 sm:block">Issues</span>
             <span className="w-20 shrink-0">Progress</span>
           </div>
-          <motion.ul
-            variants={listContainerVariants}
-            initial="hidden"
-            animate="show"
-          >
-            <AnimatePresence initial={false}>
-            {sorted.map((m) => (
-              <motion.div
-                key={m.id}
-                variants={listItemVariants}
-                exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                layout
-              >
-                <TaskRowItem
-                  task={m}
-                  wsSlug={ws?.slug ?? ''}
-                  members={members ?? []}
-                  selected={selectedIds.has(m.id)}
-                  anySelected={anySelected}
-                  onToggle={(checked) => {
-                    const next = new Set(selectedIds)
-                    if (checked) next.add(m.id)
-                    else next.delete(m.id)
-                    setSelectedIds(next)
-                  }}
-                />
-              </motion.div>
-            ))}
-            </AnimatePresence>
-          </motion.ul>
+          <AnimatePresence initial={false}>
+            {PROGRESS_GROUP_ORDER.map((groupKey) => {
+              const items = sorted.filter((m) => taskGroupKey(m) === groupKey)
+              if (items.length === 0) return null
+              const groupIds = items.map((m) => m.id)
+              const allGroupSelected = groupIds.every((id) => selectedIds.has(id))
+              const someGroupSelected = groupIds.some((id) => selectedIds.has(id))
+              return (
+                <motion.section
+                  key={groupKey}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <div
+                    className="group/header flex w-full cursor-pointer items-center gap-2 border-b border-border bg-secondary/30 px-6 py-2 transition-colors hover:bg-secondary/50"
+                    onClick={() => toggleCollapseGroup(groupKey)}
+                  >
+                    <div
+                      className="flex shrink-0 cursor-pointer items-center justify-center"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleGroupSelect(items)
+                      }}
+                    >
+                      <div
+                        className={`flex size-3.5 items-center justify-center rounded border transition-all ${
+                          allGroupSelected
+                            ? 'border-primary bg-primary'
+                            : someGroupSelected
+                              ? 'border-primary bg-primary/30'
+                              : anySelected
+                                ? 'border-border bg-background hover:border-primary/50'
+                                : 'border-transparent bg-transparent group-hover/header:border-border'
+                        }`}
+                      >
+                        {allGroupSelected ? (
+                          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                            <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground" />
+                          </svg>
+                        ) : someGroupSelected ? (
+                          <svg width="9" height="2" viewBox="0 0 9 2" fill="none">
+                            <path d="M1 1H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-primary" />
+                          </svg>
+                        ) : null}
+                      </div>
+                    </div>
+                    <StatusIcon status={groupKey} size={15} />
+                    <span className="text-[13px] font-semibold text-foreground/80">{PROGRESS_GROUP_LABELS[groupKey]}</span>
+                    <span className="text-[13px] text-muted-foreground">{items.length}</span>
+                    <ChevronDown
+                      size={15}
+                      className={`ml-auto shrink-0 text-muted-foreground transition-transform ${collapsedGroups.has(groupKey) ? '-rotate-90' : ''}`}
+                    />
+                  </div>
+                  {collapsedGroups.has(groupKey) ? null : (
+                    <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
+                      <AnimatePresence initial={false}>
+                        {items.map((m) => (
+                          <motion.div
+                            key={m.id}
+                            variants={listItemVariants}
+                            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                            layout
+                          >
+                            <TaskRowItem
+                              task={m}
+                              wsSlug={ws?.slug ?? ''}
+                              members={members ?? []}
+                              selected={selectedIds.has(m.id)}
+                              anySelected={anySelected}
+                              onToggle={(checked) => {
+                                const next = new Set(selectedIds)
+                                if (checked) next.add(m.id)
+                                else next.delete(m.id)
+                                setSelectedIds(next)
+                              }}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </motion.ul>
+                  )}
+                </motion.section>
+              )
+            })}
+          </AnimatePresence>
         </div>
       )}
 
@@ -490,7 +571,11 @@ function TaskRowItem({
 
         {/* Name */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Target size={18} className="shrink-0 text-muted-foreground" />
+          {pct === 100 ? (
+            <CheckCircle2 size={18} className="shrink-0 text-primary" />
+          ) : (
+            <Target size={18} className="shrink-0 text-muted-foreground" />
+          )}
           <span className="shrink-0 font-mono text-xs text-muted-foreground">#{m.seq ?? m.id}</span>
           <span className="truncate text-sm font-medium">{m.name}</span>
         </div>

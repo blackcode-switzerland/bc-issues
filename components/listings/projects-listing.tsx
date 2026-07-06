@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { toast } from 'sonner'
-import { Folder, GripVertical, Plus } from 'lucide-react'
+import { ChevronDown, Folder, GripVertical, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { useActiveWorkspace } from './use-active-workspace'
 import { usePersistentState } from './use-persistent-filters'
@@ -81,6 +81,18 @@ const PROJECT_PRIORITY_OPTIONS = PROJECT_PRIORITIES.map((p) => ({
   icon: <PriorityIcon priority={projectPriorityKey(p.value)} size={15} />,
 }))
 
+// Projects are split into two sections by completion, mirroring the issues
+// listing's status accordion — a project is "Done" once every issue in it is
+// resolved (and it has at least one issue), otherwise it's "In Progress".
+const PROGRESS_GROUP_ORDER = ['in_progress', 'done'] as const
+const PROGRESS_GROUP_LABELS: Record<string, string> = { in_progress: 'In Progress', done: 'Done' }
+
+function projectGroupKey(p: ProjectRow): 'in_progress' | 'done' {
+  const total = p.issue_count ?? 0
+  const open = p.open_issues ?? 0
+  return total > 0 && open === 0 ? 'done' : 'in_progress'
+}
+
 // Searchable fields per project, weighted by relevance — identifier and name
 // rank above summary/status/priority/lead/health, which rank above the description.
 function projectSearchFields(p: ProjectRow): ReturnType<typeof field>[] {
@@ -113,6 +125,8 @@ export function ProjectsListing() {
   const [leadIds, setLeadIds] = usePersistentState<Array<string | number>>(fk('leadIds'), [])
   const [sort, setSort] = usePersistentState(fk('sort'), SORT_MANUAL)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  // Progress-section accordions are open by default; a group key here is collapsed.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const createProject = useMutation({
     mutationFn: async () => {
@@ -207,10 +221,22 @@ export function ProjectsListing() {
 
   function onProjectListDragEnd(result: DropResult) {
     if (!dragEnabled) return
-    if (!result.destination || result.source.index === result.destination.index) return
-    const next = [...localProjects]
-    const [moved] = next.splice(result.source.index, 1)
-    next.splice(result.destination.index, 0, moved)
+    if (!result.destination) return
+    const fromGroup = result.source.droppableId
+    const toGroup = result.destination.droppableId
+    if (fromGroup !== toGroup) return // cross-section drag not supported in list view
+    if (result.source.index === result.destination.index) return
+
+    const groupItems = localProjects.filter((p) => projectGroupKey(p) === fromGroup)
+    const moved = groupItems[result.source.index]
+    const reorderedGroup = [...groupItems]
+    reorderedGroup.splice(result.source.index, 1)
+    reorderedGroup.splice(result.destination.index, 0, moved)
+
+    // Positions are global across the whole project list (see reorderProjects),
+    // so rebuild the full order, only permuting the slots the dragged group occupies.
+    let gi = 0
+    const next = localProjects.map((p) => (projectGroupKey(p) === fromGroup ? reorderedGroup[gi++] : p))
     setLocalProjects(next)
     reorderProjects.mutate(next.map((p) => p.id))
   }
@@ -220,6 +246,24 @@ export function ProjectsListing() {
     if (checked) next.add(id)
     else next.delete(id)
     setSelectedIds(next)
+  }
+
+  function toggleGroupSelect(items: ProjectRow[]) {
+    const groupIds = items.map((p) => p.id)
+    const allSelected = groupIds.every((id) => selectedIds.has(id))
+    const next = new Set(selectedIds)
+    if (allSelected) groupIds.forEach((id) => next.delete(id))
+    else groupIds.forEach((id) => next.add(id))
+    setSelectedIds(next)
+  }
+
+  function toggleCollapseGroup(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   async function bulkPatch(patch: Record<string, unknown>) {
@@ -394,55 +438,116 @@ export function ProjectsListing() {
             <span className="hidden w-12 shrink-0 sm:block">Issues</span>
             <span className="w-20 shrink-0">Progress</span>
           </div>
-          {dragEnabled ? (
-            // Manual sort: drag-to-reorder (no layout animation — dnd owns motion).
-            <DragDropContext onDragEnd={onProjectListDragEnd}>
-              <Droppable droppableId="projects-list">
-                {(provided) => (
-                  <ul ref={provided.innerRef} {...provided.droppableProps}>
-                    {localProjects.map((p, idx) => (
-                      <Draggable key={p.id} draggableId={String(p.id)} index={idx}>
-                        {(prov, snap) => (
-                          <ProjectRowItem
-                            project={p}
-                            wsSlug={ws?.slug ?? ''}
-                            members={members ?? []}
-                            selected={selectedIds.has(p.id)}
-                            anySelected={selectedIds.size > 0}
-                            onToggle={(checked) => toggleSelect(p.id, checked)}
-                            draggableRef={prov.innerRef}
-                            draggableProps={prov.draggableProps}
-                            dragHandleProps={prov.dragHandleProps}
-                            isDragging={snap.isDragging}
-                          />
+          <DragDropContext onDragEnd={onProjectListDragEnd}>
+            <AnimatePresence initial={false}>
+              {PROGRESS_GROUP_ORDER.map((groupKey) => {
+                const items = localProjects.filter((p) => projectGroupKey(p) === groupKey)
+                if (items.length === 0) return null
+                const groupIds = items.map((p) => p.id)
+                const allGroupSelected = groupIds.every((id) => selectedIds.has(id))
+                const someGroupSelected = groupIds.some((id) => selectedIds.has(id))
+                const anySelected = selectedIds.size > 0
+                return (
+                  <motion.section
+                    key={groupKey}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <div
+                      className="group/header flex w-full cursor-pointer items-center gap-2 border-b border-border bg-secondary/30 px-6 py-2 transition-colors hover:bg-secondary/50"
+                      onClick={() => toggleCollapseGroup(groupKey)}
+                    >
+                      <div
+                        className="flex shrink-0 cursor-pointer items-center justify-center"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleGroupSelect(items)
+                        }}
+                      >
+                        <div
+                          className={`flex size-3.5 items-center justify-center rounded border transition-all ${
+                            allGroupSelected
+                              ? 'border-primary bg-primary'
+                              : someGroupSelected
+                                ? 'border-primary bg-primary/30'
+                                : anySelected
+                                  ? 'border-border bg-background hover:border-primary/50'
+                                  : 'border-transparent bg-transparent group-hover/header:border-border'
+                          }`}
+                        >
+                          {allGroupSelected ? (
+                            <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                              <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground" />
+                            </svg>
+                          ) : someGroupSelected ? (
+                            <svg width="9" height="2" viewBox="0 0 9 2" fill="none">
+                              <path d="M1 1H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-primary" />
+                            </svg>
+                          ) : null}
+                        </div>
+                      </div>
+                      <StatusIcon status={groupKey} size={15} />
+                      <span className="text-[13px] font-semibold text-foreground/80">{PROGRESS_GROUP_LABELS[groupKey]}</span>
+                      <span className="text-[13px] text-muted-foreground">{items.length}</span>
+                      <ChevronDown
+                        size={15}
+                        className={`ml-auto shrink-0 text-muted-foreground transition-transform ${collapsedGroups.has(groupKey) ? '-rotate-90' : ''}`}
+                      />
+                    </div>
+                    {collapsedGroups.has(groupKey) ? null : dragEnabled ? (
+                      // Manual sort: drag-to-reorder within the section.
+                      <Droppable droppableId={groupKey}>
+                        {(provided) => (
+                          <ul ref={provided.innerRef} {...provided.droppableProps}>
+                            {items.map((p, idx) => (
+                              <Draggable key={p.id} draggableId={String(p.id)} index={idx}>
+                                {(prov, snap) => (
+                                  <ProjectRowItem
+                                    project={p}
+                                    wsSlug={ws?.slug ?? ''}
+                                    members={members ?? []}
+                                    selected={selectedIds.has(p.id)}
+                                    anySelected={selectedIds.size > 0}
+                                    onToggle={(checked) => toggleSelect(p.id, checked)}
+                                    draggableRef={prov.innerRef}
+                                    draggableProps={prov.draggableProps}
+                                    dragHandleProps={prov.dragHandleProps}
+                                    isDragging={snap.isDragging}
+                                  />
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </ul>
                         )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </ul>
-                )}
-              </Droppable>
-            </DragDropContext>
-          ) : (
-            // Sorted: drag disabled; rows animate to their new order on sort change.
-            <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
-              <AnimatePresence initial={false}>
-                {localProjects.map((p) => (
-                  <motion.div key={p.id} layout variants={listItemVariants} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
-                    <ProjectRowItem
-                      project={p}
-                      wsSlug={ws?.slug ?? ''}
-                      members={members ?? []}
-                      selected={selectedIds.has(p.id)}
-                      anySelected={selectedIds.size > 0}
-                      onToggle={(checked) => toggleSelect(p.id, checked)}
-                      dragHandleProps={null}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.ul>
-          )}
+                      </Droppable>
+                    ) : (
+                      // Sorted: drag disabled; rows animate to their new order on sort change.
+                      <motion.ul variants={listContainerVariants} initial="hidden" animate="show">
+                        <AnimatePresence initial={false}>
+                          {items.map((p) => (
+                            <motion.div key={p.id} layout variants={listItemVariants} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
+                              <ProjectRowItem
+                                project={p}
+                                wsSlug={ws?.slug ?? ''}
+                                members={members ?? []}
+                                selected={selectedIds.has(p.id)}
+                                anySelected={selectedIds.size > 0}
+                                onToggle={(checked) => toggleSelect(p.id, checked)}
+                                dragHandleProps={null}
+                              />
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </motion.ul>
+                    )}
+                  </motion.section>
+                )
+              })}
+            </AnimatePresence>
+          </DragDropContext>
         </div>
       )}
 
