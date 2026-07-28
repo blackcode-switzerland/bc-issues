@@ -17,6 +17,102 @@ the OpenAPI description (`/api/docs`), and the embedded per-page agent manifest.
 
 ---
 
+## 2026-07-28 — Markdown containing `<placeholder>` tokens now renders correctly
+
+**Bug fix. Not breaking for well-formed clients — but it changes how some
+already-stored content is interpreted, and it fixes silent data loss.**
+
+### What was wrong
+
+Rich-text fields (comments, issue/task/project descriptions, project-update
+bodies) accept Markdown or HTML. The server decided which one it had received by
+looking for *any* HTML-looking tag — the regex matched any `<word>` anywhere in
+the document.
+
+That meant a perfectly ordinary Markdown document containing an angle-bracket
+placeholder — `` `clinicBranchId != <clinicId>` ``, `<uid>`, `Promise<void>`,
+`<your-token>` — was classified as HTML and stored **verbatim, unparsed**. On
+render the browser then treated it as HTML, with three visible symptoms:
+
+- **No Markdown was applied at all.** `##` headings, `-` lists, `|` tables and
+  `**bold**` all stayed literal.
+- **The whole document collapsed into one paragraph**, because newlines are
+  just whitespace in HTML.
+- **The placeholder itself disappeared**, silently dropped by the browser as an
+  unknown tag — so `` `clinicBranchId != <clinicId>` `` displayed as
+  `` `clinicBranchId != ` ``. This was real content loss, not only a formatting
+  problem.
+
+This hit agents and CLI users hardest, since technical write-ups routinely
+contain placeholders and generics.
+
+### What changed
+
+A document is now treated as HTML only when it contains a **block-level**
+container tag:
+
+```
+p, div, h1–h6, ul, ol, li, blockquote, pre, table, thead, tbody, tr, th, td
+```
+
+Inline tags (`<b>`, `<em>`, `<br>`, `<img>`, `<a>`, `<span>`, …) no longer flip
+the document to the HTML path. Markdown passes raw inline HTML through
+untouched, so such documents now get **both** proper Markdown structure and
+their inline tags.
+
+Second, on the Markdown path an angle-bracket token that isn't recognized markup
+is now **escaped into visible text instead of being dropped**. Previously
+`Promise<void>` written outside a code span lost its `<void>`. Both of these now
+survive, in prose and in code spans alike:
+
+```
+Returns Promise<void> and takes Array<string>, id is <uid>.
+```
+
+A side effect worth knowing: a `<script>` tag written in Markdown prose now
+displays as escaped, inert text rather than silently vanishing. It is text, not
+markup, on every render path — nothing executable survives.
+
+Nothing about the request or response shape changes — same fields, same
+envelopes, same endpoints. If you were already sending clean Markdown or clean
+editor HTML, you will simply see correct rendering.
+
+```bash
+# Previously rendered as one literal blob with `<clinicId>` missing.
+# Now renders as a heading, a list and a table, with the placeholder intact.
+bk issue comment '#327' --body-file ./findings.md
+```
+
+### Also in this change: client-supplied HTML is now sanitized
+
+HTML input previously skipped server-side sanitization entirely — it was stored
+as sent, and only the read-only display component sanitized on render.
+Descriptions, however, are rendered through the *editable* editor, which did not
+sanitize. So HTML posted to a description through the API reached the browser
+unsanitized.
+
+Now **both** paths are sanitized on write, and both render paths sanitize too.
+`<script>`, `on*` event handlers and `javascript:` URLs are stripped.
+
+The allowlist covers everything the editor emits, so this is lossless for real
+content — task lists (`ul[data-type=taskList]`,
+`li[data-type=taskItem][data-checked]`), mentions
+(`span[data-type=mention][data-id][data-label]`), tables including `colgroup`
+column widths and `colspan`/`rowspan`, and file-attachment nodes. `style` is
+narrowed to inert layout properties (`width`, `min-width`, `height`,
+`text-align`).
+
+**How to adapt:** if you post HTML directly, keep to that vocabulary — anything
+outside it is now dropped on write rather than at render.
+
+### Note on existing content
+
+This fix applies to content written **from now on**. Rows already mangled stay
+as they are; they were stored in their broken form. Re-sending the original
+Markdown (e.g. `bk issue edit-comment …`) repairs a row.
+
+---
+
 ## 2026-07-06 — Smarter, ranked search on the Issues/Tasks/Projects listings
 
 UI-only change, no API/CLI surface affected (the REST endpoints, OpenAPI spec,

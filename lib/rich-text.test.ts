@@ -129,11 +129,117 @@ describe('toRichTextHtml — HTML input (direct-API agents sending HTML)', () =>
     expect(toRichTextHtml(node)).toBe(node)
   })
 
-  it('treats markdown-with-a-stray-HTML-tag as HTML (no markdown conversion)', () => {
-    // A single tag flips the whole string to the HTML path: the "##" stays literal.
+  it('still parses markdown when it contains only inline HTML', () => {
+    // Inline tags must NOT flip the document to the HTML path — Markdown passes
+    // raw inline HTML through, so we get both.
     const out = toRichTextHtml('## Heading <b>x</b>')
-    expect(out).toContain('## Heading')
-    expect(out).not.toContain('<h2')
+    expect(out).toContain('<h2')
+    expect(out).toContain('<b>x</b>')
+  })
+
+  it('strips script and event handlers from client-supplied HTML', () => {
+    const out = toRichTextHtml('<p onclick="steal()">hi</p><script>alert(1)</script>')
+    expect(out).not.toContain('onclick')
+    expect(out).not.toContain('<script')
+    expect(out).toContain('hi')
+  })
+
+  it('strips javascript: hrefs from client-supplied HTML', () => {
+    const out = toRichTextHtml('<p><a href="javascript:alert(1)">x</a></p>')
+    expect(out).not.toContain('javascript:')
+  })
+})
+
+describe('toRichTextHtml — angle-bracket placeholders in markdown (regression)', () => {
+  // A placeholder like `<clinicId>` used to match the old "any tag" heuristic,
+  // which stored the whole document verbatim: no markdown was parsed, newlines
+  // collapsed on render, and the placeholder itself was dropped by the browser.
+  const md = [
+    '## Findings',
+    '',
+    'The query adds `clinicBranchId != <adminClinicId>` here.',
+    '',
+    '- first item',
+    '- second item',
+    '',
+    '| Item | State |',
+    '| --- | --- |',
+    '| #303 | open |',
+  ].join('\n')
+
+  it('parses block-level markdown around the placeholder', () => {
+    const out = toRichTextHtml(md)
+    expect(out).toContain('<h2')
+    expect(out).toContain('<ul')
+    expect(out).toContain('<table')
+  })
+
+  it('keeps the placeholder text visible instead of eating it as a tag', () => {
+    const out = toRichTextHtml(md)
+    expect(out).toContain('&lt;adminClinicId&gt;')
+  })
+
+  it.each(['<uid>', '<clinicId>', '<your-token>', 'Promise<void>'])(
+    'is not fooled by %s',
+    (placeholder) => {
+      expect(toRichTextHtml(`## Title\n\nUse ${placeholder} in the call.`)).toContain('<h2')
+    }
+  )
+
+  it('keeps an un-backticked placeholder as visible text', () => {
+    // Markdown passes raw inline HTML through, so `<void>` outside a code span
+    // reaches the sanitizer looking like a tag. It must be escaped, not dropped.
+    const out = toRichTextHtml('## Title\n\nReturns Promise<void> always.')
+    expect(out).toContain('Promise&lt;void&gt;')
+  })
+
+  it('neutralizes active markup on the markdown path (escaped, never live)', () => {
+    const out = toRichTextHtml('# Hi\n\n<script>alert(1)</script><iframe src="x"></iframe>')
+    // No live tag survives — the markup is escaped to inert text.
+    expect(out).not.toMatch(/<script/i)
+    expect(out).not.toMatch(/<iframe/i)
+    expect(out).toContain('&lt;script&gt;')
+    expect(out).toContain('<h1')
+  })
+})
+
+describe('toRichTextHtml — editor HTML survives sanitization losslessly', () => {
+  it('keeps task lists (checklists)', () => {
+    const html =
+      '<ul data-type="taskList"><li data-type="taskItem" data-checked="true">' +
+      '<label><input type="checkbox" checked></label><div><p>done</p></div></li></ul>'
+    const out = toRichTextHtml(html)
+    expect(out).toContain('data-type="taskList"')
+    expect(out).toContain('data-type="taskItem"')
+    expect(out).toContain('data-checked="true"')
+    expect(out).toContain('<input')
+  })
+
+  it('pins task-list inputs to checkboxes', () => {
+    const out = toRichTextHtml('<ul data-type="taskList"><li><input type="password"></li></ul>')
+    expect(out).not.toContain('password')
+    expect(out).toContain('type="checkbox"')
+  })
+
+  it('keeps mentions', () => {
+    const html = '<p><span data-type="mention" data-id="7" data-label="Ada" class="mention">@Ada</span></p>'
+    const out = toRichTextHtml(html)
+    expect(out).toContain('data-type="mention"')
+    expect(out).toContain('data-id="7"')
+    expect(out).toContain('data-label="Ada"')
+  })
+
+  it('keeps table column widths', () => {
+    const html = '<table><colgroup><col style="width: 120px"></colgroup><tbody><tr><td>x</td></tr></tbody></table>'
+    expect(toRichTextHtml(html)).toContain('width')
+  })
+
+  it('keeps a file-attachment node', () => {
+    const node = `<div data-type="file-attachment" data-file-url="${BLOB}/1-a.pdf" data-filename="a.pdf" data-content-type="application/pdf"></div>`
+    const out = toRichTextHtml(node)
+    expect(out).toContain('data-type="file-attachment"')
+    expect(out).toContain('data-filename="a.pdf"')
+    expect(out).toContain(`${BLOB}/1-a.pdf`)
   })
 })
 

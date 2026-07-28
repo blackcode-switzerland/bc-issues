@@ -99,6 +99,30 @@ function isValidUrl(url: string): boolean {
   }
 }
 
+// Render-layer sanitization for stored rich text. Applied by BOTH the read-only
+// display and the editable editor — issue/task/project descriptions are rendered
+// through the editable one, so omitting it there left HTML that reached the DB
+// before server-side sanitization existed unsanitized on the client.
+// `ADD_ATTR` keeps the markup TipTap needs to reconstruct its nodes:
+// file-attachment data-*, table geometry, and mention / task-list markers.
+function sanitizeRichText(html: string): string {
+  // SSR has no DOM for DOMPurify; the client pass runs on hydration.
+  if (typeof window === 'undefined') return html
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: [
+      ...FILE_ATTACHMENT_ATTRS,
+      'colspan',
+      'rowspan',
+      'colwidth',
+      'style',
+      'data-type',
+      'data-checked',
+      'data-id',
+      'data-label',
+    ],
+  })
+}
+
 /* ------------------------------- mentions ------------------------------- */
 
 export interface MentionItem {
@@ -1229,7 +1253,7 @@ export function RichTextEditor({
       fileAttachmentExt,
       uploadPlaceholderExt,
     ],
-    content,
+    content: sanitizeRichText(content),
     editable,
     onUpdate: ({ editor: ed }: { editor: Editor }) => {
       onChange(ed.getHTML())
@@ -1518,14 +1542,7 @@ export function RichTextDisplay({ content, onImageClick }: RichTextDisplayProps)
   const containerRef = useRef<HTMLDivElement>(null)
   const [fileAttachmentExt] = useState(() => buildFileAttachment())
 
-  const sanitizedContent =
-    typeof window !== 'undefined'
-      ? DOMPurify.sanitize(content, {
-          // Keep the file-attachment data-* attrs and the table markup TipTap
-          // emits (colgroup/col widths, colspan/rowspan) so tables survive render.
-          ADD_ATTR: [...FILE_ATTACHMENT_ATTRS, 'colspan', 'rowspan', 'colwidth', 'style'],
-        })
-      : content
+  const sanitizedContent = sanitizeRichText(content)
 
   const editor = useEditor({
     extensions: [

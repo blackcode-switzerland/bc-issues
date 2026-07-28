@@ -406,6 +406,16 @@ kanban, detail pages, modals) rendering work-item state identically.
     Chrome·Firefox, mp4 on Safari.
   - `RichTextDisplay({ content })` — read-only render.
   - `MentionItem` — the mention item type.
+  - **Sanitization on render.** Both the editable `RichTextEditor` and
+    `RichTextDisplay` pass stored HTML through `sanitizeRichText()` (one shared
+    helper, DOMPurify) before handing it to TipTap. The editable one matters
+    because issue/task/project **descriptions** are rendered through it, not
+    through `RichTextDisplay` — it previously took `content` raw. `ADD_ATTR`
+    keeps the `data-*` TipTap needs to rebuild its nodes (file attachments,
+    mentions, task items) plus table geometry; add to that list when adding an
+    extension whose markup lives in attributes. This is defence in depth — the
+    server sanitizes on write in `lib/rich-text.ts` — and it also covers rows
+    written before server-side sanitization applied to the HTML path.
 
 ## Workspace-scoped URLs
 

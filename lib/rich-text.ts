@@ -7,11 +7,14 @@
 // would otherwise be stored verbatim and render as a literal "## ..." blob.
 //
 // toRichTextHtml() makes any client "just work":
-//   - already HTML (web editor, or a client that sent tags) → passed through
-//     unchanged (don't re-sanitize: that could strip TipTap-specific markup like
-//     task lists / mentions; the render layer's DOMPurify already protects it).
+//   - already HTML (web editor, or a client that sent tags) → sanitized and
+//     stored. "Already HTML" means it contains a block-level container tag, not
+//     merely any `<word>`; see HTML_TAG_RE.
 //   - Markdown / plain text → converted to HTML and sanitized (marked output is
 //     predictable, so a generous allowlist is safe).
+// The sanitizer allowlist covers every construct the TipTap editor emits — task
+// lists, mentions, tables (incl. colgroup widths), file-attachment nodes — so
+// sanitizing is lossless for editor content in both directions.
 //   - tolerates agents that JSON-escaped newlines, i.e. sent the two characters
 //     "\n" instead of real line breaks.
 //
@@ -38,6 +41,8 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
     'strong', 'b', 'em', 'i', 'u', 's', 'del', 'mark', 'sub', 'sup',
     'code', 'pre',
     'ul', 'ol', 'li',
+    // TipTap task-item internals (`<label><input type="checkbox">`).
+    'label', 'input',
     'a', 'img',
     // Tables: gfm Markdown emits table/thead/tbody/tr/th/td; the TipTap editor
     // additionally emits colgroup/col (column widths) when resizing is used.
@@ -46,35 +51,101 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   ],
   allowedAttributes: {
     a: ['href', 'title', 'target', 'rel'],
-    img: ['src', 'alt', 'title'],
+    img: ['src', 'alt', 'title', 'width', 'height', 'style'],
     // The file-attachment node emitted by upgradeUploadedMedia(). These are inert
     // data attributes (no script), and the render layer (DOMPurify) whitelists the
     // same set, so they survive end-to-end.
     div: [...FILE_ATTACHMENT_ATTRS],
     // Table cell/column geometry (inert layout attrs, no script).
-    td: ['colspan', 'rowspan', 'colwidth'],
-    th: ['colspan', 'rowspan', 'colwidth'],
-    col: ['span', 'width'],
+    td: ['colspan', 'rowspan', 'colwidth', 'style'],
+    th: ['colspan', 'rowspan', 'colwidth', 'style'],
+    col: ['span', 'width', 'style'],
+    // TipTap task lists: `<ul data-type="taskList">` /
+    // `<li data-type="taskItem" data-checked="true"><label><input type=checkbox>`.
+    // Without these the checklist markup is stripped and the list degrades to
+    // plain bullets on the HTML path.
+    ul: ['data-type'],
+    li: ['data-type', 'data-checked'],
+    input: ['type', 'checked', 'disabled'],
+    // TipTap mentions: `<span data-type="mention" data-id data-label>`.
+    span: ['data-type', 'data-id', 'data-label', 'data-mention-suggestion-char', 'style'],
     '*': ['class'],
+  },
+  // Only the inert layout properties the editor actually emits (table column
+  // widths, alignment). Anything else in a style attribute is dropped.
+  allowedStyles: {
+    '*': {
+      width: [/^\d+(?:\.\d+)?(?:px|%|em|rem)$/i],
+      'min-width': [/^\d+(?:\.\d+)?(?:px|%|em|rem)$/i],
+      height: [/^\d+(?:\.\d+)?(?:px|%|em|rem)$/i],
+      'text-align': [/^(?:left|right|center|justify)$/i],
+    },
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   // Open links safely.
   transformTags: {
     a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer', target: '_blank' }),
+    // `input` exists solely for task-list checkboxes. Pin the type so a client
+    // can't smuggle a text/password field into a comment body.
+    input: sanitizeHtml.simpleTransform('input', { type: 'checkbox' }, true),
   },
+  // Tags dropped together with their text content (rather than unwrapped), so a
+  // stripped <script> can't leave its source behind as visible prose.
+  nonTextTags: ['script', 'style', 'textarea', 'option', 'iframe', 'object', 'embed', 'noscript'],
 }
 
-// A string already looks like HTML if it contains an opening tag.
-const HTML_TAG_RE = /<[a-z][a-z0-9-]*(\s[^>]*)?\/?>/i
+// Markdown path only. Markdown passes raw inline HTML straight through, so an
+// angle-bracket token written in prose rather than in a code span — `<uid>`,
+// `Promise<void>` — reaches the sanitizer looking like a tag. Discarding it
+// would silently delete text the author typed (the same data loss the block-tag
+// fix addressed, one level down), so on this path unrecognized tags are
+// **escaped** back into visible text instead.
+//
+// Note this applies to `<script>` too: in escape mode `nonTextTags` no longer
+// removes the content, so a script written in prose shows up as escaped, inert
+// text rather than vanishing. That is safe — it is text, not markup, on every
+// render path — and it is the honest outcome for what is almost always a code
+// example. Nothing executable survives either way.
+const MARKDOWN_SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  ...SANITIZE_OPTS,
+  disallowedTagsMode: 'escape',
+}
+
+// Does this string look like an HTML *document* (editor output), as opposed to
+// Markdown prose that merely happens to contain an angle-bracket token?
+//
+// Only BLOCK-level container tags count. The editor always wraps content in one
+// of them, while Markdown written by humans and agents routinely contains things
+// like `<uid>`, `<clinicId>` or `Promise<void>` — often inside code spans. The
+// previous heuristic matched *any* `<word>`, so a single such placeholder flipped
+// the whole document to the HTML path: no Markdown was ever parsed, headings /
+// lists / tables stayed literal, every newline collapsed to a space, and the
+// placeholder itself was silently dropped by the browser as an unknown tag.
+//
+// Inline tags are deliberately excluded (`<b>`, `<br>`, `<img>`, …): Markdown
+// passes raw inline HTML straight through, so those documents get the best of
+// both — real Markdown structure *and* their inline tags preserved.
+const EDITOR_BLOCK_TAGS = [
+  'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'li', 'blockquote', 'pre',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td',
+]
+const HTML_TAG_RE = new RegExp(`</?(?:${EDITOR_BLOCK_TAGS.join('|')})(?:\\s[^>]*)?/?>`, 'i')
 
 export function toRichTextHtml<T extends string | null | undefined>(input: T): T {
   if (input == null) return input
   let text = String(input)
   if (text.trim() === '') return '' as T
 
-  // Already HTML — trust it; the display layer sanitizes on render. Still upgrade
-  // any uploaded-file references so an HTML-sending client gets inline embeds too.
-  if (HTML_TAG_RE.test(text)) return upgradeUploadedMedia(text) as unknown as T
+  // Already HTML — don't run it through Markdown. It is still sanitized: the
+  // allowlist covers everything the editor emits (task lists, mentions, tables,
+  // file-attachment nodes), so a round-trip is lossless, while script/handler
+  // markup from a direct API client is stripped here rather than being trusted
+  // all the way to the browser. Uploaded-file references are upgraded first so
+  // an HTML-sending client gets inline embeds too.
+  if (HTML_TAG_RE.test(text)) {
+    return sanitizeHtml(upgradeUploadedMedia(text), SANITIZE_OPTS) as unknown as T
+  }
 
   // Markdown / plain text. Tolerate JSON-escaped newlines/tabs (a common agent
   // mistake: sending the literal characters "\n" instead of real line breaks).
@@ -90,7 +161,7 @@ export function toRichTextHtml<T extends string | null | undefined>(input: T): T
 
   let html = marked.parse(text, { async: false, gfm: true, breaks: true }) as string
   html = upgradeUploadedMedia(html)
-  return sanitizeHtml(html, SANITIZE_OPTS) as unknown as T
+  return sanitizeHtml(html, MARKDOWN_SANITIZE_OPTS) as unknown as T
 }
 
 /* ------------------------- uploaded-media embedding ------------------------- */

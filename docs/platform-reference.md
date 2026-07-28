@@ -151,6 +151,22 @@ newlines**, not the literal characters `\n`. GFM Markdown tables (and HTML
 `<table>`) render as real tables. Raw `<iframe>` and **external** (non-uploaded)
 media are stripped on render.
 
+A body is treated as HTML only when it contains a **block-level** tag (`<p>`,
+`<div>`, `<h1>`–`<h6>`, `<ul>`/`<ol>`/`<li>`, `<blockquote>`, `<pre>`,
+`<table>` & friends). Markdown containing an angle-bracket placeholder —
+`` `<clinicId>` ``, `<uid>`, `Promise<void>` — is still parsed as Markdown, and
+the placeholder is preserved as visible text whether or not it sits in a code
+span. Inline tags (`<b>`, `<br>`, `<img>`, …) are passed through inside Markdown
+rather than disabling it.
+
+Both paths are **sanitized on write**: `<script>`, `on*` handlers and
+`javascript:` URLs are stripped. If you post HTML directly, keep to the editor's
+vocabulary — headings, paragraphs, lists, task lists
+(`ul[data-type=taskList]` / `li[data-type=taskItem][data-checked]`), mentions
+(`span[data-type=mention][data-id][data-label]`), tables (incl. `colgroup`
+widths, `colspan`/`rowspan`), links, images and file-attachment nodes. `style`
+is limited to `width`, `min-width`, `height` and `text-align`.
+
 **Embedding files/images.** Upload first, then reference the returned url in a
 body:
 1. `POST /api/upload` (multipart, field `file`) → `{ url }`. Max **100 MB**.

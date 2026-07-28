@@ -300,7 +300,36 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   write via `lib/rich-text.ts` (`toRichTextHtml`), applied in the query layer so
   every surface benefits. Markdown is converted (and a common agent mistake —
   literal `\n` instead of real newlines — is tolerated); existing HTML (web
-  editor) is passed through and sanitized again at render by the display layer.
+  editor) is sanitized too, and both paths are sanitized again at render by the
+  display layer.
+- **How "is this HTML?" is decided.** `toRichTextHtml` treats input as HTML only
+  when it contains a **block-level** container tag (`<p>`, `<div>`, `<h1>`–`<h6>`,
+  `<ul>`/`<ol>`/`<li>`, `<blockquote>`, `<pre>`, `<table>` & friends) — see
+  `HTML_TAG_RE`. This matters: the heuristic used to match *any* `<word>`, so
+  ordinary Markdown containing a placeholder like `` `<clinicId>` `` or
+  `Promise<void>` was stored verbatim as "HTML" — no headings/lists/tables were
+  ever parsed, newlines collapsed on render, and the placeholder was silently
+  eaten by the browser as an unknown tag. Inline tags (`<b>`, `<br>`, `<img>`, …)
+  deliberately do **not** trigger the HTML path, because Markdown passes raw
+  inline HTML through unchanged — so those documents keep both their Markdown
+  structure and their inline tags.
+- **Sanitizing is lossless for editor content.** The allowlist in
+  `lib/rich-text.ts` covers every construct TipTap emits — task lists
+  (`ul[data-type=taskList]`, `li[data-type=taskItem][data-checked]`, `label`,
+  `input`), mentions (`span[data-type=mention][data-id][data-label]`), tables
+  including `colgroup`/`col` widths and `colspan`/`rowspan`, and the
+  file-attachment node. `allowedStyles` permits only inert layout properties
+  (`width`, `min-width`, `height`, `text-align`). Extend the allowlist whenever a
+  new editor extension is added, or its markup will be stripped on write.
+- **The two paths sanitize differently on purpose.** The HTML path *discards*
+  unrecognized tags (`SANITIZE_OPTS`); the Markdown path *escapes* them
+  (`MARKDOWN_SANITIZE_OPTS`, `disallowedTagsMode: 'escape'`). Markdown passes raw
+  inline HTML through, so an un-backticked `Promise<void>` or `<uid>` reaches the
+  sanitizer looking like a tag — discarding it would silently delete text the
+  author typed. Escaping keeps it visible. Consequence to know: a `<script>`
+  written in Markdown prose renders as escaped, inert text rather than
+  disappearing. Nothing executable survives on either path (`<script>`, `on*`
+  handlers, `javascript:` URLs).
 - **Embedding uploaded files in rich text.** `toRichTextHtml` also runs
   `upgradeUploadedMedia`: a reference to a file uploaded through our own pipeline
   (Vercel Blob, or `/uploads` in dev) — written as a Markdown image `![](url)` or
