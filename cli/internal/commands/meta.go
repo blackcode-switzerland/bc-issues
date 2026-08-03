@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -40,7 +41,19 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 				return err
 			}
 
-			return output.Render(format, meta, func(w io.Writer) error {
+			// Machine formats print the server's payload verbatim, so every
+			// dynamic block it carries (limits, media, cli, vocabulary, and
+			// anything added later) reaches the agent without a CLI release.
+			// Re-serialising the typed struct would silently drop them.
+			var payload any = meta
+			if len(meta.Raw) > 0 && (format == output.FormatJSON || format == output.FormatYAML) {
+				var passthrough any
+				if err := json.Unmarshal(meta.Raw, &passthrough); err == nil {
+					payload = passthrough
+				}
+			}
+
+			return output.Render(format, payload, func(w io.Writer) error {
 				name := ""
 				if meta.User.Name != nil {
 					name = *meta.User.Name

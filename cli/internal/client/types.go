@@ -48,11 +48,24 @@ type User struct {
 // workspace the caller belongs to so an agent can pick its write target by
 // name/slug (never by the opaque numeric id). `ActiveWorkspace` is only a
 // default. Vocabulary/labels/projects/members are passed through raw.
+// Meta is the typed view of GET /api/meta used to render the human table.
+//
+// Raw holds the server's response verbatim, and `bk meta --json` / `--yaml`
+// print THAT rather than re-serialising this struct. That matters: /api/meta is
+// where every dynamic value lives (limits, media rules, CLI versions,
+// vocabularies), and the embedded guide deliberately points at it instead of
+// restating them. If this struct were the JSON output, every server-side
+// addition would be silently dropped until someone shipped a new CLI — which is
+// exactly the drift the guide/meta split exists to prevent. `limits` and `media`
+// were invisible to `bk meta` for this reason before v1.9.0.
 type Meta struct {
 	User            MetaUser             `json:"user" yaml:"user"`
 	ActiveWorkspace *MetaActiveWorkspace `json:"active_workspace" yaml:"active_workspace"`
 	Workspaces      []MetaWorkspace      `json:"workspaces" yaml:"workspaces"`
 	Vocabulary      json.RawMessage      `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
+
+	// The unmodified response body. Not a wire field of its own.
+	Raw json.RawMessage `json:"-" yaml:"-"`
 }
 
 type MetaUser struct {

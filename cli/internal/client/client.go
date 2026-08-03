@@ -233,10 +233,15 @@ func (c *Client) Meta(ws string) (*Meta, error) {
 	if strings.TrimSpace(ws) != "" {
 		path += "?ws=" + url.QueryEscape(ws)
 	}
-	var m Meta
-	if err := c.get(path, &m); err != nil {
+	var raw json.RawMessage
+	if err := c.get(path, &raw); err != nil {
 		return nil, err
 	}
+	var m Meta
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	m.Raw = raw
 	return &m, nil
 }
 

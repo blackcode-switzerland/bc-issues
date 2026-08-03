@@ -121,6 +121,13 @@ from the module that enforces it, so it cannot disagree with the code:
   uploads accept "any file type" was wrong.
 - **`cli`** — `latest_version`, `min_version`, `package`, `install`, `update`.
 
+**`bk meta --json` / `--yaml` now print the server's payload verbatim** rather
+than re-serialising a typed Go struct. This is load-bearing, not cosmetic: the
+guide points at `bk meta` for every dynamic value instead of restating it, and a
+typed struct silently drops fields it doesn't know — so any block the server adds
+would be invisible until someone shipped a new CLI. Guarded by
+`cli/internal/client/meta_test.go`.
+
 `conventions` shrank to pointers; the prose it carried is now in `bk guide`.
 `GET /api/upload` also gained the numeric `maxBytes` and `blockedMimeTypes` that
 the old documentation claimed it already returned.
