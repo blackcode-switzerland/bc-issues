@@ -26,10 +26,17 @@ A guide topic must **never** restate a dynamic value. Point at `bk meta` instead
 
 ## The one rule that matters most
 
-> **Every API route must be reachable from `bk`.** A route with no command is a
-> capability an agent cannot use.
+> **Every change lands in three places, in the same commit:**
+> **route → `bk` command → changelog entry.**
+>
+> Plus a conditional fourth: a guide topic, *only* if agent-visible behaviour
+> changed. If only a value changed (a limit, an enum), edit its source — `bk meta`
+> serves it live and no guide edit is needed.
+>
+> Corollary: **every API route must be reachable from `bk`.** A route with no
+> command is a capability an agent cannot use.
 
-When you add / change / remove a route or feature:
+Detail:
 
 1. **Route** — `app/api/**`. Same conventions: workspace-scoped under
    `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`; lists via
@@ -38,14 +45,18 @@ When you add / change / remove a route or feature:
 2. **CLI** — add or update the `bk` command + client method in `cli/`, **and its
    `routes` annotation** (`Annotations: map[string]string{"routes": "GET /api/…"}`,
    or `"none"` when the command makes no HTTP call).
-3. **Guide** — if agent-visible *behaviour* changed, update the relevant
-   `cli/internal/guide/topics/*.md`.
-4. **`bk meta`** — if a vocabulary or limit changed, update its source
-   (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
-   `bk meta` follow automatically via `lib/agent-meta.ts`.
-5. **Deprecations** — if you renamed or removed a flag/command, add a row to
-   `cli/internal/commands/deprecations.go` in the same commit.
-6. **Changelog** — one dated entry in `docs/api-changelog.md`, newest first.
+3. **Changelog** — one dated entry at the top of `docs/api-changelog.md`.
+
+Conditional, only when it applies:
+
+- **Guide** — agent-visible *behaviour* changed → update the relevant
+  `cli/internal/guide/topics/*.md`.
+- **`bk meta`** — a vocabulary or limit changed → update its source
+  (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
+  `bk meta` follow automatically via `lib/agent-meta.ts`. Never restate a value
+  in a guide topic.
+- **Deprecations** — renamed or removed a flag/command → add a row to
+  `cli/internal/commands/deprecations.go` in the same commit.
 
 This is enforced. **`lib/cli-parity.test.ts` (via `npm test`) fails the build**
 if a route has no CLI coverage, or if the CLI claims a route that doesn't exist.

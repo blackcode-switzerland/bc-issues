@@ -161,11 +161,21 @@ Full migration notes, including where each piece of the old documentation went:
 
 ### Versions
 
-CLI latest **1.9.0**; minimum supported stays at **1.8.7** for now. A 1.8.x
-client still works — it just has no `guide` or `skill` commands. The floor will
-be raised to 1.9.0 after 1.9.0 has soaked; both values are env-overridable
-(`BK_CLI_LATEST` / `BK_CLI_MIN`) so the floor can be rolled back without a
-redeploy.
+CLI latest **1.9.0**; minimum supported **1.9.0**.
+
+**This is the breaking part for CLI users.** A `bk` older than 1.9.0 now refuses
+to run: exit code **8**, with the upgrade commands printed. The floor was raised
+because a pre-1.9.0 binary has no `guide` and no `skill` command — it cannot find
+its own way back, which is the whole mechanism this release exists to provide.
+
+```bash
+npm install -g @blackcode_sa/bc-issues@latest
+bk skill install
+bk guide
+```
+
+Both values are env-overridable (`BK_CLI_LATEST` / `BK_CLI_MIN`), so the floor
+can be lowered again without a redeploy if something goes wrong.
 
 ---
 

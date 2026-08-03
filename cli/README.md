@@ -1,17 +1,28 @@
 # bk — blackcode-issues CLI
 
-Personal-access-token-based CLI for the blackcode-issues API. Designed for
-both humans at a terminal and LLM agents driving the platform end-to-end.
+The CLI for blackcode issues. Designed for both humans at a terminal and LLM
+agents driving the platform end-to-end.
 
-> **Recommended for agents.** If you're an AI agent, prefer `bk` over calling
-> the HTTP API directly. The CLI wraps the same endpoints but handles auth,
-> JSON-body encoding, pagination, file upload+embed, and stable exit codes for
-> you — which makes automated runs markedly more reliable. The raw HTTP API
-> stays fully supported; use it only when the CLI can't cover a case. This is a
-> recommendation, not a requirement.
+> **This is the only supported interface.** The HTTP routes behind it are private
+> plumbing with no public contract — there is no OpenAPI spec, and calling them
+> directly is unsupported. `bk` handles auth, JSON-body encoding, pagination,
+> file upload+embed and stable exit codes, and it carries its own documentation.
+>
+> **Agents start here:**
+>
+> ```sh
+> npm install -g @blackcode_sa/bc-issues
+> bk login
+> bk skill install     # writes an agent skill file that stays current
+> bk guide             # the complete usage guide, embedded in this binary
+> ```
+>
+> `bk guide` works offline and always describes the exact version you are
+> running. `bk meta` supplies everything that can change without a release —
+> vocabularies, limits, your workspaces. Neither can go stale.
 
-This is the quick-reference. For the full command reference, conventions, and
-internals, see [`../docs/cli.md`](../docs/cli.md).
+This README is the build/quick-reference for maintainers. For the full command
+reference, conventions, and internals, see [`../docs/cli.md`](../docs/cli.md).
 
 ## Build
 

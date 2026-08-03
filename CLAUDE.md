@@ -88,7 +88,26 @@ fails the build if a topic hardcodes one.
 Likewise, **a limit is declared once** in `lib/limits.ts`, imported by the route
 that enforces it, and served by `/api/meta`. Never re-type a number.
 
-### When you add / change / remove a route or feature
+### THE RULE: every change lands in three places
+
+> **Route → `bk` command → changelog entry.** Same commit, every time.
+>
+> | # | Edit | Where |
+> |---|---|---|
+> | **1** | The **route** | `app/api/**` |
+> | **2** | The **`bk` command** + its `routes` annotation | `cli/internal/commands/`, `cli/internal/client/` |
+> | **3** | A dated **changelog** entry | `docs/api-changelog.md` |
+>
+> Plus **one conditional fourth**: if agent-visible *behaviour* changed (a flag, a
+> workflow, a failure mode), update the relevant `cli/internal/guide/topics/*.md`.
+> If only a *value* changed (a limit, an enum), touch its source instead —
+> `bk meta` carries it live and no guide edit is needed.
+
+This replaced a seven-surface contract on 2026-08-03. Do not add a fourth
+unconditional step, and never reintroduce a hand-maintained copy of facts that
+live elsewhere — that is what drifted last time and what broke agents mid-run.
+
+The detail behind each step:
 
 1. **Route** — `app/api/**`, same conventions as before: workspace-scoped under
    `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`
@@ -106,23 +125,28 @@ that enforces it, and served by `/api/meta`. Never re-type a number.
    required rather than allowed-to-be-empty so an oversight stays visible.
    Reuse `wsPath()` for workspace-scoped calls and unwrap the
    `{ data, next_cursor }` envelope. Keep JSON/YAML output + stable exit codes.
-3. **Guide** — if agent-visible *behaviour* changed, update the relevant
-   `cli/internal/guide/topics/*.md`.
-4. **`bk meta`** — if a vocabulary or limit changed, update its source
-   (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
-   `bk meta` follow automatically.
-5. **Deprecations** — if you renamed or removed a flag/command, add a row to
-   `cli/internal/commands/deprecations.go` **in the same commit**. Keep entries
-   for two minor releases, then prune. This is what lets a failed run recover
-   itself: the CLI prints the new spelling instead of "unknown flag".
-6. **Server `suggestion`s** — any 400/404/409 an agent can realistically hit
-   should carry an actionable `suggestion` (`Errors.badRequest(code, msg, 'do X')`).
-   The CLI surfaces it as a `hint:` line on stderr.
-7. **Docs** — see the Docs sync rule below (`docs/backend.md`, `docs/cli.md`,
-   `docs/frontend.md`). These are **internal/maintainer** docs now, not an agent
-   surface.
-8. **Changelog** — see the Changelog rule below. One dated entry in
-   `docs/api-changelog.md`.
+3. **Changelog** — see the Changelog rule below. One dated entry at the top of
+   `docs/api-changelog.md`: what changed, whether it's breaking, how to adapt.
+
+**Conditional — only when the situation applies:**
+
+- **Guide** — if agent-visible *behaviour* changed (a flag, a workflow, a failure
+  mode), update the relevant `cli/internal/guide/topics/*.md`.
+- **`bk meta`** — if a vocabulary or limit changed, update its *source*
+  (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
+  `bk meta` follow automatically via `lib/agent-meta.ts`. Never edit a guide
+  topic to state a value — that's the drift we removed.
+- **Deprecations** — if you renamed or removed a flag/command, add a row to
+  `cli/internal/commands/deprecations.go` **in the same commit**. Keep entries
+  for two minor releases, then prune. This is what lets a failed run recover
+  itself: the CLI prints the new spelling instead of "unknown flag".
+- **Server `suggestion`s** — any 400/404/409 an agent can realistically hit
+  should carry an actionable `suggestion` (`Errors.badRequest(code, msg, 'do X')`).
+  The CLI surfaces it as a `hint:` line on stderr.
+- **Internal docs** — see the Docs sync rule below (`docs/backend.md`,
+  `docs/cli.md`, `docs/frontend.md`, `docs/marketing.md`). These are
+  **maintainer** docs, not an agent surface — but they still must not contradict
+  the CLI-only contract.
 
 ### The guardrail
 
@@ -227,12 +251,25 @@ dated record. `/agent-updator` is the human-and-agent-readable migration page.
 
 **After every code change, check whether any file in `docs/` is now outdated or incomplete, and update it before finishing.** This is mandatory, not optional.
 
-- `docs/frontend.md` — covers components, UI patterns, design system usage, page layouts
-- `docs/backend.md` — covers API routes, DB schema, query helpers, auth, migrations
-- `docs/cli.md` — covers dev commands, env vars, deployment, tooling
+These are **maintainer** docs. They are not read by agents — agents read
+`bk guide` — so they are free to describe internals, but they must never
+contradict the CLI-only contract.
+
+- `docs/frontend.md` — components, UI patterns, design system usage, page layouts
+- `docs/backend.md` — API routes, DB schema, query helpers, auth, migrations
+- `docs/cli.md` — CLI internals, build, release, version policy
+- `docs/marketing.md` — positioning, landing-page copy, FAQ seed
+- `docs/devops.md`, `docs/env.md` — release process, environment variables
 
 Rules:
 - If you add/remove/rename a component, API route, DB table, env var, or command → update the relevant doc.
 - If you change behavior (auth flow, data fetching pattern, UX pattern) → update the relevant doc.
 - If new functionality has no doc coverage yet → add a section.
 - Do NOT add docs for implementation details already obvious from the code; only document intent, contracts, and non-obvious constraints.
+- **Never present the HTTP API as a way to use the product.** This applies to
+  `docs/marketing.md`, `README.md`, `components/landing-page.tsx` and
+  `/llms.txt` especially — outward-facing copy is how a wrong integration gets
+  started. Two ways in: the web UI for humans, `bk` for agents.
+- **Dated logs are history — don't rewrite them.** `docs/next-fixes.md` and
+  `docs/api-changelog.md` record what was true on a date. If one has since become
+  misleading, add a dated note at the top pointing at current practice.

@@ -1,5 +1,10 @@
 # Next fixes — CLI friction log
 
+> **Historical record, kept as written.** It mentions keeping "REST/OpenAPI/CLI/docs
+> in sync" — that was true in June 2026. The OpenAPI spec was retired on
+> 2026-08-03 and the contract is now three edits: route → `bk` command → changelog.
+> See `CLAUDE.md`. Nothing below should be copied as current practice.
+
 Notes captured live on **2026-06-18** while using the `bk` CLI against **production**
 to do something that should be trivial: *"fetch issue #234 in Andrea's workspace."*
 It took ~10 steps and a fallback to raw `curl` to answer, because of the gaps below.

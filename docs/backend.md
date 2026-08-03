@@ -280,12 +280,14 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
 
 ## API reference
 
-> **Recommended interface for agents:** prefer the `bk` CLI over calling these
-> HTTP routes directly. The CLI wraps the same endpoints but handles auth,
-> JSON-body encoding, pagination, file upload+embed, and stable exit codes — so
-> automated/agent runs are more reliable. The HTTP API stays fully supported;
-> reach for it directly only when the CLI can't cover a case. See
-> [`docs/cli.md`](./cli.md). This is a recommendation, not a requirement.
+> **This section is a map for maintainers, not a contract.** These routes are
+> private plumbing: the `bk` CLI is their only supported client, and it is the
+> only interface agents use. Do not point external consumers at them, and do not
+> treat any shape here as stable — the whole point of retiring the OpenAPI spec
+> was that changing a route and its CLI command together, in one commit, no
+> longer breaks anybody. Every route must be reachable from `bk`
+> (`lib/cli-parity.test.ts` fails the build otherwise). See
+> [`docs/cli.md`](./cli.md).
 
 ### Conventions
 

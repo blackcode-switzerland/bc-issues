@@ -34,7 +34,7 @@ Source-of-truth content for the landing page and other marketing surfaces. Lists
 
 - **Product name**: **blackcode issues**
 - **Tagline (current)**: *AI-Native Issue Tracking*
-- **One-line pitch**: An issue tracker designed for AI agents and the humans who direct them — clean integer IDs, a self-describing HTTP API, a first-class CLI, and a polished web UI, all over one data model.
+- **One-line pitch**: An issue tracker designed for AI agents and the humans who direct them — clean integer IDs, a self-describing CLI that ships its own guide, and a polished web UI, over one data model.
 - **Category**: Project / issue management. Adjacent to Linear, Jira, GitHub Issues.
 - **License**: Internal (see repo for definitive terms).
 - **Status**: Working alpha — usable end-to-end, with documented gaps the roadmap is closing.
@@ -76,15 +76,15 @@ Pick one set; vary tone to match the chosen design direction.
 
 ### Option A — confident technical (in use on the page)
 - **H1**: Issue tracking for humans and the AI working alongside them.
-- **Sub**: Integer IDs. A stable, self-describing HTTP API. A CLI written in Go. A web UI built like Linear. One data model behind all three.
+- **Sub**: Integer IDs. A Go CLI that documents itself. A web UI built like Linear. One data model behind both.
 
 ### Option B — agent-forward
 - **H1**: An issue tracker your agents can actually use.
 - **Sub**: Memorable IDs, a self-documenting Go CLI with stable exit codes, and an undo button for the times your agent (or you) gets it wrong.
 
 ### Option C — pragmatic
-- **H1**: A focused issue tracker. Three ways to use it.
-- **Sub**: Web, CLI, or HTTP. Same auth, same data, same workflows. Built for teams that move fast and the agents that help them.
+- **H1**: A focused issue tracker. One for you, one for your agent.
+- **Sub**: A web UI for humans, a CLI for agents. Same auth, same data, same workflows. Built for teams that move fast and the agents that help them.
 
 ---
 
@@ -190,13 +190,10 @@ Polished defaults, accessible Radix primitives, and full ownership of every comp
 
 ## Surface areas
 
-The landing page should make it obvious there are **three** equal ways to use the product. Lean into it.
+The landing page should make it obvious there are **two** ways in, matched to who is using it. Do not present the HTTP routes as a third — they are private plumbing, and saying otherwise invites integrations we will not support.
 
 ### Web (`/dashboard`)
 For humans. Kanban, Gantt/timeline, list, issue detail with rich text, comments, attachments, analytics.
-
-### HTTP API (`/api/*`)
-JSON in, JSON out, through `bk`. `bk login` handles auth; `--json` on any read command gives you a parseable envelope; stable exit codes let scripts branch without parsing stderr. The HTTP routes underneath are private plumbing with no public contract.
 
 ### CLI (`bk`)
 A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` opens a browser to authenticate and drops the token in `~/.config/bk/config.json`. Commands for everything the web does, plus `bk undo`. Output as table / JSON / YAML, with stable exit codes for scripts and agents.
@@ -215,16 +212,16 @@ bk issue list --status todo --json
 For the "How it works" landing-page section. Show that this isn't a black box.
 
 ```
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│   Web (you)  │   │  CLI / bk    │   │  Agent / API │
-└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
-       │ cookie           │ Bearer token     │  Bearer token
-       └─────────┬────────┴───────┬──────────┘
-                 │                │
-                 ▼                ▼
+┌──────────────┐        ┌────────────────────────┐
+│   Web (you)  │        │  Agent / script → bk   │
+└──────┬───────┘        └───────────┬────────────┘
+       │ session cookie             │ Bearer token
+       │                            │
+       └─────────────┬──────────────┘
+                     ▼
         ┌─────────────────────────────────┐
         │   Next.js — /api/*              │
-        │   Route handlers · validation   │
+        │   private plumbing, no contract │
         │   resolveAuth() unifies auth    │
         └─────────────────┬───────────────┘
                           │
@@ -357,7 +354,7 @@ The live page (`components/landing-page.tsx`) is structured as:
 
 ## FAQ seed
 
-The seed mirrors the live page's FAQ (focused on the API, CLI, and automation).
+The seed mirrors the live page's FAQ (focused on the CLI and automation).
 
 ### How do agents discover and call the API?
 An agent runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: workspaces, the valid status/priority/health values, and every limit. Flags come from `bk <group> <command> --help`. Nothing has to be guessed or cached.
@@ -366,13 +363,13 @@ An agent runs `bk guide` — the complete usage guide, embedded in the binary, s
 `npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk workspace use <slug>`, and you're working: `bk issue list`, `bk issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
 
 ### How do agents and scripts authenticate?
-Mint an API token at `/dashboard/settings/tokens` (or via `bk login`), then send it as `Authorization: Bearer bk_live_…`. The same token works across the CLI and raw HTTP. Tokens carry optional expiry and can be revoked from the same page.
+`bk login` opens a browser, captures a token and stores it in `~/.config/bk/config.json` — that is the whole flow. For headless runs, mint a token at `/dashboard/settings/tokens` and pipe it in: `echo "$TOKEN" | bk login --token`. Tokens carry optional expiry and can be revoked from the same page.
 
 ### Is the CLI scriptable for automation and CI?
 Yes. Add `--json` or `-o yaml` for machine-readable output, pipe through `jq`, and branch on stable exit codes (0 ok, 3 unauthenticated, 4 forbidden, 5 not found, 6 validation, 7 aborted). Set `BK_NO_PROMPT=1` to skip confirmations in unattended runs.
 
 ### How does pagination work?
-Every list endpoint returns `{ data, next_cursor }`. When `next_cursor` is non-null, pass it back as `?cursor=` to fetch the next page; null means the end. The CLI exposes this as `--limit` / `--cursor`.
+Most lists (issues, projects, tasks) come back in one response. The keyset feeds — activity, trash, super-admin errors — page with `--limit` / `--cursor`, and the CLI prints the next cursor on stderr so a script can follow it without parsing stdout.
 
 ### What happens when I delete something?
 Issues, projects and tasks soft-delete into a recoverable Trash. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with `bk undo` (`POST /api/undo`), up to 10 at a time.

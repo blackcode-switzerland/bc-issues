@@ -36,7 +36,8 @@ tracker. The rest is a general-purpose internal-app platform:
 
 Same story in code. Platform-shaped already: `lib/api/` (`apiHandler`, `Errors`,
 `jsonList`, cursor pagination), `lib/auth/`, `lib/db/client.ts`,
-`lib/openapi/` + `parity.test.ts`, `lib/changelog.ts`, `lib/agent-manifest.ts`,
+`lib/cli-parity.test.ts`, `lib/limits.ts`, `lib/changelog.ts`,
+`lib/agent-meta.ts`, `lib/agent-manifest.ts`,
 `lib/blob-refs.ts`, `lib/upload.ts`, `lib/rich-text.ts`, the whole design system
 and `components/ui/`, and most of `cli/internal/` (auth, config, output,
 version floor). App-specific: `lib/work-items.ts`, `lib/db/queries/`, the
@@ -59,13 +60,14 @@ blackcode-platform/                 (monorepo, Turborepo)
 │   ├── platform-auth/              next-auth config, bk_live_ token verification, RBAC
 │   ├── platform-api/               apiHandler, Errors, jsonList, pagination, workspace-context
 │   ├── platform-ui/                design system, rich-text-editor, confirm dialog, toasts
-│   ├── platform-agent/             agent-manifest, llms.txt, changelog renderer, /agent-updator
-│   └── openapi-kit/                spec builder + the parity test harness
+│   └── platform-agent/             agent manifest, llms.txt, changelog renderer,
+│                                    /agent-updator, limits registry, CLI-parity harness
 └── cli/                            ONE Go binary `bk`, one subcommand namespace per app
 ```
 
 Each app keeps its own `app/api/**`, its own Drizzle schema file for its own
-Postgres schema, its own OpenAPI spec fragment, and its own Vercel project.
+Postgres schema, its own guide topics under `cli/internal/guide/`, and its own
+Vercel project. **No app publishes an OpenAPI spec** — see §7.
 
 ## 4. Database
 
@@ -144,14 +146,24 @@ bk meta / search / activity / link / workspace / login / storage / changelog
 ```
 
 `api_tokens` gains a `scopes` column so one `bk_live_` token can be scoped per
-app. All the agent-onboarding work already built — `agent-manifest.ts`, the
-OpenAPI spec + parity test, `/agent-updator`, `/changelog`, `llms.txt`, the
-`X-BK-*` breadcrumb headers, the CLI version floor — is written **once** and
-amortizes across every app.
+app. All the agent-onboarding work already built — the embedded `bk guide`, `bk
+skill` and its self-update loop, `bk meta` + the limits registry, the CLI-parity
+test, `/agent-updator`, `/changelog`, `llms.txt`, the `X-BK-*` breadcrumb
+headers, the CLI version floor — is written **once** and amortizes across every
+app.
 
-**The multi-surface sync contract in `CLAUDE.md` extends unchanged to every
-app.** Route → OpenAPI spec → CLI → docs → changelog, in the same change. The
-parity test runs per app.
+**The agent surface contract in `CLAUDE.md` extends unchanged to every app**, and
+it is now three edits, not five: **route → `bk` command (+ guide topic if
+behaviour changed) → changelog entry.** The CLI-parity test runs per app; so does
+the guide test that forbids hardcoding a dynamic value.
+
+This matters more at N apps than at one. The seven-surface contract we retired on
+2026-08-03 had already drifted with a single app — the manifest claimed uploads
+accept any file type (SVG is rejected), the pinned platform reference described a
+response field that never existed and named a stale CLI version. Multiplying
+hand-maintained copies by the number of apps would have made drift certain rather
+than likely. One binary that ships its own guide, plus one `/api/meta` per app
+for live values, is the only version of this that survives N apps.
 
 **Consider also:** an MCP server exposing all apps' toolsets under one auth.
 Given our consumers are largely Claude/Cursor-style clients, this may be higher

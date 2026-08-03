@@ -166,8 +166,10 @@ export default function AgentUpdatorPage() {
             <code>X-BK-CLI-Min</code> (oldest still supported). Below the minimum, <code>bk</code>{' '}
             refuses to run &mdash; exit code <code>8</code>, with the upgrade commands printed
             &mdash; rather than failing with cryptic 404s. A <code>bk</code> older than 1.9.0 has no{' '}
-            <code>guide</code> or <code>skill</code> commands, so the floor will be raised to 1.9.0
-            once the release has soaked.
+            <code>guide</code> or <code>skill</code> commands and therefore no way to find its own
+            way back, so the floor was raised to 1.9.0 when that release shipped. If your{' '}
+            <code>bk</code> stops running, that is what happened &mdash; upgrade and re-run{' '}
+            <code>bk skill install</code>.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Current: CLI latest v{CLI_LATEST_VERSION} &middot; minimum supported v{CLI_MIN_VERSION}.
