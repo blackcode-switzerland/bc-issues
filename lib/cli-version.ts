@@ -24,4 +24,4 @@
 // redeploy needed.
 
 export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '1.9.0'
-export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '1.8.7'
+export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '1.9.0'
