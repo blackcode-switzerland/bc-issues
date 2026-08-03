@@ -791,7 +791,7 @@ The API sends two headers on **every** response, and the CLI acts on them:
 
 **Soft notice.** When the running version is older than `X-BK-CLI-Latest`, the CLI prints `bk <current> is behind <latest> — run: bk skill sync` to **stderr** after the command finishes. It names the *fix*, not just the fact: `bk skill sync` reports the upgrade command when the binary is behind and refreshes the installed agent skill when it isn't. It's throttled to once per 24 hours via the `last_update_check` field in the config file, and never written to stdout (so it can't corrupt `--json` output).
 
-**Hard floor.** When the running version is below `X-BK-CLI-Min`, every request fails fast: the CLI prints the full recovery (`npm install -g …@latest`, `bk skill install`, `bk guide`) to stderr and exits with code **8**. Naming all three matters — an agent blocked here also has a stale skill, and refreshing it is what stops the block recurring. Dev / unparsable versions (`dev`, `(devel)`, etc.) are never blocked or nagged.
+**Hard floor.** When the running version is below `X-BK-CLI-Min`, every request fails fast — including the header-harvesting call inside `bk skill check` / `bk skill sync`, which used to swallow it and report success (fixed in 1.9.2; see `harvestVersions` in `internal/commands/skill.go`): the CLI prints the full recovery (`npm install -g …@latest`, `bk skill install`, `bk guide`) to stderr and exits with code **8**. Naming all three matters — an agent blocked here also has a stale skill, and refreshing it is what stops the block recurring. Dev / unparsable versions (`dev`, `(devel)`, etc.) are never blocked or nagged.
 
 ---
 

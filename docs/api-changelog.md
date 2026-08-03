@@ -16,6 +16,33 @@ Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
 
 ---
 
+## 2026-08-03 — `bk skill check` / `sync` now report the version floor
+
+**Fixed in 1.9.2.** A binary below the server's `X-BK-CLI-Min` had every command
+failing fast with exit **8** — except `bk skill check` and `bk skill sync`, which
+reported success and exit **0**.
+
+That is the worst possible place for it. `bk skill sync` is the command an agent
+runs *to recover*, so the sequence was:
+
+```
+"update available" notice  ->  bk skill sync  ->  "skill synced", exit 0
+                           ->  next real command  ->  exit 8, blocked
+```
+
+The agent was told it was current at the exact moment it was blocked.
+
+The cause: both commands make one cheap request purely to read the version
+headers, and it discarded every error — including the hard-floor refusal. Network
+failures are still ignored (a blip must not break the recovery path, and the
+guide ships inside the binary so an offline sync still has work to do), but a
+floor refusal now propagates and exits **8** with the upgrade commands.
+
+Nothing to change on your side. If you are on a supported version you will never
+see this.
+
+---
+
 ## 2026-08-03 — `bk skill install` / `sync` no longer overwrite a hand-written skill file
 
 **Fixed a data-loss bug in 1.9.0.** If you had a hand-written

@@ -249,13 +249,41 @@ func inspect(dirFlag string) (skillStatus, error) {
 
 	// One cheap call purely to harvest the version headers the API sets on every
 	// response. `bk changelog`'s endpoint is public, so this works logged out.
-	c := changelogClient("")
-	_, _ = c.Changelog()
+	if err := harvestVersions(changelogClient("")); err != nil {
+		return st, err
+	}
 	st.LatestVersion = client.LatestSeen
 	if st.LatestVersion != "" && version.Less(version.Version, st.LatestVersion) {
 		st.BinaryIsCurrent = false
 	}
 	return st, nil
+}
+
+// harvestVersions makes one cheap request whose only purpose is to read the
+// X-BK-CLI-Latest / X-BK-CLI-Min headers the API sets on every response.
+//
+// It deliberately treats two failures differently:
+//
+//   - A NETWORK failure (or auth, or anything else) is IGNORED. `bk skill check`
+//     and `bk skill sync` are what an agent runs to recover, and a blip must not
+//     break the recovery path. The version headers simply stay unknown, and the
+//     caller degrades to "assume current".
+//   - A HARD FLOOR refusal PROPAGATES. Swallowing it was a bug: a binary below
+//     X-BK-CLI-Min had every other command failing with exit 8, while `bk skill
+//     sync` reported "skill synced" and exit 0 — telling an agent it was current
+//     at the exact moment it was blocked. main.go maps this to exit 8 with the
+//     upgrade instructions.
+//
+// The headers are recorded before the floor check fires, so LatestSeen/MinSeen
+// are still populated when this returns an error.
+func harvestVersions(c *client.Client) error {
+	if _, err := c.Changelog(); err != nil {
+		var oe *client.OutdatedError
+		if errors.As(err, &oe) {
+			return err
+		}
+	}
+	return nil
 }
 
 func newSkillCheckCmd() *cobra.Command {
