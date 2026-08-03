@@ -49,9 +49,11 @@ Anything outside the markers survives every `install` and `sync`.
 A `SKILL.md` with neither the markers nor a `bk` version stamp is treated as
 foreign and never modified:
 
-- **`bk skill install`** stops with exit **2** and names every option: paste the
-  two marker lines in to coexist, `--dir` to write elsewhere, `--format
-  agents-md` to use `AGENTS.md`, or `--force` to replace it deliberately.
+- **`bk skill install`** stops with a non-zero exit and names every option:
+  paste the two marker lines in to coexist, `--dir` to write elsewhere,
+  `--format agents-md` to use `AGENTS.md`, or `--force` to replace it
+  deliberately. The full instruction is on stderr — read it rather than
+  branching on the code here.
 - **`bk skill sync`** leaves it alone and exits **0** with a note. That is not a
   failure: the binary and `bk guide` carry current behaviour, and they are
   already up to date.
