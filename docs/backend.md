@@ -663,7 +663,7 @@ response, success or error:
   CLIs** (e.g. the milestone→task / key-removal rename) so stale clients get a
   clear "please upgrade" instead of cryptic 404s.
 - `X-BK-Help` — the get-current guide (`/agent-updator`).
-- `X-BK-Changelog` — the changelog (`/changelog`).
+- `X-BK-Changelog` — the changelog (`/api/changelog`). Points at the JSON route, not a page: the human `/changelog` page was removed on 2026-08-03 and these headers are read by agents.
 
 The version headers come from `lib/cli-version.ts` (override via `BK_CLI_LATEST` /
 `BK_CLI_MIN` env, no redeploy); the two breadcrumb headers come from

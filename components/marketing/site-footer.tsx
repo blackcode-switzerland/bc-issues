@@ -18,12 +18,6 @@ export function SiteFooter() {
           </div>
           <nav className="flex items-center gap-6 text-sm text-muted-foreground">
             <Link
-              href="/changelog"
-              className="transition-colors hover:text-foreground"
-            >
-              Changelog
-            </Link>
-            <Link
               href="/agent-updator"
               className="transition-colors hover:text-foreground"
             >

@@ -148,7 +148,7 @@ bk meta / search / activity / link / workspace / login / storage / changelog
 `api_tokens` gains a `scopes` column so one `bk_live_` token can be scoped per
 app. All the agent-onboarding work already built — the embedded `bk guide`, `bk
 skill` and its self-update loop, `bk meta` + the limits registry, the CLI-parity
-test, `/agent-updator`, `/changelog`, `llms.txt`, the `X-BK-*` breadcrumb
+test, `/agent-updator`, `bk changelog`, `llms.txt`, the `X-BK-*` breadcrumb
 headers, the CLI version floor — is written **once** and amortizes across every
 app.
 

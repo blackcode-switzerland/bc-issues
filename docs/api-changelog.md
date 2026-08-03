@@ -16,6 +16,24 @@ Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
 
 ---
 
+## 2026-08-03 — The `/changelog` web page was removed
+
+**No effect on agents.** `bk changelog` and `GET /api/changelog` are unchanged,
+still render `docs/api-changelog.md`, and remain the way to read this record.
+Only the human-facing web page at `/changelog` is gone, along with its footer
+link.
+
+It had no audience. The changelog exists so an agent whose integration has
+drifted can find out what changed — that job is done by `bk changelog`. A web
+rendering of the same file was one more surface to keep honest for readers who
+weren't there.
+
+`X-BK-Changelog`, sent on every API response, now points at **`/api/changelog`**
+instead of `/changelog`. If you followed that header to a page, follow it to the
+JSON route instead — or just run `bk changelog`.
+
+---
+
 ## 2026-08-03 — **BREAKING (documentation):** the `bk` CLI is now the only supported interface
 
 **Nothing was removed or changed at the route level. Every existing HTTP

@@ -223,14 +223,18 @@ redeploy.
 
 ## Changelog rule (MANDATORY)
 
-We publish a changelog so users and their AI agents can keep their integrations
-and skills up to date. It is a product surface, not just a doc — served three
-aligned ways from one source: the **`/changelog`** web page, **`GET
-/api/changelog`** (JSON, or `?format=markdown`), and **`bk changelog`**. All read
-from `lib/changelog.ts`, which renders **one** authored Markdown file:
+We publish a changelog so AI agents can keep their integrations and skills up to
+date. It is an **agent** surface — served two aligned ways from one source:
+**`bk changelog`** and **`GET /api/changelog`** (JSON, or `?format=markdown`).
+Both read from `lib/changelog.ts`, which renders **one** authored Markdown file:
 
 - **`docs/api-changelog.md`** — the dated log, **newest first**. The running
   record of every change.
+
+The **`/changelog` web page was removed on 2026-08-03** — it had no human
+audience, and a page nobody reads is still a page somebody has to keep honest.
+Do not reintroduce it. The record itself is unchanged; only the human rendering
+is gone.
 
 There is deliberately no pinned "platform reference" any more. A hand-maintained
 snapshot of the surface is a copy, and copies drift — that one's CLI version was

@@ -1,7 +1,11 @@
-// Single source of truth for the product changelog, surfaced three aligned ways:
-// the /changelog web page, GET /api/changelog, and `bk changelog`. All three read
-// docs/api-changelog.md — the dated, newest-first log of every change. Each entry
-// is a `## YYYY-MM-DD — Title` section.
+// Single source of truth for the product changelog, surfaced two aligned ways:
+// `bk changelog` and GET /api/changelog. Both read docs/api-changelog.md — the
+// dated, newest-first log of every change. Each entry is a
+// `## YYYY-MM-DD — Title` section.
+//
+// The /changelog web page was removed on 2026-08-03: it had no human audience,
+// and a page nobody reads is still a page somebody has to keep honest. The
+// changelog is an AGENT surface now.
 //
 // It used to also serve docs/platform-reference.md, a pinned "complete snapshot
 // of the API + CLI surface". That document is gone: a hand-maintained snapshot of

@@ -36,10 +36,10 @@ function Code({ children }: { children: React.ReactNode }) {
 const MOVED: Array<[string, string, string]> = [
   ['/api/openapi.json', 'bk guide', 'How every command works, embedded in the binary you run.'],
   ['/api/docs', 'bk guide', 'Same content, same command.'],
-  ['Platform Reference (/changelog)', 'bk guide', 'The pinned snapshot is gone; the guide is the surface.'],
+  ['Platform Reference', 'bk guide', 'The pinned snapshot is gone; the guide is the surface.'],
   ['Per-page agent manifest', 'bk guide', 'The page manifest is now a four-line pointer.'],
   ['/api/meta', 'bk meta', 'Unchanged and still live — now also carries limits, media rules and CLI versions.'],
-  ['/changelog', 'bk changelog', 'Unchanged: the dated record of what changed.'],
+  ['/changelog (web page)', 'bk changelog', 'The page was removed; the dated record itself is unchanged and also at GET /api/changelog.'],
 ]
 
 export default function AgentUpdatorPage() {

@@ -26,8 +26,12 @@ export const AGENT_MANIFEST = {
   package: '@blackcode_sa/bc-issues',
   // Where a stuck agent goes. Kept because lib/api/handler.ts advertises these
   // on every response as X-BK-Help / X-BK-Changelog.
+  //
+  // `changelog` points at the JSON route, not a page: the human /changelog page
+  // was removed on 2026-08-03 (nobody read it) and these headers are consumed by
+  // agents anyway. `bk changelog` is the CLI-side equivalent.
   help: '/agent-updator',
-  changelog: '/changelog',
+  changelog: '/api/changelog',
 } as const
 
 // Human-readable prose for agents that scrape the raw HTML rather than parse the
@@ -41,6 +45,6 @@ This product is operated through a CLI. There is no supported HTTP API.
   bk guide
 \`bk guide\` is the complete usage guide for the binary you just installed, and works offline.
 \`bk meta\` returns your workspaces and the live status/priority vocabularies and limits.
-Out of date? /agent-updator · What changed: /changelog
+Out of date? /agent-updator · What changed: \`bk changelog\` (or /api/changelog)
 A structured version of this note is in the <script type="application/json" id="agent-manifest"> element on this page.
 `.trim()
