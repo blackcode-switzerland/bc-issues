@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
@@ -93,5 +94,26 @@ func TestHarvestVersionsNeverBlocksDevBuilds(t *testing.T) {
 
 	if err := harvestVersions(client.New(srv.URL, "", "")); err != nil {
 		t.Fatalf("harvestVersions() = %v, want nil for a dev build", err)
+	}
+}
+
+// Exit 9 covers two situations that need opposite instructions. Conflating them
+// sends an agent into a loop: told to `npm install` when the binary is already
+// current, it upgrades, nothing changes, it re-checks, same message.
+func TestUpdateAvailableErrorDistinguishesBinaryFromSkill(t *testing.T) {
+	binaryBehind := (&UpdateAvailableError{Current: "1.9.1", Latest: "1.9.2"}).Error()
+	if !strings.Contains(binaryBehind, "npm install") {
+		t.Errorf("a behind binary must name the upgrade command, got: %q", binaryBehind)
+	}
+
+	skillOnly := (&UpdateAvailableError{Current: "1.9.2", SkillOnly: true}).Error()
+	if strings.Contains(skillOnly, "npm install") {
+		t.Errorf("the binary is current — telling the agent to upgrade loops it: %q", skillOnly)
+	}
+	if !strings.Contains(skillOnly, "bk skill install") {
+		t.Errorf("must name the actual fix, got: %q", skillOnly)
+	}
+	if strings.Contains(skillOnly, "is behind 1.9.2") {
+		t.Errorf("must not claim a version is behind itself: %q", skillOnly)
 	}
 }

@@ -16,6 +16,32 @@ Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
 
 ---
 
+## 2026-08-03 — `bk skill check` no longer tells you to upgrade a current binary
+
+**Fixed in 1.9.3.** When the binary was current but the skill file was missing or
+stale, `bk skill check` exited 9 with:
+
+```
+bk v1.9.2 is behind v1.9.2 — upgrade, then re-run:
+  npm install -g @blackcode_sa/bc-issues@latest
+```
+
+A version is not behind itself, and the named fix was the wrong one. An agent
+following it would upgrade, observe nothing change, re-check, and get the same
+message — a loop with no exit.
+
+Exit 9 covers two situations and they need opposite instructions. They are now
+distinct:
+
+| Situation | Message |
+|---|---|
+| Binary behind | `bk X is behind Y — upgrade, then re-run: npm install …` |
+| Binary current, skill isn't | `bk X is current; the agent skill file is not — run: bk skill install` |
+
+Exit codes are unchanged.
+
+---
+
 ## 2026-08-03 — `bk skill check` / `sync` now report the version floor
 
 **Fixed in 1.9.2.** A binary below the server's `X-BK-CLI-Min` had every command

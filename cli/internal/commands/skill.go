@@ -20,9 +20,20 @@ import (
 // agent can branch on "I need to upgrade" without parsing stderr.
 type UpdateAvailableError struct {
 	Current, Latest string
+	// SkillOnly means the BINARY is fine and only the skill file needs writing.
+	// Both situations exit 9, but they need opposite instructions: telling an
+	// agent to `npm install` when the binary is already current sends it into a
+	// loop — upgrade, nothing changes, re-check, same message.
+	SkillOnly bool
 }
 
 func (e *UpdateAvailableError) Error() string {
+	if e.SkillOnly {
+		return fmt.Sprintf(
+			"bk %s is current; the agent skill file is not — run:\n"+
+				"  bk skill install",
+			e.Current)
+	}
 	return fmt.Sprintf(
 		"bk %s is behind %s — upgrade, then re-run:\n"+
 			"  npm install -g @blackcode_sa/bc-issues@latest\n"+
@@ -331,7 +342,7 @@ Exit 0 = everything current. Exit 9 = something is behind; run ` + "`bk skill sy
 				return &UpdateAvailableError{Current: st.RunningVersion, Latest: st.LatestVersion}
 			}
 			if !st.Installed || !st.SkillIsCurrent {
-				return &UpdateAvailableError{Current: st.RunningVersion, Latest: st.RunningVersion}
+				return &UpdateAvailableError{Current: st.RunningVersion, SkillOnly: true}
 			}
 			return nil
 		},
