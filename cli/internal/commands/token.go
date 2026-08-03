@@ -25,8 +25,9 @@ func newTokenCmd() *cobra.Command {
 
 func newTokenListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List your API tokens",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/tokens"},
+		Short:       "List your API tokens",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -72,8 +73,9 @@ func newTokenListCmd() *cobra.Command {
 func newTokenCreateCmd() *cobra.Command {
 	var name, expiresAt string
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a new API token (the secret is shown once — copy it now)",
+		Use:         "create",
+		Annotations: map[string]string{"routes": "POST /api/tokens"},
+		Short:       "Create a new API token (the secret is shown once — copy it now)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -110,9 +112,10 @@ func newTokenCreateCmd() *cobra.Command {
 func newTokenDeleteCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <id>",
-		Short: "Revoke an API token",
-		Args:  cobra.ExactArgs(1),
+		Use:         "delete <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/tokens/{id}"},
+		Short:       "Revoke an API token",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace, resolveEntityId, jsonList } from '@/lib/api'
 import { attachLabel, getOrCreateLabels, listIssueLabels } from '@/lib/db/queries/labels'
 import { getIssueInWorkspace } from '@/lib/db/queries/issues'
+import { LABEL_NAME_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string; id: string }>
@@ -39,7 +40,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     labelId = body.label_id
   } else if (typeof body.name === 'string' && body.name.trim()) {
     const name = body.name.trim()
-    if (name.length > 50) throw Errors.badRequest('label_name_too_long', 'label names are max 50 chars')
+    if (name.length > LABEL_NAME_MAX)
+      throw Errors.badRequest('label_name_too_long', `label names are max ${LABEL_NAME_MAX} chars`)
     const [resolved] = await getOrCreateLabels(ctx.workspace.id, [name], ctx.user.id)
     if (!resolved) throw Errors.badRequest('invalid_label', 'could not resolve label')
     labelId = resolved

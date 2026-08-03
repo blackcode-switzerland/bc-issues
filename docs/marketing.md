@@ -43,14 +43,14 @@ Source-of-truth content for the landing page and other marketing surfaces. Lists
 
 ## Positioning
 
-Most issue trackers were built for humans clicking through forms. blackcode issues was built so an AI agent (or a power user at a terminal) can do the same work without losing context: integer IDs you can remember, a stable HTTP API documented as OpenAPI, a Go CLI with predictable exit codes and machine-readable output, and a web UI for everyone else.
+Most issue trackers were built for humans clicking through forms. blackcode issues was built so an AI agent (or a power user at a terminal) can do the same work without losing context: integer IDs you can remember, a Go CLI that documents itself (`bk guide` ships inside the binary), predictable exit codes and machine-readable output, and a web UI for everyone else.
 
 It's the **memory layer** of an AI-augmented workflow. The agent does the work; this is where the work lives.
 
 ### Three things that make it different
 
 1. **Integer IDs everywhere.** No UUID hell. Agents (and humans) can refer to "issue 42" instead of `c47ad9b3-…`.
-2. **Three equal interfaces.** Web UI, HTTP API, and a Go CLI — all driven by the same auth model and the same data, and kept honest by an automated parity test between the routes and the published OpenAPI spec.
+2. **Two interfaces, no gap between them.** A web UI for humans and a Go CLI for agents — same auth model, same data, kept honest by an automated parity test that fails the build if any capability exists in one and not the other.
 3. **Reversible & recoverable.** Issue edits are journaled to a transaction log and reversible with one command; deletes soft-delete to a recoverable Trash.
 
 ---
@@ -80,7 +80,7 @@ Pick one set; vary tone to match the chosen design direction.
 
 ### Option B — agent-forward
 - **H1**: An issue tracker your agents can actually use.
-- **Sub**: Memorable IDs, an OpenAPI-documented API, a Go CLI with stable exit codes, and an undo button for the times your agent (or you) gets it wrong.
+- **Sub**: Memorable IDs, a self-documenting Go CLI with stable exit codes, and an undo button for the times your agent (or you) gets it wrong.
 
 ### Option C — pragmatic
 - **H1**: A focused issue tracker. Three ways to use it.
@@ -144,18 +144,17 @@ Every mutation is recorded on an append-only **event spine**. That powers a per-
 **Integer IDs**
 Every record — projects, issues, tasks, comments, attachments, members, tokens — uses a plain integer primary key. "Issue 42" is easier to dictate, grep, and keep in a model's working memory than a UUID.
 
-**Three equally-supported interfaces**
+**Two interfaces, no gap between them**
 - **Web UI** at `/dashboard` — for humans.
-- **HTTP API** under `/api/*` — JSON in, JSON out, documented in [`docs/backend.md`](./backend.md).
-- **Go CLI** `bk` — documented in [`docs/cli.md`](./cli.md), with table/JSON/YAML output and stable exit codes.
+- **Go CLI** `bk` — for agents and scripts. Table/JSON/YAML output, stable exit codes, and `bk guide` for usage. The HTTP routes underneath are private plumbing with no public contract.
 
-All three share the same auth and data model. Anything you can do in one, you can do in the others — and a parity test fails the build if they drift.
+Both share the same auth and data model. Anything you can do in one, an agent can do with the other — and a parity test fails the build if a capability exists in one and not the other.
 
-**Self-describing API**
-The full surface is published as an **OpenAPI 3.1** document at `/api/openapi.json` (browsable at `/api/docs`). `GET /api/meta` returns the caller's context — active workspace plus the valid status/priority **vocabulary** — so an agent never has to guess an enum value.
+**Self-describing CLI**
+The full surface is `bk guide` — the complete usage guide, **embedded in the binary**, so it always describes the version the agent is running and works offline. `bk meta` returns the caller's context — active workspace, the valid status/priority **vocabulary**, and every server-enforced limit — so an agent never has to guess a value.
 
-**Predictable JSON errors**
-Every error response is `{ error, code, suggestion?, details? }`. The CLI maps HTTP statuses to stable exit codes (401→3, 403→4, 404→5, 400/422→6) so scripts and agents can branch reliably.
+**Predictable failures**
+Stable exit codes to branch on (auth→3, permission→4, not-found→5, validation→6, client-too-old→8, update-available→9), plus a `hint:` line on stderr that names the fix — a renamed flag, an upgrade, `bk skill sync` — so a stuck run can recover itself instead of stopping.
 
 ### 🟢 Live — Recovery
 
@@ -197,7 +196,7 @@ The landing page should make it obvious there are **three** equal ways to use th
 For humans. Kanban, Gantt/timeline, list, issue detail with rich text, comments, attachments, analytics.
 
 ### HTTP API (`/api/*`)
-JSON in, JSON out. Two auth modes — session cookie (web) or `Authorization: Bearer bk_live_…` (everything else). Workspace-scoped under `/api/workspaces/{ws}/…`; lists are cursor-paginated (`{ data, next_cursor }`). Published as OpenAPI at `/api/openapi.json`.
+JSON in, JSON out, through `bk`. `bk login` handles auth; `--json` on any read command gives you a parseable envelope; stable exit codes let scripts branch without parsing stderr. The HTTP routes underneath are private plumbing with no public contract.
 
 ### CLI (`bk`)
 A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` opens a browser to authenticate and drops the token in `~/.config/bk/config.json`. Commands for everything the web does, plus `bk undo`. Output as table / JSON / YAML, with stable exit codes for scripts and agents.
@@ -253,7 +252,7 @@ Concrete scenarios to ground the abstract claims:
 Spin it up locally with Docker, sign in with a password, organize work into projects, use Kanban when triaging and the list view when executing.
 
 ### "My agent should manage issues for me"
-Mint an API token, drop it in the agent's config, and point the agent at `/api/openapi.json` (or `/api/meta`). It now reads, writes, and comments using the same data you see in the web UI.
+Run `bk login`, then `bk skill install` — your coding agent gets a ~30-line skill file pointing it at `bk guide` and `bk meta`. It now reads, writes, and comments using the same data you see in the web UI.
 
 ### "I scripted a release process"
 `bk issue list --status in_progress --json | jq '.data[].id' | xargs -I{} bk issue edit {} --status done` — and use stable exit codes to fail-fast in CI.
@@ -286,7 +285,7 @@ For a public "What's next" section. Groupings, not specific dates.
 - Mobile-friendly layouts
 - Published performance benchmarks
 
-> Note: contract testing partially shipped — an OpenAPI↔routes parity test runs in `npm test`.
+> Note: contract testing partially shipped — a CLI↔routes parity test runs in `npm test`.
 
 ---
 
@@ -332,9 +331,9 @@ For a public "What's next" section. Groupings, not specific dates.
 
 ### Phrases we like
 
-- "Three equal interfaces."
+- "One door: the CLI."
 - "Integer IDs. No UUID hell."
-- "A self-describing API."
+- "A self-describing CLI."
 - "Built for terminals, agents, and people."
 
 ---
@@ -344,11 +343,11 @@ For a public "What's next" section. Groupings, not specific dates.
 The live page (`components/landing-page.tsx`) is structured as:
 
 1. **Hero** — H1/sub (Option A), CTAs: "Get started" (→ `/login?tab=signup`) and "Try the CLI" (→ `#cli`), product screenshot.
-2. **Three surfaces** — Web · CLI · HTTP, one card each, with a real example route on each.
+2. **Two surfaces** — Web · CLI, one card each, with a real example on each.
 3. **Feature catalog** — status-pilled cards drawn from the Live/In-preview features above.
 4. **Command line** — one-line install, a copy-paste quickstart, and how the CLI works.
 5. **How it works** — the architecture diagram + four bullets (same auth, one data model, reversible, predictable failures).
-6. **For agents** — a CLI snippet and the equivalent `POST /api/workspaces/{ws}/issues`, plus the self-describing-API callout (`/api/openapi.json`, `/api/docs`, `/api/meta`).
+6. **For agents** — a CLI snippet plus the four-command bootstrap, and the self-describing-CLI callout (`bk guide`, `bk meta`).
 7. **FAQ** — from the seed below.
 8. **Final CTA** — sign up / sign in.
 
@@ -361,7 +360,7 @@ The live page (`components/landing-page.tsx`) is structured as:
 The seed mirrors the live page's FAQ (focused on the API, CLI, and automation).
 
 ### How do agents discover and call the API?
-Every route is published as an OpenAPI 3.1 document at `/api/openapi.json` (rendered at `/api/docs`), and a parity test keeps it in lock-step with the code. `GET /api/meta` returns your context — the active workspace and the valid status/priority vocabulary — so an agent never guesses an enum value. Or just drive the `bk` CLI.
+An agent runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: workspaces, the valid status/priority/health values, and every limit. Flags come from `bk <group> <command> --help`. Nothing has to be guessed or cached.
 
 ### How do I install and use the CLI?
 `npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk workspace use <slug>`, and you're working: `bk issue list`, `bk issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
@@ -393,7 +392,7 @@ A compact table for laying out a feature grid.
 | Feature | Card title | Status pill |
 |---|---|---|
 | Integer IDs | "Integer IDs" | Live |
-| Web + CLI + API parity | "Three surfaces" | Live |
+| Web + CLI parity (enforced by a build-failing test) | "Two surfaces" | Live |
 | Google OAuth + email | "Sign in your way" | Live |
 | API tokens | "API tokens for scripts" | Live |
 | Workspace + project roles | "Teams & roles" | Live |
@@ -407,7 +406,7 @@ A compact table for laying out a feature grid.
 | File attachments (100 MB) | "File attachments" | Live |
 | Activity feed & inbox | "Activity feed & inbox" | Live |
 | Search (lists, API & CLI; by name or #id) | "Search everything" | Live |
-| Self-describing API (OpenAPI/meta) | "Self-describing API" | Live |
+| Self-describing CLI (`bk guide` / `bk meta`) | "Self-describing CLI" | Live |
 | Trash & restore | "Trash & restore" | Live |
 | Workspace analytics | "Workspace analytics" | Live |
 | Dark mode | "Dark mode by default" | Live |

@@ -26,14 +26,16 @@ and the rest of bk operates within it.`,
 		newWorkspaceUseCmd(),
 		newWorkspaceEditCmd(),
 		newWorkspaceTransferCmd(),
+		newWorkspaceDeleteCmd(),
 	)
 	return cmd
 }
 
 func newWorkspaceListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List workspaces you are a member of",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces"},
+		Short:       "List workspaces you are a member of",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -74,9 +76,10 @@ func newWorkspaceListCmd() *cobra.Command {
 
 func newWorkspaceShowCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show [slug|id]",
-		Short: "Show details of a workspace (defaults to active)",
-		Args:  cobra.MaximumNArgs(1),
+		Use:         "show [slug|id]",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}"},
+		Short:       "Show details of a workspace (defaults to active)",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -110,8 +113,9 @@ func newWorkspaceCreateCmd() *cobra.Command {
 	var name string
 	var useAfter bool
 	cmd := &cobra.Command{
-		Use:   "create --name NAME",
-		Short: "Create a new workspace",
+		Use:         "create --name NAME",
+		Annotations: map[string]string{"routes": "POST /api/workspaces"},
+		Short:       "Create a new workspace",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -147,9 +151,10 @@ func newWorkspaceCreateCmd() *cobra.Command {
 
 func newWorkspaceUseCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "use <slug|id>",
-		Short: "Set the active workspace for subsequent commands",
-		Args:  cobra.ExactArgs(1),
+		Use:         "use <slug|id>",
+		Annotations: map[string]string{"routes": "POST /api/me/active-workspace,GET /api/workspaces"},
+		Short:       "Set the active workspace for subsequent commands",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -177,9 +182,10 @@ func newWorkspaceUseCmd() *cobra.Command {
 func newWorkspaceEditCmd() *cobra.Command {
 	var name, slug string
 	cmd := &cobra.Command{
-		Use:   "edit [slug|id]",
-		Short: "Edit workspace settings (name, slug)",
-		Args:  cobra.MaximumNArgs(1),
+		Use:         "edit [slug|id]",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}"},
+		Short:       "Edit workspace settings (name, slug)",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -219,9 +225,10 @@ func newWorkspaceTransferCmd() *cobra.Command {
 	var userRef string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "transfer [slug|id]",
-		Short: "Transfer workspace ownership to another member (owner only)",
-		Args:  cobra.MaximumNArgs(1),
+		Use:         "transfer [slug|id]",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/transfer"},
+		Short:       "Transfer workspace ownership to another member (owner only)",
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if userRef == "" {
 				return fmt.Errorf("--to is required (user id, email, or name)")
@@ -249,6 +256,78 @@ func newWorkspaceTransferCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&userRef, "to", "", "New owner (id, email, or name)")
+	AddYesFlag(cmd, &yes)
+	return cmd
+}
+
+// newWorkspaceDeleteCmd deletes a workspace and everything inside it.
+//
+// This is the most destructive call in the CLI, and the usual `--yes` guard is
+// not enough on its own: Confirm() auto-approves under BK_NO_PROMPT=1 and on a
+// non-TTY, which is exactly how agents run. So the real guard is --confirm: the
+// caller must repeat the workspace back, which cannot happen by accident from a
+// wrong variable or a mis-scoped loop.
+//
+// It also takes the target as an explicit argument rather than falling back to
+// the active workspace — "delete whatever I happen to be pointed at" is not a
+// safe default for an irreversible operation.
+func newWorkspaceDeleteCmd() *cobra.Command {
+	var confirmRef string
+	var yes bool
+	cmd := &cobra.Command{
+		Use:         "delete <slug|id> --confirm <slug|id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}"},
+		Short:       "Permanently delete a workspace and everything in it (owner only)",
+		Long: `Permanently delete a workspace: its projects, tasks, issues, labels,
+comments, invitations and membership. This is NOT the Trash — there is no
+restore, and ` + "`bk undo`" + ` cannot roll it back.
+
+You must be the workspace owner. To transfer it instead, see
+` + "`bk workspace transfer`" + `.
+
+--confirm must repeat the same slug/id you passed as the argument. It is
+required even with --yes and even under BK_NO_PROMPT=1.
+
+  bk workspace delete scratch-ws --confirm scratch-ws
+
+If the deleted workspace was your active one, the active workspace is cleared —
+run ` + "`bk workspace use <slug>`" + ` to pick a new one.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ref := strings.TrimSpace(args[0])
+			if ref == "" {
+				return fmt.Errorf("a workspace slug or id is required")
+			}
+			if strings.TrimSpace(confirmRef) != ref {
+				return fmt.Errorf(
+					"--confirm is required and must match the workspace being deleted: --confirm %s", ref)
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			if !Confirm(fmt.Sprintf(
+				"Permanently delete workspace %q and everything in it? This cannot be undone.", ref), yes) {
+				return fmt.Errorf("aborted")
+			}
+			if err := c.DeleteWorkspace(ref); err != nil {
+				return err
+			}
+			// Clear the active workspace if we just deleted it, so the next
+			// command fails with "no active workspace" instead of 404-ing.
+			if cfg.ActiveWorkspaceSlug == ref || fmt.Sprint(cfg.ActiveWorkspaceID) == ref {
+				cfg.ActiveWorkspaceSlug = ""
+				cfg.ActiveWorkspaceID = 0
+				_ = config.Save(cfg)
+				fmt.Fprintln(cmd.ErrOrStderr(),
+					"note: that was your active workspace — run `bk workspace use <slug>` to pick another")
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted workspace %q\n", ref)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&confirmRef, "confirm", "",
+		"Repeat the workspace slug/id to authorise the delete (required)")
 	AddYesFlag(cmd, &yes)
 	return cmd
 }

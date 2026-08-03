@@ -29,8 +29,9 @@ func newInviteCmd() *cobra.Command {
 
 func newInviteCandidatesCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "candidates",
-		Short: "List people you can invite to the active workspace (owner only)",
+		Use:         "candidates",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/invite-candidates"},
+		Short:       "List people you can invite to the active workspace (owner only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -78,9 +79,10 @@ func newInviteCandidatesCmd() *cobra.Command {
 
 func newInviteSendCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "send <email>",
-		Short: "Invite a teammate to the active workspace by email",
-		Args:  cobra.ExactArgs(1),
+		Use:         "send <email>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/invitations"},
+		Short:       "Invite a teammate to the active workspace by email",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -110,8 +112,9 @@ func newInviteSendCmd() *cobra.Command {
 func newInviteListCmd() *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List invitations for the active workspace (owner only)",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/invitations"},
+		Short:       "List invitations for the active workspace (owner only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -146,9 +149,10 @@ func newInviteListCmd() *cobra.Command {
 
 func newInviteRevokeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "revoke <id>",
-		Short: "Revoke a pending invitation",
-		Args:  cobra.ExactArgs(1),
+		Use:         "revoke <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/invitations/{id}"},
+		Short:       "Revoke a pending invitation",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -173,9 +177,10 @@ func newInviteRevokeCmd() *cobra.Command {
 
 func newInviteAcceptCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "accept <token>",
-		Short: "Accept an invitation by its token",
-		Args:  cobra.ExactArgs(1),
+		Use:         "accept <token>",
+		Annotations: map[string]string{"routes": "POST /api/invitations/accept"},
+		Short:       "Accept an invitation by its token",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newClientAndConfig()
 			if err != nil {
@@ -192,9 +197,10 @@ func newInviteAcceptCmd() *cobra.Command {
 
 func newInviteDeclineCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "decline <token>",
-		Short: "Decline an invitation by its token",
-		Args:  cobra.ExactArgs(1),
+		Use:         "decline <token>",
+		Annotations: map[string]string{"routes": "POST /api/invitations/decline"},
+		Short:       "Decline an invitation by its token",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newClientAndConfig()
 			if err != nil {
@@ -211,8 +217,9 @@ func newInviteDeclineCmd() *cobra.Command {
 
 func newInvitePendingCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "pending",
-		Short: "List invitations pending for your email",
+		Use:         "pending",
+		Annotations: map[string]string{"routes": "GET /api/me/pending-invitations"},
+		Short:       "List invitations pending for your email",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

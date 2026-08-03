@@ -19,6 +19,7 @@ func newLabelCmd() *cobra.Command {
 		newLabelListCmd(),
 		newLabelViewCmd(),
 		newLabelCreateCmd(),
+		newLabelEditCmd(),
 		newLabelDeleteCmd(),
 		newLabelAttachCmd(),
 		newLabelDetachCmd(),
@@ -28,9 +29,10 @@ func newLabelCmd() *cobra.Command {
 
 func newLabelViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <id>",
-		Short: "Show a label",
-		Args:  cobra.ExactArgs(1),
+		Use:         "view <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/labels/{id}"},
+		Short:       "Show a label",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -65,8 +67,9 @@ func newLabelViewCmd() *cobra.Command {
 
 func newLabelListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List labels in the active workspace",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/labels"},
+		Short:       "List labels in the active workspace",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -99,8 +102,9 @@ func newLabelListCmd() *cobra.Command {
 func newLabelCreateCmd() *cobra.Command {
 	var name, color, description string
 	cmd := &cobra.Command{
-		Use:   "create --name NAME [--color HEX]",
-		Short: "Create a label in the active workspace",
+		Use:         "create --name NAME [--color HEX]",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/labels"},
+		Short:       "Create a label in the active workspace",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -133,11 +137,70 @@ func newLabelCreateCmd() *cobra.Command {
 	return cmd
 }
 
+// bk label edit — renaming/recolouring a label was reachable only from the web
+// UI. In a CLI-only product that is a hole, not a convenience gap, so the
+// parity test now requires it.
+func newLabelEditCmd() *cobra.Command {
+	var name, color, description string
+	cmd := &cobra.Command{
+		Use:         "edit <id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/labels/{id}"},
+		Short:       "Rename or recolour a label",
+		Args:        cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid label id %q", args[0])
+			}
+			if err != nil {
+				return err
+			}
+			c, cfg, err := newClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := requireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+
+			// Only send what the caller actually set — an omitted flag must mean
+			// "leave unchanged", not "clear".
+			var req client.UpdateLabelRequest
+			if cmd.Flags().Changed("name") {
+				req.Name = &name
+			}
+			if cmd.Flags().Changed("color") {
+				req.Color = &color
+			}
+			if cmd.Flags().Changed("description") {
+				req.Description = &description
+			}
+			if req.Name == nil && req.Color == nil && req.Description == nil {
+				return fmt.Errorf("nothing to change: pass --name, --color or --description")
+			}
+
+			label, err := c.UpdateLabel(ws, id, req)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated label %s (id %d, color %s)\n",
+				label.Name, label.ID, label.Color)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "New label name")
+	cmd.Flags().StringVar(&color, "color", "", "New label color (#rrggbb)")
+	cmd.Flags().StringVar(&description, "description", "", "New description")
+	return cmd
+}
+
 func newLabelDeleteCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete <id>",
-		Short: "Delete a label (removes it from all issues)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "delete <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/labels/{id}"},
+		Short:       "Delete a label (removes it from all issues)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -162,9 +225,10 @@ func newLabelDeleteCmd() *cobra.Command {
 
 func newLabelAttachCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "attach <issue_id> <label_id>",
-		Short: "Attach a label to an issue",
-		Args:  cobra.ExactArgs(2),
+		Use:         "attach <issue_id> <label_id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/labels,GET /api/workspaces/{ws}/issues/{id}/labels"},
+		Short:       "Attach a label to an issue",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issueID, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -193,9 +257,10 @@ func newLabelAttachCmd() *cobra.Command {
 
 func newLabelDetachCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "detach <issue_id> <label_id>",
-		Short: "Detach a label from an issue",
-		Args:  cobra.ExactArgs(2),
+		Use:         "detach <issue_id> <label_id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid}"},
+		Short:       "Detach a label from an issue",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issueID, err := strconv.Atoi(args[0])
 			if err != nil {

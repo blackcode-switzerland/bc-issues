@@ -1,0 +1,490 @@
+{
+  "commands_unannotated": [],
+  "routes": [
+    {
+      "method": "DELETE",
+      "path": "/api/super-admin/errors",
+      "command": "bk super-admin errors delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/super-admin/errors/{id}",
+      "command": "bk super-admin errors delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/super-admin/whitelist/{id}",
+      "command": "bk super-admin whitelist remove"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tokens/{id}",
+      "command": "bk token delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk workspace delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/comments/{id}",
+      "command": "bk issue delete-comment"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk invite revoke"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/issues/{id}",
+      "command": "bk issue delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/issues/{id}/attachments/{attachmentId}",
+      "command": "bk issue detach"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/issues/{id}/labels/{lid}",
+      "command": "bk label detach"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/issues/{id}/watch",
+      "command": "bk issue unwatch"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk label delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/members/{userId}",
+      "command": "bk member remove"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/projects/{id}",
+      "command": "bk project delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/projects/{id}/members",
+      "command": "bk project remove-member"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/projects/{id}/updates/{updateId}",
+      "command": "bk project updates delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/storage/{id}",
+      "command": "bk storage rm"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/tasks/{id}",
+      "command": "bk task delete"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/trash/purge",
+      "command": "bk trash purge"
+    },
+    {
+      "method": "GET",
+      "path": "/api/changelog",
+      "command": "bk skill sync"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me",
+      "command": "bk whoami"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/inbox",
+      "command": "bk inbox list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/pending-invitations",
+      "command": "bk invite pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/meta",
+      "command": "bk meta"
+    },
+    {
+      "method": "GET",
+      "path": "/api/super-admin/errors",
+      "command": "bk super-admin errors stats"
+    },
+    {
+      "method": "GET",
+      "path": "/api/super-admin/errors/{id}",
+      "command": "bk super-admin errors view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/super-admin/users",
+      "command": "bk super-admin users"
+    },
+    {
+      "method": "GET",
+      "path": "/api/super-admin/whitelist",
+      "command": "bk super-admin whitelist list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tokens",
+      "command": "bk token list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/undo",
+      "command": "bk undo"
+    },
+    {
+      "method": "GET",
+      "path": "/api/upload",
+      "command": "bk upload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "command": "bk user view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk workspace use"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk workspace show"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/activity",
+      "command": "bk activity"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/analytics",
+      "command": "bk analytics"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/attachments",
+      "command": "bk storage attachments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk invite list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invite-candidates",
+      "command": "bk invite candidates"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues",
+      "command": "bk project issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}",
+      "command": "bk issue view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}/activity",
+      "command": "bk issue activity"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}/attachments",
+      "command": "bk issue attachments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}/comments",
+      "command": "bk issue comments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}/labels",
+      "command": "bk label attach"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}/watch",
+      "command": "bk issue watch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/labels",
+      "command": "bk label list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk label view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk member list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/projects",
+      "command": "bk project list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/projects/{id}",
+      "command": "bk project view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/projects/{id}/comments",
+      "command": "bk project comments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/projects/{id}/members",
+      "command": "bk project members"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/projects/{id}/updates",
+      "command": "bk project updates list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/storage",
+      "command": "bk storage list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/tasks",
+      "command": "bk task list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/tasks/{id}",
+      "command": "bk task view"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/tasks/{id}/comments",
+      "command": "bk task comments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/trash",
+      "command": "bk trash list"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/me",
+      "command": "bk profile edit"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/super-admin/errors/{id}",
+      "command": "bk super-admin errors unresolve"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk workspace edit"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/comments/{id}",
+      "command": "bk issue edit-comment"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/issues/{id}",
+      "command": "bk issue unassign"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk label edit"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/projects/{id}",
+      "command": "bk project edit"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/tasks/{id}",
+      "command": "bk task edit"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/accept",
+      "command": "bk invite accept"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/decline",
+      "command": "bk invite decline"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk workspace use"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/inbox/archive",
+      "command": "bk inbox archive"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/inbox/mark-read",
+      "command": "bk inbox read"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/inbox/unarchive",
+      "command": "bk inbox unarchive"
+    },
+    {
+      "method": "POST",
+      "path": "/api/super-admin/whitelist",
+      "command": "bk super-admin whitelist add"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tokens",
+      "command": "bk token create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/undo",
+      "command": "bk undo"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "command": "bk upload"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/blob",
+      "command": "bk upload"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces",
+      "command": "bk workspace create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk invite send"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/issues",
+      "command": "bk issue create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/issues/{id}/attachments",
+      "command": "bk issue attach"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/issues/{id}/comments",
+      "command": "bk issue comment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/issues/{id}/labels",
+      "command": "bk label attach"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/issues/{id}/watch",
+      "command": "bk issue watch"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/labels",
+      "command": "bk label create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/leave",
+      "command": "bk member leave"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/move",
+      "command": "bk move"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/projects",
+      "command": "bk project create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/projects/{id}/comments",
+      "command": "bk project comment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/projects/{id}/members",
+      "command": "bk project add-member"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/projects/{id}/updates",
+      "command": "bk project updates add"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/tasks",
+      "command": "bk task create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/tasks/{id}/comments",
+      "command": "bk task comment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/transfer",
+      "command": "bk workspace transfer"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/trash/empty",
+      "command": "bk trash empty"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/trash/restore",
+      "command": "bk trash restore"
+    }
+  ]
+}

@@ -24,8 +24,9 @@ func newMemberCmd() *cobra.Command {
 
 func newMemberListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List members of the active workspace",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/members"},
+		Short:       "List members of the active workspace",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -61,9 +62,10 @@ func newMemberListCmd() *cobra.Command {
 
 func newMemberRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <user_id>",
-		Short: "Remove a member from the active workspace (owner only)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "remove <user_id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/members/{userId}"},
+		Short:       "Remove a member from the active workspace (owner only)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			userID, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -88,8 +90,9 @@ func newMemberRemoveCmd() *cobra.Command {
 
 func newMemberLeaveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "leave",
-		Short: "Leave the active workspace (not allowed for owner)",
+		Use:         "leave",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/leave"},
+		Short:       "Leave the active workspace (not allowed for owner)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {

@@ -41,8 +41,9 @@ func newSuperAdminCmd() *cobra.Command {
 
 func newSuperAdminUsersCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "users",
-		Short: "List every member across the whole platform",
+		Use:         "users",
+		Annotations: map[string]string{"routes": "GET /api/super-admin/users"},
+		Short:       "List every member across the whole platform",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -94,8 +95,9 @@ func newSuperAdminWhitelistCmd() *cobra.Command {
 
 func newWhitelistListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List allowed domains and emails",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/super-admin/whitelist"},
+		Short:       "List allowed domains and emails",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -130,8 +132,9 @@ func newWhitelistListCmd() *cobra.Command {
 func newWhitelistAddCmd() *cobra.Command {
 	var typ, value string
 	cmd := &cobra.Command{
-		Use:   "add --type domain|email --value <value>",
-		Short: "Allow a domain or email to register / be invited platform-wide",
+		Use:         "add --type domain|email --value <value>",
+		Annotations: map[string]string{"routes": "POST /api/super-admin/whitelist"},
+		Short:       "Allow a domain or email to register / be invited platform-wide",
 		Example: `  bk super-admin whitelist add --type domain --value blackcode.ch
   bk super-admin whitelist add --type email --value contractor@example.com`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -173,10 +176,11 @@ func newWhitelistAddCmd() *cobra.Command {
 func newWhitelistRemoveCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:     "remove <id>",
-		Aliases: []string{"rm", "delete"},
-		Short:   "Remove a whitelist entry by id",
-		Args:    cobra.ExactArgs(1),
+		Use:         "remove <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/super-admin/whitelist/{id}"},
+		Aliases:     []string{"rm", "delete"},
+		Short:       "Remove a whitelist entry by id",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -226,8 +230,9 @@ func newErrorsListCmd() *cobra.Command {
 		stats                   bool
 	)
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List error events (newest first)",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/super-admin/errors"},
+		Short:       "List error events (newest first)",
 		Long: `List platform error events, newest first.
 
 Filter by --level, triage --status (open|resolved), or an occurred-at window
@@ -305,9 +310,10 @@ printed to stderr. --stats also prints aggregate counts.`,
 
 func newErrorsViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <id>",
-		Short: "Show full detail for one error (stack + context)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "view <id>",
+		Annotations: map[string]string{"routes": "GET /api/super-admin/errors/{id}"},
+		Short:       "Show full detail for one error (stack + context)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -377,9 +383,10 @@ func newErrorsResolveCmd(resolve bool) *cobra.Command {
 		short = "Re-open a resolved error"
 	}
 	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Use:         use,
+		Annotations: map[string]string{"routes": "PATCH /api/super-admin/errors/{id}"},
+		Short:       short,
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -406,10 +413,11 @@ func newErrorsResolveCmd(resolve bool) *cobra.Command {
 func newErrorsDeleteCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:     "delete <id> [<id> ...]",
-		Aliases: []string{"rm"},
-		Short:   "Permanently delete one or more error events",
-		Args:    cobra.MinimumNArgs(1),
+		Use:         "delete <id> [<id> ...]",
+		Annotations: map[string]string{"routes": "DELETE /api/super-admin/errors,DELETE /api/super-admin/errors/{id}"},
+		Aliases:     []string{"rm"},
+		Short:       "Permanently delete one or more error events",
+		Args:        cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ids := make([]int, 0, len(args))
 			for _, a := range args {
@@ -451,8 +459,9 @@ func newErrorsDeleteCmd() *cobra.Command {
 
 func newErrorsStatsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "stats",
-		Short: "Show aggregate error counts (total / open / resolved)",
+		Use:         "stats",
+		Annotations: map[string]string{"routes": "GET /api/super-admin/errors"},
+		Short:       "Show aggregate error counts (total / open / resolved)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

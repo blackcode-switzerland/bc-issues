@@ -11,6 +11,7 @@ import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { events, users, issues, tasks, projects, type Event, type NewEvent } from '../schema'
 import { fanOutEvent } from './fanout'
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
 export type EntityType =
   | 'workspace'
@@ -179,8 +180,8 @@ export interface EventsPage {
   next_cursor: number | null
 }
 
-const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 200
+const DEFAULT_LIMIT = PAGE_SIZE_DEFAULT
+const MAX_LIMIT = PAGE_SIZE_MAX
 
 export async function listEvents(filter: ListEventsFilter): Promise<EventsPage> {
   const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)

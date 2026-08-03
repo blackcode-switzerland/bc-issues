@@ -1,9 +1,13 @@
-// Public changelog page. Server-rendered from docs/platform-reference.md +
-// docs/api-changelog.md via lib/changelog.ts. Layout: a pinned "Platform
-// Reference (baseline)" the reader can collapse, then the dated log newest-first.
+// Public changelog page. Server-rendered from docs/api-changelog.md via
+// lib/changelog.ts: the dated log, newest first.
+//
+// It used to lead with a pinned "Platform Reference" — a complete snapshot of the
+// API + CLI surface. That is gone; the current surface is `bk guide`, which ships
+// inside the binary and so always matches the version the reader is running. This
+// page now answers only "what changed", and points at `bk guide` for "how it works".
 //
 // The same content is available programmatically at GET /api/changelog and via
-// `bk changelog` — this page just renders it for humans.
+// `bk changelog`.
 
 import type { Metadata } from 'next'
 import { MarketingLayout } from '@/components/marketing/layout'
@@ -12,7 +16,7 @@ import { getChangelog } from '@/lib/changelog'
 export const metadata: Metadata = {
   title: 'Changelog · Blackcode Issues',
   description:
-    'Every change to the Blackcode Issues API and bk CLI, newest first — plus a complete platform reference. Also available at /api/changelog and via `bk changelog`.',
+    'Every change to blackcode issues and the bk CLI, newest first. Also available at /api/changelog and via `bk changelog`.',
 }
 
 // Re-read on a schedule so a docs edit (redeploy) shows up without a full
@@ -27,7 +31,7 @@ function formatDate(iso: string): string {
 }
 
 export default function ChangelogPage() {
-  const { reference, entries, cli_latest_version, cli_min_version } = getChangelog()
+  const { entries, cli_latest_version, cli_min_version } = getChangelog()
 
   return (
     <MarketingLayout>
@@ -36,9 +40,10 @@ export default function ChangelogPage() {
           <div className="text-xs font-medium uppercase tracking-wider text-primary">Changelog</div>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">What&apos;s changed</h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Every notable change to the REST API and the <code>bk</code> CLI, newest first. Building
-            an integration or an agent skill? Read the platform reference below to get current, then
-            check back here for anything new. This page is also available as JSON at{' '}
+            Every notable change to blackcode issues and the <code>bk</code> CLI, newest first.
+            Looking for how something <em>works</em> rather than what changed? Run{' '}
+            <code>bk guide</code> — it is the complete usage guide, embedded in the CLI binary, so it
+            always matches the version you have. This page is also available as JSON at{' '}
             <a href="/api/changelog" className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground">
               /api/changelog
             </a>{' '}
@@ -49,25 +54,21 @@ export default function ChangelogPage() {
             .
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Current: API v1.1.0 · CLI latest v{cli_latest_version} · minimum supported v{cli_min_version}
+            Current: CLI latest v{cli_latest_version} · minimum supported v{cli_min_version}
           </p>
         </header>
 
-        {/* Pinned baseline reference — open by default, collapsible to keep the
-            dated log reachable. */}
-        <details open className="mb-14 rounded-lg border border-border/60 bg-muted/30">
-          <summary className="cursor-pointer select-none list-none px-5 py-4 text-sm font-medium">
-            <span className="mr-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-              Baseline
-            </span>
-            Platform Reference — the complete API + CLI surface
-            <span className="ml-2 text-xs font-normal text-muted-foreground">(click to collapse)</span>
-          </summary>
-          <div
-            className="prose max-w-none border-t border-border/60 px-5 py-6 text-sm leading-relaxed text-muted-foreground"
-            dangerouslySetInnerHTML={{ __html: reference.html }}
-          />
-        </details>
+        {/* The retired baseline used to sit here. Replaced by a pointer: a
+            snapshot of the surface is a copy, and copies drift. */}
+        <div className="mb-14 rounded-lg border border-border/60 bg-muted/30 px-5 py-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            <strong className="text-foreground">Looking for the Platform Reference?</strong> It has
+            been replaced by <code>bk guide</code>, which ships inside the CLI binary — so it
+            describes the exact version you are running, and can never tell you about a flag you do
+            not have. Run <code>bk guide</code> (offline, no auth needed), or{' '}
+            <code>bk meta</code> for the live vocabularies and limits.
+          </p>
+        </div>
 
         <div className="mb-6 flex items-center gap-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">

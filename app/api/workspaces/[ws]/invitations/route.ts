@@ -7,6 +7,7 @@ import {
 import { sendInvitationEmail } from '@/lib/email/send'
 import { isEmailAllowed, isSuperAdmin, isWhitelistEnabled } from '@/lib/auth/whitelist'
 import { addWhitelistEntry } from '@/lib/db/queries/whitelist'
+import { INVITE_EMAIL_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -47,7 +48,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.badRequest('invalid_email', 'email is required and must be a valid email')
   }
   if (email.length > 255) {
-    throw Errors.badRequest('email_too_long', 'email max 255 chars')
+    throw Errors.badRequest('email_too_long', `email max ${INVITE_EMAIL_MAX} chars`)
   }
 
   // Whitelist gate for invitations

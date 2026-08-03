@@ -62,42 +62,140 @@ TanStack Query throughout. See memory file `sync-architecture.md` for query key 
 
 Controlled via `SUPER_ADMINS` env var (comma-separated emails) + `email_whitelist` DB table. Pages at `/dashboard/super-admin`. See memory file `super-admin.md`.
 
-## API multi-surface sync contract (MANDATORY)
+## Agent surface contract (MANDATORY)
 
-The product is consumed through **four surfaces that must always agree**: the REST
-API, the OpenAPI spec, the `bk` CLI, and the docs. Any change to an API route or a
-user-facing feature MUST be propagated to all of them in the **same** change. This
-is not optional — a dedicated test fails the build if the spec drifts.
+Agents operate this product through **one** interface: the `bk` CLI. The HTTP
+API is **private plumbing with no public contract** — do not document it for
+external consumers, and **never reintroduce an OpenAPI spec or a fat page
+manifest.** Both were deleted on 2026-08-03: they were hand-maintained copies of
+facts that lived elsewhere, and they had already drifted (the manifest claimed
+uploads accept any file type; SVG is rejected. The platform reference described
+a `GET /api/upload` field that never existed, and pinned a stale CLI version).
 
-When you add / change / remove a route or feature, update every applicable item:
+### Where knowledge lives
 
-1. **REST route** — `app/api/**`. Follow the conventions: workspace-scoped under
+Two homes, and the split is the whole trick:
+
+| Kind | Home | Why |
+|---|---|---|
+| **Static** — how the tool behaves: flag names, exit codes, the upload→embed flow, the UTF-8 warning | `cli/internal/guide/topics/*.md`, `//go:embed`-ed, served by `bk guide` | It describes *this binary*. Fetching it from the server would describe a version the agent isn't running — worse than being out of date. |
+| **Dynamic** — what the data is right now: statuses, priorities, health, workspaces, size caps, blocked MIME types | the server, via `GET /api/meta` → `bk meta` (assembled in `lib/agent-meta.ts`) | Changes without a CLI release. |
+
+**A guide topic must never restate a dynamic value.** Write *"run `bk meta` for
+the current status values"*, not the values. `cli/internal/guide/guide_test.go`
+fails the build if a topic hardcodes one.
+
+Likewise, **a limit is declared once** in `lib/limits.ts`, imported by the route
+that enforces it, and served by `/api/meta`. Never re-type a number.
+
+### When you add / change / remove a route or feature
+
+1. **Route** — `app/api/**`, same conventions as before: workspace-scoped under
    `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`
    (`lib/api`); lists return `{ data, next_cursor }` via `jsonList()`; single
    resources return the bare entity; create → `201`, delete → `{ deleted: true }`.
    Never reintroduce implicit-active-workspace ("legacy") routes.
-2. **OpenAPI spec** — `lib/openapi/spec.ts` (served at `/api/openapi.json`,
-   rendered at `/api/docs`). Add/adjust the path + schema. Enum values must come
-   from `lib/work-items.ts` imports, never hardcoded. **`lib/openapi/parity.test.ts`
-   (run by `npm test`) fails if any route+method is missing from the spec or the
-   spec references a route that doesn't exist.**
-3. **CLI** — `cli/`. Add/adjust the `bk` command + the client method in
-   `cli/internal/client/`. Reuse `wsPath()` for workspace-scoped calls and unwrap
-   the `{ data, next_cursor }` envelope. Keep JSON/YAML output + stable exit codes.
-4. **`/api/meta`** — if you add or change an enum/vocabulary (statuses,
-   priorities, health), update `lib/work-items.ts`; `/api/meta` and the spec both
-   read from it, so they stay in sync automatically.
-5. **Docs** — see the Docs sync rule below (`docs/backend.md`, `docs/cli.md`,
-   `docs/frontend.md`).
-6. **Per-page agent manifest** — `lib/agent-manifest.ts` (embedded on every page
-   via `components/agent-manifest.tsx`) states the auth header, envelope shapes,
-   and discovery endpoints. If any of those change, update it too.
-7. **Changelog** — see the Changelog rule below. Every route/feature change gets
-   a dated entry in `docs/api-changelog.md`; if the surface itself changed, also
-   update the baseline `docs/platform-reference.md`.
+2. **CLI** — add or update the `bk` command + the client method in
+   `cli/internal/client/`, **and its `routes` annotation**:
 
-Before finishing any API/feature change, run: `npx tsc --noEmit`, `npm test`
-(parity), and `cd cli && go build ./...`. See `AGENTS.md` for the short version.
+   ```go
+   Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues"},
+   ```
+
+   Use the literal `"none"` when the command makes no HTTP call. `"none"` is
+   required rather than allowed-to-be-empty so an oversight stays visible.
+   Reuse `wsPath()` for workspace-scoped calls and unwrap the
+   `{ data, next_cursor }` envelope. Keep JSON/YAML output + stable exit codes.
+3. **Guide** — if agent-visible *behaviour* changed, update the relevant
+   `cli/internal/guide/topics/*.md`.
+4. **`bk meta`** — if a vocabulary or limit changed, update its source
+   (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
+   `bk meta` follow automatically.
+5. **Deprecations** — if you renamed or removed a flag/command, add a row to
+   `cli/internal/commands/deprecations.go` **in the same commit**. Keep entries
+   for two minor releases, then prune. This is what lets a failed run recover
+   itself: the CLI prints the new spelling instead of "unknown flag".
+6. **Server `suggestion`s** — any 400/404/409 an agent can realistically hit
+   should carry an actionable `suggestion` (`Errors.badRequest(code, msg, 'do X')`).
+   The CLI surfaces it as a `hint:` line on stderr.
+7. **Docs** — see the Docs sync rule below (`docs/backend.md`, `docs/cli.md`,
+   `docs/frontend.md`). These are **internal/maintainer** docs now, not an agent
+   surface.
+8. **Changelog** — see the Changelog rule below. One dated entry in
+   `docs/api-changelog.md`.
+
+### The guardrail
+
+`lib/cli-parity.test.ts` (run by `npm test`) fails the build if:
+
+- a real route+method has **no `bk` command** (a capability agents can't reach), or
+- the CLI **claims a route that doesn't exist** (drift), or
+- a leaf command declares **no `routes` annotation** at all.
+
+Genuine non-CLI routes (browser auth flows, telemetry beacons, the status page)
+live in that file's `EXCLUDED_PATHS` / `EXCLUDED_OPERATIONS` maps — **each entry
+must carry a reason.** An unexplained exclusion is how coverage quietly rots.
+
+**Reach for an exclusion last.** Writing the annotations is what surfaces the
+holes: it found four routes with no command, and for `label edit`, `undo --log`,
+`issue watch --status` and `workspace delete`, "exclude it" would have been a lie
+about what agents can do. Only two exclusions are real capability decisions, and
+both are account/workspace destruction the product deliberately keeps human:
+`DELETE /api/me` (an agent must never delete its owner's account — settled,
+don't revisit) and the two board-ordering `PATCH …/reorder` routes, which are
+meaningless outside the drag-and-drop UI.
+
+The other Go guardrails:
+
+- `cli/internal/commands/routes_test.go` — every leaf command has a `routes`
+  annotation.
+- `cli/internal/guide/guide_test.go` — no guide topic hardcodes a dynamic value.
+- `cli/internal/skill/skill_test.go` — the skill template stays thin: under 40
+  lines, and never names a route, an enum or an auth header.
+- `cli/internal/commands/groups_test.go` — a mistyped subcommand is an error,
+  never a silent help-and-exit-0.
+
+### Writing commands agents can survive
+
+Three rules learned the hard way; all four Go tests above exist to enforce one.
+
+- **`Confirm()` is not a guard for agents.** It auto-approves under
+  `BK_NO_PROMPT=1` and on a non-TTY — exactly how agents run. For anything
+  irreversible, require the caller to *repeat the target back*
+  (`bk workspace delete <slug> --confirm <slug>`), and require it even with
+  `--yes`. Take the target as an explicit argument; never fall back to the active
+  workspace for a destructive call.
+- **Every failure must be a non-zero exit with one line on stderr.** Exit codes
+  are the contract (`cmd/bk/main.go` owns the table); stdout stays parseable.
+  Cobra's defaults fight this — it prints errors the CLI already prints, and it
+  answers an unknown subcommand with help and exit 0. `SilenceErrors` and
+  `rejectUnknownSubcommands()` in `root.go` correct both.
+- **A dead end must name its own exit.** `hintFor()` in `main.go` turns a failure
+  into a recovery: the server's `suggestion`, the `deprecations.go` row, or the
+  generic "run `bk skill sync`". If you add a failure mode an agent can hit,
+  check it lands on one of those paths.
+
+Before finishing any API/feature change, run:
+
+```bash
+npx tsc --noEmit
+npm test
+cd cli && go build ./... && go vet ./... && go test ./...
+cd cli && make routes          # if any `routes` annotation changed
+```
+
+See `AGENTS.md` for the short version.
+
+### Releasing
+
+`./devops/release.sh cli minor` (GitHub + npm; needs `npm login` + an OTP) and
+`./devops/release.sh web` (Vercel production). Both are interactive.
+
+`CLI_MIN_VERSION` in `lib/cli-version.ts` hard-blocks every older binary with
+exit 8. **Publish to npm before raising it** — raise it first and every user is
+locked out with nothing to upgrade to. Both versions are overridable by env
+(`BK_CLI_LATEST` / `BK_CLI_MIN`), so the floor moves and rolls back without a
+redeploy.
 
 ## Changelog rule (MANDATORY)
 
@@ -105,25 +203,25 @@ We publish a changelog so users and their AI agents can keep their integrations
 and skills up to date. It is a product surface, not just a doc — served three
 aligned ways from one source: the **`/changelog`** web page, **`GET
 /api/changelog`** (JSON, or `?format=markdown`), and **`bk changelog`**. All read
-from `lib/changelog.ts`, which renders two authored Markdown files:
+from `lib/changelog.ts`, which renders **one** authored Markdown file:
 
 - **`docs/api-changelog.md`** — the dated log, **newest first**. The running
   record of every change.
-- **`docs/platform-reference.md`** — the pinned "Platform Reference (baseline)": a
-  complete snapshot of the whole API + CLI surface, data types, rules, and
-  warnings at the current release.
+
+There is deliberately no pinned "platform reference" any more. A hand-maintained
+snapshot of the surface is a copy, and copies drift — that one's CLI version was
+already stale when we retired it. The current surface is `bk guide`, which ships
+inside the binary and therefore always matches the binary being run.
 
 > **The rule:** any change to an API route or a user-facing feature MUST be
 > reported in `docs/api-changelog.md` in the **same** change, as a new
 > `## YYYY-MM-DD — <clear title>` entry at the top. Write it clearly and in
 > detail: what changed, whether it's breaking, and how a client should adapt
-> (with the new request/response shape and the CLI equivalent). Use a real,
-> absolute date. If the change alters the surface itself (a new/removed endpoint,
-> a changed envelope/vocabulary, a new rule or warning), also update the relevant
-> section of `docs/platform-reference.md` so the baseline stays a true snapshot.
+> (with the new CLI command). Use a real, absolute date.
 
-This keeps every consumer able to self-update: point an outdated agent at
-`/agent-updator` (or `/changelog`) and it can bring its skill current.
+This keeps every consumer able to self-update: an agent that hits a wall runs
+`bk skill sync`, then `bk guide` for current usage and `bk changelog` for the
+dated record. `/agent-updator` is the human-and-agent-readable migration page.
 
 ## Docs sync rule
 

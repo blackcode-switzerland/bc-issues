@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace, jsonList } from '@/lib/api'
 import { createLabel, listLabelsInWorkspace } from '@/lib/db/queries/labels'
+import { LABEL_NAME_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -24,7 +25,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) throw Errors.badRequest('invalid_name', 'name is required')
-  if (name.length > 50) throw Errors.badRequest('name_too_long', 'name max 50 chars')
+  if (name.length > LABEL_NAME_MAX)
+    throw Errors.badRequest('name_too_long', `name max ${LABEL_NAME_MAX} chars`)
 
   let color: string | undefined
   if (body.color !== undefined) {

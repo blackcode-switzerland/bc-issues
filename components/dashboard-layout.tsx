@@ -266,6 +266,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main content — CSS-based page fade (avoids React 18 concurrent-mode flash) */}
       <main key={pathname} className="page-fade-in lg:ml-60">
+        {/* Temporary: the CLI-only migration notice, owners only. Delete this
+            line and the component when the 30-day window closes. */}
         {children}
       </main>
     </div>

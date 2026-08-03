@@ -4,6 +4,7 @@ import {
   createProject,
   listProjectsInWorkspace,
 } from '@/lib/db/queries/projects'
+import { PROJECT_NAME_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -31,7 +32,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) throw Errors.badRequest('invalid_name', 'name is required')
-  if (name.length > 100) throw Errors.badRequest('name_too_long', 'name max 100 chars')
+  if (name.length > PROJECT_NAME_MAX)
+    throw Errors.badRequest('name_too_long', `name max ${PROJECT_NAME_MAX} chars`)
 
   const memberIds = Array.isArray(body.member_ids)
     ? body.member_ids.filter((n: unknown): n is number => typeof n === 'number')

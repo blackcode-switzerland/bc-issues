@@ -52,8 +52,9 @@ type issueListFlags struct {
 func newIssueListCmd() *cobra.Command {
 	var f issueListFlags
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List issues",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users"},
+		Short:       "List issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIssueList(cmd, f)
 		},
@@ -192,9 +193,10 @@ func filterIssues(c *client.Client, cfg *config.Config, issues []client.Issue, f
 
 func newIssueViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <id>",
-		Short: "Show a single issue by its #number (the id shown in the app)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "view <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues/{id}"},
+		Short:       "Show a single issue by its #number (the id shown in the app)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -243,8 +245,9 @@ func newIssueCreateCmd() *cobra.Command {
 	var assignee, task, startDate, dueDate string
 	var labels, files []string
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create an issue",
+		Use:         "create",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues"},
+		Short:       "Create an issue",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if projectID == 0 || title == "" {
 				return fmt.Errorf("--project and --title are required")
@@ -348,9 +351,10 @@ func newIssueEditCmd() *cobra.Command {
 	var priority int
 	var assignee, task, startDate, dueDate string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
-		Short: "Edit an issue (status, title, priority, description, assignee, task, dates)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "edit <id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id}"},
+		Short:       "Edit an issue (status, title, priority, description, assignee, task, dates)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -439,9 +443,10 @@ func newIssueEditCmd() *cobra.Command {
 func newIssueDeleteCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <id>",
-		Short: "Delete an issue (project owners/admins only)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "delete <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}"},
+		Short:       "Delete an issue (project owners/admins only)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()
 			if err != nil {
@@ -467,9 +472,10 @@ func newIssueDeleteCmd() *cobra.Command {
 
 func newIssueAssignCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "assign <id> <user>",
-		Short: "Assign an issue (user is id, email, name, or 'me')",
-		Args:  cobra.ExactArgs(2),
+		Use:         "assign <id> <user>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id},GET /api/users"},
+		Short:       "Assign an issue (user is id, email, name, or 'me')",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -523,9 +529,10 @@ func newIssueAssignCmd() *cobra.Command {
 
 func newIssueUnassignCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unassign <id>",
-		Short: "Clear the assignee on an issue",
-		Args:  cobra.ExactArgs(1),
+		Use:         "unassign <id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id}"},
+		Short:       "Clear the assignee on an issue",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -556,9 +563,10 @@ func newIssueCommentCmd() *cobra.Command {
 	var replyTo int
 	var files []string
 	cmd := &cobra.Command{
-		Use:   "comment <id>",
-		Short: "Post a comment on an issue (use --body \"-\" for stdin; --reply-to to reply; --file to attach)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "comment <id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/comments"},
+		Short:       "Post a comment on an issue (use --body \"-\" for stdin; --reply-to to reply; --file to attach)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content, err := ReadBody(body, bodyFile)
 			if err != nil {
@@ -607,9 +615,10 @@ func newIssueCommentCmd() *cobra.Command {
 func newIssueEditCommentCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "edit-comment <issue-id> <comment-id>",
-		Short: "Edit a comment on an issue (author only)",
-		Args:  cobra.ExactArgs(2),
+		Use:         "edit-comment <issue-id> <comment-id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/comments/{id}"},
+		Short:       "Edit a comment on an issue (author only)",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// args[0] (the issue ref) is accepted for symmetry but the API
 			// addresses comments by their own id, so it isn't resolved here.
@@ -654,8 +663,9 @@ func newIssueEditCommentCmd() *cobra.Command {
 func newIssueDeleteCommentCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete-comment <issue-id> <comment-id>",
-		Short: "Delete a comment (author only)",
+		Use:         "delete-comment <issue-id> <comment-id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/comments/{id}"},
+		Short:       "Delete a comment (author only)",
 		Long: "Permanently delete a comment (author only). Any files the comment\n" +
 			"embedded are automatically removed from storage if nothing else in the\n" +
 			"workspace references them.",
@@ -690,10 +700,12 @@ func newIssueDeleteCommentCmd() *cobra.Command {
 }
 
 func newIssueWatchCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "watch <id>",
-		Short: "Subscribe to notifications on an issue",
-		Args:  cobra.ExactArgs(1),
+	var status bool
+	cmd := &cobra.Command{
+		Use:         "watch <id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/watch,GET /api/workspaces/{ws}/issues/{id}/watch"},
+		Short:       "Subscribe to notifications on an issue (--status to just report the current state)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -707,6 +719,23 @@ func newIssueWatchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// --status is a read: report whether you are watching, change nothing.
+			// Lets a script check before toggling instead of blind-writing.
+			if status {
+				watching, err := c.GetWatchStatus(ws, id)
+				if err != nil {
+					return err
+				}
+				format, err := output.Resolve(cmd)
+				if err != nil {
+					return err
+				}
+				return output.Render(format, map[string]any{"id": id, "watching": watching},
+					func(w io.Writer) error {
+						fmt.Fprintf(w, "watching: %t\n", watching)
+						return nil
+					})
+			}
 			if err := c.WatchIssue(ws, id); err != nil {
 				return err
 			}
@@ -714,13 +743,16 @@ func newIssueWatchCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&status, "status", false, "Report whether you are watching this issue, without changing it")
+	return cmd
 }
 
 func newIssueUnwatchCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unwatch <id>",
-		Short: "Unsubscribe from notifications on an issue",
-		Args:  cobra.ExactArgs(1),
+		Use:         "unwatch <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/watch"},
+		Short:       "Unsubscribe from notifications on an issue",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -746,9 +778,10 @@ func newIssueUnwatchCmd() *cobra.Command {
 func newIssueAttachCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "attach <id>",
-		Short: "Upload and attach a file to an issue",
-		Args:  cobra.ExactArgs(1),
+		Use:         "attach <id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/attachments"},
+		Short:       "Upload and attach a file to an issue",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
 				return fmt.Errorf("--file is required")
@@ -786,9 +819,10 @@ func newIssueAttachCmd() *cobra.Command {
 func newIssueDetachCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "detach <id> <attachment-id>",
-		Short: "Delete an attachment from an issue",
-		Args:  cobra.ExactArgs(2),
+		Use:         "detach <id> <attachment-id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/attachments/{attachmentId}"},
+		Short:       "Delete an attachment from an issue",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			attID, err := strconv.Atoi(args[1])
 			if err != nil {
@@ -818,9 +852,10 @@ func newIssueDetachCmd() *cobra.Command {
 
 func newIssueCommentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <id>",
-		Short: "List comments on an issue",
-		Args:  cobra.ExactArgs(1),
+		Use:         "comments <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues/{id}/comments"},
+		Short:       "List comments on an issue",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -856,9 +891,10 @@ func newIssueCommentsCmd() *cobra.Command {
 
 func newIssueActivityCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "activity <id>",
-		Short: "Show activity (comments + changes) on an issue",
-		Args:  cobra.ExactArgs(1),
+		Use:         "activity <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues/{id}/activity"},
+		Short:       "Show activity (comments + changes) on an issue",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -902,9 +938,10 @@ func newIssueActivityCmd() *cobra.Command {
 
 func newIssueAttachmentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "attachments <id>",
-		Short: "List attachments on an issue",
-		Args:  cobra.ExactArgs(1),
+		Use:         "attachments <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues/{id}/attachments"},
+		Short:       "List attachments on an issue",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

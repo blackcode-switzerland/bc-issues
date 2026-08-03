@@ -39,9 +39,10 @@ are — you end up with the items in BOTH workspaces.`
 	}
 
 	cmd := &cobra.Command{
-		Use:   mode,
-		Short: short,
-		Long:  long,
+		Use:         mode,
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/move"},
+		Short:       short,
+		Long:        long,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if target == "" {
 				return fmt.Errorf("--to (target workspace slug or id) is required")

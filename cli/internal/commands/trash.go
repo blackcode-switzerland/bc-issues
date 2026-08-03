@@ -55,8 +55,9 @@ func parseRefs(args []string) ([]client.TrashEntityRef, error) {
 func newTrashListCmd() *cobra.Command {
 	var typ string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List items in the recycle bin",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/trash"},
+		Short:       "List items in the recycle bin",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch typ {
 			case "", "issue", "project", "task":
@@ -115,8 +116,9 @@ func newTrashRestoreCmd() *cobra.Command {
 	var batch int
 	var restoreParents, standalone bool
 	cmd := &cobra.Command{
-		Use:   "restore [<type:id>...]",
-		Short: "Restore items (or a whole batch) from the recycle bin",
+		Use:         "restore [<type:id>...]",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/trash/restore"},
+		Short:       "Restore items (or a whole batch) from the recycle bin",
 		Long: "Restore deleted items back to the workspace.\n\n" +
 			"Pass refs like `issue:42 project:3`, or restore a whole delete group with\n" +
 			"--batch <id> (see the BATCH column in `bk trash list`).\n\n" +
@@ -184,8 +186,9 @@ func newTrashPurgeCmd() *cobra.Command {
 	var batch int
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "purge [<type:id>...]",
-		Short: "Permanently delete items from the recycle bin (owner only)",
+		Use:         "purge [<type:id>...]",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/trash/purge"},
+		Short:       "Permanently delete items from the recycle bin (owner only)",
 		Long: "Permanently delete binned items. This cannot be undone and requires the\n" +
 			"workspace owner role. Pass refs like `issue:42`, or --batch <id>.\n\n" +
 			"Any files embedded in the deleted items are automatically removed from\n" +
@@ -237,8 +240,9 @@ func newTrashPurgeCmd() *cobra.Command {
 func newTrashEmptyCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "empty",
-		Short: "Permanently delete everything in the recycle bin (owner only)",
+		Use:         "empty",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/trash/empty"},
+		Short:       "Permanently delete everything in the recycle bin (owner only)",
 		Long: "Permanently delete everything in the workspace recycle bin. Owner only.\n\n" +
 			"Any files embedded in the deleted items are automatically removed from\n" +
 			"storage once nothing else in the workspace references them (same safety\n" +

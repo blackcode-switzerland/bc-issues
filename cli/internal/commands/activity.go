@@ -15,8 +15,9 @@ import (
 func newActivityCmd() *cobra.Command {
 	var limit, cursor int
 	cmd := &cobra.Command{
-		Use:   "activity",
-		Short: "Show the workspace activity feed",
+		Use:         "activity",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/activity"},
+		Short:       "Show the workspace activity feed",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -85,8 +86,9 @@ func newAnalyticsCmd() *cobra.Command {
 		priority, label              []int
 	)
 	cmd := &cobra.Command{
-		Use:   "analytics",
-		Short: "Show workspace analytics (summary, throughput, distributions)",
+		Use:         "analytics",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/analytics"},
+		Short:       "Show workspace analytics (summary, throughput, distributions)",
 		Long: `Show analytics for the active workspace (or --ws <slug|id>).
 
 Mirrors the web dashboard: pick a scope with --view (workspace|project|

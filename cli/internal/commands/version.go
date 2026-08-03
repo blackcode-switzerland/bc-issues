@@ -10,8 +10,9 @@ import (
 
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Print the bk CLI version",
+		Use:         "version",
+		Annotations: map[string]string{"routes": "none"},
+		Short:       "Print the bk CLI version",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v := version.Version
 			if v == "dev" {

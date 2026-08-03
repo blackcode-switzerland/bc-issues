@@ -15,6 +15,12 @@ import { upload } from '@vercel/blob/client'
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 export const MAX_UPLOAD_LABEL = '100MB'
 
+// MIME types POST /api/upload refuses (400 file_type_not_allowed). SVG is
+// blocked because it can carry script. Everything else is accepted. Served live
+// as `media.blocked_mime_types` by GET /api/meta so the CLI guide never has to
+// hardcode the list — see lib/limits.ts.
+export const BLOCKED_UPLOAD_MIME_TYPES = ['image/svg+xml'] as const
+
 // Cache the capability check for the session.
 let blobEnabled: boolean | null = null
 async function isBlobEnabled(): Promise<boolean> {

@@ -50,8 +50,8 @@ func (c *Client) CreateWorkspace(name string) (*Workspace, error) {
 }
 
 type WorkspaceDetail struct {
-	Workspace Workspace        `json:"workspace"`
-	Role      string           `json:"role"`
+	Workspace Workspace         `json:"workspace"`
+	Role      string            `json:"role"`
 	Members   []WorkspaceMember `json:"members"`
 }
 
@@ -92,15 +92,15 @@ func (c *Client) SetActiveWorkspace(workspaceID int) (*Workspace, error) {
 // ---------- members ----------
 
 type WorkspaceMember struct {
-	ID         int     `json:"id" yaml:"id"`
-	WorkspaceID int    `json:"workspace_id" yaml:"workspace_id"`
-	UserID     int     `json:"user_id" yaml:"user_id"`
-	Role       string  `json:"role" yaml:"role"`
-	JoinedAt   *string `json:"joined_at,omitempty" yaml:"joined_at,omitempty"`
-	Email      string  `json:"email" yaml:"email"`
-	Name       *string `json:"name" yaml:"name"`
-	AvatarURL  *string `json:"avatar_url" yaml:"avatar_url"`
-	DeletedAt  *string `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
+	ID          int     `json:"id" yaml:"id"`
+	WorkspaceID int     `json:"workspace_id" yaml:"workspace_id"`
+	UserID      int     `json:"user_id" yaml:"user_id"`
+	Role        string  `json:"role" yaml:"role"`
+	JoinedAt    *string `json:"joined_at,omitempty" yaml:"joined_at,omitempty"`
+	Email       string  `json:"email" yaml:"email"`
+	Name        *string `json:"name" yaml:"name"`
+	AvatarURL   *string `json:"avatar_url" yaml:"avatar_url"`
+	DeletedAt   *string `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
 }
 
 func (c *Client) ListWorkspaceMembers(slugOrID string) ([]WorkspaceMember, error) {
@@ -322,6 +322,22 @@ type CreateLabelRequest struct {
 func (c *Client) CreateLabel(slugOrID string, req CreateLabelRequest) (*Label, error) {
 	var label Label
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/labels", slugOrID), req, &label); err != nil {
+		return nil, err
+	}
+	return &label, nil
+}
+
+// UpdateLabelRequest carries only the fields being changed — omitted pointers
+// leave the value untouched, matching the PATCH semantics of every edit route.
+type UpdateLabelRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
+func (c *Client) UpdateLabel(slugOrID string, id int, req UpdateLabelRequest) (*Label, error) {
+	var label Label
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/labels/%d", slugOrID, id), req, &label); err != nil {
 		return nil, err
 	}
 	return &label, nil

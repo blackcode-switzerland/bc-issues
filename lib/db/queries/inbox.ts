@@ -15,6 +15,7 @@ import {
   type InboxMessage,
   type NewInboxMessage,
 } from '../schema'
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
 const DEDUP_WINDOW_MS = 60_000
 
@@ -104,8 +105,8 @@ export interface InboxPage {
   unread_count: number
 }
 
-const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 200
+const DEFAULT_LIMIT = PAGE_SIZE_DEFAULT
+const MAX_LIMIT = PAGE_SIZE_MAX
 
 export async function listInbox(filter: ListInboxFilter): Promise<InboxPage> {
   const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)

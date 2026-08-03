@@ -4,6 +4,7 @@
 import { and, count, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { errorEvents, type ErrorEvent, type NewErrorEvent } from '../schema'
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
 export interface PublicErrorRow {
   id: number
@@ -28,8 +29,8 @@ export interface ListErrorEventsFilter {
   limit?: number
 }
 
-const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 200
+const DEFAULT_LIMIT = PAGE_SIZE_DEFAULT
+const MAX_LIMIT = PAGE_SIZE_MAX
 
 export async function listPublicErrorEvents(
   filter: ListErrorEventsFilter = {}

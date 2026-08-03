@@ -14,8 +14,9 @@ import (
 // opaque numeric id (the most common cause of writing to the wrong workspace).
 func newMetaCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "meta",
-		Short: "Bootstrap context: who am I + every workspace I can write to",
+		Use:         "meta",
+		Annotations: map[string]string{"routes": "GET /api/meta"},
+		Short:       "Bootstrap context: who am I + every workspace I can write to",
 		Long: `Print the agent bootstrap context (GET /api/meta): the authenticated
 user, the active workspace, and EVERY workspace you belong to.
 

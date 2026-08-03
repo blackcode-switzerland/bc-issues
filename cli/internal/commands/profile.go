@@ -23,8 +23,9 @@ func newProfileCmd() *cobra.Command {
 
 func newProfileViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view",
-		Short: "Show your profile",
+		Use:         "view",
+		Annotations: map[string]string{"routes": "GET /api/me"},
+		Short:       "Show your profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -55,8 +56,9 @@ func newProfileViewCmd() *cobra.Command {
 func newProfileEditCmd() *cobra.Command {
 	var name, tagline, avatarURL string
 	cmd := &cobra.Command{
-		Use:   "edit",
-		Short: "Update your profile (name, tagline, avatar URL)",
+		Use:         "edit",
+		Annotations: map[string]string{"routes": "PATCH /api/me"},
+		Short:       "Update your profile (name, tagline, avatar URL)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("name") &&
 				!cmd.Flags().Changed("tagline") &&

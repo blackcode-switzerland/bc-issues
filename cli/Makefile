@@ -8,6 +8,7 @@
 #   make install               # install to $GOBIN (or ~/go/bin)
 #   make run -- whoami         # go run cmd/bk -- whoami
 #   make test                  # go test ./...
+#   make routes                # emit routes.json for the JS parity test
 #   make clean                 # remove ./bk and dist/
 
 # ---- variables -----------------------------------------------------------
@@ -44,7 +45,7 @@ ARTIFACTS := $(foreach t,$(TARGETS),\
 
 # ---- targets -------------------------------------------------------------
 
-.PHONY: help build install all dist sums run test vet fmt tidy clean version targets
+.PHONY: help build install all dist sums run test vet fmt tidy clean version targets routes
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nTargets:\n"} \
@@ -63,7 +64,14 @@ install: ## Install to $GOBIN (defaults to ~/go/bin)
 
 all: $(ARTIFACTS) ## Cross-compile every target into dist/
 
-dist: all sums ## Cross-compile + write dist/SHA256SUMS
+dist: all sums routes ## Cross-compile + write dist/SHA256SUMS + routes.json
+
+# routes.json is the CLI's declared API coverage, consumed by
+# lib/cli-parity.test.ts. That test prefers `go run ./cmd/bk __routes`; this
+# artifact is the fallback for CI images that run the JS suite without a Go
+# toolchain. Regenerate it whenever a `routes` annotation changes.
+routes: ## Emit routes.json (CLI route coverage, for the JS parity test)
+	@$(GO) run $(PKG) __routes > routes.json && echo "wrote cli/routes.json"
 
 sums: ## Recompute dist/SHA256SUMS over current artifacts
 	@cd $(DIST) && shasum -a 256 $(BIN)-$(VERSION)-* > SHA256SUMS && \
@@ -99,8 +107,8 @@ fmt: ## gofmt -w on all Go sources
 tidy: ## go mod tidy
 	$(GO) mod tidy
 
-clean: ## Remove ./bk and dist/
-	rm -f $(BIN)
+clean: ## Remove ./bk, dist/ and routes.json
+	rm -f $(BIN) routes.json
 	rm -rf $(DIST)
 
 version: ## Print the resolved version string

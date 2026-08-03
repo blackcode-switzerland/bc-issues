@@ -166,6 +166,12 @@ export function toRichTextHtml<T extends string | null | undefined>(input: T): T
 
 /* ------------------------- uploaded-media embedding ------------------------- */
 
+// The MIME prefixes that render as inline media (preview / player) rather than a
+// download card. This is what FileAttachmentView branches on; exported so
+// GET /api/meta can serve the rule live (`media.inline_prefixes`) instead of the
+// CLI guide restating it. See lib/limits.ts.
+export const INLINE_MEDIA_PREFIXES = ['image/', 'video/', 'audio/'] as const
+
 // Extension → MIME. Used to decide how an uploaded file renders. The prefix
 // (image/ video/ audio/) is what the FileAttachmentView branches on; everything
 // else becomes a generic download card.

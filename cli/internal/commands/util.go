@@ -15,7 +15,6 @@ import (
 	"golang.org/x/term"
 )
 
-
 // AddYesFlag attaches the --yes/-y skip-confirmation flag to a destructive command.
 func AddYesFlag(cmd *cobra.Command, target *bool) {
 	cmd.Flags().BoolVarP(target, "yes", "y", false, "Skip the interactive confirmation")

@@ -6,64 +6,86 @@ load-bearing summary.
 
 ## What this project is
 
-An AI-native, Linear-style issue tracker. It is consumed through **four surfaces
-that must always stay in sync**:
+An AI-native, Linear-style issue tracker. Humans use the web UI; **agents use one
+interface: the `bk` CLI** (`cli/`, Go, published to npm as
+`@blackcode_sa/bc-issues`).
 
-1. **REST API** — `app/api/**` (Next.js App Router route handlers).
-2. **OpenAPI spec** — `lib/openapi/spec.ts`, served at `GET /api/openapi.json`,
-   rendered at `GET /api/docs`.
-3. **`bk` CLI** — `cli/` (Go), published to npm as `@blackcode_sa/bc-issues`.
-4. **Docs** — `docs/backend.md`, `docs/cli.md`, `docs/frontend.md`.
+The HTTP API under `app/api/**` is **private plumbing with no public contract**.
+Do not document it for external consumers, and never reintroduce an OpenAPI spec
+or a fat page manifest — both were deleted on 2026-08-03 precisely because they
+were hand-maintained copies of facts that lived elsewhere, and they drifted.
 
-Plus `GET /api/meta` — the agent bootstrap endpoint (current user, active
-workspace, the full `workspaces` list you belong to, and the enum vocabulary
-from `lib/work-items.ts`). Agents pick their write target from `workspaces` by
-**name/slug** — never by the opaque numeric id, and `active_workspace` is only a
-default.
+Two sources of truth, and only two:
+
+| Kind of knowledge | Where | Why there |
+|---|---|---|
+| **Static** — how the tool behaves (flags, exit codes, workflows) | `cli/internal/guide/topics/*.md`, `//go:embed`-ed, served by `bk guide` | It describes *the binary being run*. Fetching it from the server could describe a `--flag` the agent doesn't have. |
+| **Dynamic** — what the data is now (vocabularies, limits, workspaces) | the server, via `GET /api/meta` → `bk meta` | Changes without a CLI release. |
+
+A guide topic must **never** restate a dynamic value. Point at `bk meta` instead.
 
 ## The one rule that matters most
 
-> **Any change to an API route or user-facing feature must be propagated to ALL
-> four surfaces in the same change.**
+> **Every API route must be reachable from `bk`.** A route with no command is a
+> capability an agent cannot use.
 
-Concretely, when you add / change / remove a route:
+When you add / change / remove a route or feature:
 
-- Update the **route** in `app/api/**` (conventions: workspace-scoped under
-  `/api/workspaces/{ws}/…`; `apiHandler` + `Errors`; lists via `jsonList()` →
-  `{ data, next_cursor }`; create → 201; delete → `{ deleted: true }`).
-- Update the **OpenAPI spec** `lib/openapi/spec.ts` (import enums from
-  `lib/work-items.ts` — never hardcode them).
-- Update the **CLI** command + client method in `cli/`.
-- Update the relevant **doc** in `docs/`.
-- **Add a dated changelog entry.** Report every route/feature change in
-  `docs/api-changelog.md` as a new `## YYYY-MM-DD — Title` (newest first): what
-  changed, if it's breaking, how to adapt. If the surface itself changed, also
-  update the baseline `docs/platform-reference.md`. This is what lets users' AI
-  agents self-update — it surfaces at `/changelog`, `GET /api/changelog`, and
-  `bk changelog`. See CLAUDE.md → "Changelog rule".
+1. **Route** — `app/api/**`. Same conventions: workspace-scoped under
+   `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`; lists via
+   `jsonList()` → `{ data, next_cursor }`; create → 201; delete →
+   `{ deleted: true }`.
+2. **CLI** — add or update the `bk` command + client method in `cli/`, **and its
+   `routes` annotation** (`Annotations: map[string]string{"routes": "GET /api/…"}`,
+   or `"none"` when the command makes no HTTP call).
+3. **Guide** — if agent-visible *behaviour* changed, update the relevant
+   `cli/internal/guide/topics/*.md`.
+4. **`bk meta`** — if a vocabulary or limit changed, update its source
+   (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
+   `bk meta` follow automatically via `lib/agent-meta.ts`.
+5. **Deprecations** — if you renamed or removed a flag/command, add a row to
+   `cli/internal/commands/deprecations.go` in the same commit.
+6. **Changelog** — one dated entry in `docs/api-changelog.md`, newest first.
 
-This is enforced: **`lib/openapi/parity.test.ts` (via `npm test`) fails the build
-if the spec and the routes drift apart.**
+This is enforced. **`lib/cli-parity.test.ts` (via `npm test`) fails the build**
+if a route has no CLI coverage, or if the CLI claims a route that doesn't exist.
+**`cli/internal/commands/routes_test.go`** fails if a leaf command declares
+nothing at all.
+
+## Writing commands agents can survive
+
+- **`Confirm()` is not a guard for agents** — it auto-approves under
+  `BK_NO_PROMPT=1` and on a non-TTY, which is how agents run. For anything
+  irreversible, make the caller repeat the target back (`--confirm <slug>`), and
+  require it even with `--yes`. Never default a destructive command to the active
+  workspace.
+- **Every failure exits non-zero with one line on stderr.** Exit codes are the
+  contract; stdout stays parseable. Cobra's defaults fight this and are corrected
+  in `root.go` (`SilenceErrors`, `rejectUnknownSubcommands`).
+- **A dead end must name its own exit** — via the server's `suggestion`, a
+  `deprecations.go` row, or the generic `bk skill sync`. See `hintFor()` in
+  `cmd/bk/main.go`.
 
 ## Before you finish an API/feature change
 
 ```bash
-npx tsc --noEmit          # types
-npm test                  # includes the OpenAPI↔routes parity test
-cd cli && go build ./...  # CLI compiles
+npx tsc --noEmit                                          # types
+npm test                                                  # includes lib/cli-parity.test.ts
+cd cli && go build ./... && go vet ./... && go test ./...  # CLI + guide/skill/groups tests
+cd cli && make routes                                     # if a `routes` annotation changed
 ```
 
 ## Conventions cheat-sheet
 
-- **Auth:** `Authorization: Bearer bk_live_…` (API token) or a browser session.
+- **Auth:** `bk login` (or a browser session for the web UI).
 - **Errors:** `{ error, code, suggestion?, details? }` — always via `apiHandler`.
-- **Lists:** `{ data, next_cursor }` (cursor pagination), built with `jsonList()`.
-- **No legacy routes:** never reintroduce implicit-active-workspace endpoints;
-  everything tenant-scoped goes under `/api/workspaces/{ws}/…`.
-- **Enums (status/priority/health):** single source of truth is
-  `lib/work-items.ts`; the spec and `/api/meta` both read from it.
-- **Per-page agent note:** every page embeds a machine-readable access manifest
-  (`lib/agent-manifest.ts` → `components/agent-manifest.tsx`, rendered in the root
-  layout), and `/llms.txt` is generated from the same constant. If the auth
-  header, envelope shapes, or discovery endpoints change, update
-  `lib/agent-manifest.ts` — both surfaces update with it.
+  Set `suggestion` on any 400/404/409 an agent can realistically hit; the CLI
+  prints it as a `hint:` line, which is what turns a dead run into a recovered one.
+- **Lists:** `{ data, next_cursor }`, built with `jsonList()`.
+- **No legacy routes:** everything tenant-scoped goes under `/api/workspaces/{ws}/…`.
+- **Enums:** single source of truth is `lib/work-items.ts`; `/api/meta` reads from it.
+- **Limits:** single source of truth is `lib/limits.ts`; the route that enforces a
+  cap imports it, and `/api/meta` serves it. Never re-type a number.
+- **Per-page agent note:** `lib/agent-manifest.ts` → `components/agent-manifest.tsx`
+  (root layout) and `/llms.txt`. It is a **pointer, not a copy** — keep it under
+  ~10 lines and add nothing that could ever become false.

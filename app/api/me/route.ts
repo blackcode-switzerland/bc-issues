@@ -8,6 +8,7 @@ import {
   updateUserProfile,
 } from '@/lib/db/queries/users'
 import { isSuperAdmin } from '@/lib/auth/whitelist'
+import { PROFILE_NAME_MAX, PROFILE_TAGLINE_MAX } from '@/lib/limits'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   // resolveAuth (not resolveUser) so we can report `via` — this route absorbed
@@ -50,7 +51,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     }
     const trimmed = typeof body.name === 'string' ? body.name.trim() : body.name
     if (typeof trimmed === 'string' && trimmed.length > 255) {
-      throw Errors.badRequest('name_too_long', 'name max 255 chars')
+      throw Errors.badRequest('name_too_long', `name max ${PROFILE_NAME_MAX} chars`)
     }
     patch.name = trimmed
   }
@@ -60,7 +61,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     }
     const trimmed = typeof body.tagline === 'string' ? body.tagline.trim() : body.tagline
     if (typeof trimmed === 'string' && trimmed.length > 140) {
-      throw Errors.badRequest('tagline_too_long', 'tagline max 140 chars')
+      throw Errors.badRequest('tagline_too_long', `tagline max ${PROFILE_TAGLINE_MAX} chars`)
     }
     patch.tagline = trimmed
   }

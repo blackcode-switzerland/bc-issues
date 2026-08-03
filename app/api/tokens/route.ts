@@ -4,6 +4,7 @@ import { apiHandler, Errors } from '@/lib/api'
 import { authOptions } from '@/lib/auth'
 import { getUserByEmail } from '@/lib/db/queries/users'
 import { listTokens, mintToken } from '@/lib/auth/tokens'
+import { TOKEN_NAME_MAX } from '@/lib/limits'
 
 // Token management is session-only on purpose: minting or listing API tokens
 // with an API token would be privilege escalation, so these require a browser
@@ -34,7 +35,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const name = (body.name ?? '').trim()
   if (!name) throw Errors.badRequest('invalid_name', 'name is required')
-  if (name.length > 100) throw Errors.badRequest('name_too_long', `name max 100 chars (got ${name.length})`)
+  if (name.length > TOKEN_NAME_MAX)
+    throw Errors.badRequest('name_too_long', `name max ${TOKEN_NAME_MAX} chars (got ${name.length})`)
 
   let expires_at: Date | null = null
   if (body.expires_at) {

@@ -240,8 +240,9 @@ func (c *Client) Meta(ws string) (*Meta, error) {
 	return &m, nil
 }
 
-// Changelog fetches GET /api/changelog — the platform-reference baseline plus
-// the dated change log. Public (no workspace needed); auth is sent if present.
+// Changelog fetches GET /api/changelog — the dated change log, newest first.
+// Public (no workspace needed); auth is sent if present. For how the CLI WORKS
+// rather than what changed, see internal/guide (`bk guide`).
 func (c *Client) Changelog() (*Changelog, error) {
 	var cl Changelog
 	if err := c.get("/api/changelog", &cl); err != nil {
@@ -636,6 +637,17 @@ func (c *Client) DeleteTask(id int, mode string) error {
 		path += "?mode=" + mode
 	}
 	return c.deleteJSON(path, nil, nil)
+}
+
+// UndoLog fetches GET /api/undo — the recent transaction log, so you can see
+// what `bk undo` would roll back before committing to it. Returned verbatim as
+// raw JSON so new fields flow through without a client change.
+func (c *Client) UndoLog() (json.RawMessage, error) {
+	var raw json.RawMessage
+	if err := c.get("/api/undo", &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 func (c *Client) Undo(count int) (*UndoResponse, error) {

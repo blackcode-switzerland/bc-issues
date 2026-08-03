@@ -1,77 +1,46 @@
-// Single source of truth for the machine-readable "how to use this
-// programmatically" note embedded on every page by <AgentManifest/>
-// (components/agent-manifest.tsx).
+// The machine-readable "how to use this programmatically" note embedded on every
+// page by <AgentManifest/> (components/agent-manifest.tsx), and the source for
+// /llms.txt.
 //
-// Keep it TRUE — it is one of the product surfaces covered by the API
-// multi-surface sync contract (see CLAUDE.md / AGENTS.md). If the auth header,
-// envelope shape, or discovery endpoints change, update this too.
+// This used to be 77 dense lines restating the auth header, every envelope
+// shape, the pagination rules, the upload flow, the encoding warning… all of it
+// a hand-maintained copy of facts that lived elsewhere, and all of it a drift
+// risk. Two of those copies were already wrong when we measured.
+//
+// It is now a POINTER, not a copy. Everything specific lives in exactly one of
+// two places, neither of which can go stale:
+//
+//   `bk guide` — static behaviour, embedded in the binary being run
+//   `bk meta`  — dynamic data (vocabularies, limits, workspaces), fetched live
+//
+// The rule: nothing may be added here that could ever become false. If you are
+// tempted to document a route, an envelope or a limit, it belongs in a guide
+// topic or in /api/meta instead.
 
 export const AGENT_MANIFEST = {
   project: 'blackcode issues',
-  summary:
-    'AI-native issue tracker. The same workspace data is available through a web UI, a Go CLI (bk), and an HTTP API.',
-  recommended_interface:
-    'For programmatic/agent access we recommend the bk CLI over direct HTTP API calls. The CLI wraps the same API but handles auth, JSON-body encoding, pagination, file upload+embed, and gives stable exit codes — which makes agent runs markedly more reliable. The raw HTTP API stays fully supported; reach for it when the CLI cannot cover a case (e.g. an urgent one-off). Not required, just the more dependable path.',
-  programmatic_access: {
-    api_base: '/api',
-    workspace_scoped_routes: '/api/workspaces/{workspace_slug_or_id}/...',
-    auth: 'HTTP header — Authorization: Bearer bk_live_<token>',
-    get_a_token: 'Mint at /dashboard/settings/tokens, or run: bk login',
-    list_envelope: '{ data: [...], next_cursor?: number | null, total?: number }',
-    error_envelope: '{ error, code, suggestion?, details? }',
-    pagination: 'Most lists (issues, projects, tasks) return everything in one response (no cursor); issues add a total. Only the keyset feeds paginate via ?limit=&?cursor=: activity, trash, super-admin errors.',
-    rich_text: 'Description/comment/body fields accept Markdown or HTML (stored as sanitized HTML); send real newlines, not literal \\n. GFM Markdown tables (and HTML <table>) render natively. To embed video/audio, upload it (see file_uploads) and reference the url — raw <iframe> and external (non-uploaded) media are stripped.',
-    json_bodies: 'Build request bodies with a real JSON encoder, not string concatenation. Embedded urls and Markdown like ![](url) contain () and special chars that break hand-built JSON/shell strings — encode, then POST the file (e.g. curl --data @body.json).',
-    text_encoding: 'All text in and out is UTF-8. If you pipe content through a shell (bulk import/export/move), ensure the environment is UTF-8 — a non-UTF-8 console (commonly Windows cmd/PowerShell without `chcp 65001`) silently produces mojibake (é→Ã©, —→ΓÇö) that gets stored verbatim. Prefer sending a JSON body (unambiguously UTF-8 on the wire) over round-tripping text through a terminal.',
-    move_items: 'Copy or move projects/tasks/issues (referenced by #number) between two workspaces you belong to: POST /api/workspaces/{source_ws}/move { target, mode: "move"|"copy", projects?, tasks?, issues?, cascade_tasks?, cascade_issues? }. One atomic transaction (no data loss on failure); new #numbers are allocated in the target, labels are matched/created by name, and user refs not in the target membership are dropped and listed under `adjustments`. CLI: `bk move --to <ws> --project N …` / `bk copy --to <ws> …`.',
-    file_uploads:
-      'To embed a file/image in a description or comment: (1) POST the file to /api/upload (multipart, field "file") to get back { url }; (2) reference that url in the body with Markdown — an image as ![name](url), any other file as [name](url). The server auto-renders uploaded urls inline (image preview, video/audio player, or download card). Max 100MB. CLI shortcuts: `bk upload <file>` prints the url; `bk issue|task|project create --file ./x` (and `bk issue comment <id> --file ./x`) upload+embed in one step; or reference a local path directly in --description/--description-file (wrap paths with spaces/parens in angle brackets, e.g. [](</abs/my file (2).mp4>)) and the CLI uploads+rewrites it.',
-    storage:
-      'Editing a file out of a body never deletes the stored bytes (so undo/restore stay safe). But terminal deletes DO free storage automatically: hard-deleting a comment/reply or purging an item from Trash removes the files that content referenced once nothing else references them. A workspace owner can also review/clean everything: GET /api/workspaces/{ws}/storage lists every file with its live references + usage; DELETE /api/workspaces/{ws}/storage/{id} permanently removes a file with reference_count 0 (refused 409 if anything, including a trashed item, still references it). CLI: `bk storage list`, `bk storage rm <id>`, `bk storage attachments`.',
-  },
-  discovery: {
-    context: '/api/meta',
-    workspaces: '/api/workspaces',
-    openapi: '/api/openapi.json',
-    docs: '/api/docs',
-    changelog: '/changelog',
-    changelog_api: '/api/changelog',
-    get_up_to_date: '/agent-updator',
-  },
-  staying_current:
-    'This API and CLI evolve. If a request that used to work now fails, the cause is almost always a change listed in the changelog. Read /changelog (a pinned complete Platform Reference plus dated entries, newest first) — or GET /api/changelog (JSON, or ?format=markdown), or run `bk changelog`. If your integration/skill has drifted, /agent-updator is a short guide to getting current. Every API response carries breadcrumb headers so you can find your way from any failed call: X-BK-Help (/agent-updator) and X-BK-Changelog (/changelog), plus X-BK-CLI-Latest and X-BK-CLI-Min. The CLI is version-floored: an old bk is hard-blocked (exit 8) with an upgrade prompt, and on a stuck call it prints a one-line `hint:` to stderr pointing here. Update with `npm install -g @blackcode_sa/bc-issues@latest`.',
-  choosing_a_workspace:
-    'All tenant data lives inside a workspace, and most accounts have more than one. Before you create/update anything, decide WHICH workspace. GET /api/meta returns `workspaces` (every workspace you belong to, with id, name, slug, role) plus the current `active_workspace` — or call GET /api/workspaces for the same list. Match the user\'s intent to a workspace by its human-readable `name`/`slug`; do NOT pick by the numeric `id` (ids are opaque sequential numbers and trivial to confuse — writing to the wrong one is the most common agent mistake here). Then address it as /api/workspaces/{slug}/… (the {ws} segment accepts slug or id — prefer the slug). `active_workspace` is just a default, not necessarily where the user means to write. CLI: `bk meta` (mirror of GET /api/meta) or `bk workspace list`, then `bk workspace use <slug>` or a per-command `bk --ws <slug> …`.',
-  cli: {
-    recommended: 'Preferred interface for agents — more reliable than calling the HTTP API directly (see recommended_interface).',
-    package: '@blackcode_sa/bc-issues',
-    install: 'npm install -g @blackcode_sa/bc-issues',
-    login: 'bk login',
-    machine_output: 'add --json or -o yaml; set BK_NO_PROMPT=1 for unattended runs',
-  },
-  for_developers: '/AGENTS.md',
+  summary: 'AI-native issue tracker. Agents operate it through the bk CLI.',
+  interface: 'CLI only. There is no supported HTTP API.',
+  install: 'npm install -g @blackcode_sa/bc-issues',
+  start: ['bk login', 'bk skill install', 'bk guide', 'bk meta'],
+  package: '@blackcode_sa/bc-issues',
+  // Where a stuck agent goes. Kept because lib/api/handler.ts advertises these
+  // on every response as X-BK-Help / X-BK-Changelog.
+  help: '/agent-updator',
+  changelog: '/changelog',
 } as const
 
 // Human-readable prose for agents that scrape the raw HTML rather than parse the
 // JSON block. Rendered inside an HTML comment at the top of <body>.
 export const AGENT_MANIFEST_NOTE = `
 blackcode issues — programmatic access
-This is a rendered web page, but everything here is also available over an HTTP API and a CLI.
-- RECOMMENDED: use the bk CLI rather than calling the HTTP API directly. It wraps the same API but handles auth, JSON encoding, pagination, file upload+embed and stable exit codes, so agent runs are more reliable. The HTTP API stays supported for cases the CLI can't cover — it's a recommendation, not a requirement.
-- API base: /api  (tenant data is workspace-scoped under /api/workspaces/{ws}/...)
-- Auth: send  Authorization: Bearer bk_live_<token>  (mint at /dashboard/settings/tokens, or run: bk login)
-- Start here: GET /api/meta  (your context + the valid status/priority values + the list of every workspace you belong to)
-- Pick the right workspace FIRST: GET /api/meta (or GET /api/workspaces) lists every workspace with its name + slug. Choose the target by NAME/slug, never by the numeric id (ids are opaque and easy to mix up — writing to the wrong workspace is the #1 agent mistake). Then use /api/workspaces/{slug}/... . active_workspace is only a default. CLI: bk workspace list; bk workspace use <slug> (or bk --ws <slug> per command)
-- Full spec: GET /api/openapi.json  (OpenAPI 3.1; human-browsable at /api/docs)
-- CLI: npm install -g @blackcode_sa/bc-issues  then  bk login
-- Item ids (project/task/issue) are the workspace #number shown in the app — address everything by it; the global db id is never exposed. Changelog + full platform reference: /changelog (JSON at /api/changelog, or run: bk changelog). Outdated integration? /agent-updator
-- Lists return { data } in one response (issues/projects/tasks aren't paginated; issues add total); only activity/trash/super-admin errors paginate via ?limit=&?cursor= with next_cursor. Errors return { error, code, suggestion?, details? }
-- Rich text (descriptions, comments, bodies): send Markdown or HTML; use real newlines, not literal \\n. GFM/HTML tables render natively; embed video/audio by uploading it (raw <iframe>/external media are stripped)
-- Files/images: POST to /api/upload (multipart "file") -> { url }, then put the url in the body as ![name](url) (image) or [name](url) (any file); it renders inline. CLI: bk ... create --file ./x
-- File storage is tracked per workspace. Deleting a comment/reply or purging from Trash auto-frees referenced files (when nothing else references them); editing a file out of a body never deletes the bytes. Owner review/cleanup: GET /api/workspaces/{ws}/storage (files + references + usage), DELETE /api/workspaces/{ws}/storage/{id}. CLI: bk storage list|rm|attachments
-- Build JSON bodies with a real encoder, not string concatenation — urls + Markdown like ![](url) contain () and special chars that break hand-built JSON/shell strings (POST via curl --data @file.json)
-- Text is UTF-8 in and out. When piping text through a shell (bulk import/export/move), keep the environment UTF-8 — a non-UTF-8 console (e.g. Windows without \`chcp 65001\`) silently corrupts accents/dashes (é→Ã©, —→ΓÇö). Prefer a JSON body over round-tripping text through a terminal
-- Move/copy items between your workspaces: POST /api/workspaces/{source_ws}/move { target, mode:"move"|"copy", projects?/tasks?/issues? by #number }. Atomic (no data loss), new #numbers in the target, labels matched by name, non-member user refs dropped into an adjustments report. CLI: bk move --to <ws> --project N; bk copy --to <ws> …
-- Developer/agent guide: /AGENTS.md
+This product is operated through a CLI. There is no supported HTTP API.
+  npm install -g @blackcode_sa/bc-issues
+  bk login
+  bk skill install
+  bk guide
+\`bk guide\` is the complete usage guide for the binary you just installed, and works offline.
+\`bk meta\` returns your workspaces and the live status/priority vocabularies and limits.
+Out of date? /agent-updator · What changed: /changelog
 A structured version of this note is in the <script type="application/json" id="agent-manifest"> element on this page.
 `.trim()

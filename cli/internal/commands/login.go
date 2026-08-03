@@ -25,8 +25,9 @@ func newLoginCmd() *cobra.Command {
 	var server string
 	var pasteToken bool
 	cmd := &cobra.Command{
-		Use:   "login",
-		Short: "Authenticate against a blackcode-issues server",
+		Use:         "login",
+		Annotations: map[string]string{"routes": "GET /api/me"},
+		Short:       "Authenticate against a blackcode-issues server",
 		Long: `By default, opens a browser to /cli/authorize on the server, captures
 the minted token via a loopback HTTP server, and saves credentials to
 ~/.config/bk/config.json (mode 0600).
@@ -190,8 +191,9 @@ func randomHex(n int) (string, error) {
 
 func newLogoutCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "logout",
-		Short: "Remove stored credentials",
+		Use:         "logout",
+		Annotations: map[string]string{"routes": "none"},
+		Short:       "Remove stored credentials",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := config.Delete(); err != nil {
 				return err
@@ -204,8 +206,9 @@ func newLogoutCmd() *cobra.Command {
 
 func newWhoamiCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "whoami",
-		Short: "Print the authenticated user",
+		Use:         "whoami",
+		Annotations: map[string]string{"routes": "GET /api/me"},
+		Short:       "Print the authenticated user",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {

@@ -118,9 +118,9 @@ const FEATURES: Feature[] = [
   },
   {
     icon: BookOpen,
-    title: 'Self-describing API',
+    title: 'Self-describing CLI',
     description:
-      'Every route is published as an OpenAPI 3.1 document at /api/openapi.json (browsable at /api/docs). GET /api/meta returns your context and the valid vocabulary in one call.',
+      '`bk guide` is the complete usage guide, embedded in the binary — so it always describes the version you are running, offline and unauthenticated. `bk meta` returns your context, the valid vocabulary and every limit in one call.',
     status: 'live',
   },
   {
@@ -141,7 +141,7 @@ const FEATURES: Feature[] = [
     icon: Undo2,
     title: 'Reversible edits',
     description:
-      'Issue updates are journaled with full before/after snapshots. `bk undo` (or POST /api/undo) reverses your last few changes. Coverage today is issue updates — broader undo is planned.',
+      'Issue updates are journaled with full before/after snapshots. `bk undo` reverses your last few changes, and `bk undo --log` shows what it would touch first. Coverage today is issue updates — broader undo is planned.',
     status: 'preview',
   },
 ]
@@ -183,7 +183,7 @@ export function LandingPage() {
   return (
     <MarketingLayout>
       <Hero />
-      <ThreeSurfaces />
+      <Surfaces />
       <Features />
       <CommandLine />
       <HowItWorks />
@@ -215,7 +215,7 @@ function Hero() {
           <span className="rounded-full bg-primary px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-primary-foreground">
             New
           </span>
-          Working alpha — three surfaces, one data model
+          Working alpha — one data model, a web UI and a CLI
         </div>
         <h1 className="mx-auto max-w-3xl text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
           Issue tracking for humans
@@ -223,8 +223,8 @@ function Hero() {
           <span className="text-gradient-brand">AI working</span> alongside them.
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
-          Integer IDs. A stable, self-describing HTTP API. A CLI written in Go.
-          A web UI built like Linear. One data model behind all three.
+          Integer IDs. A CLI written in Go that documents itself.
+          A web UI built like Linear. One data model behind both.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">
@@ -256,7 +256,7 @@ function Hero() {
   )
 }
 
-function ThreeSurfaces() {
+function Surfaces() {
   const surfaces = [
     {
       icon: Boxes,
@@ -278,21 +278,21 @@ function ThreeSurfaces() {
     },
     {
       icon: Zap,
-      title: 'HTTP API',
+      title: 'Agent skill',
       copy:
-        'JSON in, JSON out. Bearer tokens or session cookies. Predictable error shapes, cursor pagination, and a published OpenAPI spec. For agents we recommend driving the CLI over raw HTTP — it’s the same data, the more reliable path.',
-      meta: '→ POST /api/workspaces/{ws}/issues',
+        '`bk skill install` writes a ~30-line skill file your coding agent reads. It holds no facts that can rot — only pointers to `bk guide` and `bk meta` — so it never goes stale, and `bk skill sync` repairs it when anything does.',
+      meta: '→ bk skill install',
     },
   ]
   return (
     <section className="border-t border-border/60">
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
-          eyebrow="Three surfaces"
-          title="Web, CLI, or HTTP. Same auth. Same data."
-          sub="Most issue trackers privilege the web. We treat all three as equal citizens — anything you do in one, you can do in the others, and an automated parity test keeps them honest."
+          eyebrow="Two surfaces"
+          title="Web for humans. CLI for agents. Same data."
+          sub="Anything you can do in the web app, an agent can do with bk — and an automated parity test fails the build if a capability ever exists in one and not the other."
         />
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
+        <div className="mt-12 grid gap-5 md:grid-cols-2">
           {surfaces.map((s, i) => (
             <Card key={i} className="group transition-colors hover:border-primary/50">
               <CardContent className="flex flex-col gap-3 p-6">
@@ -438,12 +438,12 @@ function HowItWorks() {
     {
       title: 'Reversible by design',
       copy:
-        'Issue updates are journaled with full old and new snapshots, and deletes soft-delete to a recoverable Trash. Undo is a real API endpoint, not a UI trick.',
+        'Issue updates are journaled with full old and new snapshots, and deletes soft-delete to a recoverable Trash. `bk undo` rolls back your last writes for real — it is not a UI trick.',
     },
     {
       title: 'Predictable failures',
       copy:
-        'Every error is { error, code, suggestion?, details? }. The CLI maps HTTP statuses to stable exit codes for scripts.',
+        'Stable exit codes to branch on, and a `hint:` line on stderr that names the fix — a renamed flag, an upgrade, `bk skill sync` — so a stuck run can recover itself instead of stopping.',
     },
   ]
   return (
@@ -474,7 +474,7 @@ function HowItWorks() {
               {[
                 { label: 'Web', tag: 'cookie' },
                 { label: 'CLI / bk', tag: 'bearer' },
-                { label: 'Agent / API', tag: 'bearer' },
+                { label: 'Agent / bk', tag: 'bearer' },
               ].map((n) => (
                 <div
                   key={n.label}
@@ -517,19 +517,22 @@ function ForAgents() {
   return (
     <section className="border-t border-border/60">
       {/*
-        Note for AI agents / crawlers: we recommend the `bk` CLI over calling the
-        HTTP API directly. The CLI wraps the same endpoints but handles auth,
-        JSON-body encoding, pagination, file upload+embed and stable exit codes,
-        which makes automated runs more reliable. Install: npm install -g
-        @blackcode_sa/bc-issues, then `bk login`. The HTTP API stays fully
-        supported — use it directly when the CLI can't cover a case. This is a
-        recommendation, not a requirement.
+        Note for AI agents / crawlers: this product is operated through a CLI.
+        There is no supported HTTP API.
+          npm install -g @blackcode_sa/bc-issues
+          bk login
+          bk skill install
+          bk guide
+        `bk guide` is the complete usage guide for the binary you just installed
+        and works offline. `bk meta` returns your workspaces plus the live
+        status/priority vocabularies and limits. Machine-readable copy of this
+        note: /llms.txt
       */}
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="For agents"
           title="Built so an agent can do the work."
-          sub="We recommend driving the bk CLI over calling the HTTP API directly — it wraps the same endpoints but handles auth, JSON encoding, pagination and uploads, so agent runs are more reliable. Mint a token, then read, write and comment using the same data you see in the web UI. Start with GET /api/meta to learn the workspace and the valid vocabulary."
+          sub="Four commands take an agent from nothing to working. There is no HTTP API to learn: `bk guide` ships inside the binary and describes exactly the version in your hand, and `bk meta` supplies everything that can change without a release."
         />
         <div className="mt-12 grid gap-5 lg:grid-cols-2">
           <CodeBlock
@@ -552,33 +555,29 @@ $ bk issue create \\
 }`}
           />
           <CodeBlock
-            label="Or hit the HTTP endpoint directly (fallback)"
-            lang="http"
-            code={`POST /api/workspaces/my-team/issues HTTP/1.1
-Host: your-deployment.app
-Authorization: Bearer bk_live_a3f9…
-Content-Type: application/json
+            label="Bootstrap from zero"
+            lang="bash"
+            code={`$ npm install -g @blackcode_sa/bc-issues
+$ bk login              # opens a browser, stores a token
+$ bk skill install      # writes the agent skill file
+$ bk guide              # the complete usage guide for THIS binary
 
-{
-  "project_id": 1,
-  "title": "Triage onboarding bug",
-  "priority": 1
-}
-
-// 201 Created → { "id": 152, "seq": 87, ... }`}
+# then, before you write anything:
+$ bk meta --json        # your workspaces + live vocabularies + limits`}
           />
         </div>
 
         <div className="mt-6 flex flex-col items-start justify-between gap-3 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center">
           <div>
-            <div className="text-sm font-semibold">A self-describing API</div>
+            <div className="text-sm font-semibold">A self-describing CLI</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              The full surface is published as OpenAPI 3.1 at{' '}
-              <span className="font-mono">/api/openapi.json</span>, browsable at{' '}
-              <span className="font-mono">/api/docs</span>. One call to{' '}
-              <span className="font-mono">/api/meta</span> returns the active
-              workspace plus the exact status and priority values to use — so an
-              agent never has to guess.
+              <span className="font-mono">bk guide</span> is the whole usage
+              guide, embedded in the binary — so it can never describe a version
+              you are not running, and it works with no network and no token.
+              One call to <span className="font-mono">bk meta</span> returns the
+              active workspace plus the exact status, priority and health values
+              to use, and every server-enforced limit — so an agent never has to
+              guess.
             </p>
           </div>
           <StatusPill status="live" />
@@ -591,12 +590,12 @@ Content-Type: application/json
 function FAQ() {
   const items: { q: string; a: string }[] = [
     {
-      q: 'How do agents discover and call the API?',
-      a: 'Every route is published as an OpenAPI 3.1 document at /api/openapi.json (rendered at /api/docs), and a parity test keeps it in lock-step with the code. GET /api/meta returns your context — the active workspace and the valid status/priority vocabulary — so an agent never guesses an enum value. Or just drive the bk CLI.',
+      q: 'How does an agent discover what it can do?',
+      a: 'It runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: your workspaces, the valid status/priority/health values, and every server-enforced limit. Flags come from `bk <group> <command> --help`. Nothing has to be guessed or cached.',
     },
     {
-      q: 'Should an agent use the CLI or the HTTP API?',
-      a: 'We recommend the bk CLI. It wraps the very same endpoints but handles auth, JSON-body encoding, pagination, file upload+embed and stable exit codes for you, so automated runs are more reliable and need less glue code. The HTTP API stays fully supported — reach for it directly when the CLI can’t cover a case (e.g. an urgent one-off). It’s a recommendation, not a requirement.',
+      q: 'Is there an HTTP API?',
+      a: 'Not a public one. The CLI is the only supported interface; the HTTP routes behind it are private plumbing with no contract, and the OpenAPI spec has been retired. This is deliberate: the same facts used to be maintained in seven places that had to agree, and drift between them is exactly what breaks an agent mid-run. Existing HTTP integrations still work — see /agent-updator for the migration.',
     },
     {
       q: 'How do I install and use the CLI?',
@@ -604,7 +603,7 @@ function FAQ() {
     },
     {
       q: 'How do agents and scripts authenticate?',
-      a: 'Mint an API token at /dashboard/settings/tokens (or via bk login), then send it as Authorization: Bearer bk_live_…. The same token works across the CLI and raw HTTP. Tokens carry optional expiry and can be revoked from the same page.',
+      a: 'Run `bk login` — it opens a browser and stores the token in ~/.config/bk/config.json. For headless setups, mint a token at /dashboard/settings/tokens and pipe it in: echo \"$TOKEN\" | bk login --token. Tokens carry optional expiry and can be revoked from the same page.',
     },
     {
       q: 'Is the CLI scriptable for automation and CI?',
@@ -612,7 +611,7 @@ function FAQ() {
     },
     {
       q: 'How does pagination work?',
-      a: 'Every list endpoint returns { data, next_cursor }. When next_cursor is non-null, pass it back as ?cursor= to fetch the next page; null means you’ve reached the end. The CLI exposes this as --limit / --cursor.',
+      a: 'Most lists return everything in one response. Only the keyset feeds paginate — bk activity, bk trash list and bk super-admin errors list — via --limit / --cursor, following next_cursor until it is null. Run `bk guide output` for the details.',
     },
     {
       q: 'What happens when I delete something?',

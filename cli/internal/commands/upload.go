@@ -11,8 +11,9 @@ import (
 
 func newUploadCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "upload <file> [<file> ...]",
-		Short: "Upload file(s) and print the public URL(s)",
+		Use:         "upload <file> [<file> ...]",
+		Annotations: map[string]string{"routes": "GET /api/upload,POST /api/upload,POST /api/upload/blob"},
+		Short:       "Upload file(s) and print the public URL(s)",
 		Long: `Upload one or more files (max 100MB each) and print the resulting public URL.
 
 Use a URL in any description or comment to embed the file inline:

@@ -16,30 +16,45 @@ import (
 // help an out-of-date setup get current — so it must work without a config file.
 const defaultChangelogServer = "https://bc-issues.vercel.app"
 
-// `bk changelog` mirrors GET /api/changelog. By default it prints the dated
-// change log (newest first); --reference prints the pinned Platform Reference
-// baseline; --full prints both. Read this to bring an outdated skill current.
+// `bk changelog` mirrors GET /api/changelog: the dated record of what changed.
+//
+// It no longer has a --reference flag. That printed a server-hosted "Platform
+// Reference" — a complete snapshot of the surface — which is precisely the kind
+// of copy that drifts (its CLI version was stale before we retired it). The
+// current surface is `bk guide`, embedded in THIS binary, so it can never
+// describe a version you are not running. The flag is kept as a hidden alias
+// that redirects, rather than vanishing into "unknown flag".
 func newChangelogCmd() *cobra.Command {
 	var full, reference bool
 	var serverFlag string
 
 	cmd := &cobra.Command{
-		Use:   "changelog",
-		Short: "What's changed in the API and CLI (read this to get up to date)",
+		Use:         "changelog",
+		Annotations: map[string]string{"routes": "GET /api/changelog"},
+		Short:       "What's changed in the API and CLI (read this to get up to date)",
 		Long: `Print the product changelog (GET /api/changelog).
 
-Default: the dated log of changes, newest first.
-  --reference   print the pinned Platform Reference baseline (the complete
-                current API + CLI surface, data types, rules and warnings)
-  --full        print the reference followed by every dated entry
+Default: a table of dated changes, newest first.
+  --full        print every dated entry in full
+
+For how the CLI WORKS (rather than what changed), run ` + "`bk guide`" + ` — the
+complete usage guide embedded in this binary.
 
 The changelog is public, so this works even before ` + "`bk login`" + `. If a
-request that used to work now fails, check here first, then
-` + "`npm install -g @blackcode_sa/bc-issues@latest`" + ` to update the CLI.`,
+command that used to work now fails, run ` + "`bk skill sync`" + `, then check here.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
+			}
+
+			// --reference was retired with the Platform Reference it printed.
+			// Redirect instead of failing: a hint an agent can act on beats an
+			// "unknown flag" it can only give up on.
+			if reference {
+				fmt.Fprintln(cmd.ErrOrStderr(),
+					"hint: --reference was retired — the platform reference is now the embedded guide.\n"+
+						"      Run `bk guide` (offline, always matches this binary).")
 			}
 
 			c := changelogClient(serverFlag)
@@ -49,18 +64,6 @@ request that used to work now fails, check here first, then
 			}
 
 			return output.Render(format, cl, func(w io.Writer) error {
-				if reference || full {
-					fmt.Fprintln(w, strings.TrimSpace(cl.Reference.Markdown))
-					if full {
-						fmt.Fprintln(w)
-						fmt.Fprintln(w, strings.Repeat("─", 60))
-						fmt.Fprintln(w)
-					}
-				}
-				if reference && !full {
-					return nil
-				}
-
 				if full {
 					// Whole dated log, in full.
 					for i, e := range cl.Entries {
@@ -89,14 +92,15 @@ request that used to work now fails, check here first, then
 					return err
 				}
 				fmt.Fprintln(cmd.ErrOrStderr(),
-					"\nRead a full entry: `bk changelog --full`. Complete surface: `bk changelog --reference` (or /changelog).")
+					"\nRead every entry in full: `bk changelog --full`. How the CLI works: `bk guide`.")
 				return nil
 			})
 		},
 	}
 
-	cmd.Flags().BoolVar(&full, "full", false, "Print the reference and every dated entry in full")
-	cmd.Flags().BoolVar(&reference, "reference", false, "Print only the pinned Platform Reference baseline")
+	cmd.Flags().BoolVar(&full, "full", false, "Print every dated entry in full")
+	cmd.Flags().BoolVar(&reference, "reference", false, "Retired — the platform reference is now `bk guide`")
+	_ = cmd.Flags().MarkDeprecated("reference", "the platform reference is now the embedded guide: run `bk guide`")
 	cmd.Flags().StringVar(&serverFlag, "server", "", "Server base URL (default: your logged-in server, else "+defaultChangelogServer+")")
 	return cmd
 }

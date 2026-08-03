@@ -5,7 +5,7 @@ import { put } from '@vercel/blob'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '@/lib/upload'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, BLOCKED_UPLOAD_MIME_TYPES } from '@/lib/upload'
 import { recordUpload } from '@/lib/db/queries/uploads'
 import { getWorkspaceForUser } from '@/lib/db/queries/workspaces'
 import type { User } from '@/lib/db/schema'
@@ -57,9 +57,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   if (!file) throw Errors.badRequest('no_file', 'Include a file in the form data under the "file" field')
   if (file.size > MAX_UPLOAD_BYTES) throw Errors.badRequest('file_too_large', `Maximum file size is ${MAX_UPLOAD_LABEL}`)
-  // Block SVG due to XSS risk; allow everything else.
-  if (file.type === 'image/svg+xml') {
-    throw Errors.badRequest('file_type_not_allowed', 'SVG files are not allowed for security reasons')
+  // Block SVG due to XSS risk; allow everything else. The list is exported so
+  // GET /api/meta can serve it live (media.blocked_mime_types) — the CLI guide
+  // must never hardcode "any file type", which is what drifted before.
+  if ((BLOCKED_UPLOAD_MIME_TYPES as readonly string[]).includes(file.type)) {
+    throw Errors.badRequest(
+      'file_type_not_allowed',
+      `${file.type} files are not allowed for security reasons`
+    )
   }
 
   const timestamp = Date.now()
@@ -121,9 +126,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
     message: 'Upload API endpoint',
     usage: 'POST with multipart/form-data containing a "file" field',
     maxSize: MAX_UPLOAD_LABEL,
+    // The numeric cap. The old platform reference claimed this route returned a
+    // `maxBytes` field — it never did, so nothing could act on the limit
+    // programmatically. It does now, and GET /api/meta serves the same value
+    // under `limits.upload_max_bytes`.
+    maxBytes: MAX_UPLOAD_BYTES,
     // When true, large files should be uploaded client-direct via /api/upload/blob
     // (bypasses the serverless body limit). When false (local dev), use this route.
     blob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-    note: 'All content types accepted except image/svg+xml (blocked for XSS safety)',
+    blockedMimeTypes: BLOCKED_UPLOAD_MIME_TYPES,
+    note: `All content types accepted except ${BLOCKED_UPLOAD_MIME_TYPES.join(', ')} (blocked for XSS safety)`,
   })
 })

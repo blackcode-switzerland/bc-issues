@@ -27,8 +27,9 @@ func newInboxCmd() *cobra.Command {
 func newInboxListCmd() *cobra.Command {
 	var unread bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List inbox messages",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/me/inbox"},
+		Short:       "List inbox messages",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -81,8 +82,9 @@ func newInboxListCmd() *cobra.Command {
 func newInboxReadCmd() *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
-		Use:   "read [id ...] | --all",
-		Short: "Mark inbox messages as read",
+		Use:         "read [id ...] | --all",
+		Annotations: map[string]string{"routes": "POST /api/me/inbox/mark-read"},
+		Short:       "Mark inbox messages as read",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !all && len(args) == 0 {
 				return fmt.Errorf("provide message IDs or use --all")
@@ -113,9 +115,10 @@ func newInboxReadCmd() *cobra.Command {
 
 func newInboxArchiveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "archive <id> [id ...]",
-		Short: "Archive inbox messages",
-		Args:  cobra.MinimumNArgs(1),
+		Use:         "archive <id> [id ...]",
+		Annotations: map[string]string{"routes": "POST /api/me/inbox/archive"},
+		Short:       "Archive inbox messages",
+		Args:        cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newClientAndConfig()
 			if err != nil {
@@ -141,9 +144,10 @@ func newInboxArchiveCmd() *cobra.Command {
 
 func newInboxUnarchiveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unarchive <id> [id ...]",
-		Short: "Move archived messages back to inbox",
-		Args:  cobra.MinimumNArgs(1),
+		Use:         "unarchive <id> [id ...]",
+		Annotations: map[string]string{"routes": "POST /api/me/inbox/unarchive"},
+		Short:       "Move archived messages back to inbox",
+		Args:        cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, _, err := newClientAndConfig()
 			if err != nil {
@@ -173,4 +177,3 @@ func truncateInbox(s string, n int) string {
 	}
 	return s[:n-1] + "…"
 }
-

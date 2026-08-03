@@ -37,8 +37,9 @@ func newProjectCmd() *cobra.Command {
 func newProjectListCmd() *cobra.Command {
 	var search string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List projects you are a member of",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/projects"},
+		Short:       "List projects you are a member of",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -80,9 +81,10 @@ func newProjectListCmd() *cobra.Command {
 
 func newProjectViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <id>",
-		Short: "Show a single project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "view <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/projects/{id}"},
+		Short:       "Show a single project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -116,9 +118,10 @@ func newProjectViewCmd() *cobra.Command {
 
 func newProjectMembersCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "members <project-id>",
-		Short: "List members of a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "members <project-id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/projects/{id}/members"},
+		Short:       "List members of a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -158,9 +161,10 @@ func newProjectMembersCmd() *cobra.Command {
 func newProjectIssuesCmd() *cobra.Command {
 	var status, assignee string
 	cmd := &cobra.Command{
-		Use:   "issues <project-id>",
-		Short: "List issues for a project (optionally filter by status/assignee)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "issues <project-id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues"},
+		Short:       "List issues for a project (optionally filter by status/assignee)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -180,9 +184,10 @@ func newProjectIssuesCmd() *cobra.Command {
 
 func newProjectTasksCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "tasks <project-id>",
-		Short: "List tasks for a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "tasks <project-id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks"},
+		Short:       "List tasks for a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -210,8 +215,9 @@ func newProjectCreateCmd() *cobra.Command {
 	var priority, visibility, color, startDate, dueDate string
 	var files []string
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a new project",
+		Use:         "create",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/projects"},
+		Short:       "Create a new project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -283,9 +289,10 @@ func newProjectEditCmd() *cobra.Command {
 	var name, summary, description, descriptionFile, status string
 	var priority, visibility, color, startDate, dueDate string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
-		Short: "Edit a project (name, description, status, priority, visibility, color, dates)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "edit <id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/projects/{id}"},
+		Short:       "Edit a project (name, description, status, priority, visibility, color, dates)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -364,8 +371,9 @@ func newProjectEditCmd() *cobra.Command {
 func newProjectDeleteCmd() *cobra.Command {
 	var yes, cascade, detach bool
 	cmd := &cobra.Command{
-		Use:   "delete <id>",
-		Short: "Move a project to the Trash",
+		Use:         "delete <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/projects/{id}"},
+		Short:       "Move a project to the Trash",
 		Long: "Move a project to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
 			"Attached issues and tasks: by default they stay active and are\n" +
 			"unlinked from the project (--detach). Pass --cascade to move them to the\n" +
@@ -412,9 +420,10 @@ func newProjectDeleteCmd() *cobra.Command {
 func newProjectAddMemberCmd() *cobra.Command {
 	var email, role string
 	cmd := &cobra.Command{
-		Use:   "add-member <project-id>",
-		Short: "Add a member to a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "add-member <project-id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/projects/{id}/members"},
+		Short:       "Add a member to a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -450,9 +459,10 @@ func newProjectRemoveMemberCmd() *cobra.Command {
 	var userRef string
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "remove-member <project-id>",
-		Short: "Remove a member from a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "remove-member <project-id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/projects/{id}/members"},
+		Short:       "Remove a member from a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -500,9 +510,10 @@ func newProjectUpdatesCmd() *cobra.Command {
 
 func newProjectUpdatesListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <project-id>",
-		Short: "List health updates for a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "list <project-id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/projects/{id}/updates"},
+		Short:       "List health updates for a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -547,9 +558,10 @@ func newProjectUpdatesListCmd() *cobra.Command {
 func newProjectUpdatesAddCmd() *cobra.Command {
 	var status, body, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "add <project-id>",
-		Short: "Post a health update on a project (status: on_track/at_risk/off_track)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "add <project-id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/projects/{id}/updates"},
+		Short:       "Post a health update on a project (status: on_track/at_risk/off_track)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -601,9 +613,10 @@ func newProjectUpdatesAddCmd() *cobra.Command {
 func newProjectUpdatesDeleteCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "delete <project-id> <update-id>",
-		Short: "Delete a project health update (author only)",
-		Args:  cobra.ExactArgs(2),
+		Use:         "delete <project-id> <update-id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}"},
+		Short:       "Delete a project health update (author only)",
+		Args:        cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -638,9 +651,10 @@ func newProjectUpdatesDeleteCmd() *cobra.Command {
 func newProjectCommentCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "comment <project-id>",
-		Short: "Post a comment on a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "comment <project-id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/projects/{id}/comments"},
+		Short:       "Post a comment on a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -686,9 +700,10 @@ func newProjectCommentCmd() *cobra.Command {
 
 func newProjectCommentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <project-id>",
-		Short: "List comments on a project",
-		Args:  cobra.ExactArgs(1),
+		Use:         "comments <project-id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/projects/{id}/comments"},
+		Short:       "List comments on a project",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {

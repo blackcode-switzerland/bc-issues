@@ -29,15 +29,42 @@ import { AGENT_MANIFEST } from '@/lib/agent-manifest'
 //    these to show a soft "update available" notice and to hard-block when it is
 //    below the minimum supported version.
 //  - X-BK-Help / X-BK-Changelog: passive breadcrumbs so an agent that hits a wall
-//    can find its own way back — the get-current guide and the changelog. They
-//    sit out-of-band in headers (never in the body), so they cost nothing to a
-//    client that ignores them. Sourced from the agent manifest so they can't
-//    drift from /llms.txt and the per-page manifest.
-function withStandardHeaders<T extends NextResponse | Response>(res: T): T {
+//    can find its own way back. They sit out-of-band in headers (never in the
+//    body), so they cost nothing to a client that ignores them. Sourced from the
+//    agent manifest so they can't drift from /llms.txt and the per-page manifest.
+//
+// Plus a standing "this is not a supported interface" signal for DIRECT HTTP
+// CALLERS. There is no sunset date: the users are internal and were told
+// directly, so there is no notice period to run down. The signal stays
+// indefinitely because its real audience is an agent working from stale context
+// — one that learned these routes before 1.9.0 and still has them in its
+// prompt. That agent can show up at any time, and a header costs nothing.
+//
+// It is safe because no route changed (we withdrew the support promise, not the
+// endpoint) and the signal travels in headers, never the body, so it cannot
+// break anyone's response parsing.
+const DEPRECATION_WARNING =
+  '299 - "The HTTP API is no longer a supported interface. Use the bk CLI: ' +
+  'npm install -g @blackcode_sa/bc-issues && bk skill install"'
+
+// The CLI identifies itself as `bk-cli/<version>` (see cli/internal/client). It
+// IS the supported interface, so warning it would be noise that its users can do
+// nothing about — and noise teaches agents to ignore headers.
+function isCliCaller(req: NextRequest): boolean {
+  const ua = req.headers.get('user-agent') ?? ''
+  return ua.startsWith('bk-cli/') || req.headers.get('x-bk-client') === 'cli'
+}
+
+function withStandardHeaders<T extends NextResponse | Response>(res: T, req?: NextRequest): T {
   res.headers.set('X-BK-CLI-Latest', CLI_LATEST_VERSION)
   res.headers.set('X-BK-CLI-Min', CLI_MIN_VERSION)
-  res.headers.set('X-BK-Help', AGENT_MANIFEST.discovery.get_up_to_date)
-  res.headers.set('X-BK-Changelog', AGENT_MANIFEST.discovery.changelog)
+  res.headers.set('X-BK-Help', AGENT_MANIFEST.help)
+  res.headers.set('X-BK-Changelog', AGENT_MANIFEST.changelog)
+
+  if (req && !isCliCaller(req)) {
+    res.headers.set('X-BK-Migration', AGENT_MANIFEST.help)
+    res.headers.set('Warning', DEPRECATION_WARNING)
+  }
   return res
 }
 
@@ -53,9 +80,9 @@ export function apiHandler<TCtx extends RouteContext = RouteContext>(
 ): (req: NextRequest, ctx: TCtx) => Promise<NextResponse | Response> {
   return async (req, ctx) => {
     try {
-      return withStandardHeaders(await handler(req, ctx))
+      return withStandardHeaders(await handler(req, ctx), req)
     } catch (err) {
-      return withStandardHeaders(await handleError(err, req))
+      return withStandardHeaders(await handleError(err, req), req)
     }
   }
 }

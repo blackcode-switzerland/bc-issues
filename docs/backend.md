@@ -1,5 +1,11 @@
 # Backend
 
+> **Internal.** The HTTP API is private plumbing — **the only public contract is
+> the `bk` CLI.** This document is for people working on this repo. Do not treat
+> it as an integration guide, do not link external consumers to it, and do not
+> reintroduce a published API spec. Agent-facing usage lives in `bk guide`
+> (`cli/internal/guide/topics/`).
+
 How the server side of Blackcode Issues fits together: the API conventions, the
 two authentication paths, the workspace-scoped data model, the event spine that
 powers activity/inbox/analytics, and how to extend it. **Source of truth is the
@@ -349,52 +355,66 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
 
 ### Discovery (for agents & tooling)
 
-Three unauthenticated-friendly entry points make the API self-describing:
+**The HTTP API is private plumbing.** Agents reach this product through the `bk`
+CLI only; there is no public OpenAPI spec and no browsable API reference. Two
+endpoints remain part of the discovery story, and one is a deprecation stub:
 
 ```
-GET /api/openapi.json   OpenAPI 3.1 document (public). Source: lib/openapi/spec.ts.
-GET /api/docs           Human-readable API reference (Scalar, renders the spec above).
 GET /api/meta           Authenticated bootstrap: { user, active_workspace, workspaces,
-                        vocabulary, labels, projects, members }. ?ws=<slug|id> targets
-                        a workspace.
+                        vocabulary, limits, media, cli, conventions, labels, projects,
+                        members }. ?ws=<slug|id> targets a workspace.
 GET /api/changelog      PUBLIC (no auth). What changed + the current CLI version floor.
+GET /api/openapi.json   410 Gone (retired-surface stub, kept indefinitely).
+GET /api/docs           410 Gone (retired-surface stub, kept indefinitely).
 ```
+
+`GET /api/meta` is the call an agent makes first (as `bk meta`). It returns the
+active workspace, the **full `workspaces` list** the caller belongs to (id, name,
+slug, role, `is_active`), the canonical issue/project **vocabulary** (statuses,
+priorities, project-update health — value/label/color, from `lib/work-items.ts`),
+and three derived blocks assembled in **`lib/agent-meta.ts`**:
+
+- **`limits`** — every server-enforced cap, imported from `lib/limits.ts` (the
+  file the enforcing routes also import) and `lib/upload.ts`.
+- **`media`** — which MIME prefixes render inline, which get View+Download, and
+  `blocked_mime_types`; derived from `lib/rich-text.ts` and the upload route.
+- **`cli`** — the advertised versions from `lib/cli-version.ts`.
+
+Nothing in those three may be hand-typed. The rule that makes the whole design
+work: **static behaviour ships in the binary (`bk guide`, `//go:embed`-ed under
+`cli/internal/guide/topics/`); dynamic data comes from here.** A guide topic that
+restated a limit would be wrong the first time we changed it, and the agent would
+have no way to tell — so `cli/internal/guide/guide_test.go` fails the build if a
+topic hardcodes one.
+
+The `workspaces` list exists so an agent can pick its write target **by
+name/slug** — not by the opaque numeric `id`. Writing to the wrong workspace
+(because ids carry no meaning) is the most common agent mistake;
+`active_workspace` is only a default. `GET /api/workspaces` returns the same list
+on its own.
 
 `GET /api/changelog` (`app/api/changelog/route.ts`) is unauthenticated. It
-returns `{ cli_latest_version, cli_min_version, reference: { markdown, html },
-entries: [{ date, title, markdown, html }] }` (entries newest first). Pass
-`?format=markdown` (or `Accept: text/markdown`) to get the whole thing as one raw
-Markdown document instead of JSON. Source of truth is **`lib/changelog.ts`**,
-which reads two authored Markdown files — `docs/platform-reference.md` (the
-pinned baseline complete reference) and `docs/api-changelog.md` (the dated log) —
-and renders/parses them with `marked` (gfm, `breaks:false`) + `sanitize-html`.
-Because those `.md` files must exist at runtime, `next.config.js` sets
-`outputFileTracingIncludes` for `/changelog` and `/api/changelog` so they're
-bundled into the serverless output. The spec covers it with `Changelog` +
-`ChangelogEntry` schemas under the **Meta** tag; `/api/meta`
-(`conventions.changelog`) and `/llms.txt` point at `/changelog`,
-`/api/changelog`, and `/agent-updator` via `lib/agent-manifest.ts`'s `discovery`
-block.
+returns `{ cli_latest_version, cli_min_version, entries: [{ date, title,
+markdown, html }], reference_moved_to }` (entries newest first). Pass
+`?format=markdown` (or `Accept: text/markdown`) for one raw Markdown document.
+Source of truth is **`lib/changelog.ts`**, which reads **`docs/api-changelog.md`**
+and renders it with `marked` (gfm, `breaks:false`) + `sanitize-html`. Because that
+`.md` must exist at runtime, `next.config.js` sets `outputFileTracingIncludes` for
+`/changelog` and `/api/changelog`.
 
-`GET /api/meta` is the call an agent should make first: it returns the active
-workspace, the **full `workspaces` list** the caller belongs to (id, name, slug,
-role, `is_active`), plus the canonical issue/project **vocabulary** (statuses,
-priorities, project-update health — value/label/color, from `lib/work-items.ts`)
-so the agent never guesses an enum value. The `workspaces` list exists so an agent
-can pick its write target **by name/slug** — not by the opaque numeric `id`.
-Writing to the wrong workspace (because ids carry no meaning) is the most common
-agent mistake; `active_workspace` is only a default, not necessarily where the
-user intends to write. `GET /api/workspaces` returns the same list on its own. The OpenAPI spec is hand-authored and covers the
-**entire feature surface** — every route under `app/api/**` except true internals
-(the NextAuth handler, the `/api/errors/client` beacon, and the `/api/docs` +
-`/api/openapi.json` discovery routes themselves). It imports the enums from
-`lib/work-items.ts` so valid status/priority values can't drift.
+The old `reference` field (a pinned "Platform Reference" snapshot of the whole
+surface) is gone — `reference_moved_to` explains where, rather than leaving an
+old client with `undefined`. A hand-maintained snapshot of the surface is a copy,
+and copies drift; the current surface is `bk guide`.
 
-**Parity is enforced by a test** (`lib/openapi/parity.test.ts`, run by `npm
-test`): it walks `app/api/**` and fails if any route+method is missing from
-`lib/openapi/spec.ts` or if the spec describes a route that doesn't exist. So
-when you add, remove, or change a route, update `lib/openapi/spec.ts` in the same
-change or the build breaks.
+**Coverage is enforced by a test** (`lib/cli-parity.test.ts`, run by `npm test`).
+It replaces the deleted OpenAPI parity test and asks the question that now
+matters: *can an agent do this?* It walks `app/api/**`, shells out to
+`bk __routes` (the hidden command that dumps each leaf command's `routes`
+annotation), and fails if a route has no CLI command, if the CLI claims a route
+that doesn't exist, or if a leaf command declares nothing. Genuine non-CLI routes
+live in its `EXCLUDED_PATHS` / `EXCLUDED_OPERATIONS` maps, each with a stated
+reason.
 
 ### Workspace-scoped (canonical)
 

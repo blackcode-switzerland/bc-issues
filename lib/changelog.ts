@@ -1,21 +1,20 @@
-// Single source of truth for the product changelog, surfaced through three
-// aligned surfaces: the /changelog web page, GET /api/changelog, and `bk
-// changelog`. All three read from the two authored Markdown files in docs/:
+// Single source of truth for the product changelog, surfaced three aligned ways:
+// the /changelog web page, GET /api/changelog, and `bk changelog`. All three read
+// docs/api-changelog.md — the dated, newest-first log of every change. Each entry
+// is a `## YYYY-MM-DD — Title` section.
 //
-//   docs/platform-reference.md — the pinned "Platform Reference (baseline)":
-//     a complete snapshot of the API + CLI surface, data types, rules, and
-//     warnings at the current release. This is what an agent reads to bring an
-//     outdated skill fully up to date in one pass.
-//   docs/api-changelog.md      — the dated, newest-first log of every change
-//     since the baseline. Each entry is a `## YYYY-MM-DD — Title` section.
+// It used to also serve docs/platform-reference.md, a pinned "complete snapshot
+// of the API + CLI surface". That document is gone: a hand-maintained snapshot of
+// a surface is a copy, and copies drift — its CLI version was already stale when
+// we retired it. The current surface is now described by `bk guide`, which ships
+// inside the binary and therefore always matches the binary being run.
 //
-// The files are the editable source; this module reads, parses, and renders
-// them. They are bundled into the serverless output via next.config.js
+// So the changelog has exactly one job now: the dated record of what changed.
+// For how things WORK, an agent runs `bk guide`; for live values, `bk meta`.
+//
+// The file is the editable source; this module reads, parses, and renders it. It
+// is bundled into the serverless output via next.config.js
 // (outputFileTracingIncludes) so the reads work in production too.
-//
-// Part of the API multi-surface sync contract (see CLAUDE.md): every change to
-// a route or user-facing feature must add a dated entry to docs/api-changelog.md
-// (and update docs/platform-reference.md if the surface itself changed).
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -41,10 +40,14 @@ export interface ChangelogPayload {
   cli_latest_version: string
   /** Minimum CLI the API still supports; older clients are hard-blocked. */
   cli_min_version: string
-  /** The pinned baseline reference (docs/platform-reference.md). */
-  reference: { markdown: string; html: string }
-  /** Dated changes since the baseline, newest first (docs/api-changelog.md). */
+  /** Every dated change, newest first (docs/api-changelog.md). */
   entries: ChangelogEntry[]
+  /**
+   * Where the retired Platform Reference went. Kept in the payload (rather than
+   * silently dropping the field) so a client built against the old shape gets an
+   * answer instead of `undefined` — the same reasoning as the 410 stubs.
+   */
+  reference_moved_to: string
 }
 
 // We author the changelog; this is not untrusted user input. We still sanitize
@@ -111,22 +114,18 @@ let cached: ChangelogPayload | null = null
 
 export function getChangelog(): ChangelogPayload {
   if (cached) return cached
-  const referenceMd = readFileSync(join(DOCS_DIR, 'platform-reference.md'), 'utf8')
   const logMd = readFileSync(join(DOCS_DIR, 'api-changelog.md'), 'utf8')
   cached = {
     cli_latest_version: CLI_LATEST_VERSION,
     cli_min_version: CLI_MIN_VERSION,
-    reference: { markdown: referenceMd, html: render(referenceMd) },
     entries: parseEntries(logMd),
+    reference_moved_to: 'Run `bk guide` — the complete usage guide, embedded in the CLI binary.',
   }
   return cached
 }
 
-// The raw concatenated Markdown (reference first, then the dated log) — used by
-// GET /api/changelog?format=markdown and `bk changelog --full` so a client can
-// grab the whole thing as one document.
+// The raw dated log as Markdown — used by GET /api/changelog?format=markdown and
+// `bk changelog --full` so a client can grab the whole record as one document.
 export function getChangelogMarkdown(): string {
-  const referenceMd = readFileSync(join(DOCS_DIR, 'platform-reference.md'), 'utf8')
-  const logMd = readFileSync(join(DOCS_DIR, 'api-changelog.md'), 'utf8')
-  return `${referenceMd.trim()}\n\n${logMd.trim()}\n`
+  return `${readFileSync(join(DOCS_DIR, 'api-changelog.md'), 'utf8').trim()}\n`
 }

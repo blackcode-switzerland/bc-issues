@@ -2,8 +2,9 @@
 // triggered it (e.g. an invitation is still valid even if its email bounces).
 // On failure we log a warn-level error_event and return { sent: false }.
 //
-// For now, the only transactional email we send is the workspace invitation.
-// Everything else stays in the in-app inbox.
+// Transactional email is kept to a minimum: workspace invitations, password
+// resets, and the one-off CLI-only migration notice. Everything else stays in
+// the in-app inbox.
 
 import { emailEnabled, fromAddress, getResend } from './client'
 import {
@@ -107,3 +108,4 @@ async function logEmailFailure(
     // Logging is itself best-effort.
   }
 }
+

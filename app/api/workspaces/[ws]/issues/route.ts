@@ -6,6 +6,7 @@ import {
   listIssuesInWorkspace,
 } from '@/lib/db/queries/issues'
 import { getMembership } from '@/lib/db/queries/workspaces'
+import { ISSUE_TITLE_MAX, LABEL_NAME_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -64,7 +65,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   const title = typeof body.title === 'string' ? body.title.trim() : ''
   if (!title) throw Errors.badRequest('invalid_title', 'title is required')
-  if (title.length > 200) throw Errors.badRequest('title_too_long', 'title max 200 chars')
+  if (title.length > ISSUE_TITLE_MAX)
+    throw Errors.badRequest('title_too_long', `title max ${ISSUE_TITLE_MAX} chars`)
 
   // project_id / task_id in the body are workspace #numbers (seq) → resolve to
   // the internal id (also validates they exist in this workspace).
@@ -120,7 +122,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     }
     const names = (body.labels as string[]).map((s) => s.trim()).filter(Boolean)
     for (const n of names) {
-      if (n.length > 50) throw Errors.badRequest('label_name_too_long', 'label names are max 50 chars')
+      if (n.length > LABEL_NAME_MAX)
+        throw Errors.badRequest('label_name_too_long', `label names are max ${LABEL_NAME_MAX} chars`)
     }
     labelNames = names
   }

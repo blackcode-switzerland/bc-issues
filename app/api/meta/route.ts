@@ -12,8 +12,19 @@
 //                   status/priority
 //   - labels / projects / members : the active workspace's entities, to ground on
 //
-// Authenticated (session or bk_live_ token). Pair with GET /api/openapi.json for
-// the full surface.
+//   - limits      : every server-enforced cap (upload size, title/name lengths,
+//                   page sizes, undo count), imported from the modules that
+//                   enforce them (lib/limits.ts, lib/upload.ts)
+//   - media       : how an uploaded url renders in a rich-text body, and which
+//                   MIME types upload refuses
+//   - cli         : the advertised bk versions (lib/cli-version.ts)
+//
+// The last three exist so the embedded `bk guide` never has to restate a value
+// that can change without a CLI release. Guide = static behaviour, meta =
+// dynamic data. See AGENT-SURFACE-SIMPLIFICATION-PLAN.md §2.1 and lib/agent-meta.ts.
+//
+// Authenticated (session or bk_live_ token). For how to USE any of this, run
+// `bk guide` — it is the complete usage guide for the binary in the agent's hand.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, publicProject } from '@/lib/api'
@@ -30,6 +41,7 @@ import {
   PROJECT_PRIORITIES,
   PROJECT_UPDATE_STATUSES,
 } from '@/lib/work-items'
+import { META_LIMITS, META_MEDIA, META_CLI } from '@/lib/agent-meta'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await resolveAuth(request)
@@ -90,22 +102,25 @@ export const GET = apiHandler(async (request: NextRequest) => {
       project_priorities: PROJECT_PRIORITIES,
       project_update_health: PROJECT_UPDATE_STATUSES,
     },
-    // The `id` of a project/task/issue is its workspace #number (the value shown
-    // in the app), unique per workspace. Address everything by it. Breaking
-    // changes are listed in docs/api-changelog.md.
+    // Every server-enforced cap, imported from the code that enforces it. The
+    // guide points here rather than restating a number that can change without
+    // a CLI release.
+    limits: META_LIMITS,
+    // How an uploaded url renders once it is referenced in a rich-text body,
+    // and what upload refuses outright.
+    media: META_MEDIA,
+    // The bk versions this server advertises (also sent as X-BK-CLI-* headers).
+    cli: META_CLI,
+    // Pointers only — the behaviour itself lives in `bk guide`, which ships
+    // inside the binary and therefore always describes the binary in your hand.
     conventions: {
-      recommended_interface:
-        'For agents we recommend the bk CLI (npm install -g @blackcode_sa/bc-issues, then bk login) over calling this HTTP API directly — it wraps the same endpoints but handles auth, JSON encoding, pagination, file upload+embed and stable exit codes, so automated runs are more reliable. The API stays supported; use it directly when the CLI cannot cover a case. Recommendation, not a requirement.',
-      id: 'workspace-scoped number (the #N shown in the UI); address items by it. References back to a work item (comment.parent_id, attachment.issue_id, project_update.project_id) are this #number too — the internal db id is never exposed',
+      interface:
+        'This product is operated through the bk CLI. Run `bk guide` for the complete, current usage guide for your installed binary; `bk <group> <command> --help` for flags.',
+      id: 'A project/task/issue is addressed by its workspace #number (the #N shown in the app), unique per workspace. References back to a work item (comment.parent_id, attachment.issue_id, project_update.project_id) are this #number too — the internal db id is never exposed.',
       workspace_selection:
-        'Before creating anything, confirm which workspace you are writing to. The `workspaces` array above lists every workspace you belong to; match the user\'s intent to a workspace by its `name`/`slug`, not its numeric `id` (ids are opaque and easy to confuse). Then target it as /api/workspaces/{slug}/… — the {ws} path segment accepts the slug or the id, but prefer the slug. `active_workspace` is only a default; it is NOT necessarily where the user means to write.',
-      changelog:
-        'Read /changelog (a complete platform reference + dated changes, newest first) — JSON at /api/changelog, or `bk changelog`. If a request that used to work now fails, check it first. Getting an outdated integration current: /agent-updator.',
-      rich_text: 'description/comment/body fields accept Markdown or HTML, stored as sanitized HTML. GFM/HTML tables render natively; embed video/audio by uploading it (raw <iframe> and external media are stripped)',
-      file_embeds:
-        'POST a file to /api/upload (multipart field "file") -> { url }, then reference it in a body as ![name](url) for images or [name](url) for any other file; uploaded urls render inline (preview/player/download card). Max 100MB.',
-      storage:
-        'Uploaded files are tracked per workspace. The owner can review/clean them: GET /api/workspaces/{ws}/storage lists every file with what references it + total usage; DELETE /api/workspaces/{ws}/storage/{id} removes an orphan (refused with 409 if anything, including trashed items, still references it). Cleanup is also automatic on terminal deletes: hard-deleting a comment/reply or purging an item from Trash frees the files that content referenced once nothing else references them. Editing a file out of a body (without deleting the item) does NOT delete the bytes — that orphan is cleared via the owner Storage delete.',
+        'Before creating anything, confirm which workspace you are writing to. The `workspaces` array above lists every workspace you belong to; match the user\'s intent by `name`/`slug`, never by the numeric `id` (ids are opaque and easy to confuse). `active_workspace` is only a default — it is NOT necessarily where the user means to write. Set it with `bk workspace use <slug>`, or target one command with `bk --ws <slug> …`.',
+      staying_current:
+        'If a command that used to work now fails, run `bk skill sync` (updates your agent skill, and tells you when the binary itself is behind), then `bk changelog` for the dated record.',
     },
     labels,
     projects: projects.map(publicProject),

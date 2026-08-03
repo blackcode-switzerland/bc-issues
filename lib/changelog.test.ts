@@ -4,22 +4,18 @@ import { getChangelog, getChangelogMarkdown } from './changelog'
 describe('changelog', () => {
   const cl = getChangelog()
 
-  it('renders the platform-reference baseline to HTML', () => {
-    expect(cl.reference.markdown).toContain('Platform Reference')
-    expect(cl.reference.html).toContain('<h1')
-    // sanitizer keeps tables + code; strips nothing structural
-    expect(cl.reference.html).toContain('<table')
-  })
-
   it('parses dated entries newest-first with a date and title', () => {
     expect(cl.entries.length).toBeGreaterThan(3)
     const first = cl.entries[0]
     expect(first.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(first.title.length).toBeGreaterThan(0)
-    // The launch entry should be present and its body rendered.
-    const launch = cl.entries.find((e) => e.title.includes('agent-updator'))
-    expect(launch).toBeTruthy()
-    expect(launch!.html).toContain('/api/changelog')
+  })
+
+  it('renders entry bodies to sanitized HTML', () => {
+    const withBody = cl.entries.find((e) => e.markdown.length > 0)
+    expect(withBody).toBeTruthy()
+    expect(withBody!.html).toContain('<')
+    expect(withBody!.html).not.toContain('<script')
   })
 
   it('advertises the CLI versions', () => {
@@ -27,8 +23,17 @@ describe('changelog', () => {
     expect(cl.cli_latest_version).toMatch(/^\d+\.\d+\.\d+/)
   })
 
-  it('produces one combined markdown document (reference first)', () => {
+  // The retired Platform Reference must not come back as a hand-maintained copy
+  // of the surface — that is exactly what drifted. It is `bk guide` now, and the
+  // payload says so instead of leaving an old client with `undefined`.
+  it('no longer serves a platform-reference baseline', () => {
+    expect(cl).not.toHaveProperty('reference')
+    expect(cl.reference_moved_to).toContain('bk guide')
+  })
+
+  it('produces the dated log as one markdown document', () => {
     const md = getChangelogMarkdown()
-    expect(md.indexOf('Platform Reference')).toBeLessThan(md.indexOf('# API & CLI Changelog'))
+    expect(md).toContain('# API & CLI Changelog')
+    expect(md).not.toContain('Platform Reference — baseline')
   })
 })

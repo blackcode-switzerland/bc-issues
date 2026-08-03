@@ -5,6 +5,7 @@ import {
   listWorkspaceMembers,
   updateWorkspace,
 } from '@/lib/db/queries/workspaces'
+import { WORKSPACE_NAME_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -36,7 +37,8 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     if (typeof body.name !== 'string') throw Errors.badRequest('invalid_name', 'name must be a string')
     const n = body.name.trim()
     if (!n) throw Errors.badRequest('invalid_name', 'name cannot be empty')
-    if (n.length > 80) throw Errors.badRequest('name_too_long', 'name max 80 chars')
+    if (n.length > WORKSPACE_NAME_MAX)
+      throw Errors.badRequest('name_too_long', `name max ${WORKSPACE_NAME_MAX} chars`)
     patch.name = n
   }
   if ('slug' in body) {

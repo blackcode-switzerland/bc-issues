@@ -1,19 +1,164 @@
 # API & CLI Changelog
 
-Breaking and notable changes to the REST API and `bk` CLI. Newest first.
-If a request that used to work now fails, check here first.
+Breaking and notable changes to blackcode issues and the `bk` CLI. Newest first.
+If a command that used to work now fails, check here first.
 
-A complete snapshot of the whole surface (the pinned **Platform Reference
-baseline**) sits above this log — read it via [`/changelog`](/changelog) or
-`GET /api/changelog`.
+For how the CLI **works** (rather than what changed), run **`bk guide`** — the
+complete usage guide, embedded in the binary, so it always describes the version
+you are running. For live values (vocabularies, limits, your workspaces), run
+**`bk meta`**.
 
 Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
-(JSON or `?format=markdown`), `bk changelog`, `GET /api/meta` (`conventions`),
-the OpenAPI description (`/api/docs`), and the embedded per-page agent manifest.
+(JSON or `?format=markdown`), and `bk changelog`.
 
 > **Process rule:** every change to a route or user-facing feature must add a
-> dated entry here (and update `docs/platform-reference.md` if the surface
-> itself changed). Timestamp it and describe what changed and how to adapt.
+> dated entry here. Timestamp it and describe what changed and how to adapt.
+
+---
+
+## 2026-08-03 — **BREAKING (documentation):** the `bk` CLI is now the only supported interface
+
+**Nothing was removed or changed at the route level. Every existing HTTP
+integration keeps working today.** What has been withdrawn is the *documentation*
+and the *support promise*. Read that sentence before reacting to the rest.
+
+### What changed
+
+The product used to describe itself to agents through **seven hand-maintained
+surfaces** that all had to agree: the REST routes, a 1,290-line hand-written
+OpenAPI spec, the CLI, `/api/meta`, a 77-line per-page manifest, ~2,100 lines of
+docs, and this changelog. Six were copies of the same facts, and they had already
+drifted — the manifest claimed uploads accept "any file type" (SVG is rejected),
+the platform reference described a `GET /api/upload` response field that never
+existed, and its pinned CLI version was a release behind.
+
+There is now **one door (`bk`) and two sources of truth**:
+
+| Kind of knowledge | Where | Why there |
+|---|---|---|
+| How the tool behaves — flags, exit codes, workflows | `bk guide`, embedded in the binary | It describes *the binary you are running*. A guide fetched from a server could describe a `--flag` your copy doesn't have. |
+| What the data is right now — vocabularies, limits, workspaces | `bk meta`, fetched live | Changes without a CLI release. |
+
+### Retired
+
+- **`GET /api/openapi.json`** and **`GET /api/docs`** now return **`410 Gone`**
+  with the standard error envelope and an actionable `suggestion`, so an agent
+  can recover in the same run rather than treating it as a bug. They stay
+  indefinitely: their audience is an agent working from stale context that still
+  has these URLs in its prompt, and that can turn up at any time.
+- **The pinned "Platform Reference" baseline** is gone. `GET /api/changelog` no
+  longer returns a `reference` field; it returns `reference_moved_to` instead, so
+  a client built against the old shape gets an explanation rather than
+  `undefined`. `bk changelog --reference` is deprecated and prints a pointer to
+  `bk guide`.
+- **The per-page agent manifest** dropped from 77 lines to 8. `/llms.txt` is now
+  an install funnel, not a reference.
+
+### New in CLI 1.9.0
+
+```bash
+npm install -g @blackcode_sa/bc-issues@latest
+
+bk guide              # the complete usage guide for THIS binary — offline, no auth
+bk guide --list       # topic slugs + one-line summaries
+bk guide <topic>      # one topic; unknown slug exits 2 with the valid list
+bk guide --json       # { version, topics: [{ slug, title, summary, body }] }
+
+bk skill install      # write the agent skill file (--format agents-md for AGENTS.md)
+bk skill check        # exit 0 = current, exit 9 = something is behind
+bk skill sync         # the one command to run when anything drifts
+bk skill path | uninstall
+```
+
+Also new, closing real capability gaps rather than faking parity:
+
+- **`bk label edit <id>`** — renaming or recolouring a label was previously
+  reachable only from the web UI.
+- **`bk undo --log`** — preview what `bk undo` would roll back, without doing it.
+- **`bk issue watch <id> --status`** — report whether you are watching, without
+  toggling it.
+- **`bk workspace delete <slug> --confirm <slug>`** — deleting a workspace was
+  previously web-UI only, which left an agent that can *create* a workspace
+  unable to clean one up. Guarded harder than the usual `--yes`: `--confirm`
+  must repeat the target back, and it is required even under `BK_NO_PROMPT=1`,
+  because that is exactly how agents run. Takes an explicit argument — it never
+  falls back to your active workspace. Owner only, and irreversible: this is not
+  the Trash and `bk undo` cannot roll it back.
+
+Exit code **9** is new: "update available", returned by `bk skill check` / `bk
+skill sync` so an agent can branch on it without parsing stderr.
+
+### Error reporting fixes (behaviour change — check any exit-code branching)
+
+Three defects that all undercut branching on exit codes:
+
+- **A mistyped subcommand used to exit `0`.** `bk workspace notacmd` printed help
+  and reported success, which an agent reads as "it worked". It now exits **2**
+  with `unknown command "notacmd" for "bk workspace"`. This also un-blocked the
+  deprecation hints: `hint:` could never fire for a *renamed subcommand*, because
+  the failure it keys off never happened.
+- **Argument-count errors returned `1` instead of `2`.** `bk issue view` with no
+  id now exits **2**, matching the documented "bad usage" row.
+- **Every error printed twice** — once by cobra, once by the CLI — on the same
+  stderr an agent parses. Now printed once, as `error:` plus an optional `hint:`.
+
+`bk <group>` with no arguments still prints help and exits 0; that is a
+legitimate "what can this do?".
+
+### `bk meta` / `GET /api/meta` carries more
+
+Three new derived blocks. Nothing here is hand-typed — each value is imported
+from the module that enforces it, so it cannot disagree with the code:
+
+- **`limits`** — `upload_max_bytes`, `issue_title_max`, `project_name_max`,
+  `task_name_max`, `label_name_max`, `workspace_name_max`, `token_name_max`,
+  `profile_name_max`, `profile_tagline_max`, `invite_email_max`,
+  `undo_max_count`, `page_size_default`, `page_size_max`.
+  (`workspace_name_max` = 80 has been enforced all along and was documented
+  nowhere.)
+- **`media`** — which MIME prefixes render inline, which types get View+Download,
+  and `blocked_mime_types` (currently `image/svg+xml`). The old claim that
+  uploads accept "any file type" was wrong.
+- **`cli`** — `latest_version`, `min_version`, `package`, `install`, `update`.
+
+`conventions` shrank to pointers; the prose it carried is now in `bk guide`.
+`GET /api/upload` also gained the numeric `maxBytes` and `blockedMimeTypes` that
+the old documentation claimed it already returned.
+
+### Deprecation signals
+
+Every response **to a non-CLI caller** carries:
+
+```
+X-BK-Migration: <host>/agent-updator
+Warning: 299 - "The HTTP API is no longer a supported interface. Use the bk CLI: npm install -g @blackcode_sa/bc-issues && bk skill install"
+```
+
+There is no `Sunset` header and no cutover date. The routes stay where they are;
+they are simply no longer a surface we document or support.
+
+Requests made through `bk` are **not** warned — it is the supported interface,
+and a warning its users can't act on just teaches agents to ignore headers.
+
+### How to adapt
+
+```bash
+npm install -g @blackcode_sa/bc-issues
+bk login
+bk skill install
+bk guide
+```
+
+Full migration notes, including where each piece of the old documentation went:
+[/agent-updator](/agent-updator).
+
+### Versions
+
+CLI latest **1.9.0**; minimum supported stays at **1.8.7** for now. A 1.8.x
+client still works — it just has no `guide` or `skill` commands. The floor will
+be raised to 1.9.0 after 1.9.0 has soaked; both values are env-overridable
+(`BK_CLI_LATEST` / `BK_CLI_MIN`) so the floor can be rolled back without a
+redeploy.
 
 ---
 

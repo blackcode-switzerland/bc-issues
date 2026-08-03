@@ -1,13 +1,29 @@
 # 🔺 Blackcode Issues
 
-AI-native issue tracking with **three surfaces over one data model**: a web
-dashboard, an HTTP API, and the `bk` command-line tool. Everything is
-workspace-scoped and built so that humans and the agents working alongside them
-can drive the same system.
+AI-native issue tracking with **two surfaces over one data model**: a web
+dashboard for humans, and the `bk` command-line tool for agents and scripts.
+Everything is workspace-scoped and built so that humans and the agents working
+alongside them can drive the same system.
 
 - **Web** — Next.js 16 App Router dashboard (`/dashboard`)
-- **API** — workspace-scoped REST under `/api/*`
-- **CLI** — `bk`, a Go binary that talks to the same API (see [`docs/cli.md`](docs/cli.md))
+- **CLI** — `bk`, a Go binary published to npm as `@blackcode_sa/bc-issues`.
+  **The only supported programmatic interface.** The REST routes under `/api/*`
+  are private plumbing with no public contract — there is no published OpenAPI
+  spec (see [`docs/cli.md`](docs/cli.md), and `CLAUDE.md` for why).
+
+### For AI agents
+
+```bash
+npm install -g @blackcode_sa/bc-issues
+bk login
+bk skill install     # writes a ~30-line skill file for your coding agent
+bk guide             # the complete usage guide for THIS binary — offline, no auth
+bk meta              # your workspaces + live vocabularies + limits
+```
+
+`bk guide` ships inside the binary, so it always describes the version you are
+running. `bk meta` supplies everything that can change without a release. Those
+two are the only sources an agent needs.
 
 ## Stack
 
@@ -22,8 +38,8 @@ can drive the same system.
 | Email | Resend (optional — invitations + password-reset OTP) |
 | Uploads | Vercel Blob (optional — local `public/uploads` fallback in dev) |
 
-There is **no separate MCP/companion server in this repo** — the API itself is
-the integration surface. See [`docs/architecture-rebuild.md`](docs/architecture-rebuild.md)
+There is **no separate MCP/companion server in this repo** — the `bk` CLI is the
+integration surface. See [`docs/architecture-rebuild.md`](docs/architecture-rebuild.md)
 for the historical design record.
 
 > **Going multi-app.** bc-issues is the first of several internal Blackcode apps
@@ -124,16 +140,17 @@ legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
 [`docs/backend.md`](docs/backend.md).
 
 `{ws}` accepts either a workspace **slug** or numeric **id** — prefer the slug
-(the numeric id is opaque; agents should choose a workspace by name/slug from
-`GET /api/meta`'s `workspaces` list).
+(the numeric id is opaque; agents choose a workspace by name/slug from
+`bk meta`'s `workspaces` list, never by id).
 
 ## Authentication
 
 - **Browser** — NextAuth session cookie. Email/password (bcrypt) by default;
   Google OAuth if `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set.
-- **API tokens** — `Authorization: Bearer bk_live_…`, minted in
-  Settings → Tokens or via the `bk login` browser flow. Stored as a SHA-256
-  hash; shown once.
+- **API tokens** — minted in Settings → Tokens or via the `bk login` browser
+  flow, and sent by the CLI automatically. Stored as a SHA-256 hash; shown once.
+  Token creation and revocation are session-only, so a leaked token can't mint
+  more.
 - **Password reset** — OTP emailed via Resend; resetting a password invalidates
   existing browser sessions (API tokens are unaffected).
 
@@ -141,10 +158,11 @@ legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
 
 | Doc | What it covers |
 |-----|----------------|
-| [`docs/backend.md`](docs/backend.md) | Schema, auth, API surface, query layer, operations |
+| [`docs/backend.md`](docs/backend.md) | **Internal.** Schema, auth, private API routes, query layer, operations |
 | [`docs/frontend.md`](docs/frontend.md) | Routes, theme system, shared components, data fetching |
-| [`docs/cli.md`](docs/cli.md) | The `bk` CLI — full command reference |
-| [`docs/cli-sync.md`](docs/cli-sync.md) | Keeping the CLI in sync with API changes |
+| [`docs/cli.md`](docs/cli.md) | **Maintainer doc** for the `bk` CLI — build, release, internals. Usage lives in `bk guide` |
+| [`cli/internal/guide/topics/`](cli/internal/guide/topics) | The agent-facing usage guide, embedded in the binary and served by `bk guide` |
+| [`docs/api-changelog.md`](docs/api-changelog.md) | The dated record of every change (served at `/changelog`, `GET /api/changelog`, `bk changelog`) |
 | [`docs/marketing.md`](docs/marketing.md) | Positioning, feature catalog, voice |
 | `docs/architecture-rebuild.md`, `HANDOVER.md`, `docs/specs/*` | Historical design/planning records (point-in-time) |
 

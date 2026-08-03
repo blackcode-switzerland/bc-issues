@@ -32,8 +32,9 @@ func newTaskListCmd() *cobra.Command {
 	var projectID int
 	var search string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List tasks (optionally filter by --project)",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks"},
+		Short:       "List tasks (optionally filter by --project)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -58,9 +59,10 @@ func newTaskListCmd() *cobra.Command {
 func newTaskViewCmd() *cobra.Command {
 	var includeIssues bool
 	cmd := &cobra.Command{
-		Use:   "view <id>",
-		Short: "Show a task",
-		Args:  cobra.ExactArgs(1),
+		Use:         "view <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks/{id}"},
+		Short:       "Show a task",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -109,8 +111,9 @@ func newTaskCreateCmd() *cobra.Command {
 	var name, description, descriptionFile, dueDate string
 	var files []string
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a task",
+		Use:         "create",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/tasks"},
+		Short:       "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if projectID == 0 || name == "" {
 				return fmt.Errorf("--project and --name are required")
@@ -165,9 +168,10 @@ func newTaskCreateCmd() *cobra.Command {
 func newTaskEditCmd() *cobra.Command {
 	var name, description, descriptionFile, dueDate string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
-		Short: "Edit a task (name, description, due date; use 'none' to clear due date)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "edit <id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/tasks/{id}"},
+		Short:       "Edit a task (name, description, due date; use 'none' to clear due date)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -222,8 +226,9 @@ func newTaskEditCmd() *cobra.Command {
 func newTaskDeleteCmd() *cobra.Command {
 	var yes, cascade, detach bool
 	cmd := &cobra.Command{
-		Use:   "delete <id>",
-		Short: "Move a task to the Trash",
+		Use:         "delete <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/tasks/{id}"},
+		Short:       "Move a task to the Trash",
 		Long: "Move a task to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
 			"Attached issues: by default they stay active and are unlinked from the\n" +
 			"task (--detach). Pass --cascade to move them to the Trash too so they\n" +
@@ -270,9 +275,10 @@ func newTaskDeleteCmd() *cobra.Command {
 func newTaskCommentCmd() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
-		Use:   "comment <task-id>",
-		Short: "Post a comment on a task",
-		Args:  cobra.ExactArgs(1),
+		Use:         "comment <task-id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/tasks/{id}/comments"},
+		Short:       "Post a comment on a task",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
@@ -318,9 +324,10 @@ func newTaskCommentCmd() *cobra.Command {
 
 func newTaskCommentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <task-id>",
-		Short: "List comments on a task",
-		Args:  cobra.ExactArgs(1),
+		Use:         "comments <task-id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks/{id}/comments"},
+		Short:       "List comments on a task",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {

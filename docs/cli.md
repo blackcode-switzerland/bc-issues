@@ -1,8 +1,24 @@
-# CLI (`bk`)
+# CLI (`bk`) — maintainer doc
 
-The `bk` command-line tool is a Go binary that talks to the blackcode-issues HTTP API. It's the recommended interface for scripts, agents, and anyone who'd rather type than click.
+> **Scope.** This is the **maintainer** doc: how `bk` is built, released,
+> versioned and structured internally.
+>
+> It is **not** the agent-facing usage guide. That is **`bk guide`**, whose
+> topics live in [`cli/internal/guide/topics/`](../cli/internal/guide/topics) and
+> are `//go:embed`-ed into the binary. If you are documenting *how to use a
+> command*, it belongs there or in the command's own `--help`, not here.
+>
+> The reason for the split: a guide that ships with the binary always describes
+> the binary being run. A guide in a doc (or on a server) can describe a `--flag`
+> the user does not have — which is worse than being out of date. The rules that
+> used to live in this file's "conventions" sections have moved to guide topics
+> for exactly that reason.
 
-It lives in [`/cli`](../cli) as a standalone Go module — separate from the web app, but using the same API.
+The `bk` command-line tool is a Go binary and **the only supported interface** to
+blackcode issues for scripts and agents. The HTTP routes it calls are private
+plumbing with no public contract.
+
+It lives in [`/cli`](../cli) as a standalone Go module — separate from the web app.
 
 ---
 
@@ -19,6 +35,7 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 9. [Exit codes](#exit-codes)
 10. [Patterns for agents and scripts](#patterns-for-agents-and-scripts)
 11. [Internals](#internals)
+12. [The embedded guide & skill](#the-embedded-guide--skill)
 
 ---
 
@@ -122,8 +139,12 @@ which the script now edits for you:
 Because the gate lives in the web app, it only takes effect once the web is
 deployed — so if you answer **no** to "Deploy web?", the script reminds you to run
 `./devops/release.sh web` later. (`BK_CLI_LATEST` / `BK_CLI_MIN` env vars still
-override at runtime without a redeploy.) This keeps the four surfaces in sync per
-the contract in `CLAUDE.md` / `AGENTS.md`.
+override at runtime without a redeploy.) This keeps the CLI and the server in
+step per the agent surface contract in `CLAUDE.md` / `AGENTS.md`.
+
+**Order matters when raising the floor:** publish the new CLI to npm and verify a
+clean install *before* raising `CLI_MIN_VERSION`. Raising it first locks out every
+user with no working version to move to.
 
 ---
 
@@ -225,6 +246,23 @@ bk issue view 234 --ws acme                     # view by the #seq shown in the 
 
 Every read command supports `-o table|json|yaml|yml` (default `table`), plus `--json` / `--yaml` / `--yml` shortcuts. Destructive commands that prompt support `--yes` / `-y` to skip confirmation (and respect `BK_NO_PROMPT=1` and non-TTY stdin).
 
+### Self-description
+
+```bash
+bk guide                 # the complete usage guide for THIS binary (offline, no auth)
+bk guide --list          # topic slugs + one-line summaries
+bk guide <topic>         # one topic; unknown slug exits 2 with the valid list
+bk guide --json          # { version, topics: [{ slug, title, summary, body }] }
+
+bk skill install         # write the agent skill file (--format agents-md for AGENTS.md)
+bk skill path            # where it would go / already is
+bk skill check           # exit 0 = current, exit 9 = something is behind
+bk skill sync            # the one command an agent is told to run when anything drifts
+bk skill uninstall
+```
+
+See [The embedded guide & skill](#the-embedded-guide--skill) for how to maintain them.
+
 ### Auth / session
 
 | Command | Purpose |
@@ -250,6 +288,9 @@ full; `--reference` prints only the baseline reference.
 | `bk workspace show [slug\|id]` | `GET /api/workspaces/:ref` | Defaults to the active workspace. |
 | `bk workspace create --name N [--use]` | `POST /api/workspaces` | `--use` (default `true`) sets it active after creation. |
 | `bk workspace use <slug\|id>` | `GET /api/workspaces/:ref` + `POST /api/me/active-workspace` | Sets the active workspace. |
+| `bk workspace edit [slug\|id] --name N --slug S` | `PATCH /api/workspaces/:ref` | Refreshes the stored active slug if you renamed it. |
+| `bk workspace transfer [slug\|id] --to <user>` | `POST /api/workspaces/:ref/transfer` | Owner only; you become a regular member. |
+| `bk workspace delete <slug\|id> --confirm <slug\|id>` | `DELETE /api/workspaces/:ref` | Owner only, irreversible. `--confirm` must repeat the argument and is required even with `--yes` / `BK_NO_PROMPT=1`. Never defaults to the active workspace. Clears the active selection if it deleted it. |
 
 ### Moving / copying items between workspaces
 
@@ -709,13 +750,23 @@ Stable for scripting. The mapping happens in `cmd/bk/main.go` by inspecting the 
 |---|---|
 | 0 | Success |
 | 1 | Generic / runtime error |
-| 2 | Bad usage (missing required flag, invalid id) |
+| 2 | Bad usage (missing required flag, invalid id, wrong argument count, unknown flag/command) |
 | 3 | Not authenticated (401, or no config) |
 | 4 | Permission denied (403) |
 | 5 | Not found (404) |
 | 6 | Validation error (400 / 422) |
 | 7 | User aborted (declined a confirm prompt) |
 | 8 | Client outdated — running version is below the API's minimum supported version; upgrade required |
+| 9 | Update available — `bk skill check` / `bk skill sync` found a newer binary |
+
+A mistyped command or subcommand is an error, not a silent success: cobra's
+default is to print help and return `nil` for any command group, so
+`bk workspace notacmd` used to exit 0. `rejectUnknownSubcommands()` in
+`internal/commands/root.go` walks the tree at construction and gives every group
+a `RunE` that rejects leftover args (`Args: cobra.NoArgs` does not work — cobra
+returns `flag.ErrHelp` for a non-runnable command *before* it validates args).
+`internal/commands/groups_test.go` asserts this for every group, including ones
+added later.
 
 ---
 
@@ -726,9 +777,9 @@ The API sends two headers on **every** response, and the CLI acts on them:
 - `X-BK-CLI-Latest` — the newest published CLI version.
 - `X-BK-CLI-Min` — the oldest version the API still supports.
 
-**Soft notice.** When the running version is older than `X-BK-CLI-Latest`, the CLI prints `A new bk version (X) is available — upgrade: npm i -g @blackcode_sa/bc-issues@latest` to **stderr** after the command finishes. It's throttled to once per 24 hours via the `last_update_check` field in the config file, and never written to stdout (so it can't corrupt `--json` output).
+**Soft notice.** When the running version is older than `X-BK-CLI-Latest`, the CLI prints `bk <current> is behind <latest> — run: bk skill sync` to **stderr** after the command finishes. It names the *fix*, not just the fact: `bk skill sync` reports the upgrade command when the binary is behind and refreshes the installed agent skill when it isn't. It's throttled to once per 24 hours via the `last_update_check` field in the config file, and never written to stdout (so it can't corrupt `--json` output).
 
-**Hard floor.** When the running version is below `X-BK-CLI-Min`, every request fails fast: the CLI prints `Your bk version (X) is no longer supported. Upgrade: …` to stderr and exits with code **8**. Dev / unparsable versions (`dev`, `(devel)`, etc.) are never blocked or nagged.
+**Hard floor.** When the running version is below `X-BK-CLI-Min`, every request fails fast: the CLI prints the full recovery (`npm install -g …@latest`, `bk skill install`, `bk guide`) to stderr and exits with code **8**. Naming all three matters — an agent blocked here also has a stale skill, and refreshing it is what stops the block recurring. Dev / unparsable versions (`dev`, `(devel)`, etc.) are never blocked or nagged.
 
 ---
 
@@ -854,8 +905,56 @@ The state machine:
 
 ---
 
+## The embedded guide & skill
+
+Two packages exist so `bk` can describe and repair itself without the network.
+
+### `cli/internal/guide/`
+
+`topics/*.md` are `//go:embed`-ed and served by `bk guide`. Filenames carry a
+numeric prefix that sets reading order and is stripped to form the slug
+(`05-files.md` → `files`); the `# Title` heading becomes the title, and the first
+line of real prose becomes the `--list` summary.
+
+Rules for topic files, enforced by `guide_test.go`:
+
+- Every topic needs a `# Title` heading and a trailing `Related commands:` line.
+- **Never restate a dynamic value.** Status names, size caps and the upload block
+  list live on the server; write *"run `bk meta`"* instead. The test fails the
+  build on a hardcoded one.
+- Written for an agent: imperative, short, examples over prose.
+
+`bk guide` must stay **offline and unauthenticated** — it is what an agent runs
+when everything else is failing. Its `routes` annotation is `"none"`, and a test
+asserts that.
+
+### `cli/internal/skill/`
+
+`template.md` is the ~30-line agent skill file written by `bk skill install`. It
+must contain **no facts that can rot** — only pointers to `bk guide` and
+`bk meta`. `skill_test.go` fails the build if a status value, a limit, an HTTP
+route or an auth header appears in it, or if it grows past 40 lines. That
+constraint is what makes the file identical for every user and safe to leave
+installed indefinitely.
+
+`bk skill sync` will not self-mutate an npm global install: when the binary is
+behind it prints the exact upgrade command and exits **9**. A self-replacing
+binary is fragile and often permission-blocked; a distinct exit code is something
+an agent handles cleanly.
+
+### Route annotations
+
+Every leaf command carries `Annotations: map[string]string{"routes": "…"}` — the
+API routes it calls, or the literal `"none"`. The hidden `bk __routes` dumps the
+union as JSON; `make routes` writes it to `cli/routes.json` for CI images without
+a Go toolchain. `lib/cli-parity.test.ts` diffs it against `app/api/**` and fails
+the build if a route has no command, or a command claims a route that does not
+exist.
+
+---
+
 ## See also
 
-- [Backend doc](./backend.md) — the HTTP API the CLI calls.
+- [Backend doc](./backend.md) — internal; the private HTTP routes the CLI calls.
 - [Frontend doc](./frontend.md) — the web side of the same data.
 - [`cli/README.md`](../cli/README.md) — the in-repo CLI quick-reference companion to this doc.

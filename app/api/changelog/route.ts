@@ -3,14 +3,18 @@
 //
 // Default (JSON):
 //   { cli_latest_version, cli_min_version,
-//     reference: { markdown, html },              // the pinned baseline
-//     entries: [{ date, title, markdown, html }]  // dated log, newest first
+//     entries: [{ date, title, markdown, html }],  // dated log, newest first
+//     reference_moved_to                           // see below
 //   }
-// ?format=markdown (or Accept: text/markdown) returns the whole thing as one
-// raw Markdown document.
+// ?format=markdown (or Accept: text/markdown) returns the log as one raw
+// Markdown document.
 //
-// Source of truth is docs/platform-reference.md + docs/api-changelog.md, read
-// via lib/changelog.ts. Part of the API multi-surface sync contract.
+// The `reference` field is gone: the pinned Platform Reference has been replaced
+// by `bk guide`, which ships inside the CLI binary and so always matches the
+// version the caller is running. `reference_moved_to` says so explicitly rather
+// than letting an old client read `undefined`.
+//
+// Source of truth is docs/api-changelog.md, read via lib/changelog.ts.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getChangelog, getChangelogMarkdown } from '@/lib/changelog'

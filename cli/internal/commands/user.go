@@ -23,8 +23,9 @@ func newUserCmd() *cobra.Command {
 
 func newUserListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List all users",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/users"},
+		Short:       "List all users",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -59,9 +60,10 @@ func newUserListCmd() *cobra.Command {
 
 func newUserViewCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <id|email>",
-		Short: "Show a user (by id or email)",
-		Args:  cobra.ExactArgs(1),
+		Use:         "view <id|email>",
+		Annotations: map[string]string{"routes": "GET /api/users"},
+		Short:       "Show a user (by id or email)",
+		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

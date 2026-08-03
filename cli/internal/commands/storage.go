@@ -28,8 +28,9 @@ Owner only.`,
 
 func newStorageListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List uploaded files with reference counts and total usage",
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/storage"},
+		Short:       "List uploaded files with reference counts and total usage",
 		Long: `List every uploaded file in the workspace.
 
 REFS is how many things reference the file (descriptions, comments, attachments —
@@ -76,8 +77,9 @@ removed with "bk storage rm <id>".`,
 func newStorageRmCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
-		Use:   "rm <id>",
-		Short: "Permanently delete an orphaned file",
+		Use:         "rm <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/storage/{id}"},
+		Short:       "Permanently delete an orphaned file",
 		Long: `Permanently delete a stored file by its id (from "bk storage list").
 
 The server refuses (exit non-zero) if anything still references the file,
@@ -109,8 +111,9 @@ first. Deletion is irreversible.`,
 
 func newStorageAttachmentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "attachments",
-		Short: "List all issue-attachment rows in the workspace",
+		Use:         "attachments",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/attachments"},
+		Short:       "List all issue-attachment rows in the workspace",
 		Long: `List the workspace's attachments table — every file attached to an issue via
 the API/CLI ("bk issue attach"). This is separate from files embedded inline in
 descriptions/comments (see "bk storage list" for everything).`,

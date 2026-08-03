@@ -15,19 +15,18 @@ type Me struct {
 	IsSuperAdmin    bool    `json:"is_super_admin,omitempty" yaml:"is_super_admin,omitempty"`
 }
 
-// Changelog models GET /api/changelog: a pinned baseline Platform Reference
-// plus the dated log (newest first). Bodies are carried as both Markdown and
-// rendered HTML; the CLI uses the Markdown.
+// Changelog models GET /api/changelog: the dated log, newest first. Bodies are
+// carried as both Markdown and rendered HTML; the CLI uses the Markdown.
+//
+// The old `reference` field (a pinned Platform Reference) is gone — the current
+// surface is the guide embedded in this binary. ReferenceMovedTo carries the
+// server's one-line pointer so an old client sees an explanation rather than a
+// missing field.
 type Changelog struct {
 	CLILatestVersion string           `json:"cli_latest_version" yaml:"cli_latest_version"`
 	CLIMinVersion    string           `json:"cli_min_version" yaml:"cli_min_version"`
-	Reference        ChangelogDoc     `json:"reference" yaml:"reference"`
 	Entries          []ChangelogEntry `json:"entries" yaml:"entries"`
-}
-
-type ChangelogDoc struct {
-	Markdown string `json:"markdown" yaml:"markdown"`
-	HTML     string `json:"html" yaml:"html"`
+	ReferenceMovedTo string           `json:"reference_moved_to,omitempty" yaml:"reference_moved_to,omitempty"`
 }
 
 type ChangelogEntry struct {
@@ -115,7 +114,7 @@ type Issue struct {
 	ID              int             `json:"id" yaml:"id"`
 	WorkspaceID     *int            `json:"workspace_id,omitempty" yaml:"workspace_id,omitempty"`
 	ProjectID       int             `json:"project_id" yaml:"project_id"`
-	TaskID     *int            `json:"task_id" yaml:"task_id"`
+	TaskID          *int            `json:"task_id" yaml:"task_id"`
 	Title           string          `json:"title" yaml:"title"`
 	Description     *string         `json:"description" yaml:"description"`
 	Status          string          `json:"status" yaml:"status"`
@@ -126,7 +125,7 @@ type Issue struct {
 	EstimatedHours  json.RawMessage `json:"estimated_hours,omitempty" yaml:"-"`
 	Assignees       []IssueAssignee `json:"assignees" yaml:"assignees"`
 	Labels          []IssueLabel    `json:"labels,omitempty" yaml:"labels,omitempty"`
-	TaskName   *string         `json:"task_name,omitempty" yaml:"task_name,omitempty"`
+	TaskName        *string         `json:"task_name,omitempty" yaml:"task_name,omitempty"`
 	ProjectName     *string         `json:"project_name,omitempty" yaml:"project_name,omitempty"`
 	CommentCount    *int            `json:"comment_count,omitempty" yaml:"comment_count,omitempty"`
 	AttachmentCount *int            `json:"attachment_count,omitempty" yaml:"attachment_count,omitempty"`
@@ -250,7 +249,7 @@ type CreateIssueRequest struct {
 	Status      string          `json:"status,omitempty"`
 	Priority    int             `json:"priority,omitempty"`
 	AssigneeIDs []int           `json:"assignee_ids,omitempty"`
-	TaskID json.RawMessage `json:"task_id,omitempty"`
+	TaskID      json.RawMessage `json:"task_id,omitempty"`
 	StartDate   *string         `json:"start_date,omitempty"`
 	DueDate     *string         `json:"due_date,omitempty"`
 	Labels      []string        `json:"labels,omitempty"`
@@ -266,7 +265,7 @@ type UpdateIssueRequest struct {
 	Status      *string         `json:"status,omitempty"`
 	Priority    *int            `json:"priority,omitempty"`
 	AssigneeIDs json.RawMessage `json:"assignee_ids,omitempty"`
-	TaskID json.RawMessage `json:"task_id,omitempty"`
+	TaskID      json.RawMessage `json:"task_id,omitempty"`
 	StartDate   json.RawMessage `json:"start_date,omitempty"`
 	DueDate     json.RawMessage `json:"due_date,omitempty"`
 }
@@ -498,12 +497,12 @@ type WorkspaceComment struct {
 // retyping an email (e.g. someone they already share another workspace with).
 // Fields are treated permissively; extra fields from the server are ignored.
 type InviteCandidate struct {
-	ID            int     `json:"id" yaml:"id"`
-	Name          *string `json:"name" yaml:"name"`
-	Email         string  `json:"email" yaml:"email"`
-	AvatarURL     *string `json:"avatar_url" yaml:"avatar_url"`
-	AlreadyMember bool    `json:"already_member" yaml:"already_member"`
-	Invited       bool    `json:"invited" yaml:"invited"`
+	ID                  int     `json:"id" yaml:"id"`
+	Name                *string `json:"name" yaml:"name"`
+	Email               string  `json:"email" yaml:"email"`
+	AvatarURL           *string `json:"avatar_url" yaml:"avatar_url"`
+	AlreadyMember       bool    `json:"already_member" yaml:"already_member"`
+	Invited             bool    `json:"invited" yaml:"invited"`
 	SharedWorkspaceName *string `json:"shared_workspace_name,omitempty" yaml:"shared_workspace_name,omitempty"`
 }
 
@@ -536,7 +535,7 @@ type TrashItem struct {
 	BatchRootType *string `json:"batch_root_type" yaml:"batch_root_type"`
 	BatchRootID   *int    `json:"batch_root_id" yaml:"batch_root_id"`
 	ProjectID     *int    `json:"project_id" yaml:"project_id"`
-	TaskID   *int    `json:"task_id" yaml:"task_id"`
+	TaskID        *int    `json:"task_id" yaml:"task_id"`
 }
 
 // RestoreTrashRequest restores either a whole batch or an explicit item list.
