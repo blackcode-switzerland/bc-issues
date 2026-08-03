@@ -26,6 +26,13 @@ There is **no separate MCP/companion server in this repo** — the API itself is
 the integration surface. See [`docs/architecture-rebuild.md`](docs/architecture-rebuild.md)
 for the historical design record.
 
+> **Going multi-app.** bc-issues is the first of several internal Blackcode apps
+> (sales/CRM, bookkeeping, …). The agreed target architecture — monorepo, shared
+> `platform` Postgres schema, per-app schemas, one `bk` CLI, cross-app links —
+> is in [`PLATFORM-ARCHITECTURE.md`](PLATFORM-ARCHITECTURE.md). Read it before
+> starting a second app or changing `lib/db/schema.ts`, `lib/api/`, `lib/auth/`
+> or `cli/`.
+
 ## Quick start
 
 ### 1. Database
