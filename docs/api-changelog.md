@@ -16,6 +16,57 @@ Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
 
 ---
 
+## 2026-08-03 — `bk skill install` / `sync` no longer overwrite a hand-written skill file
+
+**Fixed a data-loss bug in 1.9.0.** If you had a hand-written
+`.claude/skills/blackcode-issues/SKILL.md`, `bk skill install` — and worse,
+`bk skill sync` — replaced it wholesale with no warning, no prompt and no backup.
+Since `sync` is the command agents are told to run *unprompted* whenever they
+detect drift, a team's custom rules could vanish mid-run with nobody watching.
+
+**Upgrade to 1.9.1.** Nothing to change on your side.
+
+### What `bk` now owns
+
+The generated content is delimited:
+
+```
+---
+name: blackcode-issues        <- yours to edit; bk never rewrites the front matter
+---
+
+<!-- BEGIN blackcode-issues (managed by bk skill install) -->
+...bk's content — refreshed on every sync...
+<!-- END blackcode-issues -->
+
+## Our team's rules            <- yours; preserved forever
+```
+
+Anything outside the markers survives every `install` and `sync`.
+
+### If the file wasn't written by `bk`
+
+A `SKILL.md` with neither the markers nor a `bk` version stamp is treated as
+foreign and never modified:
+
+- **`bk skill install`** stops with exit **2** and names every option: paste the
+  two marker lines in to coexist, `--dir` to write elsewhere, `--format
+  agents-md` to use `AGENTS.md`, or `--force` to replace it deliberately.
+- **`bk skill sync`** leaves it alone and exits **0** with a note. That is not a
+  failure: the binary and `bk guide` carry current behaviour, and they are
+  already up to date.
+
+### Already on 1.9.0?
+
+Your existing skill file carries a `bk` version stamp, so it is recognised as
+`bk`'s own and migrated to the marked format on the first `bk skill sync`. No
+action needed, nothing lost.
+
+`--force` is new on `bk skill install`, and is the only way to make `bk` replace
+a file it did not write.
+
+---
+
 ## 2026-08-03 — The `/changelog` web page was removed
 
 **No effect on agents.** `bk changelog` and `GET /api/changelog` are unchanged,

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -70,6 +71,7 @@ func resolveTarget(dirFlag string) (string, error) {
 
 func newSkillInstallCmd() *cobra.Command {
 	var dirFlag, format string
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -99,21 +101,68 @@ Offline: the template ships inside this binary.`,
 			if err != nil {
 				return err
 			}
+			path := skill.FilePath(dir)
+
+			existing, err := readIfExists(path)
+			if err != nil {
+				return err
+			}
+
+			content := skill.Render(version.Version)
+			if !force {
+				content, err = skill.UpsertSkillFile(existing, version.Version)
+				if errors.Is(err, skill.ErrForeign) {
+					return foreignFileError(path)
+				} else if err != nil {
+					return err
+				}
+			}
+
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return err
 			}
-			path := skill.FilePath(dir)
-			if err := os.WriteFile(path, []byte(skill.Render(version.Version)), 0o644); err != nil {
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), path)
-			fmt.Fprintf(cmd.ErrOrStderr(), "installed blackcode-issues skill (bk %s). Next: bk guide\n", version.Version)
+			verb := "installed"
+			if skill.Classify(existing) == skill.Managed {
+				verb = "updated"
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s blackcode-issues skill (bk %s). Next: bk guide\n", verb, version.Version)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&dirFlag, "dir", "", "Directory to write the skill into (overrides the default target)")
 	cmd.Flags().StringVar(&format, "format", "claude", "Container: claude (SKILL.md) | agents-md (a section in ./AGENTS.md)")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite a SKILL.md that bk did not write (destroys hand-written content)")
 	return cmd
+}
+
+// readIfExists returns a file's content, or "" when it isn't there.
+func readIfExists(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(b), nil
+}
+
+// foreignFileError is what a caller gets instead of silently destroying a
+// hand-written skill. It names every way forward, because the agent that hits
+// this cannot ask anyone.
+func foreignFileError(path string) error {
+	return fmt.Errorf(
+		"%s already exists and was not written by bk — refusing to overwrite it.\n"+
+			"      Keep both: add these two lines to that file and re-run; bk will manage only what is between them:\n"+
+			"        %s\n        %s\n"+
+			"      Or: `bk skill install --dir <other-path>` to write elsewhere,\n"+
+			"          `bk skill install --format agents-md` to use ./AGENTS.md instead,\n"+
+			"          `bk skill install --force` to replace it (destroys the current contents).",
+		path, skill.BlockBegin, skill.BlockEnd)
 }
 
 // installAgentsMd writes the same content into ./AGENTS.md, delimited by HTML
@@ -295,11 +344,33 @@ func newSkillSyncCmd() *cobra.Command {
 				return &UpdateAvailableError{Current: st.RunningVersion, Latest: st.LatestVersion}
 			}
 
+			existing, err := readIfExists(st.Path)
+			if err != nil {
+				return err
+			}
+
+			// Sync runs unattended, on an agent's own initiative. It must never
+			// destroy a hand-written file: report and leave it alone. The binary
+			// and `bk guide` — the things that actually carry current behaviour —
+			// are already current at this point, so this is not a failure.
+			content, err := skill.UpsertSkillFile(existing, version.Version)
+			if errors.Is(err, skill.ErrForeign) {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"skill file at %s is hand-managed — left untouched.\n"+
+						"      bk %s is current and `bk guide` always describes it, so you are not stale.\n"+
+						"      To let bk manage part of that file, add these two lines to it:\n"+
+						"        %s\n        %s\n",
+					st.Path, version.Version, skill.BlockBegin, skill.BlockEnd)
+				return nil
+			} else if err != nil {
+				return err
+			}
+
 			dir := filepath.Dir(st.Path)
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return err
 			}
-			if err := os.WriteFile(st.Path, []byte(skill.Render(version.Version)), 0o644); err != nil {
+			if err := os.WriteFile(st.Path, []byte(content), 0o644); err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), st.Path)

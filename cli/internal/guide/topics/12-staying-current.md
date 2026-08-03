@@ -23,6 +23,25 @@ bk skill check      # exit 0 = current, exit 9 = update available
 bk skill path       # where the skill file lives
 ```
 
+## Your own additions are safe
+
+`bk` writes only between these two markers in the skill file:
+
+```
+<!-- BEGIN blackcode-issues (managed by bk skill install) -->
+...bk's content...
+<!-- END blackcode-issues -->
+```
+
+Anything outside them — an edited description, your team's own rules below — is
+preserved by every `install` and every `sync`.
+
+If a `SKILL.md` already exists that `bk` did not write, `bk` **refuses to touch
+it**. `install` stops and tells you the options; `sync` leaves it alone and
+carries on, because the binary and this guide are what actually carry current
+behaviour. To let `bk` manage part of a hand-written file, paste those two marker
+lines into it and re-run.
+
 ## The signals that tell you to run it
 
 - An **"update available"** notice on stderr, naming `bk skill sync`.

@@ -261,6 +261,18 @@ bk skill sync            # the one command an agent is told to run when anything
 bk skill uninstall
 ```
 
+**Ownership.** `bk` writes only between `<!-- BEGIN blackcode-issues … -->` and
+`<!-- END blackcode-issues -->`; everything outside those markers survives every
+install and sync. A `SKILL.md` with neither the markers nor a `bk` version stamp
+was written by a human, and `bk` will not touch it: `install` exits 2 naming the
+options (`--dir`, `--format agents-md`, `--force`), and `sync` leaves it alone
+and exits 0. Files written by 1.9.0 carry a stamp but no markers; they are
+recognised as `bk`'s own and migrated to the marked format on first sync.
+
+This matters because `bk skill sync` is the one command agents run unprompted —
+a destructive write there would delete a team's rules with nobody watching.
+Enforced by `cli/internal/skill/skill_test.go`.
+
 See [The embedded guide & skill](#the-embedded-guide--skill) for how to maintain them.
 
 ### Auth / session
