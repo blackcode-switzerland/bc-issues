@@ -21,7 +21,7 @@ import type { NextRequest } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
 import { getWorkspaceForUser } from '@/lib/db/queries/workspaces'
 import type { Workspace, User } from '@/lib/db/schema'
-import { Errors } from './errors'
+import { Errors } from '@blackcode/platform-api'
 
 export interface WorkspaceContext {
   user: User

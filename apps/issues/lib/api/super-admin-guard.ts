@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
 import { isSuperAdmin } from '@/lib/auth/whitelist'
-import { Errors } from './errors'
+import { Errors } from '@blackcode/platform-api'
 
 export async function requireSuperAdminUser(req: NextRequest) {
   const user = await resolveUser(req)

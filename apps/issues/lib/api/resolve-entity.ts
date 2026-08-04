@@ -1,4 +1,4 @@
-import { Errors } from './errors'
+import { Errors } from '@blackcode/platform-api'
 import { resolveSeqToId, type LocatableType } from '@/lib/db/queries/locate'
 
 // Maps a workspace-scoped #number (the public `id` in URLs) to the internal

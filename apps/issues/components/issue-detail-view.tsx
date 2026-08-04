@@ -803,7 +803,7 @@ function LabelPicker({
                     className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-[13px] hover:bg-secondary"
                   >
                     <Tag size={12} className="shrink-0 text-muted-foreground" />
-                    <span>Create <span className="font-medium">"{query.trim()}"</span></span>
+                    <span>Create <span className="font-medium">&quot;{query.trim()}&quot;</span></span>
                     <span className="ml-auto size-2.5 shrink-0 rounded-full" style={{ backgroundColor: pendingColor }} />
                   </button>
                 </div>

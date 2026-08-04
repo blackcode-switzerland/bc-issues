@@ -3,7 +3,7 @@
 // dashboard and the `bk analytics` CLI command now call — so every surface
 // exposes the exact same views, date window, granularity and faceted filters.
 
-import { Errors } from './errors'
+import { Errors } from '@blackcode/platform-api'
 import type {
   AnalyticsFilters,
   AnalyticsInterval,

@@ -10,7 +10,7 @@ const nextConfig = {
   // The platform packages ship TypeScript source, not a build step — Next
   // compiles them as part of this app. Adding a package to apps/issues/package.json
   // is not enough; it must be listed here too or the build fails on `.ts` syntax.
-  transpilePackages: ['@blackcode/platform-db'],
+  transpilePackages: ['@blackcode/platform-db', '@blackcode/platform-api'],
 
   // The changelog API reads the authored Markdown in the ROOT docs/ at runtime
   // (lib/changelog.ts). Trace that file into the serverless bundle so the reads

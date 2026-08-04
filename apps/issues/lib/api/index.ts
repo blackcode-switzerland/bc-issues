@@ -1,8 +1,15 @@
+// The issues app's API barrel.
+//
+// The app-agnostic half — the error envelope, the list envelope, log
+// sanitisation — now lives in @blackcode/platform-api and is re-exported here so
+// every existing `@/lib/api` import keeps working unchanged.
+//
+// What stays app-local is what names an issue, task or project: the entity
+// serializers, seq→id resolution, and analytics parameter parsing.
+export { ApiError, Errors, jsonList, sanitize, truncate } from '@blackcode/platform-api'
+export type { ListPage } from '@blackcode/platform-api'
+
 export { apiHandler } from './handler'
-export { ApiError, Errors } from './errors'
-export { jsonList } from './responses'
-export type { ListPage } from './responses'
-export { sanitize, truncate } from './sanitize'
 export { resolveWorkspace, requireOwner } from './workspace-context'
 export type { WorkspaceContext } from './workspace-context'
 export { resolveEntityId } from './resolve-entity'

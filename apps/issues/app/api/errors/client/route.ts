@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveUser } from '@/lib/auth/resolve'
 import { apiHandler, Errors } from '@/lib/api'
-import { sanitize } from '@/lib/api/sanitize'
+import { sanitize } from '@blackcode/platform-api'
 import { insertErrorEvent } from '@/lib/db/queries/error-events'
 
 const MAX_STACK = 8_000

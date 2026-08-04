@@ -19,8 +19,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db/client'
 import { errorEvents, type NewErrorEvent } from '@/lib/db/schema'
-import { ApiError } from './errors'
-import { sanitize, truncate } from './sanitize'
+import { ApiError } from '@blackcode/platform-api'
+import { sanitize, truncate } from '@blackcode/platform-api'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@/lib/cli-version'
 import { AGENT_MANIFEST } from '@/lib/agent-manifest'
 

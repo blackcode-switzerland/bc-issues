@@ -3,7 +3,7 @@
 // resolutions keyed "type:id".
 // Import Errors from the errors module directly (not the @/lib/api barrel) so
 // this stays dependency-free and unit-testable without a DB connection.
-import { Errors } from '@/lib/api/errors'
+import { Errors } from '@blackcode/platform-api'
 import type { EntityRef, RestoreResolution, TrashType } from '@/lib/db/queries/deletion'
 
 const TYPES = new Set<TrashType>(['issue', 'project', 'task'])

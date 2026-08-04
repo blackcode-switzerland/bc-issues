@@ -1,0 +1,17 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "plugins": ["@typescript-eslint"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/apps/*/**", "../../apps/*", "../../apps/*/**"],
+            "message": "An app may not import from another app. Only packages/platform-* is shared across apps — if two apps need this code, extract it there. See PLATFORM-ARCHITECTURE.md §7.6."
+          }
+        ]
+      }
+    ]
+  }
+}
