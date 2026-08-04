@@ -73,7 +73,7 @@ export async function allocateNextIssueSeq(
   workspaceId: number
 ): Promise<number> {
   const rows = await tx.execute<{ last_issue_seq: number }>(sql`
-    UPDATE workspace_counters
+    UPDATE ${workspaceCounters}
     SET last_issue_seq = last_issue_seq + 1
     WHERE workspace_id = ${workspaceId}
     RETURNING last_issue_seq
@@ -91,7 +91,7 @@ export async function allocateNextProjectSeq(
   workspaceId: number
 ): Promise<number> {
   const rows = await tx.execute<{ last_project_seq: number }>(sql`
-    UPDATE workspace_counters
+    UPDATE ${workspaceCounters}
     SET last_project_seq = last_project_seq + 1
     WHERE workspace_id = ${workspaceId}
     RETURNING last_project_seq
@@ -109,7 +109,7 @@ export async function allocateNextTaskSeq(
   workspaceId: number
 ): Promise<number> {
   const rows = await tx.execute<{ last_task_seq: number }>(sql`
-    UPDATE workspace_counters
+    UPDATE ${workspaceCounters}
     SET last_task_seq = last_task_seq + 1
     WHERE workspace_id = ${workspaceId}
     RETURNING last_task_seq

@@ -22,7 +22,7 @@
 
 import { and, desc, eq, inArray, isNull, isNotNull, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { deletionBatches, issues, tasks, projects, comments, attachments, projectUpdates } from '../schema'
+import { attachments, comments, deletionBatches, issues, projectUpdates, projects, tasks, users } from '../schema'
 import { recordEvent } from './events'
 import { extractUploadedUrls } from '@/lib/blob-refs'
 import { sweepOrphanedUrls } from '@/lib/blob-gc'
@@ -334,24 +334,24 @@ export async function listTrash(
     WITH src AS (
       SELECT 'issue' AS type, i.id, i.title AS title, i.seq, i.status,
              i.deleted_at, i.deleted_by, i.delete_batch_id, i.project_id, i.task_id
-      FROM issues i
+      FROM ${issues} i
       WHERE i.workspace_id = ${workspaceId} AND i.deleted_at IS NOT NULL
       UNION ALL
       SELECT 'project', p.id, p.name, NULL, p.status,
              p.deleted_at, p.deleted_by, p.delete_batch_id, NULL, NULL
-      FROM projects p
+      FROM ${projects} p
       WHERE p.workspace_id = ${workspaceId} AND p.deleted_at IS NOT NULL
       UNION ALL
       SELECT 'task', m.id, m.name, NULL, m.status,
              m.deleted_at, m.deleted_by, m.delete_batch_id, m.project_id, NULL
-      FROM tasks m
+      FROM ${tasks} m
       WHERE m.workspace_id = ${workspaceId} AND m.deleted_at IS NOT NULL
     )
     SELECT src.*, du.name AS deleted_by_name,
            b.mode AS batch_mode, b.root_type AS batch_root_type, b.root_id AS batch_root_id
     FROM src
-    LEFT JOIN users du ON du.id = src.deleted_by
-    LEFT JOIN deletion_batches b ON b.id = src.delete_batch_id
+    LEFT JOIN ${users} du ON du.id = src.deleted_by
+    LEFT JOIN ${deletionBatches} b ON b.id = src.delete_batch_id
     WHERE 1=1 ${typeFilter}
     ORDER BY src.deleted_at DESC, src.type ASC, src.id DESC
     LIMIT ${limit} OFFSET ${offset}

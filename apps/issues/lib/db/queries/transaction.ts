@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { issues, transactionLog } from '../schema'
+import { issues, transactionLog, users } from '../schema'
 
 export async function logTransaction(data: {
   user_id: number
@@ -34,8 +34,8 @@ export async function getActivityFeed(limit = 50, offset = 0) {
       t.*,
       u.name as user_name,
       u.avatar_url as user_avatar
-    FROM transaction_log t
-    LEFT JOIN users u ON u.id = t.user_id
+    FROM ${transactionLog} t
+    LEFT JOIN ${users} u ON u.id = t.user_id
     ORDER BY t.created_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `)

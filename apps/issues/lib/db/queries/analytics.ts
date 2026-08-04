@@ -14,6 +14,7 @@
 
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '../client'
+import { comments, events, issueAssignees, issueLabels, issues, labels, projects, tasks, users, workspaceMembers, workspaces } from '../schema'
 
 export type AnalyticsView = 'workspace' | 'project' | 'task' | 'member'
 export type AnalyticsInterval = 'day' | 'week'
@@ -118,12 +119,12 @@ function filterWhere(f?: AnalyticsFilters): SQL {
   }
   if (f?.assignee?.length) {
     parts.push(
-      sql`i.id IN (SELECT ia.issue_id FROM issue_assignees ia WHERE ia.user_id IN (${sql.join(f.assignee.map((a) => sql`${a}`), sql`, `)}))`
+      sql`i.id IN (SELECT ia.issue_id FROM ${issueAssignees} ia WHERE ia.user_id IN (${sql.join(f.assignee.map((a) => sql`${a}`), sql`, `)}))`
     )
   }
   if (f?.label?.length) {
     parts.push(
-      sql`i.id IN (SELECT il.issue_id FROM issue_labels il WHERE il.label_id IN (${sql.join(
+      sql`i.id IN (SELECT il.issue_id FROM ${issueLabels} il WHERE il.label_id IN (${sql.join(
         f.label.map((l) => sql`${l}`),
         sql`, `
       )}))`
@@ -146,7 +147,7 @@ function scopeWhere(input: ComputeAnalyticsInput): SQL {
     scoped = sql`${base} AND i.task_id = ${input.id}`
   } else if (input.view === 'member' && input.id != null) {
     // Issues this member is involved with: assignee OR reporter.
-    scoped = sql`${base} AND (EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.user_id = ${input.id}) OR i.reporter_id = ${input.id})`
+    scoped = sql`${base} AND (EXISTS (SELECT 1 FROM ${issueAssignees} ia WHERE ia.issue_id = i.id AND ia.user_id = ${input.id}) OR i.reporter_id = ${input.id})`
   }
   return sql`${scoped}${filterWhere(input.filters)}`
 }
@@ -154,25 +155,25 @@ function scopeWhere(input: ComputeAnalyticsInput): SQL {
 async function resolveScope(input: ComputeAnalyticsInput): Promise<AnalyticsScope> {
   if (input.view === 'workspace') {
     const rows = await db.execute<{ name: string }>(
-      sql`SELECT name FROM workspaces WHERE id = ${input.workspaceId} LIMIT 1`
+      sql`SELECT name FROM ${workspaces} WHERE id = ${input.workspaceId} LIMIT 1`
     )
     return { type: 'workspace', id: null, label: rows.rows[0]?.name ?? '' }
   }
   if (input.view === 'project' && input.id != null) {
     const rows = await db.execute<{ name: string }>(
-      sql`SELECT name FROM projects WHERE id = ${input.id} AND workspace_id = ${input.workspaceId} LIMIT 1`
+      sql`SELECT name FROM ${projects} WHERE id = ${input.id} AND workspace_id = ${input.workspaceId} LIMIT 1`
     )
     return { type: 'project', id: input.id, label: rows.rows[0]?.name ?? '' }
   }
   if (input.view === 'task' && input.id != null) {
     const rows = await db.execute<{ name: string }>(
-      sql`SELECT name FROM tasks WHERE id = ${input.id} AND workspace_id = ${input.workspaceId} LIMIT 1`
+      sql`SELECT name FROM ${tasks} WHERE id = ${input.id} AND workspace_id = ${input.workspaceId} LIMIT 1`
     )
     return { type: 'task', id: input.id, label: rows.rows[0]?.name ?? '' }
   }
   if (input.view === 'member' && input.id != null) {
     const rows = await db.execute<{ email: string; name: string | null }>(
-      sql`SELECT email, name FROM users WHERE id = ${input.id} LIMIT 1`
+      sql`SELECT email, name FROM ${users} WHERE id = ${input.id} LIMIT 1`
     )
     return { type: 'member', id: input.id, label: rows.rows[0]?.name ?? rows.rows[0]?.email ?? '' }
   }
@@ -202,7 +203,7 @@ async function windowStats(where: SQL, from: Date, to: Date): Promise<WindowStat
         FILTER (WHERE i.completed_at BETWEEN ${from} AND ${to}) AS cycle_avg,
       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (i.completed_at - i.created_at)) / 3600)
         FILTER (WHERE i.completed_at BETWEEN ${from} AND ${to}) AS cycle_median
-    FROM issues i
+    FROM ${issues} i
     WHERE ${where}
   `)
   const r = rows.rows[0]
@@ -253,9 +254,9 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
       COUNT(*) FILTER (WHERE i.status = 'done')::int AS done,
       COUNT(*) FILTER (WHERE i.status = 'cancelled')::int AS cancelled,
       COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled') AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE)::int AS overdue,
-      COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled') AND NOT EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id))::int AS unassigned,
+      COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled') AND NOT EXISTS (SELECT 1 FROM ${issueAssignees} ia WHERE ia.issue_id = i.id))::int AS unassigned,
       (SUM(i.estimated_hours) FILTER (WHERE i.status NOT IN ('done','cancelled')))::float8 AS open_estimate
-    FROM issues i
+    FROM ${issues} i
     WHERE ${where}
   `)
   const s = summaryRows.rows[0]
@@ -278,11 +279,11 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     input.view === 'member' && input.id != null ? sql`AND e.actor_user_id = ${input.id}` : sql``
   const membersRows = await db.execute<{ total: number; active: number; active_prev: number }>(sql`
     SELECT
-      (SELECT COUNT(*)::int FROM workspace_members WHERE workspace_id = ${input.workspaceId}) AS total,
-      (SELECT COUNT(DISTINCT e.actor_user_id)::int FROM events e
+      (SELECT COUNT(*)::int FROM ${workspaceMembers} WHERE workspace_id = ${input.workspaceId}) AS total,
+      (SELECT COUNT(DISTINCT e.actor_user_id)::int FROM ${events} e
         WHERE e.workspace_id = ${input.workspaceId} AND e.actor_user_id IS NOT NULL ${memberActorFilter}
           AND e.occurred_at BETWEEN ${from} AND ${to}) AS active,
-      (SELECT COUNT(DISTINCT e.actor_user_id)::int FROM events e
+      (SELECT COUNT(DISTINCT e.actor_user_id)::int FROM ${events} e
         WHERE e.workspace_id = ${input.workspaceId} AND e.actor_user_id IS NOT NULL ${memberActorFilter}
           AND e.occurred_at BETWEEN ${prevFrom} AND ${prevTo}) AS active_prev
   `)
@@ -291,13 +292,13 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   // ---------- distributions ----------
   const byStatusRows = await db.execute<{ status: string; count: number }>(sql`
     SELECT i.status, COUNT(*)::int AS count
-    FROM issues i WHERE ${where}
+    FROM ${issues} i WHERE ${where}
     GROUP BY i.status ORDER BY count DESC
   `)
 
   const byPriorityRows = await db.execute<{ priority: number; count: number }>(sql`
     SELECT i.priority, COUNT(*)::int AS count
-    FROM issues i WHERE ${where}
+    FROM ${issues} i WHERE ${where}
     GROUP BY i.priority ORDER BY i.priority ASC
   `)
 
@@ -314,9 +315,9 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
       COUNT(*) FILTER (WHERE i.status = 'done')::int AS done,
       AVG(EXTRACT(EPOCH FROM (i.completed_at - i.created_at)) / 3600)
         FILTER (WHERE i.completed_at IS NOT NULL) AS cycle_avg
-    FROM issues i
-    INNER JOIN issue_assignees ia ON ia.issue_id = i.id
-    INNER JOIN users u ON u.id = ia.user_id
+    FROM ${issues} i
+    INNER JOIN ${issueAssignees} ia ON ia.issue_id = i.id
+    INNER JOIN ${users} u ON u.id = ia.user_id
     WHERE ${where}
     GROUP BY u.id, u.name, u.email
     ORDER BY (COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled'))) DESC, done DESC
@@ -330,9 +331,9 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     count: number
   }>(sql`
     SELECT l.id AS label_id, l.name, l.color, COUNT(*)::int AS count
-    FROM issue_labels il
-    INNER JOIN issues i ON i.id = il.issue_id
-    INNER JOIN labels l ON l.id = il.label_id
+    FROM ${issueLabels} il
+    INNER JOIN ${issues} i ON i.id = il.issue_id
+    INNER JOIN ${labels} l ON l.id = il.label_id
     WHERE ${where}
     GROUP BY l.id, l.name, l.color
     ORDER BY count DESC
@@ -355,8 +356,8 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE i.status = 'done')::int AS done,
         COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled'))::int AS open
-      FROM issues i
-      INNER JOIN projects p ON p.id = i.project_id
+      FROM ${issues} i
+      INNER JOIN ${projects} p ON p.id = i.project_id
       WHERE ${where}
       GROUP BY p.id, p.name, p.color, p.icon
       ORDER BY total DESC
@@ -385,11 +386,11 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     FROM buckets
     LEFT JOIN (
       SELECT date_trunc(${trunc}, i.created_at)::date AS d, COUNT(*) AS count
-      FROM issues i WHERE ${where} AND i.created_at BETWEEN ${from} AND ${to} GROUP BY 1
+      FROM ${issues} i WHERE ${where} AND i.created_at BETWEEN ${from} AND ${to} GROUP BY 1
     ) c ON c.d = buckets.d
     LEFT JOIN (
       SELECT date_trunc(${trunc}, i.completed_at)::date AS d, COUNT(*) AS count
-      FROM issues i WHERE ${where} AND i.completed_at BETWEEN ${from} AND ${to} GROUP BY 1
+      FROM ${issues} i WHERE ${where} AND i.completed_at BETWEEN ${from} AND ${to} GROUP BY 1
     ) done ON done.d = buckets.d
     ORDER BY buckets.d ASC
   `)
@@ -398,7 +399,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   const cycleBucketRows = await db.execute<{ bucket: string; count: number }>(sql`
     WITH ct AS (
       SELECT EXTRACT(EPOCH FROM (i.completed_at - i.created_at)) / 3600 AS hours
-      FROM issues i
+      FROM ${issues} i
       WHERE ${where} AND i.completed_at BETWEEN ${from} AND ${to}
     )
     SELECT b AS bucket, COALESCE(COUNT(ct.hours), 0)::int AS count
@@ -421,7 +422,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   const agingRows = await db.execute<{ bucket: string; count: number }>(sql`
     WITH op AS (
       SELECT EXTRACT(EPOCH FROM (NOW() - i.created_at)) / 86400 AS days
-      FROM issues i
+      FROM ${issues} i
       WHERE ${where} AND i.status NOT IN ('done','cancelled')
     )
     SELECT b AS bucket, COALESCE(COUNT(op.days), 0)::int AS count
@@ -451,7 +452,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     FROM buckets
     LEFT JOIN (
       SELECT date_trunc(${trunc}, e.occurred_at)::date AS d, COUNT(*) AS count
-      FROM events e
+      FROM ${events} e
       WHERE e.workspace_id = ${input.workspaceId} ${memberActorFilter}
         AND e.occurred_at BETWEEN ${from} AND ${to}
       GROUP BY 1
@@ -461,7 +462,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
 
   const activityByActionRows = await db.execute<{ action: string; count: number }>(sql`
     SELECT e.action, COUNT(*)::int AS count
-    FROM events e
+    FROM ${events} e
     WHERE e.workspace_id = ${input.workspaceId} ${memberActorFilter}
       AND e.occurred_at BETWEEN ${from} AND ${to}
     GROUP BY e.action
@@ -475,8 +476,8 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     events: number
   }>(sql`
     SELECT e.actor_user_id AS user_id, u.name, COUNT(*)::int AS events
-    FROM events e
-    LEFT JOIN users u ON u.id = e.actor_user_id
+    FROM ${events} e
+    LEFT JOIN ${users} u ON u.id = e.actor_user_id
     WHERE e.workspace_id = ${input.workspaceId}
       AND e.actor_user_id IS NOT NULL ${memberActorFilter}
       AND e.occurred_at BETWEEN ${from} AND ${to}
@@ -489,14 +490,14 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   let burndown: AnalyticsPayload['burndown_series']
   if (input.view === 'task' && input.id != null) {
     const m = await db.execute<{ due_date: string | null }>(
-      sql`SELECT due_date FROM tasks WHERE id = ${input.id} LIMIT 1`
+      sql`SELECT due_date FROM ${tasks} WHERE id = ${input.id} LIMIT 1`
     )
     const due = m.rows[0]?.due_date
     if (due) {
       const series = await db.execute<{ date: string; remaining: number }>(sql`
         WITH bounds AS (
           SELECT
-            COALESCE((SELECT MIN(i.created_at) FROM issues i WHERE i.task_id = ${input.id} AND i.deleted_at IS NULL), NOW() - interval '14 days') AS start_at,
+            COALESCE((SELECT MIN(i.created_at) FROM ${issues} i WHERE i.task_id = ${input.id} AND i.deleted_at IS NULL), NOW() - interval '14 days') AS start_at,
             (${due}::date + interval '1 day') AS end_at
         ),
         days AS (
@@ -505,7 +506,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
                                  interval '1 day')::date AS d
         )
         SELECT to_char(days.d, 'YYYY-MM-DD') AS date,
-          (SELECT COUNT(*)::int FROM issues i
+          (SELECT COUNT(*)::int FROM ${issues} i
            WHERE i.task_id = ${input.id}
              AND i.deleted_at IS NULL
              AND i.created_at <= days.d + interval '1 day'

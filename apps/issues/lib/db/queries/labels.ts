@@ -17,11 +17,11 @@ export interface LabelListItem extends Label {
 export async function listLabelsInWorkspace(workspaceId: number): Promise<LabelListItem[]> {
   const rows = await db.execute(sql`
     SELECT l.*,
-      (SELECT COUNT(*)::int FROM issue_labels il
-        INNER JOIN issues i ON i.id = il.issue_id
+      (SELECT COUNT(*)::int FROM ${issueLabels} il
+        INNER JOIN ${issues} i ON i.id = il.issue_id
         WHERE il.label_id = l.id AND i.workspace_id = ${workspaceId}
           AND i.deleted_at IS NULL) AS issue_count
-    FROM labels l
+    FROM ${labels} l
     WHERE l.workspace_id = ${workspaceId}
     ORDER BY l.name ASC
   `)

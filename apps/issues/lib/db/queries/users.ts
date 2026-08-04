@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { users } from '../schema'
+import { apiTokens, inboxMessages, users, workspaceMembers, workspaces } from '../schema'
 import type { User } from '../schema'
 
 // DEPRECATED: returns every user on the platform. Do not expose to end users —
@@ -26,9 +26,9 @@ export async function getUsers() {
 export async function getVisibleUsers(callerId: number) {
   const result = await db.execute(sql`
     SELECT DISTINCT u.id, u.name, u.email, u.avatar_url
-    FROM users u
-    INNER JOIN workspace_members wm_target ON wm_target.user_id = u.id
-    INNER JOIN workspace_members wm_self
+    FROM ${users} u
+    INNER JOIN ${workspaceMembers} wm_target ON wm_target.user_id = u.id
+    INNER JOIN ${workspaceMembers} wm_self
       ON wm_self.workspace_id = wm_target.workspace_id
     WHERE wm_self.user_id = ${callerId}
       AND u.deleted_at IS NULL
@@ -124,8 +124,8 @@ export async function deleteAccountReport(userId: number): Promise<DeleteAccount
     member_count: number
   }>(sql`
     SELECT w.id AS workspace_id, w.name, COUNT(wm.id)::int AS member_count
-    FROM workspaces w
-    LEFT JOIN workspace_members wm ON wm.workspace_id = w.id
+    FROM ${workspaces} w
+    LEFT JOIN ${workspaceMembers} wm ON wm.workspace_id = w.id
     WHERE w.owner_id = ${userId}
     GROUP BY w.id, w.name
   `)
@@ -142,17 +142,17 @@ export async function softDeleteUser(userId: number): Promise<void> {
   await db.transaction(async (tx) => {
     // Hard-delete sole-owner workspaces (the cascade will sweep their content).
     await tx.execute(sql`
-      DELETE FROM workspaces w
+      DELETE FROM ${workspaces} w
       WHERE w.owner_id = ${userId}
-        AND (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id = w.id) <= 1
+        AND (SELECT COUNT(*) FROM ${workspaceMembers} wm WHERE wm.workspace_id = w.id) <= 1
     `)
     // Revoke tokens.
-    await tx.execute(sql`DELETE FROM api_tokens WHERE user_id = ${userId}`)
+    await tx.execute(sql`DELETE FROM ${apiTokens} WHERE user_id = ${userId}`)
     // Wipe inbox.
-    await tx.execute(sql`DELETE FROM inbox_messages WHERE user_id = ${userId}`)
+    await tx.execute(sql`DELETE FROM ${inboxMessages} WHERE user_id = ${userId}`)
     // Soft delete the user row.
     await tx.execute(sql`
-      UPDATE users SET
+      UPDATE ${users} SET
         deleted_at = now(),
         password_hash = NULL,
         google_id = NULL,

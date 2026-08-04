@@ -9,7 +9,7 @@
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
-import { projects, type Project } from '../schema'
+import { issues, projectUpdates, projects, type Project, users, workspaceMembers } from '../schema'
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { softDeleteProject, type DeleteMode } from './deletion'
 import { setProjectMembers } from './project-relations'
@@ -40,12 +40,12 @@ export async function listProjectsInWorkspace(
       lead.avatar_url AS lead_avatar,
       upd.status AS health,
       upd.created_at AS health_at
-    FROM projects p
-    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
-    LEFT JOIN users lead ON lead.id = p.owner_id
+    FROM ${projects} p
+    LEFT JOIN ${issues} i ON i.project_id = p.id AND i.deleted_at IS NULL
+    LEFT JOIN ${users} lead ON lead.id = p.owner_id
     LEFT JOIN LATERAL (
       SELECT status, created_at
-      FROM project_updates pu
+      FROM ${projectUpdates} pu
       WHERE pu.project_id = p.id
       ORDER BY pu.created_at DESC, pu.id DESC
       LIMIT 1
@@ -78,8 +78,8 @@ export async function pageProjectsInWorkspace(opts: {
       p.*,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status NOT IN ('done', 'cancelled'))::int AS open_issues
-    FROM projects p
-    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
+    FROM ${projects} p
+    LEFT JOIN ${issues} i ON i.project_id = p.id AND i.deleted_at IS NULL
     WHERE p.workspace_id = ${workspaceId}
       AND p.deleted_at IS NULL
       ${filterCursor ? sql`AND p.id < ${cursor}` : sql``}
@@ -348,7 +348,7 @@ export async function getProjects(userId?: number) {
     const result = await db.execute(sql`
       SELECT p.*, COUNT(i.id)::int AS issue_count,
         COUNT(i.id) FILTER (WHERE i.status NOT IN ('done','cancelled'))::int AS open_issues
-      FROM projects p LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
+      FROM ${projects} p LEFT JOIN ${issues} i ON i.project_id = p.id AND i.deleted_at IS NULL
       WHERE p.deleted_at IS NULL
       GROUP BY p.id ORDER BY p.updated_at DESC
     `)
@@ -360,10 +360,10 @@ export async function getProjects(userId?: number) {
       wm.role AS member_role,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status NOT IN ('done','cancelled'))::int AS open_issues
-    FROM projects p
-    INNER JOIN workspace_members wm
+    FROM ${projects} p
+    INNER JOIN ${workspaceMembers} wm
       ON wm.workspace_id = p.workspace_id AND wm.user_id = ${userId}
-    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
+    LEFT JOIN ${issues} i ON i.project_id = p.id AND i.deleted_at IS NULL
     WHERE p.deleted_at IS NULL
     GROUP BY p.id, wm.role
     ORDER BY p.updated_at DESC
@@ -384,10 +384,10 @@ export async function getProjectsPage(opts: {
       wm.role AS member_role,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status NOT IN ('done','cancelled'))::int AS open_issues
-    FROM projects p
-    INNER JOIN workspace_members wm
+    FROM ${projects} p
+    INNER JOIN ${workspaceMembers} wm
       ON wm.workspace_id = p.workspace_id AND wm.user_id = ${user_id}
-    LEFT JOIN issues i ON i.project_id = p.id AND i.deleted_at IS NULL
+    LEFT JOIN ${issues} i ON i.project_id = p.id AND i.deleted_at IS NULL
     WHERE 1=1
       AND p.deleted_at IS NULL
       ${filterCursor ? sql`AND p.id < ${cursor}` : sql``}

@@ -7,7 +7,7 @@
 
 import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { uploads } from '../schema'
+import { uploads, users } from '../schema'
 import type { Upload } from '../schema'
 
 export async function recordUpload(data: {
@@ -42,8 +42,8 @@ export async function listWorkspaceUploads(workspaceId: number): Promise<
 > {
   const res = await db.execute(sql`
     SELECT u.*, usr.name AS uploader_name, usr.avatar_url AS uploader_avatar
-    FROM uploads u
-    LEFT JOIN users usr ON usr.id = u.uploaded_by
+    FROM ${uploads} u
+    LEFT JOIN ${users} usr ON usr.id = u.uploaded_by
     WHERE u.workspace_id = ${workspaceId}
     ORDER BY u.created_at DESC
   `)
@@ -69,7 +69,7 @@ export async function deleteUploadByUrl(url: string): Promise<void> {
 // quotas (compared against workspaces.storage_limit_bytes). NULL sizes count 0.
 export async function computeWorkspaceStorageUsage(workspaceId: number): Promise<number> {
   const res = await db.execute(sql`
-    SELECT COALESCE(SUM(size), 0)::bigint AS used FROM uploads WHERE workspace_id = ${workspaceId}
+    SELECT COALESCE(SUM(size), 0)::bigint AS used FROM ${uploads} WHERE workspace_id = ${workspaceId}
   `)
   return Number((res.rows[0] as { used: string | number })?.used ?? 0)
 }

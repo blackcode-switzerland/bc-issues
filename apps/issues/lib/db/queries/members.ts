@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { projectMembers } from '../schema'
+import { projectMembers, users } from '../schema'
 
 export async function getProjectMembers(projectId: number) {
   const result = await db.execute(sql`
@@ -9,8 +9,8 @@ export async function getProjectMembers(projectId: number) {
       u.name,
       u.email,
       u.avatar_url
-    FROM project_members pm
-    JOIN users u ON u.id = pm.user_id
+    FROM ${projectMembers} pm
+    JOIN ${users} u ON u.id = pm.user_id
     WHERE pm.project_id = ${projectId}
     ORDER BY pm.role, u.name
   `)

@@ -240,9 +240,39 @@ multi-app migration later.
    Plus a `migrator` role that owns the schemas and runs migrations. The app role
    must **not** own tables — that is what stops an app silently altering the
    platform schema.
-5. **Set `search_path` explicitly** on the connection (`platform, issues`) — but
-   still write schema-qualified in Drizzle. `search_path` is a safety net, not
-   the mechanism.
+5. **Qualify every table reference. There is no `search_path` safety net — it
+   does not work here.** (Corrected 2026-08-04, after the Phase 3 rehearsal
+   proved the original instruction wrong.)
+
+   Neon's pooled endpoint — which production and preview both use — defeats all
+   three ways of setting it:
+
+   | Approach | Result |
+   |---|---|
+   | `ALTER ROLE … SET search_path` | **ignored** — pooled session still reports `"$user", public` |
+   | `options=-c search_path=…` in the URL | **rejected** — "unsupported startup parameter… use unpooled connection" |
+   | `SET search_path` per connection | works, but it is session state under PgBouncer *transaction* pooling, so it can leak to another client |
+
+   Drizzle's `pgSchema` qualifies ORM calls automatically but does **not** touch
+   raw ``sql` ` `` queries — ~118 references across ~17 files. Qualify them by
+   **interpolating the Drizzle table object**, never by hardcoding a string:
+
+   ```ts
+   // wrong — unqualified, resolves to nothing after the split
+   sql`SELECT count(*) FROM issue_labels il JOIN issues i ON i.id = il.issue_id`
+
+   // wrong — qualified, but a typo is invisible until it runs in production
+   sql`SELECT count(*) FROM issues.issue_labels il JOIN issues.issues i ON …`
+
+   // right — type-checked, and it follows the table if it ever moves schema
+   sql`SELECT count(*) FROM ${issueLabels} il JOIN ${issues} i ON i.id = il.issue_id`
+   ```
+
+   The third form is the standard. A mistyped identifier fails `npm run
+   typecheck`, and Phases 6 and 7 move more tables without revisiting these call
+   sites. Most affected files already import the table objects they name in raw
+   SQL — `labels.ts` imports `issueLabels, issues, labels` and then names all
+   three as bare strings — so this is usually a substitution, not a new import.
 6. **Swap `DATABASE_URL`** in Vercel to the `issues_app` role's connection
    string. Keep the old one recorded for rollback.
 7. **Document the role-creation SQL** in `docs/platform-db.md` — it becomes step

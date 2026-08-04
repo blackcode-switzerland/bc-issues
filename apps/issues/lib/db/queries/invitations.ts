@@ -16,13 +16,7 @@
 import { randomBytes } from 'crypto'
 import { and, desc, eq, gt, sql } from 'drizzle-orm'
 import { db } from '../client'
-import {
-  users,
-  workspaceInvitations,
-  workspaceMembers,
-  workspaces,
-  type WorkspaceInvitation,
-} from '../schema'
+import { inboxMessages, type WorkspaceInvitation, users, workspaceInvitations, workspaceMembers, workspaces } from '../schema'
 import { recordEvent } from './events'
 import { addMember } from './workspaces'
 
@@ -410,7 +404,7 @@ export async function materializePendingInvitationsForUser(
       // Skip if we've already materialized this invitation for this user
       // (the fan-out path already handled it when the user existed).
       const existing = await tx.execute<{ id: number }>(sql`
-        SELECT id FROM inbox_messages
+        SELECT id FROM ${inboxMessages}
         WHERE user_id = ${userId}
           AND entity_type = 'invitation'
           AND entity_id = ${inv.id}
@@ -419,7 +413,7 @@ export async function materializePendingInvitationsForUser(
       if (existing.rows[0]) continue
 
       await tx.execute(sql`
-        INSERT INTO inbox_messages
+        INSERT INTO ${inboxMessages}
           (user_id, workspace_id, type, entity_type, entity_id, actor_user_id, payload)
         VALUES
           (${userId},

@@ -189,7 +189,7 @@ async function fanOutInvitationAccepted(tx: Tx, event: Event): Promise<void> {
   // We avoid importing workspace_invitations here to dodge a cycle; instead,
   // load through a raw SQL.
   const rows = await tx.execute<{ invited_by: number; email: string }>(sql`
-    SELECT invited_by, email FROM workspace_invitations WHERE id = ${event.entity_id}
+    SELECT invited_by, email FROM ${workspaceInvitations} WHERE id = ${event.entity_id}
   `)
   const row = rows.rows[0]
   if (!row) return

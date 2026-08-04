@@ -7,6 +7,7 @@
 
 import { sql } from 'drizzle-orm'
 import { db } from '../client'
+import { issues, projects, tasks } from '../schema'
 
 export type LocatableType = 'issue' | 'task' | 'project'
 
@@ -18,10 +19,10 @@ export async function resolveSeqToId(
 ): Promise<number | null> {
   const query =
     type === 'issue'
-      ? sql`SELECT id FROM issues WHERE workspace_id = ${workspaceId} AND seq = ${seq} AND deleted_at IS NULL LIMIT 1`
+      ? sql`SELECT id FROM ${issues} WHERE workspace_id = ${workspaceId} AND seq = ${seq} AND deleted_at IS NULL LIMIT 1`
       : type === 'task'
-        ? sql`SELECT id FROM tasks WHERE workspace_id = ${workspaceId} AND seq = ${seq} AND deleted_at IS NULL LIMIT 1`
-        : sql`SELECT id FROM projects WHERE workspace_id = ${workspaceId} AND seq = ${seq} AND deleted_at IS NULL LIMIT 1`
+        ? sql`SELECT id FROM ${tasks} WHERE workspace_id = ${workspaceId} AND seq = ${seq} AND deleted_at IS NULL LIMIT 1`
+        : sql`SELECT id FROM ${projects} WHERE workspace_id = ${workspaceId} AND seq = ${seq} AND deleted_at IS NULL LIMIT 1`
   const result = await db.execute(query)
   const row = result.rows[0] as { id: number } | undefined
   return row?.id ?? null

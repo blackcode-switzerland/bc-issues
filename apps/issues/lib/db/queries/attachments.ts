@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { attachments } from '../schema'
+import { attachments, issues, users } from '../schema'
 import type { Attachment } from '../schema'
 
 export async function getAttachments(issueId: number) {
@@ -9,8 +9,8 @@ export async function getAttachments(issueId: number) {
       a.*,
       u.name as uploader_name,
       u.avatar_url as uploader_avatar
-    FROM attachments a
-    LEFT JOIN users u ON u.id = a.uploaded_by
+    FROM ${attachments} a
+    LEFT JOIN ${users} u ON u.id = a.uploaded_by
     WHERE a.issue_id = ${issueId}
     ORDER BY a.created_at DESC
   `)
@@ -53,9 +53,9 @@ export async function getWorkspaceAttachments(workspaceId: number) {
       i.title AS issue_title,
       u.name AS uploader_name,
       u.avatar_url AS uploader_avatar
-    FROM attachments a
-    JOIN issues i ON i.id = a.issue_id
-    LEFT JOIN users u ON u.id = a.uploaded_by
+    FROM ${attachments} a
+    JOIN ${issues} i ON i.id = a.issue_id
+    LEFT JOIN ${users} u ON u.id = a.uploaded_by
     WHERE a.workspace_id = ${workspaceId}
     ORDER BY a.created_at DESC
   `)

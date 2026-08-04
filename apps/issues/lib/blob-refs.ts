@@ -21,6 +21,7 @@
 
 import { sql } from 'drizzle-orm'
 import { isUploadedAsset } from './rich-text'
+import { attachments, comments, issues, projectUpdates, projects, tasks } from './db/schema'
 
 // Lazily import the db client so this module stays import-side-effect-free: the
 // pure extractUploadedUrls() can be used (and unit-tested) without a configured
@@ -87,29 +88,29 @@ export async function computeWorkspaceReferences(
   }
 
   const db = await getDb()
-  const [issues, tasks, projects, comments, updates, atts] = await Promise.all([
-    db.execute(sql`SELECT id, seq, title, description, deleted_at FROM issues WHERE workspace_id = ${workspaceId}`),
-    db.execute(sql`SELECT id, seq, name, description, deleted_at FROM tasks WHERE workspace_id = ${workspaceId}`),
-    db.execute(sql`SELECT id, seq, name, summary, description, deleted_at FROM projects WHERE workspace_id = ${workspaceId}`),
-    db.execute(sql`SELECT id, content, parent_type FROM comments WHERE workspace_id = ${workspaceId}`),
-    db.execute(sql`SELECT id, body FROM project_updates WHERE workspace_id = ${workspaceId}`),
-    db.execute(sql`SELECT id, issue_id, file_url, filename FROM attachments WHERE workspace_id = ${workspaceId}`),
+  const [issueRows, taskRows, projectRows, commentRows, updates, atts] = await Promise.all([
+    db.execute(sql`SELECT id, seq, title, description, deleted_at FROM ${issues} WHERE workspace_id = ${workspaceId}`),
+    db.execute(sql`SELECT id, seq, name, description, deleted_at FROM ${tasks} WHERE workspace_id = ${workspaceId}`),
+    db.execute(sql`SELECT id, seq, name, summary, description, deleted_at FROM ${projects} WHERE workspace_id = ${workspaceId}`),
+    db.execute(sql`SELECT id, content, parent_type FROM ${comments} WHERE workspace_id = ${workspaceId}`),
+    db.execute(sql`SELECT id, body FROM ${projectUpdates} WHERE workspace_id = ${workspaceId}`),
+    db.execute(sql`SELECT id, issue_id, file_url, filename FROM ${attachments} WHERE workspace_id = ${workspaceId}`),
   ])
 
-  for (const r of issues.rows as Row[]) {
+  for (const r of issueRows.rows as Row[]) {
     const ref: Reference = { type: 'issue', id: Number(r.id), seq: r.seq as number | null, label: (r.title as string) ?? null, trashed: r.deleted_at != null }
     scan(r.description, ref)
   }
-  for (const r of tasks.rows as Row[]) {
+  for (const r of taskRows.rows as Row[]) {
     const ref: Reference = { type: 'task', id: Number(r.id), seq: r.seq as number | null, label: (r.name as string) ?? null, trashed: r.deleted_at != null }
     scan(r.description, ref)
   }
-  for (const r of projects.rows as Row[]) {
+  for (const r of projectRows.rows as Row[]) {
     const ref: Reference = { type: 'project', id: Number(r.id), seq: r.seq as number | null, label: (r.name as string) ?? null, trashed: r.deleted_at != null }
     scan(r.summary, ref)
     scan(r.description, ref)
   }
-  for (const r of comments.rows as Row[]) {
+  for (const r of commentRows.rows as Row[]) {
     const ref: Reference = { type: 'comment', id: Number(r.id), seq: null, label: null, trashed: false }
     scan(r.content, ref)
   }
@@ -141,18 +142,18 @@ export async function isUrlReferencedAnywhere(url: string): Promise<boolean> {
   const db = await getDb()
   const res = await db.execute(sql`
     SELECT EXISTS (
-      SELECT 1 FROM issues          WHERE strpos(coalesce(description, ''), ${url}) > 0
+      SELECT 1 FROM ${issues}          WHERE strpos(coalesce(description, ''), ${url}) > 0
       UNION ALL
-      SELECT 1 FROM tasks           WHERE strpos(coalesce(description, ''), ${url}) > 0
+      SELECT 1 FROM ${tasks}           WHERE strpos(coalesce(description, ''), ${url}) > 0
       UNION ALL
-      SELECT 1 FROM projects        WHERE strpos(coalesce(description, ''), ${url}) > 0
+      SELECT 1 FROM ${projects}        WHERE strpos(coalesce(description, ''), ${url}) > 0
                                        OR strpos(coalesce(summary, ''), ${url}) > 0
       UNION ALL
-      SELECT 1 FROM comments        WHERE strpos(coalesce(content, ''), ${url}) > 0
+      SELECT 1 FROM ${comments}        WHERE strpos(coalesce(content, ''), ${url}) > 0
       UNION ALL
-      SELECT 1 FROM project_updates WHERE strpos(coalesce(body, ''), ${url}) > 0
+      SELECT 1 FROM ${projectUpdates} WHERE strpos(coalesce(body, ''), ${url}) > 0
       UNION ALL
-      SELECT 1 FROM attachments     WHERE file_url = ${url}
+      SELECT 1 FROM ${attachments}     WHERE file_url = ${url}
     ) AS referenced
   `)
   return Boolean((res.rows[0] as Row)?.referenced)

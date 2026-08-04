@@ -9,7 +9,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
-import { tasks, type Task } from '../schema'
+import { issues, projects, tasks, type Task, users } from '../schema'
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { softDeleteTask, type DeleteMode } from './deletion'
 import { allocateNextTaskSeq } from './workspaces'
@@ -49,10 +49,10 @@ export async function listTasksInWorkspace(
       lead.avatar_url AS lead_avatar,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM tasks m
-    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN users lead ON lead.id = m.lead_id
-    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
+    FROM ${tasks} m
+    LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN ${users} lead ON lead.id = m.lead_id
+    LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.workspace_id = ${workspaceId}
       AND m.deleted_at IS NULL
       ${
@@ -86,10 +86,10 @@ export async function getTaskInWorkspace(
       lead.avatar_url AS lead_avatar,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM tasks m
-    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN users lead ON lead.id = m.lead_id
-    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
+    FROM ${tasks} m
+    LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN ${users} lead ON lead.id = m.lead_id
+    LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.workspace_id = ${workspaceId} AND m.deleted_at IS NULL
     GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
   `)
@@ -268,8 +268,8 @@ export async function getTasks(projectId: number) {
     SELECT m.*,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM tasks m
-    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
+    FROM ${tasks} m
+    LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.project_id = ${projectId} AND m.deleted_at IS NULL
     GROUP BY m.id
     ORDER BY m.due_date ASC NULLS LAST
@@ -282,9 +282,9 @@ export async function getAllTasks() {
     SELECT m.*, p.name AS project_name,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM tasks m
-    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
+    FROM ${tasks} m
+    LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.deleted_at IS NULL
     GROUP BY m.id, p.name
     ORDER BY m.due_date ASC NULLS LAST
@@ -297,9 +297,9 @@ export async function getTaskWithDetails(id: number) {
     SELECT m.*, p.name AS project_name,
       COUNT(i.id)::int AS issue_count,
       COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
-    FROM tasks m
-    LEFT JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-    LEFT JOIN issues i ON i.task_id = m.id AND i.deleted_at IS NULL
+    FROM ${tasks} m
+    LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.deleted_at IS NULL
     GROUP BY m.id, p.name
   `)

@@ -14,7 +14,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
-import { issueAssignees, issueLabels, issues, labels, type Issue } from '../schema'
+import { attachments, comments, issueAssignees, issueLabels, issues, labels, projects, tasks, type Issue, users } from '../schema'
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
@@ -50,8 +50,8 @@ const issueListSelect = sql`
   i.*,
   COALESCE((
     SELECT json_agg(json_build_object('id', u2.id, 'name', u2.name, 'email', u2.email, 'avatar_url', u2.avatar_url) ORDER BY u2.name)
-    FROM issue_assignees ia
-    JOIN users u2 ON u2.id = ia.user_id
+    FROM ${issueAssignees} ia
+    JOIN ${users} u2 ON u2.id = ia.user_id
     WHERE ia.issue_id = i.id
   ), '[]'::json) AS assignees,
   m.name AS task_name,
@@ -60,9 +60,9 @@ const issueListSelect = sql`
   p.icon AS project_icon,
   p.color AS project_color,
   p.seq AS project_seq,
-  (SELECT COUNT(*)::int FROM comments c WHERE c.issue_id = i.id) AS comment_count,
-  (SELECT COUNT(*)::int FROM attachments a WHERE a.issue_id = i.id) AS attachment_count,
-  COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM issue_labels il JOIN labels lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
+  (SELECT COUNT(*)::int FROM ${comments} c WHERE c.issue_id = i.id) AS comment_count,
+  (SELECT COUNT(*)::int FROM ${attachments} a WHERE a.issue_id = i.id) AS attachment_count,
+  COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM ${issueLabels} il JOIN ${labels} lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
 `
 
 export interface ListIssuesOptions {
@@ -103,9 +103,9 @@ export async function listIssuesInWorkspace(
         : sql``
   const assigneeFilter =
     opts.assigneeIds === null
-      ? sql`AND NOT EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id)`
+      ? sql`AND NOT EXISTS (SELECT 1 FROM ${issueAssignees} ia WHERE ia.issue_id = i.id)`
       : opts.assigneeIds !== undefined && opts.assigneeIds.length > 0
-        ? sql`AND EXISTS (SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.user_id IN (${sql.join(opts.assigneeIds.map((id) => sql`${id}`), sql`, `)}))`
+        ? sql`AND EXISTS (SELECT 1 FROM ${issueAssignees} ia WHERE ia.issue_id = i.id AND ia.user_id IN (${sql.join(opts.assigneeIds.map((id) => sql`${id}`), sql`, `)}))`
         : sql``
 
   const whereClause = sql`
@@ -124,9 +124,9 @@ export async function listIssuesInWorkspace(
   // projects/tasks). No cursor pagination — see docs/api-changelog.md.
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN tasks m ON m.id = i.task_id
-    LEFT JOIN projects p ON p.id = i.project_id
+    FROM ${issues} i
+    LEFT JOIN ${tasks} m ON m.id = i.task_id
+    LEFT JOIN ${projects} p ON p.id = i.project_id
     ${whereClause}
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
@@ -141,9 +141,9 @@ export async function getIssueInWorkspace(
 ): Promise<IssueListRow | null> {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN tasks m ON m.id = i.task_id
-    LEFT JOIN projects p ON p.id = i.project_id
+    FROM ${issues} i
+    LEFT JOIN ${tasks} m ON m.id = i.task_id
+    LEFT JOIN ${projects} p ON p.id = i.project_id
     WHERE i.id = ${id} AND i.workspace_id = ${workspaceId} AND i.deleted_at IS NULL
   `)
   return (result.rows[0] as unknown as IssueListRow | undefined) ?? null
@@ -515,9 +515,9 @@ export async function deleteIssue(
 export async function getIssuesByProject(projectId: number) {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN tasks m ON m.id = i.task_id
-    LEFT JOIN projects p ON p.id = i.project_id
+    FROM ${issues} i
+    LEFT JOIN ${tasks} m ON m.id = i.task_id
+    LEFT JOIN ${projects} p ON p.id = i.project_id
     WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
@@ -527,9 +527,9 @@ export async function getIssuesByProject(projectId: number) {
 export async function getAllIssuesWithProjects() {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN tasks m ON m.id = i.task_id
-    LEFT JOIN projects p ON p.id = i.project_id
+    FROM ${issues} i
+    LEFT JOIN ${tasks} m ON m.id = i.task_id
+    LEFT JOIN ${projects} p ON p.id = i.project_id
     WHERE i.deleted_at IS NULL
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
@@ -552,9 +552,9 @@ export async function getIssuesPage(opts: {
 
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN tasks m ON m.id = i.task_id
-    LEFT JOIN projects p ON p.id = i.project_id
+    FROM ${issues} i
+    LEFT JOIN ${tasks} m ON m.id = i.task_id
+    LEFT JOIN ${projects} p ON p.id = i.project_id
     WHERE 1=1
       AND i.deleted_at IS NULL
       ${filterProject ? sql`AND i.project_id = ${project_id}` : sql``}
@@ -572,9 +572,9 @@ export async function getIssuesPage(opts: {
 export async function getIssuesByTask(taskId: number) {
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
-    FROM issues i
-    LEFT JOIN tasks m ON m.id = i.task_id
-    LEFT JOIN projects p ON p.id = i.project_id
+    FROM ${issues} i
+    LEFT JOIN ${tasks} m ON m.id = i.task_id
+    LEFT JOIN ${projects} p ON p.id = i.project_id
     WHERE i.task_id = ${taskId} AND i.deleted_at IS NULL
     ORDER BY COALESCE(i.position, 0) ASC, i.id DESC
   `)
