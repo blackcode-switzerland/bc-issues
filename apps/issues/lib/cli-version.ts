@@ -23,5 +23,5 @@
 // AGENT-SURFACE-SIMPLIFICATION-PLAN.md §8.6), by setting BK_CLI_MIN=1.9.0 — no
 // redeploy needed.
 
-export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '1.9.3'
+export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '1.10.0'
 export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '1.9.1'
