@@ -274,7 +274,15 @@ release_cli() {
   # Update the server-side version gate now so it lands in the SAME commit as the
   # bump (one commit, then the tag/build/publish come from it). CLI_LATEST always;
   # CLI_MIN only when forced.
-  local cli_version_ts="${root_dir}/lib/cli-version.ts"
+  #
+  # The gate lives in the app that serves the version headers. It was at
+  # <root>/lib/cli-version.ts until Phase 1 of the platform migration moved the
+  # whole app under apps/issues/ — this path was not updated with it, so every
+  # release since would have died here on `sed: no such file`, after bumping
+  # package.json and install.js and before the release commit. Caught in Phase 5,
+  # which is the first release attempt since the move.
+  local cli_version_ts="${root_dir}/apps/issues/lib/cli-version.ts"
+  [[ -f "$cli_version_ts" ]] || die "Version gate not found at ${cli_version_ts} — has the app moved again?"
   sed -i '' -E "s/(CLI_LATEST_VERSION = process\.env\.BK_CLI_LATEST \?\? ')[^']*'/\1${version_number}'/" "$cli_version_ts"
   success "CLI_LATEST_VERSION → ${version_number}"
   if [[ "$forced" == true ]]; then
