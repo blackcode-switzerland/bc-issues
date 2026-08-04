@@ -3,30 +3,19 @@ package commands
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
-	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/issues"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
-// wsOverride is the per-invocation workspace target set by the persistent --ws
-// flag. When non-empty it overrides cfg.ActiveWorkspaceSlug for that command
-// only (a read must never mutate the active workspace). verboseFlag backs -v.
-var (
-	wsOverride  string
-	verboseFlag bool
-)
-
-// clientWorkspaceSlug returns the workspace slug/id the client should target:
-// the --ws override when set, otherwise the active workspace from config.
-func clientWorkspaceSlug(cfg *config.Config) string {
-	if strings.TrimSpace(wsOverride) != "" {
-		return wsOverride
-	}
-	return cfg.ActiveWorkspaceSlug
-}
+// The --ws override and the -v flag are bound to cmdutil.WSOverride /
+// cmdutil.VerboseFlag below. They live in cmdutil rather than here because both
+// command packages (platform and issues) read them, and those two must not
+// import each other — PLATFORM-ARCHITECTURE.md §7.1.
 
 // rootLong is deliberately thin. It used to duplicate the web manifest's
 // "conventions for agents" block, which meant every convention lived in two
@@ -34,8 +23,8 @@ func clientWorkspaceSlug(cfg *config.Config) string {
 // (internal/guide/topics), which ships with the binary and is served by
 // `bk guide`. What stays here: what bk is, the first run, the global flags, the
 // exit codes, the command groups, and one loud pointer.
-const rootLong = `bk is the CLI for blackcode issues — projects, issues, tasks,
-comments, labels, members, files, tokens, inbox and analytics.
+const rootLong = `bk is the CLI for the Blackcode platform — workspaces, members,
+labels, files, tokens and inbox, plus one command group per app.
 
 It is the ONLY supported interface. The HTTP API behind it is private plumbing
 with no public contract.
@@ -61,17 +50,12 @@ Exit codes (stable; for branching in scripts/agents):
   5 not-found(404)   6 validation(400/422)   7 user-aborted
   8 client too old   9 update available
 
-Command groups:
+PLATFORM verbs — shared by every app, so they stay at the top level:
   guide       the embedded usage guide (--list, <topic>, --json)
   skill       install / check / sync the agent skill file
   workspace   list (--all for every workspace + per-app badges), show, create,
               edit, transfer, use
   app         which apps a workspace runs, and who may use them (access grants)
-  move/copy   move (or copy) projects/tasks/issues to another workspace (--to)
-  project     list, view, create, edit, delete, members, updates, comment(s)
-  issue       list, view, create, edit, delete, assign, watch, comment(s),
-              edit-comment, delete-comment, attach, detach, activity
-  task        list, view, create, edit, delete, comment(s)
   label       list, view, create, delete, attach, detach
   member      list, remove, leave
   invite      send, list, accept, decline, revoke, pending, candidates
@@ -83,17 +67,23 @@ Command groups:
   trash       list, restore, purge, empty
   undo        roll back your last N writes
   activity    workspace activity feed (paginated)
-  analytics   workspace analytics
   changelog   the dated record of what changed
   super-admin users, whitelist, errors (super admins only; platform-wide)
+
+APPS — every app verb sits behind its app name:
+  issues      issue, task, project, move, copy, analytics
+
+Renamed in 1.10.0: app nouns moved behind the app name, so "bk issue list" is
+now "bk issues issue list". Every old spelling still works and prints one
+deprecation line; they go away two minor releases from now. Run "bk changelog".
 
 Discover flags before calling: bk <group> --help, then bk <group> <cmd> --help.`
 
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "bk",
-		Short:         "blackcode-issues command-line interface",
-		Long:          rootLong,
+		Use:          "bk",
+		Short:        "Blackcode platform command-line interface",
+		Long:         rootLong,
 		SilenceUsage: true,
 		// main.go owns error output: it prints `error: <msg>` and, when the
 		// failure is one an agent can recover from, a `hint:` line under it.
@@ -102,47 +92,32 @@ func NewRoot() *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Verbose can be turned on per-invocation (--verbose) or via env.
-			if verboseFlag || os.Getenv("BK_DEBUG") == "1" {
+			if cmdutil.VerboseFlag || os.Getenv("BK_DEBUG") == "1" {
 				client.Verbose = true
 			}
 		},
 	}
 	output.RegisterFlags(root)
-	root.PersistentFlags().StringVar(&wsOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
-	root.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
-	root.AddCommand(
-		newGuideCmd(),
-		newSkillCmd(),
-		newRoutesCmd(),
-		newLoginCmd(),
-		newLogoutCmd(),
-		newWhoamiCmd(),
-		newMetaCmd(),
-		newProfileCmd(),
-		newWorkspaceCmd(),
-		newAppCmd(),
-		newProjectCmd(),
-		newIssueCmd(),
-		newMoveCmd(),
-		newCopyCmd(),
-		newUserCmd(),
-		newTaskCmd(),
-		newLabelCmd(),
-		newMemberCmd(),
-		newInviteCmd(),
-		newInboxCmd(),
-		newTokenCmd(),
-		newActivityCmd(),
-		newAnalyticsCmd(),
-		newUploadCmd(),
-		newStorageCmd(),
-		newTrashCmd(),
-		newUndoCmd(),
-		newChangelogCmd(),
-		newSuperAdminCmd(),
-		newVersionCmd(),
-	)
+	root.PersistentFlags().StringVar(&cmdutil.WSOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
+	root.PersistentFlags().BoolVarP(&cmdutil.VerboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
+	// Bare verbs: everything shared by every app.
+	root.AddCommand(platform.NewCommands()...)
+	root.AddCommand(newRoutesCmd())
+
+	// One entry per app. Adding an app is adding a line here plus its package —
+	// which is the whole point of the migration.
+	root.AddCommand(issues.NewGroup())
+
+	// …and the pre-1.10.0 spellings, still working. Registered before
+	// rejectUnknownSubcommands so the groups get their RunE, and deprecated
+	// after it so that RunE is what carries the warning.
+	aliases := registerAppAliases(root, issues.LegacyTopLevel())
+
 	rejectUnknownSubcommands(root)
+
+	for _, c := range aliases {
+		deprecateTree(c, issues.Slug)
+	}
 	return root
 }
 

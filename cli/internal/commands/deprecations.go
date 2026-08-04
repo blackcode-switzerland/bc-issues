@@ -23,6 +23,24 @@ var deprecations = map[string]string{
 	// Nothing was renamed in the CLI itself. `bk changelog --reference` lost its
 	// backing document: the pinned Platform Reference is now the embedded guide.
 	"--reference": "`bk changelog --reference` was retired on 2026-08-03 — the platform reference is now the embedded guide. Run `bk guide`.",
+
+	// --- 1.10.0 (2026-08-04): app nouns moved behind the app name ---
+	//
+	// These six still RUN in 1.10.x and 1.11.x — aliases.go registers each old
+	// spelling as a working, hidden copy that prints one deprecation line. The
+	// rows below are what happens when those aliases are pruned in 1.12.0: cobra
+	// answers `bk issue create` with `unknown command "issue" for "bk"`, and
+	// hintFor() turns that into the new spelling instead of a dead end.
+	//
+	// PRUNE THESE IN THE SAME COMMIT AS THE ALIASES — one release after the
+	// aliases go, not with them. A hint outlives the thing it replaces on
+	// purpose; that gap is the only thing a stale script has left to read.
+	"issue":     "`bk issue …` is now `bk issues issue …` — app verbs sit behind their app name. Same flags, same output.",
+	"task":      "`bk task …` is now `bk issues task …` — app verbs sit behind their app name. Same flags, same output.",
+	"project":   "`bk project …` is now `bk issues project …` — app verbs sit behind their app name. Same flags, same output.",
+	"move":      "`bk move …` is now `bk issues move …` — app verbs sit behind their app name. Same flags, same output.",
+	"copy":      "`bk copy …` is now `bk issues copy …` — app verbs sit behind their app name. Same flags, same output.",
+	"analytics": "`bk analytics …` is now `bk issues analytics …` — it reports this app's statuses and priorities, so it moved with the app. Same flags, same output.",
 }
 
 // flagRe pulls the offending token out of a cobra usage error, e.g.

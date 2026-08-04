@@ -58,10 +58,24 @@ type APIError struct {
 	Details    string `json:"details,omitempty"`
 }
 
+// Error states WHAT failed. It deliberately does not include Suggestion, which
+// says what to do about it.
+//
+// Suggestion used to be appended here as well, and main.go also prints it as the
+// `hint:` line — so every server suggestion reached stderr twice:
+//
+//	error: you do not have access to the issues app here (403) — ask a workspace owner to grant you access
+//	hint: ask a workspace owner to grant you access
+//
+// That is exactly the double-print SilenceErrors was added to root.go to stop,
+// on the one channel agents parse. Phase 4 turned it from an edge case into
+// routine traffic (app_access_denied is expected now), which is what surfaced
+// it.
+//
+// One fact, one line, one owner: this method owns `error:`, hintFor() in
+// cmd/bk/main.go owns `hint:`. Details stays because it is part of what failed
+// (a field-level validation reason), not advice.
 func (e *APIError) Error() string {
-	if e.Suggestion != "" {
-		return fmt.Sprintf("%s (%d) — %s", e.ErrorMsg, e.Status, e.Suggestion)
-	}
 	if e.Details != "" {
 		return fmt.Sprintf("%s (%d): %s", e.ErrorMsg, e.Status, e.Details)
 	}

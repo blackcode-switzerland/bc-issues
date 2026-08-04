@@ -78,6 +78,24 @@ func CollectRoutes(root *cobra.Command) ([]RouteEntry, []string) {
 		if c.Name() == "help" || c.Name() == "completion" {
 			return
 		}
+		// Nor into anything hidden, and that now means whole subtrees rather
+		// than single commands.
+		//
+		// Phase 5 registers every pre-namespace spelling as a hidden alias
+		// carrying a second copy of the same leaves — so `DELETE
+		// /api/workspaces/{ws}/issues/{id}` was claimed by both `bk issue delete`
+		// and `bk issues issue delete`. They dedupe to one entry, but WHICH name
+		// landed in the artifact depended on cobra's alphabetical ordering
+		// ("issue" before "issues"), i.e. on a coincidence. One rename away, the
+		// parity artifact would have started advertising deprecated spellings as
+		// the way to reach a route.
+		//
+		// Hidden means "not the advertised surface", which is exactly the
+		// question this function answers. Coverage is unaffected: an alias is a
+		// copy of a canonical command, never the only path to a route.
+		if c.Hidden && c.HasParent() {
+			return
+		}
 		children := c.Commands()
 		// A "leaf" is a command that actually runs something. A pure group
 		// (`bk issue`) has no Run and only dispatches, so it declares nothing.

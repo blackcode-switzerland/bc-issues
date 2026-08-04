@@ -9,6 +9,7 @@ import (
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
 )
@@ -58,7 +59,7 @@ func main() {
 
 	// `bk skill check` / `bk skill sync` signal "a newer binary exists" with a
 	// distinct exit code so an agent can branch on it without parsing stderr.
-	var ue *commands.UpdateAvailableError
+	var ue *platform.UpdateAvailableError
 	if errors.As(err, &ue) {
 		fmt.Fprintln(os.Stderr, ue.Error())
 		os.Exit(exitUpdateAvail)

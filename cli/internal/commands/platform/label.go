@@ -1,0 +1,289 @@
+package platform
+
+import (
+	"fmt"
+	"io"
+	"strconv"
+
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
+	"github.com/spf13/cobra"
+)
+
+func newLabelCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "label",
+		Short: "Manage labels (workspace-scoped)",
+	}
+	cmd.AddCommand(
+		newLabelListCmd(),
+		newLabelViewCmd(),
+		newLabelCreateCmd(),
+		newLabelEditCmd(),
+		newLabelDeleteCmd(),
+		newLabelAttachCmd(),
+		newLabelDetachCmd(),
+	)
+	return cmd
+}
+
+func newLabelViewCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:         "view <id>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/labels/{id}"},
+		Short:       "Show a label",
+		Args:        cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid id: %w", err)
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			l, err := c.GetLabel(ws, id)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, l, func(w io.Writer) error {
+				fmt.Fprintf(w, "ID:          %d\n", l.ID)
+				fmt.Fprintf(w, "Name:        %s\n", l.Name)
+				fmt.Fprintf(w, "Color:       %s\n", l.Color)
+				fmt.Fprintf(w, "Description: %s\n", cmdutil.DerefOr(l.Description, "—"))
+				return nil
+			})
+		},
+	}
+}
+
+func newLabelListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/labels"},
+		Short:       "List labels in the active workspace",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			labels, err := c.ListLabels(ws)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, labels, func(w io.Writer) error {
+				tw := output.Tabwriter(w)
+				fmt.Fprintln(tw, "ID\tNAME\tCOLOR\tISSUES")
+				for _, l := range labels {
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%d\n", l.ID, l.Name, l.Color, l.IssueCount)
+				}
+				return tw.Flush()
+			})
+		},
+	}
+}
+
+func newLabelCreateCmd() *cobra.Command {
+	var name, color, description string
+	cmd := &cobra.Command{
+		Use:         "create --name NAME [--color HEX]",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/labels"},
+		Short:       "Create a label in the active workspace",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if name == "" {
+				return fmt.Errorf("--name is required")
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			req := client.CreateLabelRequest{Name: name, Color: color}
+			if description != "" {
+				req.Description = &description
+			}
+			label, err := c.CreateLabel(ws, req)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Created label %s (id %d, color %s)\n",
+				label.Name, label.ID, label.Color)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "Label name")
+	cmd.Flags().StringVar(&color, "color", "#6b7280", "Label color (#rrggbb)")
+	cmd.Flags().StringVar(&description, "description", "", "Optional description")
+	_ = cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+// bk label edit — renaming/recolouring a label was reachable only from the web
+// UI. In a CLI-only product that is a hole, not a convenience gap, so the
+// parity test now requires it.
+func newLabelEditCmd() *cobra.Command {
+	var name, color, description string
+	cmd := &cobra.Command{
+		Use:         "edit <id>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/labels/{id}"},
+		Short:       "Rename or recolour a label",
+		Args:        cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid label id %q", args[0])
+			}
+			if err != nil {
+				return err
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+
+			// Only send what the caller actually set — an omitted flag must mean
+			// "leave unchanged", not "clear".
+			var req client.UpdateLabelRequest
+			if cmd.Flags().Changed("name") {
+				req.Name = &name
+			}
+			if cmd.Flags().Changed("color") {
+				req.Color = &color
+			}
+			if cmd.Flags().Changed("description") {
+				req.Description = &description
+			}
+			if req.Name == nil && req.Color == nil && req.Description == nil {
+				return fmt.Errorf("nothing to change: pass --name, --color or --description")
+			}
+
+			label, err := c.UpdateLabel(ws, id, req)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated label %s (id %d, color %s)\n",
+				label.Name, label.ID, label.Color)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "New label name")
+	cmd.Flags().StringVar(&color, "color", "", "New label color (#rrggbb)")
+	cmd.Flags().StringVar(&description, "description", "", "New description")
+	return cmd
+}
+
+func newLabelDeleteCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:         "delete <id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/labels/{id}"},
+		Short:       "Delete a label (removes it from all issues)",
+		Args:        cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid id %q", args[0])
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			if err := c.DeleteLabel(ws, id); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "label %d deleted\n", id)
+			return nil
+		},
+	}
+}
+
+func newLabelAttachCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:         "attach <issue_id> <label_id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/labels,GET /api/workspaces/{ws}/issues/{id}/labels"},
+		Short:       "Attach a label to an issue",
+		Args:        cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			issueID, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid issue_id %q", args[0])
+			}
+			labelID, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid label_id %q", args[1])
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			if err := c.AttachIssueLabel(ws, issueID, labelID); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "attached label %d to issue %d\n", labelID, issueID)
+			return nil
+		},
+	}
+}
+
+func newLabelDetachCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:         "detach <issue_id> <label_id>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid}"},
+		Short:       "Detach a label from an issue",
+		Args:        cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			issueID, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid issue_id %q", args[0])
+			}
+			labelID, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid label_id %q", args[1])
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			if err != nil {
+				return err
+			}
+			if err := c.DetachIssueLabel(ws, issueID, labelID); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "detached label %d from issue %d\n", labelID, issueID)
+			return nil
+		},
+	}
+}

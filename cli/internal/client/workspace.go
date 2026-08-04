@@ -620,15 +620,27 @@ func (c *Client) UpdateProfile(req UpdateProfileRequest) (*Me, error) {
 }
 
 // ---------- workspace member role ----------
-
-func (c *Client) UpdateWorkspaceMemberRole(slugOrID string, userID int, role string) (*WorkspaceMember, error) {
-	var m WorkspaceMember
-	if err := c.patchJSON(
-		fmt.Sprintf("/api/workspaces/%s/members/%d", slugOrID, userID),
-		map[string]string{"role": role},
-		&m,
-	); err != nil {
-		return nil, err
-	}
-	return &m, nil
-}
+//
+// Deliberately empty. `UpdateWorkspaceMemberRole` lived here until Phase 5 and
+// was broken from the day it was written: it sent PATCH to
+// /api/workspaces/{ws}/members/{userId}, which only ever exported DELETE. There
+// is no route that edits a member's role — ownership moves via
+// `bk workspace transfer`, and everything else is a per-app grant
+// (`bk app access grant`), so nothing was lost by deleting it.
+//
+// THE BLIND SPOT IS THE REUSABLE FINDING, not the bug. cli-parity.test.ts
+// compares two sets: routes on disk, and routes a *command* annotates. This
+// method was reachable from no command, so it appeared in neither — a client
+// method can name a route that does not exist and stay invisible to the guard
+// that exists to catch exactly that. The same shape of hole has now been found
+// twice in the guardrails (the first: `routes` annotations were optional, fixed
+// by routes_test.go).
+//
+// It is documented rather than closed. Closing it would mean parsing Go call
+// sites for c.get/c.patchJSON/... and reconciling their format strings with the
+// route tree — a second, weaker route-extractor to keep honest alongside the
+// annotations. The annotations are the contract; an unreferenced client method
+// is dead code, and dead code is what code review and `go vet`-adjacent linting
+// are for. What parity guarantees is precisely: every route an agent can reach
+// is reachable, and every route a *command* claims exists. Anything the
+// commands do not claim is outside its stated scope.

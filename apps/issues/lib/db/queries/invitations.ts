@@ -12,8 +12,9 @@
 //      rows granted in the same transaction (Phase 4). An invitation may name an
 //      `app` to grant access to one app specifically.
 //
-// Tokens are 32 raw bytes encoded as base64url (43 chars). They are random,
-// not derived; we store the literal string. Tokens are unique by index.
+// Tokens are 32 raw bytes encoded as base64url (43 chars), never starting with
+// `-` — see generateInvitationToken for why. They are random, not derived; we
+// store the literal string. Tokens are unique by index.
 
 import { randomBytes } from 'crypto'
 import { and, desc, eq, gt, sql } from 'drizzle-orm'
@@ -25,8 +26,29 @@ import { recordEvent } from './events'
 const TOKEN_BYTES = 32
 const DEFAULT_TTL_DAYS = 14
 
+/**
+ * A token is 32 random bytes, base64url-encoded — but never one that begins
+ * with `-`.
+ *
+ * base64url's alphabet includes `-`, so about 1 in 32 tokens used to start with
+ * one, and every one of those was unredeemable from the CLI: `bk invite accept
+ * -Jx…` made cobra read the token as a flag and fail with `unknown shorthand
+ * flag: 'J'` before the request was ever sent. Hit for real during Phase 4
+ * verification.
+ *
+ * The CLI now reads that argument literally, but only in versions from 1.10.0
+ * on. Refusing to mint the token here is what protects every binary already
+ * installed, which is the population we cannot upgrade.
+ *
+ * Rejection is on the FIRST character only, and the rest of the string keeps the
+ * full alphabet: it costs ~0.05 bits of the token's 256 and leaves the retry
+ * loop expected to run 1.03 times.
+ */
 export function generateInvitationToken(): string {
-  return randomBytes(TOKEN_BYTES).toString('base64url')
+  for (;;) {
+    const token = randomBytes(TOKEN_BYTES).toString('base64url')
+    if (!token.startsWith('-')) return token
+  }
 }
 
 export interface CreateInvitationInput {

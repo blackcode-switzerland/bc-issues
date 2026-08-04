@@ -15,6 +15,29 @@
 // prints each leaf's `routes` annotation. We prefer running it via `go run`; if
 // Go isn't available (some CI images run only the JS suite) we fall back to
 // cli/routes.json, which `make routes` emits as a build artifact.
+//
+// ---------------------------------------------------------------------------
+// KNOWN BLIND SPOT — read this before trusting a green run
+// ---------------------------------------------------------------------------
+// This guard sees routes a COMMAND annotates. It does not see the client layer.
+// A method in cli/internal/client/ that names a route which does not exist is
+// invisible here as long as no command calls it.
+//
+// That is not hypothetical. `client.UpdateWorkspaceMemberRole` sent PATCH to
+// /api/workspaces/{ws}/members/{userId} — a DELETE-only route — from the day it
+// was written until Phase 5 deleted it, through every green run of this file.
+// It is the second guardrail hole of the same shape (the first: `routes`
+// annotations were optional until routes_test.go made them mandatory), and the
+// shape is what matters: a guard that reads declarations cannot see code that
+// declares nothing.
+//
+// Left open on purpose. Closing it means extracting routes a second way — by
+// parsing c.get/c.postJSON/... call sites and their format strings — which is a
+// weaker route-extractor to keep honest alongside the authoritative one. The
+// annotations are the contract; an unreferenced client method is dead code, and
+// dead code is a review concern. State the scope honestly instead: this file
+// proves every route is reachable from `bk`, and every route a command CLAIMS
+// exists. It proves nothing about code no command reaches.
 
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
@@ -215,7 +238,14 @@ describe('CLI ↔ routes parity', () => {
 })
 
 // All route paths on disk, including the ones excluded above.
-const allPaths = new Set(walk('app/api').map(routeUrl))
+//
+// Anchored at APP_ROOT like every other path in this file. It used to walk the
+// relative 'app/api', which resolved only because vitest happens to run with
+// cwd set to the app directory — the exact cwd dependence the header comment
+// above claims to have removed. Run from the repo root it would have thrown
+// ENOENT at import time; run from anywhere else that happened to have an
+// app/api it would have compared against the wrong tree.
+const allPaths = new Set(walk(join(APP_ROOT, 'app', 'api')).map(routeUrl))
 function pathExists(p: string): boolean {
   return allPaths.has(p)
 }
