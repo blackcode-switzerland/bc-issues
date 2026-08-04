@@ -14,7 +14,7 @@ export async function getIssueActivity(issueId: number) {
         c.created_at
       FROM comments c
       LEFT JOIN users u ON u.id = c.user_id
-      WHERE c.issue_id = ${issueId}
+      WHERE c.parent_type = 'issue' AND c.parent_id = ${issueId}
       ORDER BY c.created_at DESC
     `)
   ).rows

@@ -17,7 +17,7 @@
 // place is four code sites, not the data.
 
 import {
-  pgTable,
+  pgSchema,
   serial,
   bigserial,
   bigint,
@@ -34,7 +34,16 @@ import {
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
-export const users = pgTable('users', {
+/**
+ * The `platform` Postgres schema.
+ *
+ * Phase 3 moved these tables out of `public`. Every table is schema-qualified in
+ * Drizzle rather than relying on search_path — search_path is a safety net, not
+ * the mechanism. See PLATFORM-ARCHITECTURE.md §4.3.
+ */
+export const platformSchema = pgSchema('platform')
+
+export const users = platformSchema.table('users', {
   id: serial('id').primaryKey(),
   google_id: varchar('google_id', { length: 255 }).unique(),
   email: varchar('email', { length: 255 }).notNull().unique(),
@@ -57,7 +66,7 @@ export const users = pgTable('users', {
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
-export const workspaces = pgTable(
+export const workspaces = platformSchema.table(
   'workspaces',
   {
     id: serial('id').primaryKey(),
@@ -82,7 +91,7 @@ export const workspaces = pgTable(
   })
 )
 
-export const workspaceMembers = pgTable(
+export const workspaceMembers = platformSchema.table(
   'workspace_members',
   {
     id: serial('id').primaryKey(),
@@ -105,7 +114,7 @@ export const workspaceMembers = pgTable(
   })
 )
 
-export const workspaceCounters = pgTable('workspace_counters', {
+export const workspaceCounters = platformSchema.table('workspace_counters', {
   workspace_id: integer('workspace_id')
     .primaryKey()
     .references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -116,7 +125,7 @@ export const workspaceCounters = pgTable('workspace_counters', {
   last_task_seq: integer('last_task_seq').default(0).notNull(),
 })
 
-export const workspaceInvitations = pgTable(
+export const workspaceInvitations = platformSchema.table(
   'workspace_invitations',
   {
     id: serial('id').primaryKey(),
@@ -146,7 +155,7 @@ export const workspaceInvitations = pgTable(
   })
 )
 
-export const uploads = pgTable(
+export const uploads = platformSchema.table(
   'uploads',
   {
     id: serial('id').primaryKey(),
@@ -173,7 +182,7 @@ export const uploads = pgTable(
   })
 )
 
-export const labels = pgTable(
+export const labels = platformSchema.table(
   'labels',
   {
     id: serial('id').primaryKey(),
@@ -189,7 +198,7 @@ export const labels = pgTable(
   })
 )
 
-export const transactionLog = pgTable(
+export const transactionLog = platformSchema.table(
   'transaction_log',
   {
     id: serial('id').primaryKey(),
@@ -208,7 +217,7 @@ export const transactionLog = pgTable(
   })
 )
 
-export const apiTokens = pgTable(
+export const apiTokens = platformSchema.table(
   'api_tokens',
   {
     id: serial('id').primaryKey(),
@@ -235,7 +244,7 @@ export const apiTokens = pgTable(
 // "forgot password" flow (by email) and the in-app settings flow (session
 // email). We store only a hash of the code, cap attempts, and expire fast.
 
-export const passwordResetOtps = pgTable(
+export const passwordResetOtps = platformSchema.table(
   'password_reset_otps',
   {
     id: serial('id').primaryKey(),
@@ -257,7 +266,7 @@ export const passwordResetOtps = pgTable(
 // auto on reporter. Auto-watchers are removed when their reason no longer
 // applies (e.g. assignee unassigned), unless reason='manual'.
 
-export const events = pgTable(
+export const events = platformSchema.table(
   'events',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -300,7 +309,7 @@ export const events = pgTable(
 // events — this keeps the inbox UI snappy and survives the source event being
 // deleted (e.g. workspace deletion via cascade).
 
-export const inboxMessages = pgTable(
+export const inboxMessages = platformSchema.table(
   'inbox_messages',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -331,7 +340,7 @@ export const inboxMessages = pgTable(
 // as a group; items deleted alone restore standalone. `mode` records whether the
 // children were cascaded into the bin or detached (kept active).
 
-export const deletionBatches = pgTable(
+export const deletionBatches = platformSchema.table(
   'deletion_batches',
   {
     id: serial('id').primaryKey(),
@@ -354,7 +363,7 @@ export const deletionBatches = pgTable(
   })
 )
 
-export const errorEvents = pgTable(
+export const errorEvents = platformSchema.table(
   'error_events',
   {
     id: serial('id').primaryKey(),
@@ -383,7 +392,7 @@ export const errorEvents = pgTable(
   })
 )
 
-export const emailWhitelist = pgTable(
+export const emailWhitelist = platformSchema.table(
   'email_whitelist',
   {
     id: serial('id').primaryKey(),
@@ -395,6 +404,35 @@ export const emailWhitelist = pgTable(
   (t) => ({
     typeValueUniq: uniqueIndex('uq_email_whitelist_type_value').on(t.type, t.value),
     typeCheck: check('email_whitelist_type_check', sql`${t.type} IN ('email', 'domain')`),
+  })
+)
+
+export const comments = platformSchema.table(
+  'comments',
+  {
+    id: serial('id').primaryKey(),
+    // Phase 1: nullable during backfill. Phase 13 tightens.
+    workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Polymorphic parent: 'issue' | 'task' | 'project'.
+    // Existing rows backfill with parent_type='issue', parent_id=issue_id.
+    // We keep `issue_id` in place for one release for safety; new code uses parent_*.
+    parent_type: varchar('parent_type', { length: 20 }),
+    parent_id: integer('parent_id'),
+    user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    content: text('content').notNull(),
+    mentions: integer('mentions').array(),
+    parent_comment_id: integer('parent_comment_id'),
+    edited_at: timestamp('edited_at', { withTimezone: true }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    parentIdx: index('idx_comments_parent').on(t.parent_type, t.parent_id, t.created_at),
+    parentCommentIdx: index('idx_comments_parent_comment').on(t.parent_comment_id),
+    parentTypeCheck: check(
+      'comments_parent_type_check',
+      sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'task', 'project')`
+    ),
   })
 )
 
@@ -425,5 +463,6 @@ export type Event = typeof events.$inferSelect
 export type NewEvent = typeof events.$inferInsert
 export type InboxMessage = typeof inboxMessages.$inferSelect
 export type NewInboxMessage = typeof inboxMessages.$inferInsert
+export type Comment = typeof comments.$inferSelect
 export type EmailWhitelistEntry = typeof emailWhitelist.$inferSelect
 export type NewEmailWhitelistEntry = typeof emailWhitelist.$inferInsert

@@ -713,8 +713,6 @@ async function collectPurgeUrls(
   if (type === 'issue') {
     const atts = await tx.select({ url: attachments.file_url }).from(attachments).where(eq(attachments.issue_id, id))
     for (const a of atts) if (a.url) urls.push(a.url)
-    const legacy = await tx.select({ content: comments.content }).from(comments).where(and(eq(comments.workspace_id, workspaceId), eq(comments.issue_id, id)))
-    for (const c of legacy) urls.push(...extractUploadedUrls(c.content))
   }
   // Polymorphic comments attached to this entity (any type).
   const cmts = await tx

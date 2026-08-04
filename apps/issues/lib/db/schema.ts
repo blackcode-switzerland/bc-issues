@@ -2,20 +2,18 @@
 //
 // This file is the app's COMPLETE schema: it re-exports the shared platform
 // tables from @blackcode/platform-db and adds the ten tables that are genuinely
-// an issue tracker. Every existing `@/lib/db/schema` import keeps working
+// an issue tracker, in the `issues` Postgres schema. Every existing `@/lib/db/schema` import keeps working
 // unchanged, and Drizzle's query client still sees one combined schema.
 //
 // Adding a table here means it belongs to THIS app. If a future app would need
 // it too, it belongs in @blackcode/platform-db instead — see the boundary rule
 // in that file and PLATFORM-ARCHITECTURE.md §4.3.
 //
-// `comments` is the one deliberate exception. It is a platform concept and is
-// already polymorphic (parent_type/parent_id), but its legacy `issue_id` column
-// still has a live FK to `issues`, which would make the platform package depend
-// on this app. It moves to platform-db in Phase 3, once that column is dropped.
+// `comments` moved to @blackcode/platform-db in Phase 3, once migration 0032
+// dropped its legacy issue_id FK to issues.
 
 import {
-  pgTable,
+  pgSchema,
   serial,
   varchar,
   text,
@@ -31,13 +29,22 @@ import {
   check,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
+
+/**
+ * The `issues` Postgres schema — this app's own tables.
+ *
+ * Phase 3 moved them out of `public`. The app role may read and write
+ * `platform.*` freely, but no other app may touch this schema: that boundary is
+ * a Postgres grant, not a convention. See PLATFORM-ARCHITECTURE.md §4.3.
+ */
+export const issuesSchema = pgSchema('issues')
 import { users, workspaces, labels } from '@blackcode/platform-db'
 
 // Re-export the platform tables so `@/lib/db/schema` remains the single import
 // site for the whole schema.
 export * from '@blackcode/platform-db/schema'
 
-export const projects = pgTable(
+export const projects = issuesSchema.table(
   'projects',
   {
   id: serial('id').primaryKey(),
@@ -81,7 +88,7 @@ export const projects = pgTable(
 // updates; the latest one is the project's current health. status is one of
 // on_track / at_risk / off_track; body is rich-text HTML.
 
-export const projectUpdates = pgTable(
+export const projectUpdates = issuesSchema.table(
   'project_updates',
   {
     id: serial('id').primaryKey(),
@@ -106,7 +113,7 @@ export const projectUpdates = pgTable(
   })
 )
 
-export const tasks = pgTable(
+export const tasks = issuesSchema.table(
   'tasks',
   {
     id: serial('id').primaryKey(),
@@ -141,7 +148,7 @@ export const tasks = pgTable(
   })
 )
 
-export const issues = pgTable(
+export const issues = issuesSchema.table(
   'issues',
   {
     id: serial('id').primaryKey(),
@@ -189,41 +196,7 @@ export const issues = pgTable(
   })
 )
 
-export const comments = pgTable(
-  'comments',
-  {
-    id: serial('id').primaryKey(),
-    // Phase 1: nullable during backfill. Phase 13 tightens.
-    workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    // Polymorphic parent: 'issue' | 'task' | 'project'.
-    // Existing rows backfill with parent_type='issue', parent_id=issue_id.
-    // We keep `issue_id` in place for one release for safety; new code uses parent_*.
-    parent_type: varchar('parent_type', { length: 20 }),
-    parent_id: integer('parent_id'),
-    // Phase 9: comments are polymorphic via parent_type/parent_id. The legacy
-    // issue_id column stays for one release (data + legacy queries) but is
-    // now nullable since task/project comments don't have an issue.
-    issue_id: integer('issue_id').references(() => issues.id, { onDelete: 'cascade' }),
-    user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
-    content: text('content').notNull(),
-    mentions: integer('mentions').array(),
-    parent_comment_id: integer('parent_comment_id'),
-    edited_at: timestamp('edited_at', { withTimezone: true }),
-    created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-  },
-  (t) => ({
-    issueIdx: index('idx_comments_issue').on(t.issue_id),
-    parentIdx: index('idx_comments_parent').on(t.parent_type, t.parent_id, t.created_at),
-    parentCommentIdx: index('idx_comments_parent_comment').on(t.parent_comment_id),
-    parentTypeCheck: check(
-      'comments_parent_type_check',
-      sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'task', 'project')`
-    ),
-  })
-)
-
-export const attachments = pgTable(
+export const attachments = issuesSchema.table(
   'attachments',
   {
     id: serial('id').primaryKey(),
@@ -253,7 +226,7 @@ export const attachments = pgTable(
 // content tables (see lib/blob-refs.ts), so a stale/missing ledger row can never
 // cause data loss. `url` is unique so re-recording the same upload is a no-op.
 
-export const issueLabels = pgTable(
+export const issueLabels = issuesSchema.table(
   'issue_labels',
   {
     issue_id: integer('issue_id')
@@ -272,7 +245,7 @@ export const issueLabels = pgTable(
 // assignee_id column on issues. ON DELETE CASCADE on both sides so removing
 // either the issue or the user cleans up the row automatically.
 
-export const issueAssignees = pgTable(
+export const issueAssignees = issuesSchema.table(
   'issue_assignees',
   {
     issue_id: integer('issue_id')
@@ -292,7 +265,7 @@ export const issueAssignees = pgTable(
 
 // Project ↔ label association. Reuses the workspace-scoped labels table.
 
-export const projectLabels = pgTable(
+export const projectLabels = issuesSchema.table(
   'project_labels',
   {
     project_id: integer('project_id')
@@ -308,7 +281,7 @@ export const projectLabels = pgTable(
   })
 )
 
-export const projectMembers = pgTable(
+export const projectMembers = issuesSchema.table(
   'project_members',
   {
     id: serial('id').primaryKey(),
@@ -328,7 +301,7 @@ export const projectMembers = pgTable(
   })
 )
 
-export const issueWatchers = pgTable(
+export const issueWatchers = issuesSchema.table(
   'issue_watchers',
   {
     issue_id: integer('issue_id')
@@ -361,7 +334,6 @@ export type NewProject = typeof projects.$inferInsert
 export type Task = typeof tasks.$inferSelect
 export type Issue = typeof issues.$inferSelect
 export type NewIssue = typeof issues.$inferInsert
-export type Comment = typeof comments.$inferSelect
 export type ProjectUpdate = typeof projectUpdates.$inferSelect
 export type NewProjectUpdate = typeof projectUpdates.$inferInsert
 export type Attachment = typeof attachments.$inferSelect

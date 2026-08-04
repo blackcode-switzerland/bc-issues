@@ -269,7 +269,7 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
       await copyLabels(tx, tgtWs, actorUserId, 'project', p.id, row.id)
       await copyProjectMembers(tx, p.id, row.id, targetMembers, adjustments, p.seq)
       await copyProjectUpdates(tx, tgtWs, p.id, row.id, keepUser)
-      await copyComments(tx, srcWs, tgtWs, 'project', p.id, row.id, null, targetMembers, adjustments, 'project', p.seq)
+      await copyComments(tx, srcWs, tgtWs, 'project', p.id, row.id, targetMembers, adjustments, 'project', p.seq)
 
       await recordEvent(tx, {
         workspaceId: tgtWs,
@@ -311,7 +311,7 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
       taskIdMap.set(t.id, row.id)
       report.moved.tasks.push({ id: row.id, source_seq: t.seq, target_seq: seq, title: t.name })
 
-      await copyComments(tx, srcWs, tgtWs, 'task', t.id, row.id, null, targetMembers, adjustments, 'task', t.seq)
+      await copyComments(tx, srcWs, tgtWs, 'task', t.id, row.id, targetMembers, adjustments, 'task', t.seq)
 
       await recordEvent(tx, {
         workspaceId: tgtWs,
@@ -402,7 +402,7 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
       // labels (remap by name), attachments (blob shared by URL), comments
       await copyLabels(tx, tgtWs, actorUserId, 'issue', i.id, row.id)
       await copyAttachments(tx, tgtWs, i.id, row.id, keepUser)
-      await copyComments(tx, srcWs, tgtWs, 'issue', i.id, row.id, row.id, targetMembers, adjustments, 'issue', i.seq)
+      await copyComments(tx, srcWs, tgtWs, 'issue', i.id, row.id, targetMembers, adjustments, 'issue', i.seq)
 
       await recordEvent(tx, {
         workspaceId: tgtWs,
@@ -577,7 +577,7 @@ async function copyAttachments(
 // Copy the polymorphic comment thread attached to a source entity onto the
 // target entity, preserving thread structure (parent_comment_id), edit stamps
 // and timestamps. Comment authors and @mentions are kept only for target
-// members. legacyIssueId is set for issue comments (the legacy issue_id column).
+// members.
 async function copyComments(
   tx: Tx,
   sourceWs: number,
@@ -585,7 +585,6 @@ async function copyComments(
   parentType: ItemType,
   sourceParentId: number,
   targetParentId: number,
-  legacyIssueId: number | null,
   targetMembers: Set<number>,
   adjustments: MoveAdjustment[],
   entityType: ItemType,
@@ -620,7 +619,6 @@ async function copyComments(
         workspace_id: targetWs,
         parent_type: parentType,
         parent_id: targetParentId,
-        issue_id: legacyIssueId,
         user_id: author,
         content: c.content,
         mentions: mentions && mentions.length > 0 ? mentions : null,

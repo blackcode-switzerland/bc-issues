@@ -1,8 +1,11 @@
-// Polymorphic comments — attach to issue, task, or project.
+// Polymorphic comments — attach to issue, task, or project, via
+// parent_type + parent_id.
 //
-// New code uses parent_type + parent_id. The legacy issue_id column is kept
-// (NOT NULL for now) and mirrored on issue-parent comments so the old code
-// path doesn't break.
+// The legacy `issue_id` column was dropped in migration 0032 (Phase 3). It was
+// a hard FK from comments to issues, which made the platform depend on one app
+// and would have broken `pg_dump --schema=issues` as a clean extraction path.
+// The data had been fully mirrored for a long time — 0 rows disagreed — so the
+// drop was a code change, not a data migration.
 
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
@@ -176,9 +179,6 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
         workspace_id: input.workspaceId,
         parent_type: input.parentType,
         parent_id: input.parentId,
-        // Legacy column — mirrored only for 'issue' parents so existing
-        // queries that join on issue_id keep working until Phase 13 drops it.
-        issue_id: input.parentType === 'issue' ? input.parentId : null,
         user_id: input.userId,
         content: toRichTextHtml(input.content),
         mentions: mentionedUserIds.length > 0 ? mentionedUserIds : null,

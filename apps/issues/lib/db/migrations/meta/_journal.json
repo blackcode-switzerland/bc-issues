@@ -225,6 +225,20 @@
       "when": 1782300000000,
       "tag": "0031_uploads_ledger_storage_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785847413858,
+      "tag": "0032_drop_comments_issue_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785847414858,
+      "tag": "0033_split_platform_and_issues_schemas",
+      "breakpoints": true
     }
   ]
 }
