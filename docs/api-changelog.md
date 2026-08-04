@@ -33,11 +33,16 @@ migrated with it enabled and granted**, so nothing about your access changed on
 the day this shipped. What changed is that access is now expressible, and two
 commands answer questions they could not answer before.
 
-**Not breaking, with one behaviour change to know about.** `bk workspace list`
-and the `workspaces` array in `bk meta` now list only the workspaces you can use
-**this app** in. Because of the backfill that is the same list you had yesterday —
-but it can differ from your raw membership list from now on, and `--all` is how
-you see the difference:
+**Breaking in meaning, not in shape — read this even if nothing looks different.**
+`bk workspace list` and the `workspaces` array in `bk meta` used to mean "every
+workspace you belong to". They now mean "every workspace you belong to **and can
+use this app in**". No response field changed type or disappeared.
+
+On the day this shipped those two sets were identical for every existing user —
+the backfill granted all 42 memberships, and that was verified user-by-user
+before enforcement went live — so nobody's list changed. But they can diverge from
+now on, and if you have code that treats that list as your full membership, it is
+now wrong. `--all` is the list that kept the old meaning:
 
 ```bash
 bk workspace list          # workspaces you can use this app in
