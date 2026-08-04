@@ -1,5 +1,22 @@
 # CLI (`bk`) — maintainer doc
 
+> **2026-08-04 — the command tree is namespaced per app** (Phase 5). Package
+> layout, and the boundary two tests enforce:
+>
+> ```
+> cli/internal/commands/            root.go, aliases.go, deprecations.go, routes.go
+>   commands/platform/              bare verbs — workspace, label, upload, trash, invite, …
+>   commands/issues/                that app's nouns — bk issues issue|task|project|move|copy|analytics
+> cli/internal/cmdutil/             what both need: client construction, --ws/-v, flags, formatting
+> cli/internal/guide/topics/{platform,issues}/
+> ```
+>
+> **Command packages must not import each other**, and the platform must not
+> import any app (`commands/boundaries_test.go`). Anything two of them need goes
+> in `cmdutil`. Every pre-1.10.0 spelling is registered as a hidden alias that
+> works and warns — see `aliases.go`, and `aliases_test.go` for the table that
+> proves each one resolves to the same command.
+
 > **Scope.** This is the **maintainer** doc: how `bk` is built, released,
 > versioned and structured internally.
 >
@@ -67,10 +84,10 @@ A typical session:
 bk login --server https://issues.example.com   # browser-based authorize flow
 bk workspace list                               # show your workspaces
 bk workspace use acme                           # pick the active workspace
-bk project list                                 # show your projects
-bk issue create --project 1 --title "Fix login" --priority 2
-bk issue list --project 1 --mine
-bk issue comment 42 --body "Investigating now"
+bk issues project list                                 # show your projects
+bk issues issue create --project 1 --title "Fix login" --priority 2
+bk issues issue list --project 1 --mine
+bk issues issue comment 42 --body "Investigating now"
 bk undo --count 1                               # roll back the last operation
 ```
 
@@ -238,8 +255,8 @@ The active workspace (id, slug) is stored in the config file and is also set ser
 `--ws <slug|id>` is a **global flag** that targets a different workspace for that one command only — it does **not** mutate the active workspace (no config write, no `POST /api/me/active-workspace`). A read should never have side effects:
 
 ```bash
-bk issue list --ws acme --search "login bug"   # read acme; active workspace unchanged
-bk issue view 234 --ws acme                     # view by the #seq shown in the app
+bk issues issue list --ws acme --search "login bug"   # read acme; active workspace unchanged
+bk issues issue view 234 --ws acme                     # view by the #seq shown in the app
 ```
 
 ### Global flags
@@ -347,8 +364,8 @@ is left untouched — **no data can be lost**.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk move --to <ws> [--project N ...] [--task N ...] [--issue N ...]` | `POST /api/workspaces/:ws/move` (`mode=move`) | Copies the selected items into `--to`, then bins the source copies. |
-| `bk copy --to <ws> [--project N ...] [--task N ...] [--issue N ...]` | `POST /api/workspaces/:ws/move` (`mode=copy`) | Same, but leaves the source in place — items end up in **both** workspaces. |
+| `bk issues move --to <ws> [--project N ...] [--task N ...] [--issue N ...]` | `POST /api/workspaces/:ws/move` (`mode=move`) | Copies the selected items into `--to`, then bins the source copies. |
+| `bk issues copy --to <ws> [--project N ...] [--task N ...] [--issue N ...]` | `POST /api/workspaces/:ws/move` (`mode=copy`) | Same, but leaves the source in place — items end up in **both** workspaces. |
 
 - `--project` / `--task` / `--issue` are the workspace **#numbers** and are each repeatable.
 - `--cascade-tasks` (default `true`) also carries a transferred project's tasks; `--cascade-issues` (default `true`) also carries a project's/task's issues. Pass `--cascade-tasks=false` to move a project **without** its tasks, etc.
@@ -357,13 +374,13 @@ is left untouched — **no data can be lost**.
 
 ```bash
 # Move a whole project (with its tasks + issues) into the "growth" workspace
-bk move --to growth --project 42
+bk issues move --to growth --project 42
 
 # Move only specific issues, leaving everything else behind
-bk move --to growth --issue 108 --issue 106 --issue 105
+bk issues move --to growth --issue 108 --issue 106 --issue 105
 
 # Copy a project's structure but not its issues, into another workspace
-bk copy --to growth --project 42 --cascade-issues=false
+bk issues copy --to growth --project 42 --cascade-issues=false
 ```
 
 > ⚠️ **Encoding when scripting a bulk move.** If you drive a transfer by piping
@@ -376,39 +393,39 @@ bk copy --to growth --project 42 --cascade-issues=false
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk project list [--search TEXT]` | `GET /api/workspaces/:ws/projects` | Returns every project in one response (not paginated). `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
-| `bk project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
-| `bk project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
-| `bk project issues <id> [--status S] [--assignee REF]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
-| `bk project tasks <id>` | `GET /api/workspaces/:ws/tasks?project_id=:id` | |
-| `bk project create --name N [--description D \| --description-file F] [--file F ...]` | `POST /api/workspaces/:ws/projects` | `--file` uploads + embeds inline (repeatable). |
-| `bk project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/workspaces/:ws/projects/:id` | |
-| `bk project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached tasks/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
-| `bk project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/workspaces/:ws/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
-| `bk project remove-member <id> --user REF [--yes]` | `DELETE /api/workspaces/:ws/projects/:id/members` | `REF` = id, email, or display name. Prompts to confirm. |
+| `bk issues project list [--search TEXT]` | `GET /api/workspaces/:ws/projects` | Returns every project in one response (not paginated). `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
+| `bk issues project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
+| `bk issues project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
+| `bk issues project issues <id> [--status S] [--assignee REF]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
+| `bk issues project tasks <id>` | `GET /api/workspaces/:ws/tasks?project_id=:id` | |
+| `bk issues project create --name N [--description D \| --description-file F] [--file F ...]` | `POST /api/workspaces/:ws/projects` | `--file` uploads + embeds inline (repeatable). |
+| `bk issues project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/workspaces/:ws/projects/:id` | |
+| `bk issues project delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/projects/:id?mode=…` | Moves to Trash. `--cascade` bins attached tasks/issues as a group (restores together). `--detach` (default) keeps children active, just unlinked. Prompts to confirm. |
+| `bk issues project add-member <id> --email E [--role owner\|admin\|member\|viewer]` | `POST /api/workspaces/:ws/projects/:id/members` | `--role` defaults to `member`. The user must already be registered. |
+| `bk issues project remove-member <id> --user REF [--yes]` | `DELETE /api/workspaces/:ws/projects/:id/members` | `REF` = id, email, or display name. Prompts to confirm. |
 
 ### Issues
 
 > **Issue identifier — the `#number`.** Every issue has a single id: the
 > per-workspace **`#number`** shown in the app (e.g. `#234`). Commands take that
-> number directly, so `bk issue view 234` and `bk issue view #234` both work.
+> number directly, so `bk issues issue view 234` and `bk issues issue view #234` both work.
 > There is no separate global id — the API addresses items by this number too.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description, plus the #id when numeric — e.g. `123` or `#123`); status/assignee filters are client-side. Footer shows `showing X of N`. |
-| `bk issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | `id` is the `#number` shown in the app (a leading `#` is accepted). |
-| `bk issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
-| `bk issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
-| `bk issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
-| `bk issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
-| `bk issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
-| `bk issue comment <id> --body "..." \| --body - \| --body-file F [--reply-to C] [--file F ...]` | `POST /api/workspaces/:ws/issues/:id/comments` | Body or `--file` required. `--reply-to` threads under comment id C. `--file` uploads + embeds inline. |
-| `bk issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
-| `bk issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
-| `bk issue attach <id> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Adds to the **attachments list** (sidebar), not the body. To embed inline use `--file` on `create`/`comment`. |
-| `bk issue attachments <id>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
-| `bk issue detach <id> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
+| `bk issues issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description, plus the #id when numeric — e.g. `123` or `#123`); status/assignee filters are client-side. Footer shows `showing X of N`. |
+| `bk issues issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | `id` is the `#number` shown in the app (a leading `#` is accepted). |
+| `bk issues issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
+| `bk issues issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
+| `bk issues issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
+| `bk issues issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
+| `bk issues issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
+| `bk issues issue comment <id> --body "..." \| --body - \| --body-file F [--reply-to C] [--file F ...]` | `POST /api/workspaces/:ws/issues/:id/comments` | Body or `--file` required. `--reply-to` threads under comment id C. `--file` uploads + embeds inline. |
+| `bk issues issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
+| `bk issues issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
+| `bk issues issue attach <id> --file F` | `POST /api/upload` then `POST /api/workspaces/:ws/issues/:id/attachments` | Adds to the **attachments list** (sidebar), not the body. To embed inline use `--file` on `create`/`comment`. |
+| `bk issues issue attachments <id>` | `GET /api/workspaces/:ws/issues/:id/attachments` | |
+| `bk issues issue detach <id> <attachment-id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id/attachments/:attachmentId` | Prompts to confirm. |
 
 **`issue create` flags**:
 
@@ -467,23 +484,23 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
 > (`| a | b |` …) render as real tables. To embed video/audio, upload it and
 > reference the url (above) — raw `<iframe>` and external media are stripped.
 
-> **`--file` vs `bk issue attach`.** `--file` (and the methods above) embed in the
-> **body**. `bk issue attach` is different — it's issue-only and adds the file to
+> **`--file` vs `bk issues issue attach`.** `--file` (and the methods above) embed in the
+> **body**. `bk issues issue attach` is different — it's issue-only and adds the file to
 > the separate **attachments list** (sidebar), not the body.
 
 **`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--task`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--task`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
 
 ### Tasks
 
-`bk tasks` is an alias for `bk task`.
+`bk tasks` is an alias for `bk issues task`.
 
 | Command | Backend call |
 |---|---|
-| `bk task list [--project N] [--search TEXT]` | `GET /api/workspaces/:ws/tasks[?project_id=N&search=TEXT]` | `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
-| `bk task view <id> [--include-issues]` | `GET /api/workspaces/:ws/tasks/:id[?includeIssues=true]` |
-| `bk task create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD] [--file F ...]` | `POST /api/workspaces/:ws/tasks` | `--file` uploads + embeds inline (repeatable). |
-| `bk task edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/tasks/:id` |
-| `bk task delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/tasks/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
+| `bk issues task list [--project N] [--search TEXT]` | `GET /api/workspaces/:ws/tasks[?project_id=N&search=TEXT]` | `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
+| `bk issues task view <id> [--include-issues]` | `GET /api/workspaces/:ws/tasks/:id[?includeIssues=true]` |
+| `bk issues task create --project N --name M [--description D \| --description-file F] [--due-date YYYY-MM-DD] [--file F ...]` | `POST /api/workspaces/:ws/tasks` | `--file` uploads + embeds inline (repeatable). |
+| `bk issues task edit <id> [--name] [--description \| --description-file] [--due-date <YYYY-MM-DD\|none>]` | `PATCH /api/workspaces/:ws/tasks/:id` |
+| `bk issues task delete <id> [--yes] [--cascade \| --detach]` | `DELETE /api/workspaces/:ws/tasks/:id?mode=…` | Moves to Trash. `--cascade` bins attached issues as a group. `--detach` (default) keeps issues active. |
 
 ### Trash (recycle bin, workspace-scoped)
 
@@ -501,7 +518,7 @@ All deletes (issues, projects, tasks) are soft — rows move to a per-workspace 
 **Automatic file cleanup.** When you permanently delete a trashed item (`bk trash
 purge` / `bk trash empty`), any files embedded in that content are automatically
 removed from storage once nothing else in the workspace references them — so
-storage is freed without owner action. (Same for `bk issue delete-comment`.) See
+storage is freed without owner action. (Same for `bk issues issue delete-comment`.) See
 [Storage](#storage-workspace-scoped-owner-only).
 
 Restore conflict flags: `--restore-parents` (also restore the parent when a child's parent is still binned) and `--standalone` (restore the child with the parent link cleared). If neither is passed and conflicts exist, the command reports them and exits non-zero.
@@ -574,17 +591,17 @@ trash-restore stay safe) — use these to review usage and delete unused files.
 |---|---|---|
 | `bk storage list` | `GET /api/workspaces/:ws/storage` | Files with `REFS` (how many things reference each, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. |
 | `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Irreversible. |
-| `bk storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issue attach` row), joined to its issue + uploader. |
+| `bk storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. |
 
 ### Activity / analytics / undo
 
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk activity [--limit N] [--cursor N]` | `GET /api/workspaces/:ws/activity` | Active-workspace change feed (keyset-paginated). `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. |
-| `bk analytics [flags]` | `GET /api/workspaces/:ws/analytics` | Workspace analytics with full web-dashboard parity (see below). `--ws <slug\|id>` targets another workspace via the path. Any member; not admin-only. |
+| `bk issues analytics [flags]` | `GET /api/workspaces/:ws/analytics` | Workspace analytics with full web-dashboard parity (see below). `--ws <slug\|id>` targets another workspace via the path. Any member; not admin-only. |
 | `bk undo [--count N] [--yes]` | `POST /api/undo` | Rolls back your last N operations (clamped to 1–10). Prompts to confirm. |
 
-**`bk analytics` flags** — all optional; defaults to the active workspace,
+**`bk issues analytics` flags** — all optional; defaults to the active workspace,
 workspace scope, last-30-days window, daily buckets:
 
 | Flag | Meaning |
@@ -601,10 +618,10 @@ by-assignee); `--json` / `--yaml` emit the **full** payload (trends, all series,
 histograms, burndown). Examples:
 
 ```bash
-bk analytics                                              # active workspace, 30d
-bk analytics --view project --id 12 --interval week --json
-bk analytics --status todo,in_progress --priority 1 --priority 2
-bk analytics --ws acme --view member --id 5 --from 2026-01-01
+bk issues analytics                                              # active workspace, 30d
+bk issues analytics --view project --id 12 --interval week --json
+bk issues analytics --status todo,in_progress --priority 1 --priority 2
+bk issues analytics --ws acme --view member --id 5 --from 2026-01-01
 ```
 
 ### Super admin (platform-wide)
@@ -680,7 +697,7 @@ whose active code page isn't UTF-8.
   (and `$OutputEncoding` in PowerShell) **before** invoking `bk` in a pipeline.
   For a Python wrapper, set `PYTHONUTF8=1`.
 - **Prefer the API/JSON path over shell text.** A JSON request body is
-  unambiguously UTF-8 on the wire — moving items with `bk move` / `POST
+  unambiguously UTF-8 on the wire — moving items with `bk issues move` / `POST
   /api/workspaces/:ws/move`, or writing bodies with `--description-file`, avoids
   round-tripping text through a console entirely.
 - **Never re-feed decoded strings.** Reading text out with `--json`, mangling it
@@ -690,7 +707,7 @@ whose active code page isn't UTF-8.
 > If you already have corrupted rows, the damage is deterministic and
 > reversible: re-encode the visible string to the wrong code page's bytes and
 > decode as UTF-8 (e.g. Python `s.encode("cp437").decode("utf-8")`, falling back
-> to `cp850`/`latin1`). Fix them in place with `bk issue edit`/`bk project edit`
+> to `cp850`/`latin1`). Fix them in place with `bk issues issue edit`/`bk issues project edit`
 > — only touch the rows the bad run actually corrupted.
 
 ### Nullable field convention
@@ -701,12 +718,12 @@ For `edit` commands on nullable fields (`--assignee`, `--task`, `--start-date`, 
 - Pass `none`, `null`, `unset`, or `clear` (case-insensitive) → explicitly null it.
 
 ```bash
-bk issue edit 42 --task none --due-date 2026-06-30
+bk issues issue edit 42 --task none --due-date 2026-06-30
 ```
 
 ### User-reference convention
 
-Wherever a command takes a "user reference" (`--assignee`, `bk issue assign`, `bk project remove-member --user`, etc.), the CLI accepts:
+Wherever a command takes a "user reference" (`--assignee`, `bk issues issue assign`, `bk issues project remove-member --user`, etc.), the CLI accepts:
 
 - A numeric id (`42`)
 - An email (anything containing `@`, e.g. `alice@example.com`)
@@ -756,7 +773,7 @@ Override the directory with `BK_CONFIG_DIR` (the file is always `config.json` in
 
 ### Table (default)
 
-`text/tabwriter` aligned columns. Headers vary per command; for example `bk project list`:
+`text/tabwriter` aligned columns. Headers vary per command; for example `bk issues project list`:
 
 ```
 ID    NAME            STATUS    ROLE    ISSUES (OPEN/TOTAL)
@@ -783,7 +800,7 @@ Same shape, YAML-formatted (2-space indent).
 
 ### Pagination
 
-The main list commands (`bk issue list`, `bk project list`, `bk task list`) are **not paginated** — they return every matching item in one response (`bk issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`, `bk trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
+The main list commands (`bk issues issue list`, `bk issues project list`, `bk issues task list`) are **not paginated** — they return every matching item in one response (`bk issues issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`, `bk trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
 
 ---
 
@@ -834,7 +851,7 @@ The API sends two headers on **every** response, and the CLI acts on them:
 
 ```bash
 export BK_NO_PROMPT=1
-bk issue delete 42      # no confirmation prompt
+bk issues issue delete 42      # no confirmation prompt
 ```
 
 Confirmation is also auto-skipped when stdin is not a TTY (e.g. piped input), and per-command with `--yes`/`-y`.
@@ -842,9 +859,9 @@ Confirmation is also auto-skipped when stdin is not a TTY (e.g. piped input), an
 ### Pipe-friendly JSON
 
 ```bash
-bk issue list --project 1 --status todo --json \
+bk issues issue list --project 1 --status todo --json \
   | jq -r '.data[].id' \
-  | xargs -n1 -I{} bk issue edit {} --status in_progress --assignee me
+  | xargs -n1 -I{} bk issues issue edit {} --status in_progress --assignee me
 ```
 
 ### Recover from a misstep
@@ -862,7 +879,7 @@ echo "$MY_TOKEN" | bk login --token --server https://issues.example.com
 ### Inline error inspection
 
 ```bash
-bk issue view 999999 || echo "exit code: $?"
+bk issues issue view 999999 || echo "exit code: $?"
 # exit code: 5   (not found)
 ```
 
@@ -876,13 +893,13 @@ transfer, which is one atomic server-side transaction:
 
 ```bash
 # Move an entire project (its tasks + issues come along) into another workspace
-bk move --to growth --project 42
+bk issues move --to growth --project 42
 
 # Copy specific issues into another workspace, leaving the originals in place
-bk copy --to growth --issue 108 --issue 106
+bk issues copy --to growth --issue 108 --issue 106
 
 # Move a project's structure but not its issues
-bk move --to growth --project 42 --cascade-issues=false
+bk issues move --to growth --project 42 --cascade-issues=false
 ```
 
 The response includes an `adjustments` list of anything that couldn't be carried
@@ -892,7 +909,7 @@ failure — the source is untouched until the whole copy succeeds.
 ### Robust scripting checklist
 
 - Set `BK_NO_PROMPT=1`.
-- To relocate items across workspaces, use `bk move` / `bk copy` (above) — never re-create them by hand.
+- To relocate items across workspaces, use `bk issues move` / `bk issues copy` (above) — never re-create them by hand.
 - Pick an active workspace first (`bk workspace use …`) before workspace-scoped commands.
 - Always use `--json` for parsing; the table format is for humans.
 - Branch on exit codes, not stderr text.

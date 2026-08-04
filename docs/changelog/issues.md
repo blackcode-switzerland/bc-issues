@@ -1,18 +1,37 @@
-# API & CLI Changelog
+# Changelog — issues app
 
-Breaking and notable changes to blackcode issues and the `bk` CLI. Newest first.
-If a command that used to work now fails, check here first.
+Breaking and notable changes to the **issues** app: issues, tasks, projects,
+their comments and their analytics. Newest first. If a command that used to work
+now fails, check here first — and check `platform.md` too, which carries changes
+to workspaces, members, files, tokens and the `bk` CLI itself.
 
 For how the CLI **works** (rather than what changed), run **`bk guide`** — the
 complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your workspaces), run
 **`bk meta`**.
 
-Surfaced at: `GET /api/changelog` (JSON or `?format=markdown`) and `bk changelog`.
+Surfaced at: `GET /api/changelog` (JSON or `?format=markdown`) and `bk changelog`,
+which merge every app's file into one feed by date, each entry tagged with its
+app. `bk changelog --app issues` filters to this file.
 The `/changelog` web page was removed on 2026-08-03 — it had no human audience.
 
 > **Process rule:** every change to a route or user-facing feature must add a
 > dated entry here. Timestamp it and describe what changed and how to adapt.
+> A change touching shared platform data goes in `platform.md` instead, even
+> when this app is what prompted it.
+
+> **2026-08-04 — this file was split out of `docs/api-changelog.md`.**
+> Phase 5 of the platform migration replaced the single log with one file per
+> app plus `platform.md`, because a single file becomes a merge-conflict magnet
+> across app teams and does not survive an app extraction.
+>
+> **Every entry below the line predates the split and was moved here verbatim —
+> not re-dated, not reworded, not reclassified.** Many of them describe platform
+> concerns (uploads, workspaces, the CLI itself) that a change made *today* would
+> put in `platform.md`. They are here because sorting history into a taxonomy
+> invented afterwards is rewriting it, and a dated log is a record of what was
+> true on a date. Read the whole feed (`bk changelog`, no filter) when looking
+> for anything before 2026-08-04.
 
 ---
 

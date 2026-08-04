@@ -23,14 +23,22 @@ type Me struct {
 // server's one-line pointer so an old client sees an explanation rather than a
 // missing field.
 type Changelog struct {
-	CLILatestVersion string           `json:"cli_latest_version" yaml:"cli_latest_version"`
-	CLIMinVersion    string           `json:"cli_min_version" yaml:"cli_min_version"`
+	CLILatestVersion string `json:"cli_latest_version" yaml:"cli_latest_version"`
+	CLIMinVersion    string `json:"cli_min_version" yaml:"cli_min_version"`
+	// Apps lists the sections that have a changelog file: "platform" first, then
+	// each app. Added 2026-08-04 with the per-app split; empty against a server
+	// older than that, which is why the command falls back rather than requiring
+	// it.
+	Apps             []string         `json:"apps,omitempty" yaml:"apps,omitempty"`
 	Entries          []ChangelogEntry `json:"entries" yaml:"entries"`
 	ReferenceMovedTo string           `json:"reference_moved_to,omitempty" yaml:"reference_moved_to,omitempty"`
 }
 
 type ChangelogEntry struct {
-	Date     string `json:"date" yaml:"date"`
+	Date string `json:"date" yaml:"date"`
+	// App is which file the entry came from: "platform" or an app slug. Added
+	// 2026-08-04; empty from an older server.
+	App      string `json:"app,omitempty" yaml:"app,omitempty"`
 	Title    string `json:"title" yaml:"title"`
 	Markdown string `json:"markdown" yaml:"markdown"`
 	HTML     string `json:"html" yaml:"html"`
@@ -94,13 +102,29 @@ type MetaActiveWorkspace struct {
 }
 
 type MetaApp struct {
+	// Slug repeats the map key so an entry stays self-describing once it is
+	// pulled out of the map. Absent from a pre-Phase-5 server.
+	Slug    string  `json:"slug,omitempty" yaml:"slug,omitempty"`
 	Name    string  `json:"name" yaml:"name"`
 	BaseURL *string `json:"base_url" yaml:"base_url"`
-	// True for the app this server IS. Phase 5 namespaces the CLI per app; until
-	// then this is how an agent knows which nouns it is allowed to use.
+	// True for the app this server IS — the one whose nouns live under
+	// `bk <slug> …` in this binary.
 	IsCurrent bool `json:"is_current" yaml:"is_current"`
 	// Workspace slugs where the caller can use this app.
 	Workspaces []string `json:"workspaces" yaml:"workspaces"`
+
+	// This app's enum vocabulary, server-enforced caps, and media rules (Phase
+	// 5, §7.4). Held raw and untyped for the same reason Meta.Raw is: a typed
+	// struct silently drops fields the server adds, so a new limit would be
+	// invisible until someone shipped a new binary — which is exactly how
+	// `limits` and `media` went unseen before v1.9.0.
+	//
+	// Present only on the CURRENT app's entry. This server knows its own
+	// vocabulary and has no business inventing another app's; read a different
+	// app's from its own /api/meta, which is what BaseURL is for.
+	Vocabulary json.RawMessage `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
+	Limits     json.RawMessage `json:"limits,omitempty" yaml:"limits,omitempty"`
+	Media      json.RawMessage `json:"media,omitempty" yaml:"media,omitempty"`
 }
 
 type MetaWorkspace struct {

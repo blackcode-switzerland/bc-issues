@@ -16,7 +16,7 @@ Rich-text fields accept **Markdown or HTML**. The server stores sanitized HTML.
 
 Both paths are sanitized on write: `<script>`, `on*` handlers and `javascript:`
 URLs are removed. Raw `<iframe>` is stripped. **External media does not embed** —
-only files uploaded through `bk upload` render inline (see `bk guide files`).
+only files uploaded through `bk upload` render inline (see `bk guide platform/files`).
 `style` is limited to `width`, `min-width`, `height` and `text-align`.
 
 ## Markdown vs HTML detection
@@ -45,7 +45,7 @@ cat > /tmp/body.md <<'EOF'
 - [ ] regression test
 EOF
 
-bk issue comment 42 --body-file /tmp/body.md
+bk issues issue comment 42 --body-file /tmp/body.md
 ```
 
-Related commands: `bk issue create|edit|comment`, `bk task create|edit|comment`, `bk project create|edit|comment`, `bk project updates add`
+Related commands: `bk issues issue create|edit|comment`, `bk issues task create|edit|comment`, `bk issues project create|edit|comment`, `bk issues project updates add`

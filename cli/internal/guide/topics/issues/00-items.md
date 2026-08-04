@@ -7,8 +7,8 @@ shown in the app, unique per workspace. There is no separate global id, and the
 internal database id is never exposed. A leading `#` is accepted.
 
 ```bash
-bk issue view 42
-bk issue view '#42'      # same thing
+bk issues issue view 42
+bk issues issue view '#42'      # same thing
 ```
 
 Never cache a `#number` from one workspace and use it in another.
@@ -16,9 +16,9 @@ Never cache a `#number` from one workspace and use it in another.
 ## The core verbs
 
 ```bash
-bk project list|view|create|edit|delete
-bk task    list|view|create|edit|delete
-bk issue   list|view|create|edit|delete
+bk issues project list|view|create|edit|delete
+bk issues task    list|view|create|edit|delete
+bk issues issue   list|view|create|edit|delete
 ```
 
 Each also has satellites — comments, members, updates, labels, attachments,
@@ -26,9 +26,9 @@ watch, activity. Run `bk <group> --help` for the current set; the help is
 generated from the binary and is always right.
 
 ```bash
-bk issue create --project 4 --title "Fix login" --priority 2
-bk issue list --project 4 --status todo --mine --json
-bk issue edit 42 --status in_progress --assignee me
+bk issues issue create --project 4 --title "Fix login" --priority 2
+bk issues issue list --project 4 --status todo --mine --json
+bk issues issue edit 42 --status in_progress --assignee me
 ```
 
 ## Vocabularies — always fetch, never assume
@@ -54,7 +54,7 @@ Any `--description` / `--body` flag accepts:
 ```
 
 Prefer `--description-file` or stdin for multi-line content — it is the only way
-to be sure you send **real newlines**. See `bk guide rich-text`.
+to be sure you send **real newlines**. See `bk guide platform/rich-text`.
 
 ## Clearing a nullable field
 
@@ -62,15 +62,15 @@ On `edit`, pass the literal `none` (also `null`, `unset`, `clear`;
 case-insensitive) to null a field. **Omit** the flag to leave it unchanged.
 
 ```bash
-bk issue edit 42 --task none --due-date 2026-06-30
+bk issues issue edit 42 --task none --due-date 2026-06-30
 ```
 
 Applies to `--assignee`, `--task`, `--start-date`, `--due-date`.
 
 ## User references
 
-Anywhere a user is expected (`--assignee`, `bk issue assign`,
-`bk project remove-member --user`) the CLI accepts:
+Anywhere a user is expected (`--assignee`, `bk issues issue assign`,
+`bk issues project remove-member --user`) the CLI accepts:
 
 - a numeric id — `42`
 - an email — anything containing `@`
@@ -86,4 +86,4 @@ Title/name length caps live in `bk meta` under `limits` — e.g.
 `issue_title_max`, `project_name_max`, `task_name_max`, `label_name_max`.
 Exceeding one returns a validation error (exit **6**) naming the cap.
 
-Related commands: `bk project`, `bk task`, `bk issue`, `bk label`, `bk meta`
+Related commands: `bk issues project`, `bk issues task`, `bk issues issue`, `bk label`, `bk meta`

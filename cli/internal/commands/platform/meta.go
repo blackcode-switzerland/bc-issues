@@ -90,7 +90,7 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 				if len(meta.Apps) > 0 {
 					fmt.Fprintln(w)
 					at := output.Tabwriter(w)
-					fmt.Fprintln(at, "\tAPP\tNAME\tWORKSPACES")
+					fmt.Fprintln(at, "\tAPP\tNAME\tCOMMANDS\tWORKSPACES")
 					for _, slug := range sortedAppSlugs(meta.Apps) {
 						a := meta.Apps[slug]
 						mark := " "
@@ -101,10 +101,24 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 						if len(a.Workspaces) > 0 {
 							workspaces = strings.Join(a.Workspaces, ",")
 						}
-						fmt.Fprintf(at, "%s\t%s\t%s\t%s\n", mark, slug, a.Name, workspaces)
+						fmt.Fprintf(at, "%s\t%s\t%s\t%s\t%s\n", mark, slug, a.Name, "bk "+slug+" …", workspaces)
 					}
 					if err := at.Flush(); err != nil {
 						return err
+					}
+
+					// Where the vocabulary lives now. The table cannot usefully
+					// print an enum list, and an agent reading only this view
+					// would otherwise still reach for the deprecated top-level
+					// `vocabulary` key — the one that goes away in two minors.
+					for _, slug := range sortedAppSlugs(meta.Apps) {
+						if a := meta.Apps[slug]; a.IsCurrent && len(a.Vocabulary) > 0 {
+							fmt.Fprintf(cmd.ErrOrStderr(),
+								"\nThis app's statuses, priorities and limits: `bk meta --json` → apps.%s\n"+
+									"(the top-level vocabulary/limits/media keys are deprecated and go away in 1.12.0)\n",
+								slug)
+							break
+						}
 					}
 				}
 

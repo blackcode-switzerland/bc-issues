@@ -30,23 +30,23 @@ plain link — so "embed this video" always means "upload it first".
 **1. One step (easiest).** The `--file` flag uploads and embeds in one call:
 
 ```bash
-bk issue create --title "Crash report" --file ./screenshot.png
-bk issue comment 42 --file ./trace.log
-bk project create --name "Launch" --file ./deck.pdf
+bk issues issue create --title "Crash report" --file ./screenshot.png
+bk issues issue comment 42 --file ./trace.log
+bk issues project create --name "Launch" --file ./deck.pdf
 ```
 
 **2. Reference a local path inside the body.** The CLI finds local paths in your
 Markdown, uploads them, and rewrites the reference:
 
 ```bash
-bk issue edit 42 --description '![](./screenshot.png)'
+bk issues issue edit 42 --description '![](./screenshot.png)'
 ```
 
 **3. Upload first, embed by url.**
 
 ```bash
 url=$(bk upload ./clip.mp4 --json | jq -r '.url')
-bk issue comment 42 --body "[clip.mp4]($url)"
+bk issues issue comment 42 --body "[clip.mp4]($url)"
 ```
 
 Write `![name](url)` for an image and `[name](url)` for anything else. The server
@@ -63,14 +63,14 @@ Wrap the target in **angle brackets** or Markdown stops the link at the first
 
 ## Attachments are a different thing
 
-`bk issue attach <id> --file ./x` adds to the issue's **attachments list** (the
+`bk issues issue attach <id> --file ./x` adds to the issue's **attachments list** (the
 sidebar). It does not put the file in the body. Use `--file` on
 `create`/`edit`/`comment` for in-body embedding.
 
 ```bash
-bk issue attach 42 --file ./log.txt
-bk issue attachments 42
-bk issue detach 42 <attachment-id>
+bk issues issue attach 42 --file ./log.txt
+bk issues issue attachments 42
+bk issues issue detach 42 <attachment-id>
 ```
 
-Related commands: `bk upload`, `bk issue attach|detach|attachments`, `bk issue|task|project create --file`, `bk meta`
+Related commands: `bk upload`, `bk issues issue attach|detach|attachments`, `bk issues issue|task|project create --file`, `bk meta`

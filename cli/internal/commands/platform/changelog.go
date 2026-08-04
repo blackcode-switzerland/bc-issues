@@ -26,7 +26,7 @@ const defaultChangelogServer = "https://bc-issues.vercel.app"
 // that redirects, rather than vanishing into "unknown flag".
 func newChangelogCmd() *cobra.Command {
 	var full, reference bool
-	var serverFlag string
+	var serverFlag, app string
 
 	cmd := &cobra.Command{
 		Use:         "changelog",
@@ -34,8 +34,10 @@ func newChangelogCmd() *cobra.Command {
 		Short:       "What's changed in the API and CLI (read this to get up to date)",
 		Long: `Print the product changelog (GET /api/changelog).
 
-Default: a table of dated changes, newest first.
-  --full        print every dated entry in full
+Default: a table of dated changes, newest first, merged across every app and
+the platform, each entry tagged with where it came from.
+  --full          print every dated entry in full
+  --app <name>    only that section — an app slug, or "platform"
 
 For how the CLI WORKS (rather than what changed), run ` + "`bk guide`" + ` — the
 complete usage guide embedded in this binary.
@@ -58,7 +60,7 @@ command that used to work now fails, run ` + "`bk skill sync`" + `, then check h
 			}
 
 			c := changelogClient(serverFlag)
-			cl, err := c.Changelog()
+			cl, err := c.Changelog(app)
 			if err != nil {
 				return err
 			}
@@ -70,39 +72,77 @@ command that used to work now fails, run ` + "`bk skill sync`" + `, then check h
 						if i > 0 {
 							fmt.Fprintln(w)
 						}
-						fmt.Fprintf(w, "## %s — %s\n\n", e.Date, e.Title)
+						fmt.Fprintf(w, "## %s — %s%s\n\n", e.Date, appTag(e.App), e.Title)
 						fmt.Fprintln(w, strings.TrimSpace(e.Markdown))
 					}
 					return nil
 				}
 
-				// Default: a compact table of dated entries.
-				fmt.Fprintf(w, "blackcode issues — changelog (CLI latest v%s, min v%s)\n\n",
-					cl.CLILatestVersion, cl.CLIMinVersion)
+				// Default: a compact table of dated entries. The APP column is
+				// omitted against a pre-2026-08-04 server, which sends no `app`
+				// at all — a column of dashes would look like missing data
+				// rather than an older server.
+				scope := "every app"
+				if app != "" {
+					scope = app
+				}
+				fmt.Fprintf(w, "Blackcode platform — changelog: %s (CLI latest v%s, min v%s)\n\n",
+					scope, cl.CLILatestVersion, cl.CLIMinVersion)
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "DATE\tCHANGE")
+				if tagged(cl.Entries) {
+					fmt.Fprintln(tw, "DATE\tAPP\tCHANGE")
+				} else {
+					fmt.Fprintln(tw, "DATE\tCHANGE")
+				}
 				for _, e := range cl.Entries {
 					date := e.Date
 					if date == "" {
 						date = "—"
 					}
-					fmt.Fprintf(tw, "%s\t%s\n", date, e.Title)
+					if tagged(cl.Entries) {
+						fmt.Fprintf(tw, "%s\t%s\t%s\n", date, e.App, e.Title)
+					} else {
+						fmt.Fprintf(tw, "%s\t%s\n", date, e.Title)
+					}
 				}
 				if err := tw.Flush(); err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.ErrOrStderr(),
-					"\nRead every entry in full: `bk changelog --full`. How the CLI works: `bk guide`.")
+				hint := "\nRead every entry in full: `bk changelog --full`. How the CLI works: `bk guide`."
+				if app == "" && len(cl.Apps) > 1 {
+					hint += "\nFilter to one section: `bk changelog --app " + strings.Join(cl.Apps, "|") + "`."
+				}
+				fmt.Fprintln(cmd.ErrOrStderr(), hint)
 				return nil
 			})
 		},
 	}
 
+	cmd.Flags().StringVar(&app, "app", "",
+		"Only this section's entries: an app slug, or \"platform\" for shared changes")
 	cmd.Flags().BoolVar(&full, "full", false, "Print every dated entry in full")
 	cmd.Flags().BoolVar(&reference, "reference", false, "Retired — the platform reference is now `bk guide`")
 	_ = cmd.Flags().MarkDeprecated("reference", "the platform reference is now the embedded guide: run `bk guide`")
 	cmd.Flags().StringVar(&serverFlag, "server", "", "Server base URL (default: your logged-in server, else "+defaultChangelogServer+")")
 	return cmd
+}
+
+// tagged reports whether the server tagged its entries with an app — false
+// against anything older than 2026-08-04, where the field does not exist.
+func tagged(entries []client.ChangelogEntry) bool {
+	for _, e := range entries {
+		if e.App != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func appTag(app string) string {
+	if app == "" {
+		return ""
+	}
+	return "[" + app + "] "
 }
 
 // changelogClient builds a client for the public changelog endpoint. It prefers

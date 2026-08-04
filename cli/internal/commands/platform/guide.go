@@ -19,16 +19,23 @@ import (
 // if it needed the network it would be useless at the moment it matters most.
 func newGuideCmd() *cobra.Command {
 	var list bool
+	var app string
 
 	cmd := &cobra.Command{
 		Use:   "guide [topic]",
 		Short: "The complete usage guide for this bk binary (offline, no auth)",
 		Long: `Print the agent guide embedded in this binary.
 
-  bk guide            the whole guide — start here
-  bk guide --list     one line per topic
-  bk guide <topic>    a single topic
-  bk guide --json     { version, topics: [{ slug, title, summary, body }] }
+  bk guide                     the whole guide — platform first, then each app
+  bk guide --list              one line per topic
+  bk guide <topic>             a single topic, e.g. platform/workspaces
+  bk guide --app issues        only that app's topics
+  bk guide --app platform      only the topics true in every app
+  bk guide --json              { version, topics: [{ slug, section, title, … }] }
+
+Topics are section-qualified: ` + "`platform/…`" + ` for what holds everywhere,
+` + "`<app>/…`" + ` for one app's behaviour. A bare slug (` + "`bk guide files`" + `) still
+resolves while it is unambiguous.
 
 Works offline and unauthenticated: it describes THIS binary, so it can never
 tell you about a flag you do not have. Values that change without a CLI release
@@ -45,9 +52,22 @@ repeated here. Run ` + "`bk meta`" + ` for those.`,
 				return err
 			}
 
+			// --app scopes everything below it to one section.
+			if app != "" {
+				if !knownSection(app) {
+					return fmt.Errorf(
+						"invalid --app %q\nvalid sections: %s",
+						app, strings.Join(guide.Sections(), ", "))
+				}
+			}
+
+			topics := guide.Topics()
+			if app != "" {
+				topics = guide.TopicsIn(app)
+			}
+
 			// --list: slug + one-line summary.
 			if list {
-				topics := guide.Topics()
 				return output.Render(format, map[string]any{
 					"version": version.Version,
 					"topics":  topics,
@@ -69,6 +89,13 @@ repeated here. Run ` + "`bk meta`" + ` for those.`,
 			if len(args) == 1 {
 				t, ok := guide.Lookup(args[0])
 				if !ok {
+					// Naming BOTH candidates beats refusing: an agent that typed a
+					// bare slug two apps now share can fix it in the same run.
+					if amb := guide.Ambiguous(args[0]); len(amb) > 0 {
+						return fmt.Errorf(
+							"ambiguous guide topic %q — it exists in more than one section: %s",
+							args[0], strings.Join(amb, ", "))
+					}
 					// "invalid …" classifies as exit 2 (usage) in main.go. Listing
 					// the valid slugs makes it recoverable in the same run.
 					return fmt.Errorf(
@@ -81,11 +108,15 @@ repeated here. Run ` + "`bk meta`" + ` for those.`,
 				})
 			}
 
-			// The whole guide.
+			// The whole guide, or one section of it.
 			return output.Render(format, map[string]any{
 				"version": version.Version,
-				"topics":  guide.Topics(),
+				"topics":  topics,
 			}, func(w io.Writer) error {
+				if app != "" {
+					_, err := fmt.Fprint(w, guide.RenderSection(version.Version, app))
+					return err
+				}
 				_, err := fmt.Fprint(w, guide.Render(version.Version))
 				return err
 			})
@@ -93,5 +124,16 @@ repeated here. Run ` + "`bk meta`" + ` for those.`,
 	}
 
 	cmd.Flags().BoolVar(&list, "list", false, "List topic slugs with a one-line summary")
+	cmd.Flags().StringVar(&app, "app", "",
+		"Scope to one section: an app slug, or \"platform\" for the topics true in every app")
 	return cmd
+}
+
+func knownSection(s string) bool {
+	for _, sec := range guide.Sections() {
+		if sec == s {
+			return true
+		}
+	}
+	return false
 }

@@ -274,7 +274,7 @@ function Surfaces() {
       ),
       copy:
         'A single Go binary on npm. Table, JSON, or YAML output. Stable exit codes. bk login opens a browser; you’re authed in seconds.',
-      meta: '→ bk issue list --json',
+      meta: '→ bk issues issue list --json',
     },
     {
       icon: Zap,
@@ -391,9 +391,9 @@ $ bk login --server https://your-deployment.app
 $ bk workspace use my-team
 
 # 4. work
-$ bk issue list --status todo
-$ bk issue create --project 1 --title "Fix signup bug" --priority 1
-$ bk issue list --json | jq '.data[].title'`}
+$ bk issues issue list --status todo
+$ bk issues issue create --project 1 --title "Fix signup bug" --priority 1
+$ bk issues issue list --json | jq '.data[].title'`}
           />
           <div className="flex flex-col gap-4">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
@@ -539,7 +539,7 @@ function ForAgents() {
             label="Create an issue with the CLI"
             lang="bash"
             code={`# bk reads your token from ~/.config/bk/config.json
-$ bk issue create \\
+$ bk issues issue create \\
     --project 1 \\
     --title "Triage onboarding bug" \\
     --priority 1 \\
@@ -599,7 +599,7 @@ function FAQ() {
     },
     {
       q: 'How do I install and use the CLI?',
-      a: 'npm install -g @blackcode_sa/bc-issues, then bk login (it opens a browser and stores a token in ~/.config/bk/config.json), bk workspace use <slug>, and you’re working: bk issue list, bk issue create --project 1 --title "…". Run bk --help for the full command tree.',
+      a: 'npm install -g @blackcode_sa/bc-issues, then bk login (it opens a browser and stores a token in ~/.config/bk/config.json), bk workspace use <slug>, and you’re working: bk issues issue list, bk issues issue create --project 1 --title "…". Run bk --help for the full command tree.',
     },
     {
       q: 'How do agents and scripts authenticate?',

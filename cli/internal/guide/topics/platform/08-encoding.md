@@ -36,7 +36,7 @@ For a Python wrapper, set `PYTHONUTF8=1`.
 **Everywhere — the real fix:** don't round-trip text through a terminal at all.
 
 - Write bodies with `--description-file` / `--body-file`, not shell strings.
-- Relocate items with `bk move` / `bk copy`, never by reading them out and
+- Relocate items with `bk issues move` / `bk issues copy`, never by reading them out and
   re-creating them.
 - Never re-feed a decoded string: reading with `--json`, mangling it in a
   non-UTF-8 shell, and writing it back is how corruption spreads.
@@ -50,7 +50,7 @@ code page's bytes and decode as UTF-8:
 s.encode("cp437").decode("utf-8")     # fall back to cp850, then latin1
 ```
 
-Fix in place with `bk issue edit` / `bk project edit`, and only touch the rows
+Fix in place with `bk issues issue edit` / `bk issues project edit`, and only touch the rows
 the bad run actually corrupted.
 
-Related commands: `bk issue edit`, `bk project edit`, `bk move`, `bk copy`
+Related commands: `bk issues issue edit`, `bk issues project edit`, `bk issues move`, `bk issues copy`

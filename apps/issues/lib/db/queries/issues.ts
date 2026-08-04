@@ -121,7 +121,7 @@ export async function listIssuesInWorkspace(
   `
 
   // The listing returns every matching issue in one shot (consistent with
-  // projects/tasks). No cursor pagination — see docs/api-changelog.md.
+  // projects/tasks). No cursor pagination — see docs/changelog/.
   const result = await db.execute(sql`
     SELECT ${issueListSelect}
     FROM ${issues} i

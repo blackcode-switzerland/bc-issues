@@ -177,7 +177,7 @@ legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
 | [`docs/frontend.md`](docs/frontend.md) | Routes, theme system, shared components, data fetching |
 | [`docs/cli.md`](docs/cli.md) | **Maintainer doc** for the `bk` CLI — build, release, internals. Usage lives in `bk guide` |
 | [`cli/internal/guide/topics/`](cli/internal/guide/topics) | The agent-facing usage guide, embedded in the binary and served by `bk guide` |
-| [`docs/api-changelog.md`](docs/api-changelog.md) | The dated record of every change (served to agents via `bk changelog` and `GET /api/changelog`) |
+| [`docs/changelog/`](docs/changelog/) | The dated record of every change — one file per app plus `platform.md`, merged into one feed by `bk changelog` and `GET /api/changelog` |
 | [`docs/marketing.md`](docs/marketing.md) | Positioning, feature catalog, voice |
 | `docs/architecture-rebuild.md`, `HANDOVER.md`, `docs/specs/*` | Historical design/planning records (point-in-time) |
 

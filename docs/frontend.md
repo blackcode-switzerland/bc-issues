@@ -1,19 +1,22 @@
-# Frontend
+# Frontend — platform
 
-> **2026-08-04 — paths in this file are relative to `apps/issues/`.**
-> The repo became a monorepo (Phase 1 of `PLATFORM-MIGRATION-PLAN.md`). Every
-> `app/…`, `components/…`, `lib/…` and `types/…` path below now lives under
-> **`apps/issues/`** — e.g. `components/ui/button.tsx` →
-> `apps/issues/components/ui/button.tsx`. `app/globals.css` is
-> `apps/issues/app/globals.css`.
+> **2026-08-04 — this file was split along the platform/app line** (Phase 5 of
+> `PLATFORM-MIGRATION-PLAN.md`). What stayed here is what every app inherits:
+> the theme and token system, `components/ui/` primitives, the shared design
+> primitives, the app shell and providers, the workspace-scoped URL model, and
+> the data-fetching conventions.
 >
-> Not rewritten in place on purpose: Phase 5 moves the app half of this file to
-> `apps/issues/docs/frontend.md`, so churning ~45 references now would be undone
-> then. This note is the contract until then.
+> **The issue tracker's own dashboard routes, feature components and analytics
+> view moved to [`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md).**
+> Root docs never describe an app's internals (PLATFORM-ARCHITECTURE.md §7.5).
+>
+> **Paths are relative to `apps/issues/`.** Much of the design system has already
+> moved to `packages/platform-ui` (Phase 2); what is named here as
+> `components/ui/…` is re-exported from there.
 
-The web app: stack, routes, the theme system, the shared component primitives,
-and how data flows. **Source of truth is the code** — this describes the app as
-it is today (a monochrome, Linear-style dashboard on Next.js 16 + Tailwind v4).
+The shared web layer: stack, the theme system, the component primitives, and how
+data flows. **Source of truth is the code** — this describes it as it is today
+(a monochrome, Linear-style dashboard on Next.js 16 + Tailwind v4).
 
 ## Table of contents
 
@@ -27,6 +30,9 @@ it is today (a monochrome, Linear-style dashboard on Next.js 16 + Tailwind v4).
 - [Shared design primitives](#shared-design-primitives)
 - [State & data fetching](#state--data-fetching)
 - [Conventions](#conventions)
+
+**App docs:** [`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md) ·
+[`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md)
 
 ## Stack
 
@@ -133,6 +139,10 @@ colors in components — use the token utilities.
 
 ## Routes
 
+Public routes only — an app's authenticated dashboard routes are its own. See
+[`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md) for the issue
+tracker's.
+
 ### Public
 
 | Path | Renders |
@@ -141,49 +151,12 @@ colors in components — use the token utilities.
 | `/login` | Sign-in / sign-up tabs + password-reset flow |
 | `/blocked` | Shown when a non-whitelisted email tries Google OAuth; professional "not on the list" page |
 | `/privacy`, `/terms` | Legal pages (marketing layout) |
-| ~~`/changelog`~~ | **Removed 2026-08-03.** The public changelog page had no human audience. The record itself is unchanged and still served to agents via `GET /api/changelog` and `bk changelog`, both rendering `docs/api-changelog.md` through `lib/changelog.ts`. |
+| ~~`/changelog`~~ | **Removed 2026-08-03.** The public changelog page had no human audience. The record itself is unchanged and still served to agents via `GET /api/changelog` and `bk changelog`, both rendering `docs/changelog/*.md` through `lib/changelog.ts`. |
 | `/agent-updator` | Public "get an agent current" guide (`app/agent-updator/page.tsx`, marketing layout) — how an AI agent / stale agent skill should connect: recommended interface (`bk` CLI), install/update, auth, integration gotchas, OS-specific notes (Windows UTF-8 / `chcp 65001`, macOS, Linux), why an old CLI is version-floored (exit code 8), and links to discovery endpoints. Pulls its connection facts from `lib/agent-manifest.ts` + `lib/cli-version.ts` so it can't drift. |
 | `/status` | Public health page (DB / blob / app probes + recent errors) |
 | `/status/errors/[id]` | Error detail (owner-gated) |
 | `/invitations/[token]` | Accept/decline a workspace invite |
 | `/cli/authorize` | Grant a token to the `bk` CLI |
-
-### Authenticated (`/dashboard`, guarded by `middleware.ts` + the dashboard layout)
-
-Workspace-scoped pages live under `/dashboard/[ws]/…` (see "Workspace-scoped
-URLs" above). Detail pages use the workspace #number (`seq`); labels use the id.
-
-| Path | Renders |
-|------|---------|
-| `/dashboard/[ws]` | Projects listing (`ProjectsListing`) |
-| `/dashboard/[ws]/projects/[seq]` | Project detail (`ProjectDetailView`) |
-| `/dashboard/[ws]/issues` · `/issues/[seq]` | Issues listing · issue detail |
-| `/dashboard/[ws]/tasks` · `/tasks/[seq]` | Tasks listing · detail |
-| `/dashboard/[ws]/labels` · `/labels/new` · `/labels/[id]` | Labels listing · create page (`LabelCreateView`) · detail (`LabelDetailView`, inline-editable name/color + associated issues) |
-| `/dashboard/[ws]/members` · `/members/invite` | Workspace members + invitations |
-| `/dashboard/[ws]/activity` | Activity feed |
-| `/dashboard/[ws]/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
-| `/dashboard/[ws]/trash` | Recycle bin |
-| `/dashboard/inbox` | Notifications (cross-workspace, unscoped) |
-| `/dashboard/settings/{profile,account,tokens,workspace}` | Settings (own sub-layout + nav, unscoped) |
-| `/dashboard/super-admin/*` | Super-admin pages (unscoped) |
-| `/dashboard/workspaces` | Workspace manager (`WorkspacesView`) — list + switch; **Manage** shown to owners only |
-| `/dashboard/workspaces/new` | Create-workspace page (`WorkspaceCreateView`) — replaces the old modal in this flow |
-| `/dashboard/workspaces/[slug]` | Per-workspace settings (`WorkspaceSettingsView`) — owners get a **Manage storage** link |
-| `/dashboard/workspaces/[slug]/storage` | Storage management (`StorageView`) — owner only; lists every uploaded file with its references + usage, deletes unused (0-reference) files. Removing a file from a body never deletes bytes; only an owner-confirmed delete here does (server re-checks references). |
-
-Legacy `/dashboard`, `/dashboard/issues/[id]`, `/dashboard/tasks/[id]`, and old
-`/dashboard/{projectId}` paths still resolve — they redirect to the canonical
-`/dashboard/{ws}/…` URLs. `WorkspaceCreateModal` is still used by
-`OnboardingCreateWorkspace` (the forced first-workspace screen).
-
-`app/dashboard/layout.tsx` validates the session, shows
-`OnboardingCreateWorkspace` when the user has no workspace, and renders the
-sidebar shell (`DashboardLayout`). It is `force-dynamic`.
-
-`app/dashboard/super-admin/layout.tsx` additionally guards its sub-tree with a
-server-side `isSuperAdmin(user.email)` check and redirects non-admins to
-`/dashboard`.
 
 ## App shell & providers
 
@@ -223,146 +196,8 @@ the one place the UI has to be explicit about which empty it is.
 shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
 `tabs`, `separator`. Plus the **bespoke shared primitives** below.
 
-### `components/` — feature components (grouped)
-
-- **Shell:** `dashboard-layout`, `workspace-switcher`, `inbox-badge`,
-  `settings-nav`, `super-admin-nav`.
-- **Listings (`components/listings/`):** `projects-listing` (+ `projects-kanban`,
-  `projects-timeline`), `issues-listing` (+ `issues-kanban`, `issues-timeline`),
-  `tasks-listing` (list-only — no kanban/timeline view), plus `filter-bar`
-  (`MultiSelect`, `SearchInput`, `ViewToggle`), `labels-pill`,
-  (Projects listing filters: Status / Priority / Lead; Tasks listing filters:
-  Project / Lead. Both show an inline-editable **Lead** column and the task
-  detail sidebar has a **Lead** property — mirrors projects.)
-  **Search** on all three listings is client-side (`lib/listing-search.ts`,
-  `rankSearch`/`searchScore`/`field`/`idTokens`): the full set is already loaded,
-  so the `SearchInput` filters+ranks in-memory (instant, no per-keystroke
-  refetch — `search` is intentionally not sent to the API). It matches across
-  the `#N` identifier the row actually displays — `seq ?? id` (e.g. `#123` or
-  `123`; falls back to `id` if `seq` is ever null) — plus title/name,
-  description/summary, status, priority, assignees/lead, project/task names
-  and labels. All three listings display and search the same `seq ?? id`
-  value (issues already did; tasks/projects previously showed raw `id` in the
-  row while search/nav used `seq ?? id`, so the visible number could silently
-  fail to search or even navigate to the wrong item — fixed). Multiple
-  whitespace-separated terms are ANDed (a term can match a different field than
-  its siblings). Per term/field, matches are scored — exact > prefix >
-  word-boundary substring > mid-word substring > fuzzy (typo-tolerant,
-  bounded-edit-distance, never applied to purely numeric terms so ID search
-  stays exact) — and fields are weighted (identifier and title/name
-  outrank status/project/lead, which outrank description). Results are sorted
-  best-match-first while the query is non-empty and the Sort control is left on
-  "Manual"; picking an explicit sort overrides relevance ordering as before.
-  Filter/search/view state on all three listings persists across navigation via
-  `usePersistentState` (`use-persistent-filters.ts`) — an in-memory, per-workspace
-  store that survives client-side navigation (open a detail, come back) but
-  resets on a full reload. Selection state is intentionally **not** persisted.
-  A **Sort** control (`SortSelect` + `sort.ts`, client-side: Manual/Name/Newest/
-  Oldest/Updated, plus Priority+Due for issues/projects, Due for tasks) sets the
-  order. Drag-to-reorder (`position`) is **only enabled under "Manual"**; other
-  sorts disable the drag handle. In kanban, a non-manual sort disables in-column
-  reorder but cross-column status-drag still works. Drag-reorder mutations
-  invalidate the listing query in `onSettled` so the new order survives
-  navigation (previously the optimistic order was lost until a reload).
-  List rows animate to their new order on sort change: the list view branches
-  on `dragEnabled` — manual → `@hello-pangea/dnd` (dnd owns motion), sorted →
-  `motion.li` with `layout` (the two libs don't share an element, avoiding
-  conflicts). Detail-page inline title edits write the new title to the query
-  cache optimistically (`setQueryData`) so clearing the draft doesn't flash the
-  old title during the PATCH + refetch.
-  **List-view grouping:** the list view (not kanban/timeline) on all three
-  listings renders as collapsible sections over the already filtered+sorted
-  rows — grouping never changes which rows appear or their relative order,
-  only how they're bucketed for display. Issues group by `status` into up to
-  five sections (In Progress / Todo / Backlog / Done / Cancelled, plus any
-  other status value seen). Projects and tasks group into exactly two sections,
-  **In Progress** / **Done**, keyed off completion rather than the `status`
-  column: a project is "Done" when `open_issues === 0 && issue_count > 0`; a
-  task is "Done" when `completed_issues >= issue_count && issue_count > 0`
-  (zero-issue items are "In Progress"). Each section header shows a
-  select-all-in-section checkbox, item count, and a collapse toggle (all
-  sections open by default; collapse state is local, not persisted). Manual-sort
-  drag-to-reorder is confined within a section — cross-section drag is a no-op
-  — matching the issues list's cross-status drag restriction; for projects the
-  `position` column is a single global sequence (shared with kanban), so a
-  same-section drag rewrites the *full* project order with only that section's
-  slots permuted, rather than sending a section-scoped id list.
-  `bulk-action-bar` (multi-select toolbar for batch status/delete), and the
-  `use-active-workspace` hook.
-- **Detail views:** `project-detail-view`, `issue-detail-view`,
-  `task-detail-view`.
-- **Create / edit modals:** `issue-create-modal` (kanban flow only — all other
-  "new" buttons POST immediately then redirect to the detail page with `?new=1`),
-  `project-settings-modal`, `workspace-create-modal`.
-- **Management views:** `members-view`, `project-members-panel`, `labels-view`,
-  `activity-view` (full workspace feed page), `activity-feed` (reusable feed
-  component used by the activity page and issue/project detail sidebars),
-  `comment-section` (reusable polymorphic comment thread), `analytics-view`
-  (see Analytics dashboard below), `print-analytics-view`, `inbox-view`,
-  `trash-view` (recycle bin —
-  `/dashboard/trash`), `workspaces-view` (workspace manager at
-  `/dashboard/workspaces`).
-- **Settings:** `profile-settings-view`, `account-settings-view`,
-  `api-tokens-settings`, `workspace-settings-view`, `storage-view` (owner-only
-  workspace file management at `/dashboard/workspaces/[slug]/storage`),
-  `workspace-apps-panel` (the **Apps** section of workspace settings: which apps
-  the workspace runs, each one's `default_access`, and the per-member access list).
-  The panel is **readable by any member** — seeing that a colleague has access and
-  you do not is how a person works out what to ask for — while the controls are
-  owner-only. It never renders a Disable button for the app you are currently in,
-  matching the server's `cannot_disable_current_app` refusal. Its fetch helper
-  concatenates the API's `suggestion` into the toast message, so the web UI is not
-  the one surface that says "no" without saying what to do.
-- **Super admin:** `super-admin-users-view` (platform-wide member table with workspace count),
-  `super-admin-whitelist-view` (add/remove allowed domains and emails),
-  `super-admin-errors-view` (error log with status/level/date filters, stat cards,
-  expandable rows showing stack + sanitized context, resolve/reopen toggle,
-  row checkboxes + select-all for bulk delete, and single-row delete;
-  destructive actions go through `useConfirm()`; `useInfiniteQuery` cursor pagination).
-  All visible only when `me.is_super_admin === true` (from `/api/me`).
-- **Client error capture:** `app/error.tsx` (React error boundary, render errors) and
-  `global-error-listener` (mounted in `Providers`; catches `window.onerror` +
-  unhandled promise rejections, de-duped and capped per session) both POST to
-  `/api/errors/client`, feeding the super-admin Errors tab.
-- **Auth & marketing:** `landing-page`, `cli-authorize-form`,
-  `password-reset-flow`, `onboarding-create-workspace`,
-  `accept-invitation-button`, `components/marketing/*` (the marketing site
-  footer, `components/marketing/site-footer.tsx`, links to
-  "For agents" link to `/agent-updator`).
-- **Helpers:** `rich-text-editor`, `project-icon`, `icon-picker`,
-  `image-upload-field`, `image-lightbox`.
-
-> **Legacy / orphaned (safe to ignore — not imported by any route):**
-> `project-view.tsx` and its private subtree — `kanban-board.tsx`,
-> `issue-list-view.tsx`, `gantt-view.tsx`, `create-issue-modal.tsx` — plus
-> `timeline-view.tsx`. These predate the listings rewrite. (`dashboard.tsx` is
-> **not** dead — it's a shared utility module imported widely.)
-
-## Analytics dashboard (`analytics-view.tsx`)
-
-The `/dashboard/analytics` page is a multi-tab BI dashboard over the analytics
-payload (see `docs/backend.md` → *Analytics contract*). All chart primitives
-live in `components/analytics/charts.tsx` (hand-rolled themed SVG — **no chart
-library**; use `var(--primary)` and the `SERIES` palette, never hardcode the
-old `#5e6ad2`).
-
-- **Controls (sticky):** a scope segmented control (Workspace / Project /
-  Task / Member) with a searchable target picker; a granularity toggle
-  (Daily / Weekly); date-range presets (7D/30D/90D/12M/All) + a Custom range
-  built from two `DatePicker` chips; and a faceted **filter bar** (Status /
-  Priority / Assignee / Label multi-selects via `FilterMenu`, with an active
-  count badge and "Clear all"). Every control feeds the React Query key, so the
-  whole dashboard refetches as one.
-- **Tabs:** Overview (KPI grid + velocity + status/priority/project), Throughput
-  (velocity, cumulative flow, cycle-time + aging histograms), Workload (assignee
-  table, labels), Activity (event series + by-action + top members), and —
-  task scope only — Burndown.
-- **Export:** "PDF" opens `/dashboard/analytics/print` (the same payload,
-  forwarding **all** params incl. filters + interval + theme, then auto-prints).
-  "CSV" downloads a client-built summary + velocity table.
-- Chart kit: `KpiCard` (value + `TrendBadge` vs. previous period + sparkline),
-  `AreaLineChart` (multi-series, gradient fill, hover crosshair + tooltip),
-  `DonutChart`, `HorizontalBars`, `ColumnChart` (histograms), `BurndownChart`.
+Feature components — listings, kanban boards, detail views, modals — belong to
+the app that owns them and are documented there, not here.
 
 ## Shared design primitives
 
@@ -480,7 +315,7 @@ pages just render the view with the seq — no preflight, no second id. The view
 (`IssueDetailView` / `TaskDetailView` / `ProjectDetailView`) take the seq as
 their `issueId`/`taskId`/`projectId` and an optional `workspaceSlug`, and fetch
 `/api/workspaces/{ws}/{type}/{seq}` (+ sub-resources by the same seq). See
-`docs/api-changelog.md`.
+`docs/changelog/`.
 
 There is **no legacy id mapping** — old global-id links are not redirected.
 

@@ -262,9 +262,13 @@ func (c *Client) Meta(ws string) (*Meta, error) {
 // Changelog fetches GET /api/changelog — the dated change log, newest first.
 // Public (no workspace needed); auth is sent if present. For how the CLI WORKS
 // rather than what changed, see internal/guide (`bk guide`).
-func (c *Client) Changelog() (*Changelog, error) {
+func (c *Client) Changelog(app string) (*Changelog, error) {
+	path := "/api/changelog"
+	if a := strings.TrimSpace(app); a != "" {
+		path += "?app=" + url.QueryEscape(a)
+	}
 	var cl Changelog
-	if err := c.get("/api/changelog", &cl); err != nil {
+	if err := c.get(path, &cl); err != nil {
 		return nil, err
 	}
 	return &cl, nil

@@ -49,6 +49,18 @@ import { APP_SLUG } from '@/lib/app'
 import { db } from '@/lib/db/client'
 import { appsReachableByUser } from '@blackcode/platform-db'
 
+// This app's enum vocabulary, straight from the module the routes validate
+// against. Named once and served twice — nested under `apps.issues` (current)
+// and at the top level (deprecated, removed after two minor releases) — so the
+// two spellings cannot drift apart during the overlap.
+const APP_VOCABULARY = {
+  issue_statuses: ISSUE_STATUSES,
+  issue_priorities: ISSUE_PRIORITIES,
+  project_statuses: PROJECT_STATUSES,
+  project_priorities: PROJECT_PRIORITIES,
+  project_update_health: PROJECT_UPDATE_STATUSES,
+} as const
+
 export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await resolveAuth(request)
   if (!auth) throw Errors.unauthorized()
@@ -126,32 +138,46 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // means that is an additive change; an array would have to be replaced, and
     // replacing a field agents already parse is exactly the breakage this
     // migration is sequenced to avoid.
+    //
+    // Phase 5: the CURRENT app's entry also carries its vocabulary, limits and
+    // media rules. Two apps must never share one top-level enum list — an agent
+    // has to be structurally unable to send a sales stage to the issue tracker
+    // (§7.4).
+    //
+    // Only the current app's entry carries them, and that is not an omission.
+    // This server is the issues app; it knows its own vocabulary and has no
+    // business inventing another app's. An agent reads a different app's
+    // vocabulary from that app's own /api/meta, which is what `base_url` is for.
+    // A merged registry here would be a hand-maintained copy of facts owned
+    // elsewhere — the exact thing that drifted and got deleted on 2026-08-03.
     apps: Object.fromEntries(
       reachableApps.map((a) => [
         a.slug,
         {
+          slug: a.slug,
           name: a.name,
           base_url: a.base_url,
           is_current: a.slug === APP_SLUG,
           workspaces: allMyWorkspaces
             .filter((w) => a.workspace_ids.includes(w.id))
             .map((w) => w.slug),
+          ...(a.slug === APP_SLUG
+            ? { vocabulary: APP_VOCABULARY, limits: META_LIMITS, media: META_MEDIA }
+            : {}),
         },
       ])
     ),
-    vocabulary: {
-      issue_statuses: ISSUE_STATUSES,
-      issue_priorities: ISSUE_PRIORITIES,
-      project_statuses: PROJECT_STATUSES,
-      project_priorities: PROJECT_PRIORITIES,
-      project_update_health: PROJECT_UPDATE_STATUSES,
-    },
-    // Every server-enforced cap, imported from the code that enforces it. The
-    // guide points here rather than restating a number that can change without
-    // a CLI release.
+    // ---------------------------------------------------------------------
+    // DEPRECATED (2026-08-04): the four keys below moved into
+    // `apps.<slug>`. They stay here, correct and identical, for TWO MINOR
+    // RELEASES so nothing breaks in the release that introduces the nested
+    // form — then they go away. Read `apps.issues.*` instead.
+    //
+    // Same object references, not copies: a divergence between the old and new
+    // spelling during the overlap would be worse than either shape alone.
+    // ---------------------------------------------------------------------
+    vocabulary: APP_VOCABULARY,
     limits: META_LIMITS,
-    // How an uploaded url renders once it is referenced in a rich-text body,
-    // and what upload refuses outright.
     media: META_MEDIA,
     // The bk versions this server advertises (also sent as X-BK-CLI-* headers).
     cli: META_CLI,

@@ -180,6 +180,9 @@ func classify(err error) int {
 	case strings.HasPrefix(msg, "aborted"):
 		return exitAborted
 	case strings.Contains(msg, "required") || strings.HasPrefix(msg, "invalid "),
+		// `bk guide pitfalls` once two sections define it: the caller named a
+		// real topic imprecisely, which is bad usage (2), not a runtime fault (1).
+		strings.HasPrefix(msg, "ambiguous "),
 		strings.Contains(msg, "unknown flag"),
 		strings.Contains(msg, "unknown command"),
 		strings.Contains(msg, "unknown shorthand"),

@@ -288,7 +288,7 @@ func inspect(dirFlag string) (skillStatus, error) {
 // The headers are recorded before the floor check fires, so LatestSeen/MinSeen
 // are still populated when this returns an error.
 func harvestVersions(c *client.Client) error {
-	if _, err := c.Changelog(); err != nil {
+	if _, err := c.Changelog(""); err != nil {
 		var oe *client.OutdatedError
 		if errors.As(err, &oe) {
 			return err

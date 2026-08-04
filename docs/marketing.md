@@ -61,7 +61,7 @@ It's the **memory layer** of an AI-augmented workflow. The agent does the work; 
 
 - **Solo developers and small teams** who want issue tracking without Jira-grade ceremony.
 - **AI/agent builders** who need a place for the agent to read, write, and remember work — with an interface that's actually scriptable and self-describing.
-- **Terminal-first developers** who'd rather type `bk issue create --title "..."` than open a tab.
+- **Terminal-first developers** who'd rather type `bk issues issue create --title "..."` than open a tab.
 
 ### Secondary
 
@@ -118,7 +118,7 @@ Group issues into tasks with optional due dates. A task can stand alone or belon
 Workspace-wide labels with colors, attachable to issues — managed from a dedicated labels view.
 
 **Move & copy across workspaces**
-Reorganize as you grow: move or copy projects, tasks, and issues between any two workspaces you belong to. It's a single atomic transfer — items get fresh per-workspace numbers, and their labels, comments, attachments, watchers, and members come along. Nothing is lost if it fails, and anything the destination can't hold (like a member who isn't on the other team) is reported back rather than silently changing your data. Available from the `bk` CLI (`bk move` / `bk copy`) and the API.
+Reorganize as you grow: move or copy projects, tasks, and issues between any two workspaces you belong to. It's a single atomic transfer — items get fresh per-workspace numbers, and their labels, comments, attachments, watchers, and members come along. Nothing is lost if it fails, and anything the destination can't hold (like a member who isn't on the other team) is reported back rather than silently changing your data. Available from the `bk` CLI (`bk issues move` / `bk issues copy`) and the API.
 
 ### 🟢 Live — Issue workflows
 
@@ -164,7 +164,7 @@ Deleting an issue, project, or task moves it to a recoverable Trash. Items delet
 ### 🟢 Live — Analytics
 
 **Workspace analytics**
-Snapshot counts, completion rate, cycle time, velocity, and aging — sliced by status, priority, assignee, label, and project, with per-task burndown. Available for workspace / project / task / member views with date-range and faceted filters, and reachable from the CLI (`bk analytics`).
+Snapshot counts, completion rate, cycle time, velocity, and aging — sliced by status, priority, assignee, label, and project, with per-task burndown. Available for workspace / project / task / member views with date-range and faceted filters, and reachable from the CLI (`bk issues analytics`).
 
 ### 🟡 In preview — Reliability
 
@@ -202,7 +202,7 @@ A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` o
 npm install -g @blackcode_sa/bc-issues
 bk login --server https://your-deployment.app
 bk workspace use my-team
-bk issue list --status todo --json
+bk issues issue list --status todo --json
 ```
 
 ---
@@ -252,7 +252,7 @@ Spin it up locally with Docker, sign in with a password, organize work into proj
 Run `bk login`, then `bk skill install` — your coding agent gets a ~30-line skill file pointing it at `bk guide` and `bk meta`. It now reads, writes, and comments using the same data you see in the web UI.
 
 ### "I scripted a release process"
-`bk issue list --status in_progress --json | jq '.data[].id' | xargs -I{} bk issue edit {} --status done` — and use stable exit codes to fail-fast in CI.
+`bk issues issue list --status in_progress --json | jq '.data[].id' | xargs -I{} bk issues issue edit {} --status done` — and use stable exit codes to fail-fast in CI.
 
 ### "I made a mistake during an update"
 `bk undo --count 5` restores your last five issue edits; an accidental delete comes back from `bk trash restore`.
@@ -360,7 +360,7 @@ The seed mirrors the live page's FAQ (focused on the CLI and automation).
 An agent runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: workspaces, the valid status/priority/health values, and every limit. Flags come from `bk <group> <command> --help`. Nothing has to be guessed or cached.
 
 ### How do I install and use the CLI?
-`npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk workspace use <slug>`, and you're working: `bk issue list`, `bk issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
+`npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk workspace use <slug>`, and you're working: `bk issues issue list`, `bk issues issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
 
 ### How do agents and scripts authenticate?
 `bk login` opens a browser, captures a token and stores it in `~/.config/bk/config.json` — that is the whole flow. For headless runs, mint a token at `/dashboard/settings/tokens` and pipe it in: `echo "$TOKEN" | bk login --token`. Tokens carry optional expiry and can be revoked from the same page.

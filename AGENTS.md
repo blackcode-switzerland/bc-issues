@@ -13,11 +13,15 @@ tracker. Humans use the web UI; **agents use one interface: the `bk` CLI**
 
 Run every command from the **repo root**; Turborepo delegates into the workspace.
 `PLATFORM-ARCHITECTURE.md` is where this is going and `PLATFORM-MIGRATION-PLAN.md`
-is how. **Phases 0–4 have landed:** `packages/platform-{db,api,ui,auth}` exist,
-the database is `platform.*` + `issues.*` (not `public`), and apps are real data —
+is how. **Phases 0–5 have landed:** `packages/platform-{db,api,ui,auth}` exist,
+the database is `platform.*` + `issues.*` (not `public`), apps are real data —
 workspace listings are app-scoped and every workspace-scoped route enforces per-app
-access. **The CLI is not yet namespaced per app** (`bk issue create`, not
-`bk issues issue create`); that is Phase 5.
+access — and **the CLI, guide, changelog, `bk meta` and docs are all split per app.**
+
+Commands are `bk issues issue create`, not `bk issue create`. Every old spelling
+still runs as a deprecated alias that prints one stderr line naming the new one;
+they go away in 1.12.0. Platform verbs (`workspace`, `label`, `upload`, `trash`,
+`invite`, …) stay bare — they mean the same thing in every app.
 
 The HTTP API under `apps/issues/app/api/**` is **private plumbing with no public contract**.
 Do not document it for external consumers, and never reintroduce an OpenAPI spec
@@ -28,7 +32,7 @@ Two sources of truth, and only two:
 
 | Kind of knowledge | Where | Why there |
 |---|---|---|
-| **Static** — how the tool behaves (flags, exit codes, workflows) | `cli/internal/guide/topics/*.md`, `//go:embed`-ed, served by `bk guide` | It describes *the binary being run*. Fetching it from the server could describe a `--flag` the agent doesn't have. |
+| **Static** — how the tool behaves (flags, exit codes, workflows) | `cli/internal/guide/topics/{platform,<app>}/*.md`, `//go:embed`-ed, served by `bk guide` | It describes *the binary being run*. Fetching it from the server could describe a `--flag` the agent doesn't have. |
 | **Dynamic** — what the data is now (vocabularies, limits, workspaces) | the server, via `GET /api/meta` → `bk meta` | Changes without a CLI release. |
 
 A guide topic must **never** restate a dynamic value. Point at `bk meta` instead.
@@ -53,13 +57,17 @@ Detail:
    `{ deleted: true }`.
 2. **CLI** — add or update the `bk` command + client method in `cli/`, **and its
    `routes` annotation** (`Annotations: map[string]string{"routes": "GET /api/…"}`,
-   or `"none"` when the command makes no HTTP call).
-3. **Changelog** — one dated entry at the top of `docs/api-changelog.md`.
+   or `"none"` when the command makes no HTTP call). App nouns go in
+   `cli/internal/commands/<app>/`, shared verbs in `commands/platform/`; the two
+   must not import each other (`boundaries_test.go` enforces it).
+3. **Changelog** — one dated entry at the top of the right `docs/changelog/*.md`:
+   `platform.md` for anything shared, `<app>.md` for one app's own surface.
 
 Conditional, only when it applies:
 
 - **Guide** — agent-visible *behaviour* changed → update the relevant
-  `cli/internal/guide/topics/*.md`.
+  `cli/internal/guide/topics/platform/*.md` or `topics/<app>/*.md`. A topic under
+  `topics/<app>/` may not describe another app.
 - **`bk meta`** — a vocabulary or limit changed → update its source
   (`apps/issues/lib/work-items.ts`, `apps/issues/lib/limits.ts`, `apps/issues/lib/upload.ts`); `/api/meta` and
   `bk meta` follow automatically via `apps/issues/lib/agent-meta.ts`. Never restate a value
@@ -109,9 +117,14 @@ deliberate, since a root config compiling nothing would report a vacuous green.
   prints it as a `hint:` line, which is what turns a dead run into a recovered one.
 - **Lists:** `{ data, next_cursor }`, built with `jsonList()`.
 - **No legacy routes:** everything tenant-scoped goes under `/api/workspaces/{ws}/…`.
-- **Enums:** single source of truth is `apps/issues/lib/work-items.ts`; `/api/meta` reads from it.
+- **Enums:** single source of truth is `apps/issues/lib/work-items.ts`; `/api/meta` serves
+  them under `apps.issues.vocabulary` (the top-level `vocabulary` key is deprecated
+  and goes away in 1.12.0).
 - **Limits:** single source of truth is `apps/issues/lib/limits.ts`; the route that enforces a
   cap imports it, and `/api/meta` serves it. Never re-type a number.
+- **Docs live in two places:** `/docs` is the platform, `/apps/<app>/docs` is that
+  app. Root docs never describe an app's internals; app docs never describe
+  another app.
 - **Per-page agent note:** `apps/issues/lib/agent-manifest.ts` → `apps/issues/components/agent-manifest.tsx`
   (root layout) and `/llms.txt`. It is a **pointer, not a copy** — keep it under
   ~10 lines and add nothing that could ever become false.

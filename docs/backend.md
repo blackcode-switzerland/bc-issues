@@ -1,25 +1,30 @@
-# Backend
+# Backend — platform
 
-> **2026-08-04 — paths in this file are relative to `apps/issues/`.**
-> The repo became a monorepo (Phase 1 of `PLATFORM-MIGRATION-PLAN.md`). Every
-> `lib/…`, `app/…`, `components/…` and `types/…` path below now lives under
-> **`apps/issues/`** — e.g. `lib/api/handler.ts` → `apps/issues/lib/api/handler.ts`.
-> `cli/…` and `docs/…` are unchanged; they stayed at the repo root.
+> **2026-08-04 — this file was split along the platform/app line** (Phase 5 of
+> `PLATFORM-MIGRATION-PLAN.md`). What stayed here is the **platform**: identity,
+> workspaces, membership, per-app access, the shared content tables, the event
+> spine, the `apiHandler`/`Errors` contract, the query-layer conventions.
 >
-> The paths were deliberately **not** rewritten in place: Phase 5 splits this
-> file along the platform/app line and moves the app half to
-> `apps/issues/docs/backend.md`, so rewriting ~74 references now would be churn
-> that Phase 5 undoes. This note is the contract until then.
+> **The issue tracker's own schema, routes and `#number` model moved to
+> [`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md).** Root docs
+> never describe an app's internals; an app's docs never describe another app
+> (PLATFORM-ARCHITECTURE.md §7.5).
+>
+> **Paths in this file are relative to `apps/issues/`** where they name
+> `lib/…`, `app/…` or `components/…`. Most of what is described here still
+> physically lives in that app and moves out over Phases 6–7 (`lib/auth.ts` →
+> `packages/platform-auth`, `lib/upload.ts`/`blob-refs.ts` →
+> `packages/platform-storage`). `cli/…` and `docs/…` are at the repo root.
 
 > **Internal.** The HTTP API is private plumbing — **the only public contract is
 > the `bk` CLI.** This document is for people working on this repo. Do not treat
 > it as an integration guide, do not link external consumers to it, and do not
 > reintroduce a published API spec. Agent-facing usage lives in `bk guide`
-> (`cli/internal/guide/topics/`).
+> (`cli/internal/guide/topics/platform/`).
 
-How the server side of Blackcode Issues fits together: the API conventions, the
-two authentication paths, the workspace-scoped data model, the event spine that
-powers activity/inbox/analytics, and how to extend it. **Source of truth is the
+How the shared server side fits together: the API conventions, the two
+authentication paths, the workspace-scoped data model, per-app access, and the
+event spine that powers activity/inbox/analytics. **Source of truth is the
 code** — `lib/db/schema.ts` for the schema and `app/api/**` for routes; this doc
 describes them as they are today.
 
@@ -36,6 +41,9 @@ describes them as they are today.
 - [Cross-cutting concerns](#cross-cutting-concerns)
 - [Adding new functionality](#adding-new-functionality)
 - [Operational notes](#operational-notes)
+
+**App docs:** [`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md) ·
+[`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md)
 
 ## Stack
 
@@ -209,41 +217,29 @@ for exact column types, indexes, and check constraints.
 | `password_reset_otps` | `email`, `otp_hash`, `expires_at`, `consumed_at`, `attempts` |
 | `email_whitelist` | Platform access control (migration `0023`). `type` ∈ `email` \| `domain`; `value` is the address or domain; `added_by` FK to users. Active only when `SUPER_ADMINS` env var is set. |
 
-### Work items
+### Shared content tables
+
+These look like issue-tracker tables and are not — a sales app would need every
+one of them unchanged, which is the test that put them in `platform.*`.
 
 | Table | Purpose / notable columns |
 |-------|---------------------------|
-| `projects` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace), `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `due_date` |
-| `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
-| `tasks` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace — mirrors `issues.seq`), optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
-| `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
-| `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. The legacy `issue_id` column was dropped in migration `0032` — it was a platform→app FK that would have broken `pg_dump --schema=issues` |
-| `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by`. Issues-only; written via API/CLI (`bk issue attach`) |
 | `uploads` | **upload ledger** — one row per file stored through our pipeline, written at upload time: `workspace_id` (nullable), unique `url`, `pathname`, `filename`, `size` (bigint), `mime_type`, `uploaded_by`. Metadata only — never the authority for deletion (a live reference scan is); source for the Storage page |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
-| `issue_labels` / `project_labels` | join tables (composite PKs) linking workspace labels to issues / projects |
-| `project_members` | the project's "people working on it" list (not access control); `(project_id, user_id)` unique |
-| `issue_watchers` | `(issue_id, user_id)` PK; `reason` ∈ `manual`/`assigned`/`reporter`. Auto-watchers are pruned when their reason no longer applies (unless `manual`) |
 
-### System
+### App-owned tables
 
-| Table | Purpose |
-|-------|---------|
-| `events` | **append-only spine** (`bigserial`). `entity_type`, `entity_id`, `action`, `diff`, `meta`, `actor_user_id`/`actor_token_id`, `idempotency_key`. Indexed by workspace × (occurred_at / entity / actor / action) |
-| `inbox_messages` | per-user projection of events (`bigserial`). `type`, denormalized `payload` (JSON), `read_at`, `archived_at`. `event_id`/`workspace_id` nullable for synthetic rows |
-| `transaction_log` | legacy undo log: `operation_type`, `table_name`, `record_id`, `old_data`/`new_data`, `rolled_back` |
-| `error_events` | platform error log: `level`, `code`, `message`, `stack`, `route`, `method`, `status_code`, sanitized `context`, plus triage state `resolved` / `resolved_at` / `resolved_by`. Written by `apiHandler` (server 5xx), `/api/errors/client` (client boundary) and `lib/email` (job failures); triaged from the super-admin Errors tab |
+The ten work-item tables (`issues`, `tasks`, `projects`, `project_updates`,
+`issue_assignees`, `issue_watchers`, `issue_labels`, `project_labels`,
+`project_members`, `attachments`) live in the **`issues` Postgres schema** and
+are documented in **`apps/issues/docs/backend.md`**, not here — root docs do not
+describe an app's internals (PLATFORM-ARCHITECTURE.md §7.5). The same goes for
+their status/priority vocabularies.
 
-Status/priority **values** (the labels and colors the UI uses) are canonical in
-`lib/work-items.ts`, not the schema:
-
-- Issue status: `backlog`, `todo`, `in_progress`, `done`, `cancelled`.
-- Issue priority: `1` urgent … `4` low, `5` none.
-- Project status: `backlog`, `planned`, `in_progress`, `completed`, `cancelled`;
-  priority `P0`–`P4`.
-- Project update health: `on_track`, `at_risk`, `off_track`.
-
+An app may FK into and query `platform.*` freely; it may not read or write
+another app's schema, and the per-app Postgres roles make that a database
+guarantee rather than a convention.
 ## Per-app access (Phase 4)
 
 Three levels decide what a person can reach. Only the last two are new:
@@ -495,7 +491,7 @@ on its own.
 returns `{ cli_latest_version, cli_min_version, entries: [{ date, title,
 markdown, html }], reference_moved_to }` (entries newest first). Pass
 `?format=markdown` (or `Accept: text/markdown`) for one raw Markdown document.
-Source of truth is **`lib/changelog.ts`**, which reads **`docs/api-changelog.md`**
+Source of truth is **`lib/changelog.ts`**, which merges **`docs/changelog/*.md`**
 and renders it with `marked` (gfm, `breaks:false`) + `sanitize-html`. Because that
 `.md` must exist at runtime, `next.config.js` sets `outputFileTracingIncludes` for
 `/changelog` and `/api/changelog`.
@@ -515,26 +511,6 @@ live in its `EXCLUDED_PATHS` / `EXCLUDED_OPERATIONS` maps, each with a stated
 reason.
 
 ### Workspace-scoped (canonical)
-
-> **`{id}` for projects/tasks/issues = the workspace `seq` (the `#N` shown in the
-> app), not the global PK.** Route handlers resolve `(workspace, seq) → internal
-> id` via `resolveEntityId` (`lib/api`); responses serialize through
-> `publicProject`/`publicTask`/`publicIssue` (`lib/api/serialize.ts`) so the
-> global id is never emitted and FK fields (`project_id`/`task_id`) are the
-> parent's seq. List endpoints return everything (no cursor). See
-> `docs/api-changelog.md`. Sub-entities (comments/labels/attachments/updates)
-> keep their own ids — but any FK that points **back** at a work item is also
-> mapped to that item's `#number`, never the internal id: comments expose
-> `parent_id` (+ `parent_type`) and drop the legacy internal `issue_id`;
-> attachments expose `issue_id` as the `#number`; project updates expose
-> `project_id` as the `#number`. These go through `publicComment` /
-> `publicAttachment` / `publicProjectUpdate` (`lib/api/serialize.ts`), which take
-> the parent's seq from the request path (or resolve it for by-id routes). The
-> activity feed (`GET …/activity`) likewise maps `entity_id` to the `#number` for
-> issue/task/project events (`publicEvent` + `resolveEventEntitySeqs`, batch seq
-> lookup incl. trashed rows; purged → `meta.seq` fallback or `null`); other
-> entity types (comment/label/attachment/workspace/member/invitation) keep their
-> own-domain id. No route emits an internal work-item serial.
 
 ```
 GET    /api/workspaces                          workspaces I can use THIS app in
@@ -563,46 +539,10 @@ POST   /api/workspaces/{ws}/invitations         invite by email (owner); optiona
 DELETE /api/workspaces/{ws}/invitations/{id}    revoke (owner)
 GET    /api/workspaces/{ws}/invite-candidates    suggested people to invite (owner)
 
-GET    /api/workspaces/{ws}/projects            list projects
-POST   /api/workspaces/{ws}/projects            create project
-GET    /api/workspaces/{ws}/projects/{id}       project detail (+ members, labels)
-PATCH  /api/workspaces/{ws}/projects/{id}       update (also member_ids/label_ids)
-GET    /api/workspaces/{ws}/projects/{id}/members  list members / POST add (owner|admin) / DELETE remove ({user_id})
-GET    /api/workspaces/{ws}/projects/{id}?preview=1   child counts for delete dialog
-DELETE /api/workspaces/{ws}/projects/{id}?mode=cascade|detach   move to Trash (default: detach)
-GET    /api/workspaces/{ws}/projects/{id}/comments   list / POST comment
-GET    /api/workspaces/{ws}/projects/{id}/updates    list status updates
-POST   /api/workspaces/{ws}/projects/{id}/updates    post update (status + body)
-DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId}   delete (author)
-POST   /api/workspaces/{ws}/projects/reorder    update display order (drag-and-drop)
 
-GET    /api/workspaces/{ws}/tasks          list / POST create
-GET    /api/workspaces/{ws}/tasks/{id}?preview=1   child counts for delete dialog
-PATCH  /api/workspaces/{ws}/tasks/{id}     update
-DELETE /api/workspaces/{ws}/tasks/{id}?mode=cascade|detach   move to Trash (default: detach)
-GET    /api/workspaces/{ws}/tasks/{id}/comments  list / POST
 
-GET    /api/workspaces/{ws}/issues              list (filters) / POST create
-                                               (filters: project_id, task_id (workspace #numbers),
-                                                assignee_id(s) (user ids), status, priority, search.
-                                                search = case-insensitive substring on title/description,
-                                                and the #id when the query is numeric (e.g. "123"/"#123");
-                                                same for tasks (name/description) and projects (name/description)
-                                                via lib/db/queries/search.ts.
-                                                Returns { data, total } — every match, no pagination.
-                                                create accepts project_id/task_id as #numbers; label_ids
-                                                (existing) and labels: string[] — names matched
-                                                case-insensitively, unknown ones created on the fly)
-GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH
-DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
-GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
-GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach ({label_id} or {name} — name created on the fly)
-DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid} detach
-GET    /api/workspaces/{ws}/issues/{id}/activity      activity feed for the issue
-GET    /api/workspaces/{ws}/issues/{id}/attachments   list / POST attach
-DELETE /api/workspaces/{ws}/issues/{id}/attachments/{attachmentId}  remove attachment
-POST   /api/workspaces/{ws}/issues/{id}/watch        watch / DELETE unwatch
-POST   /api/workspaces/{ws}/issues/reorder      update display order (drag-and-drop)
+
+(The projects / tasks / issues routes moved to apps/issues/docs/backend.md.)
 
 GET    /api/workspaces/{ws}/labels              list / POST create
 GET    /api/workspaces/{ws}/labels/{id}         label detail

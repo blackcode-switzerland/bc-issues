@@ -9,10 +9,10 @@ PostgreSQL, next-auth, TanStack Query, Framer Motion.
 
 The target architecture is `PLATFORM-ARCHITECTURE.md`; the ordered migration to
 it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
-`docs/migration/baseline.md`. **Phases 0–4 have landed; 5–8 have not.** So:
+`docs/migration/baseline.md`. **Phases 0–5 have landed; 6–8 have not.** So:
 
 - `packages/platform-db`, `platform-api`, `platform-ui` and `platform-auth` exist.
-  `platform-storage` and `platform-agent` do **not** — they are Phases 7 and 5.
+  `platform-storage` and `platform-agent` do **not** — they are Phases 7 and 6.
   `platform-auth` currently holds only per-app access; `lib/auth.ts` moves there in
   Phase 6.
 - The database is **`platform.*` + `issues.*`**, not `public` (Phase 3). Production
@@ -20,16 +20,24 @@ it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
 - Apps are real data (Phase 4): `platform.apps`, `workspace_apps`, `app_access`.
   Workspace listings are app-scoped and `resolveWorkspace` enforces access behind
   `PLATFORM_ENFORCE_APP_ACCESS`. See "Per-app access" in `docs/backend.md`.
-- The CLI is **not** namespaced per app yet — it is `bk issue create`, not
-  `bk issues issue create`. That is Phase 5, along with the guide/changelog/meta
-  splits. Do not write code that assumes it has happened.
+- **The CLI is namespaced per app (Phase 5): `bk issues issue create`.** Every
+  pre-1.10.0 spelling still runs as a deprecated alias that prints one stderr
+  line, and is removed in 1.12.0. Guide topics, the changelog and the docs are
+  split the same way. `CLI_MIN_VERSION` has **not** moved — that is Phase 8.
+- Still not done (Phases 6–8): `platform.entities`/`links`, a federated
+  `bk activity`/`bk search`, app-aware blob attribution, `apps/_template/`.
 
 ## Repo layout
 
 ```
-apps/issues/          the issue tracker — app/ components/ lib/ types/ public/
+apps/issues/          the issue tracker — app/ components/ lib/ types/ docs/ public/
 cli/                  the `bk` Go binary (repo root — shared by every app)
-docs/                 platform docs + the changelog agents read
+  internal/commands/platform/   bare verbs: workspace, label, upload, trash, …
+  internal/commands/issues/     that app's nouns, behind `bk issues …`
+  internal/cmdutil/             what both need; the app packages never import each other
+  internal/guide/topics/{platform,issues}/
+docs/                 PLATFORM docs only (see the Docs sync rule)
+docs/changelog/       one file per app + platform.md — merged by `bk changelog`
 devops/               release scripts
 turbo.json            task pipeline
 tsconfig.base.json    shared TS settings; apps extend it
@@ -137,11 +145,12 @@ that enforces it, and served by `/api/meta`. Never re-type a number.
 > | # | Edit | Where |
 > |---|---|---|
 > | **1** | The **route** | `apps/issues/app/api/**` |
-> | **2** | The **`bk` command** + its `routes` annotation | `cli/internal/commands/`, `cli/internal/client/` |
-> | **3** | A dated **changelog** entry | `docs/api-changelog.md` |
+> | **2** | The **`bk` command** + its `routes` annotation | `cli/internal/commands/<app>/` or `platform/`, `cli/internal/client/` |
+> | **3** | A dated **changelog** entry | `docs/changelog/<app>.md`, or `platform.md` |
 >
 > Plus **one conditional fourth**: if agent-visible *behaviour* changed (a flag, a
-> workflow, a failure mode), update the relevant `cli/internal/guide/topics/*.md`.
+> workflow, a failure mode), update the relevant
+> `cli/internal/guide/topics/{platform,<app>}/*.md`.
 > If only a *value* changed (a limit, an enum), touch its source instead —
 > `bk meta` carries it live and no guide edit is needed.
 
@@ -168,12 +177,16 @@ The detail behind each step:
    Reuse `wsPath()` for workspace-scoped calls and unwrap the
    `{ data, next_cursor }` envelope. Keep JSON/YAML output + stable exit codes.
 3. **Changelog** — see the Changelog rule below. One dated entry at the top of
-   `docs/api-changelog.md`: what changed, whether it's breaking, how to adapt.
+   the right file in `docs/changelog/`: what changed, whether it's breaking, how
+   to adapt. A change touching shared platform data goes in `platform.md`, **not**
+   in the app that happened to prompt it.
 
 **Conditional — only when the situation applies:**
 
 - **Guide** — if agent-visible *behaviour* changed (a flag, a workflow, a failure
-  mode), update the relevant `cli/internal/guide/topics/*.md`.
+  mode), update the relevant `cli/internal/guide/topics/platform/*.md` (true
+  everywhere) or `topics/<app>/*.md` (one app). A topic under `topics/<app>/` may
+  not describe another app; `guide_test.go` enforces it.
 - **`bk meta`** — if a vocabulary or limit changed, update its *source*
   (`apps/issues/lib/work-items.ts`, `apps/issues/lib/limits.ts`, `apps/issues/lib/upload.ts`); `/api/meta` and
   `bk meta` follow automatically via `apps/issues/lib/agent-meta.ts`. Never edit a guide
@@ -269,10 +282,23 @@ redeploy.
 We publish a changelog so AI agents can keep their integrations and skills up to
 date. It is an **agent** surface — served two aligned ways from one source:
 **`bk changelog`** and **`GET /api/changelog`** (JSON, or `?format=markdown`).
-Both read from `apps/issues/lib/changelog.ts`, which renders **one** authored Markdown file:
+Both read from `apps/issues/lib/changelog.ts`, which merges **one authored
+Markdown file per section**, newest first, tagging each entry with where it came
+from:
 
-- **`docs/api-changelog.md`** — the dated log, **newest first**. The running
-  record of every change.
+- **`docs/changelog/platform.md`** — identity, workspaces, membership, per-app
+  access, labels, uploads, tokens, trash, undo, and the `bk` CLI itself.
+- **`docs/changelog/<app>.md`** — one per app; today just `issues.md`.
+
+`bk changelog` and `GET /api/changelog` serve the merged feed; `--app <name>` /
+`?app=<name>` filter to one file. Files are discovered by reading the directory,
+so adding an app is adding a file — there is no registry to keep in step.
+
+Split from the single `docs/api-changelog.md` on 2026-08-04: one file per app
+because a single file becomes a merge-conflict magnet across app teams and does
+not survive an app extraction. **The whole pre-split record was moved verbatim
+into `issues.md`** — including entries that describe platform concerns — because
+sorting history into a taxonomy invented afterwards is rewriting it.
 
 The **`/changelog` web page was removed on 2026-08-03** — it had no human
 audience, and a page nobody reads is still a page somebody has to keep honest.
@@ -285,10 +311,11 @@ already stale when we retired it. The current surface is `bk guide`, which ships
 inside the binary and therefore always matches the binary being run.
 
 > **The rule:** any change to an API route or a user-facing feature MUST be
-> reported in `docs/api-changelog.md` in the **same** change, as a new
+> reported in the right `docs/changelog/*.md` file in the **same** change, as a new
 > `## YYYY-MM-DD — <clear title>` entry at the top. Write it clearly and in
 > detail: what changed, whether it's breaking, and how a client should adapt
-> (with the new CLI command). Use a real, absolute date.
+> (with the new CLI command). Use a real, absolute date. **A change touching
+> shared platform data goes in `platform.md`, not in the app that prompted it.**
 
 This keeps every consumer able to self-update: an agent that hits a wall runs
 `bk skill sync`, then `bk guide` for current usage and `bk changelog` for the
@@ -302,11 +329,24 @@ These are **maintainer** docs. They are not read by agents — agents read
 `bk guide` — so they are free to describe internals, but they must never
 contradict the CLI-only contract.
 
-- `docs/frontend.md` — components, UI patterns, design system usage, page layouts
-- `docs/backend.md` — API routes, DB schema, query helpers, auth, migrations
+**Docs live in two places, and the split is load-bearing**
+(PLATFORM-ARCHITECTURE.md §7.5): **root docs never describe an app's internals,
+and an app's docs never describe another app.**
+
+`/docs` — the platform and the monorepo itself:
+
+- `docs/backend.md` — shared API conventions, auth, `platform.*` schema, per-app access, the event spine
+- `docs/frontend.md` — theme + tokens, `components/ui/` primitives, app shell, workspace-scoped URLs, data fetching
 - `docs/cli.md` — CLI internals, build, release, version policy
 - `docs/marketing.md` — positioning, landing-page copy, FAQ seed
 - `docs/devops.md`, `docs/env.md` — release process, environment variables
+- `docs/changelog/` — the dated record, one file per app plus `platform.md`
+
+`/apps/<app>/docs` — that app only:
+
+- `apps/issues/docs/backend.md` — the `issues.*` schema, its routes, the `#number` model, its query layer
+- `apps/issues/docs/frontend.md` — its dashboard routes, feature components, analytics view
+- `apps/issues/docs/history/` — superseded design notes, kept as history
 
 Rules:
 - If you add/remove/rename a component, API route, DB table, env var, or command → update the relevant doc.
@@ -317,6 +357,8 @@ Rules:
   `docs/marketing.md`, `README.md`, `apps/issues/components/landing-page.tsx` and
   `/llms.txt` especially — outward-facing copy is how a wrong integration gets
   started. Two ways in: the web UI for humans, `bk` for agents.
+- **Ask which layer it belongs to before writing:** *would a second app need this
+  unchanged?* Yes → root. No → the app's own `docs/`.
 - **Dated logs are history — don't rewrite them.** `docs/next-fixes.md` and
-  `docs/api-changelog.md` record what was true on a date. If one has since become
+  `docs/changelog/*.md` record what was true on a date. If one has since become
   misleading, add a dated note at the top pointing at current practice.

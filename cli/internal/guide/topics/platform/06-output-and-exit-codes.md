@@ -3,9 +3,9 @@
 ## Always ask for JSON
 
 ```bash
-bk issue list --json
-bk issue list -o json      # same
-bk issue list --yaml       # or -o yaml / --yml
+bk issues issue list --json
+bk issues issue list -o json      # same
+bk issues issue list --yaml       # or -o yaml / --yml
 ```
 
 Table output is for humans and its layout is not a contract. Parse `--json`.
@@ -21,7 +21,7 @@ Global flags, available on every command:
 ## Shapes
 
 A **list** command prints `{ "data": [ … ], "next_cursor": <id|null> }`.
-`bk issue list` adds `"total"`. A **single-item** command prints the bare object.
+`bk issues issue list` adds `"total"`. A **single-item** command prints the bare object.
 
 Most lists return everything in one response and `next_cursor` is `null`. Only
 three feeds paginate: `bk activity`, `bk trash list`, and
@@ -68,13 +68,13 @@ you the new spelling; for drift it tells you to run `bk skill sync`.
 - Pick the workspace first (`bk workspace use …` or `--ws`)
 - `--json` for everything you parse
 - Branch on exit codes
-- Use `bk move` / `bk copy` to relocate items — never re-create by hand
+- Use `bk issues move` / `bk issues copy` to relocate items — never re-create by hand
 - Discover flags with `bk <group> <cmd> --help` before calling
 
 ```bash
-bk issue list --project 1 --status todo --json \
+bk issues issue list --project 1 --status todo --json \
   | jq -r '.data[].id' \
-  | xargs -n1 -I{} bk issue edit {} --status in_progress --assignee me
+  | xargs -n1 -I{} bk issues issue edit {} --status in_progress --assignee me
 ```
 
 Related commands: every command; see `bk activity`, `bk trash list`, `bk super-admin errors list` for pagination

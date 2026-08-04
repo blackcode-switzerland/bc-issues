@@ -23,7 +23,12 @@ const nextConfig = {
   // directory, so ../../ reaches the repo root — keep in step with DOCS_DIR in
   // lib/changelog.ts.
   outputFileTracingIncludes: {
-    '/api/changelog': ['../../docs/api-changelog.md'],
+    // A glob, not a list: Phase 5 split the log into one file per app plus
+    // platform.md, and lib/changelog.ts discovers them by reading the directory.
+    // Naming files here individually would mean a new app's changelog builds
+    // locally and 500s in production, which is the failure only a real deploy
+    // catches.
+    '/api/changelog': ['../../docs/changelog/*.md'],
   },
   images: {
     remotePatterns: [

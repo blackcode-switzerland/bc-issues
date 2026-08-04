@@ -3,17 +3,17 @@
 **Never hand-roll a cross-workspace migration** by reading items out and
 re-creating them. That loses satellite data (comments, attachments, labels,
 watchers) and, if you pipe titles/bodies through a non-UTF-8 shell, corrupts the
-text (see `bk guide encoding`). Use the built-in transfer.
+text (see `bk guide platform/encoding`). Use the built-in transfer.
 
 ```bash
 # Move a whole project — its tasks and issues come along
-bk move --to growth --project 42
+bk issues move --to growth --project 42
 
 # Copy specific issues, leaving the originals in place
-bk copy --to growth --issue 108 --issue 106
+bk issues copy --to growth --issue 108 --issue 106
 
 # Move a project's structure but not its issues
-bk move --to growth --project 42 --cascade-issues=false
+bk issues move --to growth --project 42 --cascade-issues=false
 ```
 
 `--project`, `--task` and `--issue` are repeatable and take **#numbers** in the
@@ -32,7 +32,7 @@ the active workspace (or whatever `--ws` targets).
   unassigned issue is the usual surprise.
 
 ```bash
-bk move --to growth --project 42 --json | jq '.adjustments'
+bk issues move --to growth --project 42 --json | jq '.adjustments'
 ```
 
-Related commands: `bk move`, `bk copy`, `bk meta`
+Related commands: `bk issues move`, `bk issues copy`, `bk meta`
