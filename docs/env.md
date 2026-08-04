@@ -176,9 +176,37 @@ configured sender is `admin@issues.blackcode.ch`.
 
 ---
 
+## RUN_MIGRATIONS
+
+| | |
+|---|---|
+| **Purpose** | Gates the `postbuild` Drizzle migration. Set → migrations run on build. Unset → they are skipped and the build is pure. |
+| **Status** | **Required in Production.** Must not be set locally, in CI, or for preview. |
+| **Value** | `1` |
+| **Source** | Introduced 2026-08-04 with the monorepo move; implemented in `apps/issues/scripts/migrate-if-enabled.mjs` |
+| **Impact if missing in Production** | **Deploys keep succeeding while migrations silently stop.** Schema changes never reach the database and the app fails later, far from the cause. |
+| **Impact if set locally** | `npm run build` migrates whatever `DATABASE_URL` points at — the hazard this variable exists to remove. |
+
+Before 2026-08-04 `postbuild` was a bare `drizzle-kit migrate`, which made
+`npm run build` a database write and made it exit 1 whenever the local Postgres
+was not running. `devops/release.sh` does **not** run migrations, so `postbuild`
+remains the only thing applying them in production — hence the flag rather than
+deleting the hook.
+
+Recognised falsey values (treated as unset): empty, `0`, `false`, `no`, `off`.
+
+```bash
+vercel env add RUN_MIGRATIONS production --value "1" --yes
+```
+
+---
+
 ## Local development
 
-Copy the following into `.env.local` in the project root (never commit this file):
+Copy the following into **`apps/issues/.env.local`** (never commit this file).
+Note the path: since the monorepo move it lives in the app workspace, not the
+repo root — Next and `drizzle.config.ts` both resolve it relative to
+`apps/issues/`.
 
 ```env
 DATABASE_URL=postgres://blackcode:blackcode_dev@localhost:5434/blackcode_issues
@@ -192,6 +220,11 @@ SUPER_ADMINS=balathanusan@blackcode.ch
 # Optional — omit to disable Google sign-in locally
 # GOOGLE_CLIENT_ID=
 # GOOGLE_CLIENT_SECRET=
+
+# Do NOT set RUN_MIGRATIONS here. Leaving it unset is what keeps
+# `npm run build` from writing to your database. Migrate explicitly instead:
+#   npm run db:migrate
 ```
 
-Start the local Postgres with `docker compose up -d`, then `npm run dev`.
+Start the local Postgres with `docker compose up -d`, then — **from the repo
+root** — `npm run dev`.

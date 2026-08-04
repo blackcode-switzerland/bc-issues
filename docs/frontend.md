@@ -1,5 +1,16 @@
 # Frontend
 
+> **2026-08-04 — paths in this file are relative to `apps/issues/`.**
+> The repo became a monorepo (Phase 1 of `PLATFORM-MIGRATION-PLAN.md`). Every
+> `app/…`, `components/…`, `lib/…` and `types/…` path below now lives under
+> **`apps/issues/`** — e.g. `components/ui/button.tsx` →
+> `apps/issues/components/ui/button.tsx`. `app/globals.css` is
+> `apps/issues/app/globals.css`.
+>
+> Not rewritten in place on purpose: Phase 5 moves the app half of this file to
+> `apps/issues/docs/frontend.md`, so churning ~45 references now would be undone
+> then. This note is the contract until then.
+
 The web app: stack, routes, the theme system, the shared component primitives,
 and how data flows. **Source of truth is the code** — this describes the app as
 it is today (a monochrome, Linear-style dashboard on Next.js 16 + Tailwind v4).

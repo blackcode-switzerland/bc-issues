@@ -19,9 +19,19 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const
+
+// This app lives at apps/issues; the CLI stays at the monorepo root. Resolve the
+// root from this file rather than from cwd, so the test gives the same answer
+// whether it is run by `npm test` at the root, by turbo, or by vitest inside the
+// app directory. Getting this wrong makes the guard silently unable to find the
+// CLI — which reads as "the CLI claims nothing", not as an error.
+const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
+const REPO_ROOT = join(APP_ROOT, '..', '..')
+const CLI_DIR = join(REPO_ROOT, 'cli')
 
 // Routes deliberately NOT reachable from the CLI. Each needs a reason — an
 // unexplained entry here is how coverage quietly rots.
@@ -72,8 +82,14 @@ function walk(dir: string): string[] {
   return out
 }
 
+// `walk` yields absolute paths (it is anchored at APP_ROOT, not at cwd), so make
+// the path app-relative before turning it into a URL. Doing this with
+// path.relative rather than a `^app` regex means the result no longer depends on
+// where the process was started from.
 function routeUrl(file: string): string {
-  return file
+  return relative(APP_ROOT, file)
+    .split(sep)
+    .join('/')
     .replace(/^app/, '')
     .replace(/\/route\.ts$/, '')
     .replace(/\[\.\.\.(\w+)\]/g, '{$1}')
@@ -96,14 +112,14 @@ interface CliRoutes {
 function loadCliRoutes(): CliRoutes {
   try {
     const raw = execFileSync('go', ['run', './cmd/bk', '__routes'], {
-      cwd: 'cli',
+      cwd: CLI_DIR,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 120_000,
     })
     return JSON.parse(raw)
   } catch {
-    const artifact = join('cli', 'routes.json')
+    const artifact = join(CLI_DIR, 'routes.json')
     if (existsSync(artifact)) return JSON.parse(readFileSync(artifact, 'utf8'))
     throw new Error(
       'Cannot determine CLI route coverage: `go run ./cmd/bk __routes` failed and ' +
@@ -118,11 +134,24 @@ describe('CLI ↔ routes parity', () => {
 
   // Every real route+method, minus the documented exclusions.
   const real = new Map<string, Set<string>>()
-  for (const file of walk('app/api')) {
+  for (const file of walk(join(APP_ROOT, 'app', 'api'))) {
     const url = routeUrl(file)
     if (EXCLUDED_PATHS.has(url)) continue
     real.set(url, new Set(methodsOf(readFileSync(file, 'utf8'))))
   }
+
+  // Both sides of this guard are discovered by walking the filesystem, and both
+  // paths are now computed from this file's location rather than from cwd. That
+  // makes "found nothing" a real failure mode — and an empty set would make the
+  // two coverage assertions below pass vacuously, reporting green while checking
+  // nothing. Assert the inputs are non-empty before trusting any conclusion.
+  it('discovers both sides (guards against a vacuous pass)', () => {
+    expect(real.size, `no API routes found under ${join(APP_ROOT, 'app', 'api')}`).toBeGreaterThan(0)
+    expect(
+      cli.routes.length,
+      `the CLI claims no routes at all — is ${CLI_DIR} the right directory?`
+    ).toBeGreaterThan(0)
+  })
 
   it('every leaf command declares its routes', () => {
     expect(

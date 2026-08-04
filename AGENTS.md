@@ -6,11 +6,18 @@ load-bearing summary.
 
 ## What this project is
 
-An AI-native, Linear-style issue tracker. Humans use the web UI; **agents use one
-interface: the `bk` CLI** (`cli/`, Go, published to npm as
-`@blackcode_sa/bc-issues`).
+A **monorepo** (npm workspaces + Turborepo) of Blackcode's internal apps. Today
+there is exactly one — **`apps/issues`**, an AI-native, Linear-style issue
+tracker. Humans use the web UI; **agents use one interface: the `bk` CLI**
+(`cli/`, at the repo root, Go, published to npm as `@blackcode_sa/bc-issues`).
 
-The HTTP API under `app/api/**` is **private plumbing with no public contract**.
+Run every command from the **repo root**; Turborepo delegates into the workspace.
+`PLATFORM-ARCHITECTURE.md` is where this is going and `PLATFORM-MIGRATION-PLAN.md`
+is how — but only Phases 0–1 have landed, so there is no `packages/platform-*`,
+the CLI is not yet namespaced per app, and the database is still one `public`
+schema.
+
+The HTTP API under `apps/issues/app/api/**` is **private plumbing with no public contract**.
 Do not document it for external consumers, and never reintroduce an OpenAPI spec
 or a fat page manifest — both were deleted on 2026-08-03 precisely because they
 were hand-maintained copies of facts that lived elsewhere, and they drifted.
@@ -38,7 +45,7 @@ A guide topic must **never** restate a dynamic value. Point at `bk meta` instead
 
 Detail:
 
-1. **Route** — `app/api/**`. Same conventions: workspace-scoped under
+1. **Route** — `apps/issues/app/api/**`. Same conventions: workspace-scoped under
    `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`; lists via
    `jsonList()` → `{ data, next_cursor }`; create → 201; delete →
    `{ deleted: true }`.
@@ -52,13 +59,13 @@ Conditional, only when it applies:
 - **Guide** — agent-visible *behaviour* changed → update the relevant
   `cli/internal/guide/topics/*.md`.
 - **`bk meta`** — a vocabulary or limit changed → update its source
-  (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
-  `bk meta` follow automatically via `lib/agent-meta.ts`. Never restate a value
+  (`apps/issues/lib/work-items.ts`, `apps/issues/lib/limits.ts`, `apps/issues/lib/upload.ts`); `/api/meta` and
+  `bk meta` follow automatically via `apps/issues/lib/agent-meta.ts`. Never restate a value
   in a guide topic.
 - **Deprecations** — renamed or removed a flag/command → add a row to
   `cli/internal/commands/deprecations.go` in the same commit.
 
-This is enforced. **`lib/cli-parity.test.ts` (via `npm test`) fails the build**
+This is enforced. **`apps/issues/lib/cli-parity.test.ts` (via `npm test`) fails the build**
 if a route has no CLI coverage, or if the CLI claims a route that doesn't exist.
 **`cli/internal/commands/routes_test.go`** fails if a leaf command declares
 nothing at all.
@@ -79,12 +86,18 @@ nothing at all.
 
 ## Before you finish an API/feature change
 
+Run these **from the repo root**:
+
 ```bash
-npx tsc --noEmit                                          # types
-npm test                                                  # includes lib/cli-parity.test.ts
+npm run typecheck                                         # types (NOT `npx tsc --noEmit`)
+npm test                                                  # includes apps/issues/lib/cli-parity.test.ts
+npm run build                                             # pure build; touches no database
 cd cli && go build ./... && go vet ./... && go test ./...  # CLI + guide/skill/groups tests
 cd cli && make routes                                     # if a `routes` annotation changed
 ```
+
+`npx tsc --noEmit` has no root `tsconfig.json` to find in the monorepo — that is
+deliberate, since a root config compiling nothing would report a vacuous green.
 
 ## Conventions cheat-sheet
 
@@ -94,9 +107,9 @@ cd cli && make routes                                     # if a `routes` annota
   prints it as a `hint:` line, which is what turns a dead run into a recovered one.
 - **Lists:** `{ data, next_cursor }`, built with `jsonList()`.
 - **No legacy routes:** everything tenant-scoped goes under `/api/workspaces/{ws}/…`.
-- **Enums:** single source of truth is `lib/work-items.ts`; `/api/meta` reads from it.
-- **Limits:** single source of truth is `lib/limits.ts`; the route that enforces a
+- **Enums:** single source of truth is `apps/issues/lib/work-items.ts`; `/api/meta` reads from it.
+- **Limits:** single source of truth is `apps/issues/lib/limits.ts`; the route that enforces a
   cap imports it, and `/api/meta` serves it. Never re-type a number.
-- **Per-page agent note:** `lib/agent-manifest.ts` → `components/agent-manifest.tsx`
+- **Per-page agent note:** `apps/issues/lib/agent-manifest.ts` → `apps/issues/components/agent-manifest.tsx`
   (root layout) and `/llms.txt`. It is a **pointer, not a copy** — keep it under
   ~10 lines and add nothing that could ever become false.

@@ -1,42 +1,73 @@
-# Blackcode Issues — CLAUDE.md
+# Blackcode Platform — CLAUDE.md
 
 ## Project overview
 
-AI-native issue tracker (Linear-style). Next.js 16 App Router, TypeScript, Tailwind v4, Drizzle ORM + PostgreSQL, next-auth, TanStack Query, Framer Motion.
+A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
+Today there is exactly one: **`apps/issues`**, an AI-native issue tracker
+(Linear-style). Next.js 16 App Router, TypeScript, Tailwind v4, Drizzle ORM +
+PostgreSQL, next-auth, TanStack Query, Framer Motion.
+
+The target architecture is `PLATFORM-ARCHITECTURE.md`; the ordered migration to
+it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
+`docs/migration/baseline.md`. **Phases 2–8 are not done yet** —
+`packages/platform-*` does not exist, the CLI is not namespaced, and the database
+is still a single `public` schema. Do not write code that assumes otherwise.
+
+## Repo layout
+
+```
+apps/issues/          the issue tracker — app/ components/ lib/ types/ public/
+cli/                  the `bk` Go binary (repo root — shared by every app)
+docs/                 platform docs + the changelog agents read
+devops/               release scripts
+turbo.json            task pipeline
+tsconfig.base.json    shared TS settings; apps extend it
+```
 
 ## Dev commands
 
+**Run these from the repo root.** They delegate through Turborepo.
+
 ```bash
-npm run dev      # start dev server (port 3000)
-npm run build    # production build
-npx tsc --noEmit # type check only
+npm run dev        # start dev server (port 3000) — turbo run dev --filter=issues
+npm run build      # production build
+npm run typecheck  # type check only  ← NOT `npx tsc --noEmit`
+npm test           # vitest, incl. the CLI-parity guard
 ```
+
+> **`npx tsc --noEmit` no longer works from the repo root** — there is no root
+> `tsconfig.json`, by design: a root config that compiled nothing would report a
+> vacuous green. Use `npm run typecheck`, or `cd apps/issues && npx tsc --noEmit`.
+
+> **`npm run build` does not touch a database.** The `postbuild` hook only
+> migrates when `RUN_MIGRATIONS` is set, which is true in Vercel Production only.
+> See `apps/issues/scripts/migrate-if-enabled.mjs`.
 
 ## Key architecture
 
-- **`app/`** — Next.js App Router pages + API routes
-- **`components/`** — shared UI components; `components/ui/` = primitives
-- **`lib/db/`** — Drizzle schema (`schema.ts`), migrations (`migrations/`), query helpers (`queries/`)
-- **`lib/`** — auth, utils, work-item constants
+- **`apps/issues/app/`** — Next.js App Router pages + API routes
+- **`apps/issues/components/`** — shared UI components; `apps/issues/components/ui/` = primitives
+- **`apps/issues/lib/db/`** — Drizzle schema (`schema.ts`), migrations (`migrations/`), query helpers (`queries/`)
+- **`apps/issues/lib/`** — auth, utils, work-item constants
 
 ## Design system
 
 See memory file `design-system.md` for full details. Short version:
 
-- **Theme**: monochrome Linear-style. `--primary: #007bd3`. Tokens in `app/globals.css`.
+- **Theme**: monochrome Linear-style. `--primary: #007bd3`. Tokens in `apps/issues/app/globals.css`.
 - **Dark/light**: `next-themes`, class strategy, `defaultTheme="dark"`.
-- **Status/priority colors**: canonical in `lib/work-items.ts` — never hardcode elsewhere.
-- **Dialogs**: `useConfirm()` from `components/ui/confirm-dialog.tsx` — never `window.confirm/prompt`.
+- **Status/priority colors**: canonical in `apps/issues/lib/work-items.ts` — never hardcode elsewhere.
+- **Dialogs**: `useConfirm()` from `apps/issues/components/ui/confirm-dialog.tsx` — never `window.confirm/prompt`.
 - **Toasts**: `sonner` — `toast.success` / `toast.error` on all mutations.
 - **Page layout**: slim sticky header (`h-11 border-b`), borderless edge-to-edge list rows, no card wrappers in listings.
 
 ## Rich text editor
 
-`components/rich-text-editor.tsx` — TipTap-based, used everywhere for descriptions and comments.
+`apps/issues/components/rich-text-editor.tsx` — TipTap-based, used everywhere for descriptions and comments.
 
 - **Slash command** (`/`): H1–H4, Bold, Italic, Strike, Underline, Link, Quote, Code block, Bullet list, Numbered list, Checklist, Table, Attach file.
 - **BubbleMenu** (on text selection): full formatting bar — B, I, Strike, Underline, Code, H1–H4, Bullet, Numbered, Checklist, Quote, Link.
-- **Table menu** (cursor inside a table, no selection): add/delete row & column, toggle header row, delete table. Tables round-trip everywhere (editor, read-only display, gfm Markdown, HTML, CLI/API) via `@tiptap/extension-table*`; the server (`lib/rich-text.ts`) and render-layer (DOMPurify) sanitizers both whitelist the table markup.
+- **Table menu** (cursor inside a table, no selection): add/delete row & column, toggle header row, delete table. Tables round-trip everywhere (editor, read-only display, gfm Markdown, HTML, CLI/API) via `@tiptap/extension-table*`; the server (`apps/issues/lib/rich-text.ts`) and render-layer (DOMPurify) sanitizers both whitelist the table markup.
 - `variant="bordered"` for modals/forms; `variant="seamless"` for detail-page descriptions.
 - `hideToolbar` — create-issue-modal sets this; formatting via slash + bubble menus only.
 - `onFileUpload?: (file: File) => Promise<string>` — pass `/api/upload` handler to enable paste/drag-drop/slash-attach for **any file type**. Images/video/audio preview inline; PDF gets View+Download; other files get a Download card. After upload, cursor moves to a new line below the attachment.
@@ -79,13 +110,13 @@ Two homes, and the split is the whole trick:
 | Kind | Home | Why |
 |---|---|---|
 | **Static** — how the tool behaves: flag names, exit codes, the upload→embed flow, the UTF-8 warning | `cli/internal/guide/topics/*.md`, `//go:embed`-ed, served by `bk guide` | It describes *this binary*. Fetching it from the server would describe a version the agent isn't running — worse than being out of date. |
-| **Dynamic** — what the data is right now: statuses, priorities, health, workspaces, size caps, blocked MIME types | the server, via `GET /api/meta` → `bk meta` (assembled in `lib/agent-meta.ts`) | Changes without a CLI release. |
+| **Dynamic** — what the data is right now: statuses, priorities, health, workspaces, size caps, blocked MIME types | the server, via `GET /api/meta` → `bk meta` (assembled in `apps/issues/lib/agent-meta.ts`) | Changes without a CLI release. |
 
 **A guide topic must never restate a dynamic value.** Write *"run `bk meta` for
 the current status values"*, not the values. `cli/internal/guide/guide_test.go`
 fails the build if a topic hardcodes one.
 
-Likewise, **a limit is declared once** in `lib/limits.ts`, imported by the route
+Likewise, **a limit is declared once** in `apps/issues/lib/limits.ts`, imported by the route
 that enforces it, and served by `/api/meta`. Never re-type a number.
 
 ### THE RULE: every change lands in three places
@@ -94,7 +125,7 @@ that enforces it, and served by `/api/meta`. Never re-type a number.
 >
 > | # | Edit | Where |
 > |---|---|---|
-> | **1** | The **route** | `app/api/**` |
+> | **1** | The **route** | `apps/issues/app/api/**` |
 > | **2** | The **`bk` command** + its `routes` annotation | `cli/internal/commands/`, `cli/internal/client/` |
 > | **3** | A dated **changelog** entry | `docs/api-changelog.md` |
 >
@@ -109,9 +140,9 @@ live elsewhere — that is what drifted last time and what broke agents mid-run.
 
 The detail behind each step:
 
-1. **Route** — `app/api/**`, same conventions as before: workspace-scoped under
+1. **Route** — `apps/issues/app/api/**`, same conventions as before: workspace-scoped under
    `/api/workspaces/{ws}/…`; auth + errors via `apiHandler` + `Errors`
-   (`lib/api`); lists return `{ data, next_cursor }` via `jsonList()`; single
+   (`apps/issues/lib/api`); lists return `{ data, next_cursor }` via `jsonList()`; single
    resources return the bare entity; create → `201`, delete → `{ deleted: true }`.
    Never reintroduce implicit-active-workspace ("legacy") routes.
 2. **CLI** — add or update the `bk` command + the client method in
@@ -133,8 +164,8 @@ The detail behind each step:
 - **Guide** — if agent-visible *behaviour* changed (a flag, a workflow, a failure
   mode), update the relevant `cli/internal/guide/topics/*.md`.
 - **`bk meta`** — if a vocabulary or limit changed, update its *source*
-  (`lib/work-items.ts`, `lib/limits.ts`, `lib/upload.ts`); `/api/meta` and
-  `bk meta` follow automatically via `lib/agent-meta.ts`. Never edit a guide
+  (`apps/issues/lib/work-items.ts`, `apps/issues/lib/limits.ts`, `apps/issues/lib/upload.ts`); `/api/meta` and
+  `bk meta` follow automatically via `apps/issues/lib/agent-meta.ts`. Never edit a guide
   topic to state a value — that's the drift we removed.
 - **Deprecations** — if you renamed or removed a flag/command, add a row to
   `cli/internal/commands/deprecations.go` **in the same commit**. Keep entries
@@ -150,7 +181,7 @@ The detail behind each step:
 
 ### The guardrail
 
-`lib/cli-parity.test.ts` (run by `npm test`) fails the build if:
+`apps/issues/lib/cli-parity.test.ts` (run by `npm test`) fails the build if:
 
 - a real route+method has **no `bk` command** (a capability agents can't reach), or
 - the CLI **claims a route that doesn't exist** (drift), or
@@ -199,11 +230,12 @@ Three rules learned the hard way; all four Go tests above exist to enforce one.
   generic "run `bk skill sync`". If you add a failure mode an agent can hit,
   check it lands on one of those paths.
 
-Before finishing any API/feature change, run:
+Before finishing any API/feature change, run **from the repo root**:
 
 ```bash
-npx tsc --noEmit
+npm run typecheck              # NOT `npx tsc --noEmit` — see Dev commands
 npm test
+npm run build
 cd cli && go build ./... && go vet ./... && go test ./...
 cd cli && make routes          # if any `routes` annotation changed
 ```
@@ -215,7 +247,7 @@ See `AGENTS.md` for the short version.
 `./devops/release.sh cli minor` (GitHub + npm; needs `npm login` + an OTP) and
 `./devops/release.sh web` (Vercel production). Both are interactive.
 
-`CLI_MIN_VERSION` in `lib/cli-version.ts` hard-blocks every older binary with
+`CLI_MIN_VERSION` in `apps/issues/lib/cli-version.ts` hard-blocks every older binary with
 exit 8. **Publish to npm before raising it** — raise it first and every user is
 locked out with nothing to upgrade to. Both versions are overridable by env
 (`BK_CLI_LATEST` / `BK_CLI_MIN`), so the floor moves and rolls back without a
@@ -226,7 +258,7 @@ redeploy.
 We publish a changelog so AI agents can keep their integrations and skills up to
 date. It is an **agent** surface — served two aligned ways from one source:
 **`bk changelog`** and **`GET /api/changelog`** (JSON, or `?format=markdown`).
-Both read from `lib/changelog.ts`, which renders **one** authored Markdown file:
+Both read from `apps/issues/lib/changelog.ts`, which renders **one** authored Markdown file:
 
 - **`docs/api-changelog.md`** — the dated log, **newest first**. The running
   record of every change.
@@ -271,7 +303,7 @@ Rules:
 - If new functionality has no doc coverage yet → add a section.
 - Do NOT add docs for implementation details already obvious from the code; only document intent, contracts, and non-obvious constraints.
 - **Never present the HTTP API as a way to use the product.** This applies to
-  `docs/marketing.md`, `README.md`, `components/landing-page.tsx` and
+  `docs/marketing.md`, `README.md`, `apps/issues/components/landing-page.tsx` and
   `/llms.txt` especially — outward-facing copy is how a wrong integration gets
   started. Two ways in: the web UI for humans, `bk` for agents.
 - **Dated logs are history — don't rewrite them.** `docs/next-fixes.md` and

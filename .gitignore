@@ -1,9 +1,21 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+#
+# MONOREPO NOTE: patterns here must NOT be anchored with a leading slash unless
+# they genuinely only apply to the repo root. A leading slash matches only the
+# root, so `/node_modules` silently stopped covering `apps/issues/node_modules`
+# when the app moved down a level. Unanchored patterns match at every depth,
+# which is what a workspace layout needs.
+
 gitIgnore
 .playwright-mcp
+scratchpad
+
+# turborepo
+.turbo
+
 # dependencies
-/node_modules
-/.pnp
+node_modules
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -12,14 +24,14 @@ gitIgnore
 !.yarn/versions
 
 # testing
-/coverage
+coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store
@@ -37,8 +49,10 @@ yarn-error.log*
 # vercel
 .vercel
 
-# locally-uploaded files (used when BLOB_READ_WRITE_TOKEN is unset in dev)
-/public/uploads/
+# locally-uploaded files (used when BLOB_READ_WRITE_TOKEN is unset in dev).
+# `**/` is required: a pattern containing a slash is anchored to this file's
+# directory, so plain `public/uploads/` would only match at the repo root.
+**/public/uploads/
 
 # typescript
 *.tsbuildinfo

@@ -121,10 +121,25 @@ applies any pending migrations:
 ./devops/migrate-local.sh --status   # list migrations already applied
 ```
 
-Production migrates automatically on deploy (`postbuild` runs `drizzle-kit
-migrate`), so the local script is only for keeping your own machine in sync —
-e.g. after pulling a branch that adds a migration. To run it manually against
-production instead:
+Production migrates automatically on deploy — but **only because the Vercel
+Production environment sets `RUN_MIGRATIONS=1`.**
+
+Since 2026-08-04, `postbuild` runs `apps/issues/scripts/migrate-if-enabled.mjs`
+rather than a bare `drizzle-kit migrate`. Without the flag it prints a skip line
+and exits 0, so a local or preview `npm run build` is a pure build and never
+touches a database. Two things this protects: `npm run build` used to fail with
+exit 1 whenever the local Postgres was simply not running, and it would migrate
+whatever `DATABASE_URL` happened to be exported.
+
+> **⚠ `RUN_MIGRATIONS=1` must exist in Vercel Production.** `devops/release.sh`
+> does not run migrations, so `postbuild` is the only thing that applies them in
+> production. If that variable is ever removed, deploys will keep succeeding
+> while migrations silently stop. Do not delete the `postbuild` hook either — the
+> gate is inside the script, not in whether the hook exists.
+
+The local script is only for keeping your own machine in sync — e.g. after
+pulling a branch that adds a migration. To run it manually against production
+instead:
 
 ```bash
 DATABASE_URL="<neon-url>" npm run db:migrate

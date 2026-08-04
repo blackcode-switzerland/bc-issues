@@ -127,7 +127,7 @@ final "Proceed?" confirm before doing anything irreversible:
 On confirm it: preflights (gh/npm/git auth, clean tree, version unused — plus
 Vercel auth if deploying web); edits `cli/npm/package.json` + `install.js`
 (install.js derives its version from package.json, so they can't drift) **and**
-`lib/cli-version.ts`, then makes **one** commit + push for all three; creates and
+`apps/issues/lib/cli-version.ts`, then makes **one** commit + push for all three; creates and
 pushes the `vX.Y.Z` tag; `make dist` cross-compiles (version stamped via
 `-ldflags`); publishes the GitHub Release + npm package; and finally deploys web
 if you said yes. (One commit, near the start — the tag and the published binary
@@ -136,7 +136,7 @@ are built from it, so it can't be deferred to after publish.)
 ### Upgrade policy: normal vs forced
 
 The "update available" notice and the hard min-version block (see
-[Updates](#updates)) are driven by **server** constants in `lib/cli-version.ts`,
+[Updates](#updates)) are driven by **server** constants in `apps/issues/lib/cli-version.ts`,
 which the script now edits for you:
 
 - **normal** → sets `CLI_LATEST_VERSION` to the new version (soft "a new bk version
@@ -968,7 +968,7 @@ an agent handles cleanly.
 Every leaf command carries `Annotations: map[string]string{"routes": "…"}` — the
 API routes it calls, or the literal `"none"`. The hidden `bk __routes` dumps the
 union as JSON; `make routes` writes it to `cli/routes.json` for CI images without
-a Go toolchain. `lib/cli-parity.test.ts` diffs it against `app/api/**` and fails
+a Go toolchain. `apps/issues/lib/cli-parity.test.ts` diffs it against `apps/issues/app/api/**` and fails
 the build if a route has no command, or a command claims a route that does not
 exist.
 

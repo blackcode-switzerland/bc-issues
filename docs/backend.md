@@ -1,5 +1,16 @@
 # Backend
 
+> **2026-08-04 — paths in this file are relative to `apps/issues/`.**
+> The repo became a monorepo (Phase 1 of `PLATFORM-MIGRATION-PLAN.md`). Every
+> `lib/…`, `app/…`, `components/…` and `types/…` path below now lives under
+> **`apps/issues/`** — e.g. `lib/api/handler.ts` → `apps/issues/lib/api/handler.ts`.
+> `cli/…` and `docs/…` are unchanged; they stayed at the repo root.
+>
+> The paths were deliberately **not** rewritten in place: Phase 5 splits this
+> file along the platform/app line and moves the app half to
+> `apps/issues/docs/backend.md`, so rewriting ~74 references now would be churn
+> that Phase 5 undoes. This note is the contract until then.
+
 > **Internal.** The HTTP API is private plumbing — **the only public contract is
 > the `bk` CLI.** This document is for people working on this repo. Do not treat
 > it as an integration guide, do not link external consumers to it, and do not

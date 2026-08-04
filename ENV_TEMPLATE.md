@@ -1,8 +1,14 @@
 # Environment variables
 
-Copy the relevant values into `.env.local` for local development, or set them in
-the Vercel dashboard for production. Only three are required; the rest unlock
-optional integrations and the app runs fine without them.
+Copy the relevant values into **`apps/issues/.env.local`** for local development,
+or set them in the Vercel dashboard for production. Only three are required; the
+rest unlock optional integrations and the app runs fine without them.
+
+> The file lives in the app workspace, not the repo root — Next and
+> `drizzle.config.ts` resolve it relative to `apps/issues/`.
+>
+> **Never set `RUN_MIGRATIONS` locally.** It gates the `postbuild` migration and
+> belongs only in Vercel Production; see `docs/env.md`.
 
 ## Required
 

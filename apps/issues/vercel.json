@@ -4,6 +4,11 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "regions": ["fra1"],
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "headers": [
     {
       "source": "/api/(.*)",

@@ -26,7 +26,12 @@ import { marked } from 'marked'
 import sanitizeHtml from 'sanitize-html'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from './cli-version'
 
-const DOCS_DIR = join(process.cwd(), 'docs')
+// The changelog lives at the MONOREPO ROOT (`docs/`), not inside this app —
+// architecture §7.3 makes it a platform surface that will merge one file per app
+// into a single feed. This app runs with its cwd at `apps/issues`, so walk up two
+// levels. `outputFileTracingRoot` + `outputFileTracingIncludes` in next.config.js
+// are what carry the file into the serverless bundle; keep the two in step.
+const DOCS_DIR = join(process.cwd(), '..', '..', 'docs')
 
 export interface ChangelogEntry {
   /** ISO date `YYYY-MM-DD` parsed from the entry heading (empty if unparseable). */

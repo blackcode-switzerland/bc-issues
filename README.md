@@ -30,7 +30,7 @@ two are the only sources an agent needs.
 | Layer | Choice |
 |-------|--------|
 | Framework | Next.js 16 (App Router, React 18, TypeScript strict) |
-| Styling | Tailwind v4 (CSS-first, no `tailwind.config`), shadcn-style tokens in `app/globals.css` |
+| Styling | Tailwind v4 (CSS-first, no `tailwind.config`), shadcn-style tokens in `apps/issues/app/globals.css` |
 | Data | PostgreSQL via Drizzle ORM (`pg` Pool) |
 | Auth | NextAuth (JWT) — email/password + optional Google OAuth; `bk_live_…` API tokens for the CLI/agents |
 | Client data | TanStack Query |
@@ -42,13 +42,21 @@ There is **no separate MCP/companion server in this repo** — the `bk` CLI is t
 integration surface. See [`docs/architecture-rebuild.md`](docs/architecture-rebuild.md)
 for the historical design record.
 
-> **Going multi-app.** bc-issues is the first of several internal Blackcode apps
-> (sales/CRM, bookkeeping, …). The agreed target architecture — monorepo, shared
-> `platform` Postgres schema, per-app schemas, one `bk` CLI, cross-app links —
-> is in [`PLATFORM-ARCHITECTURE.md`](PLATFORM-ARCHITECTURE.md), and the ordered
-> migration in [`PLATFORM-MIGRATION-PLAN.md`](PLATFORM-MIGRATION-PLAN.md). Read
-> them before starting a second app or changing `lib/db/schema.ts`, `lib/api/`,
-> `lib/auth/` or `cli/`.
+> **Going multi-app.** The issue tracker is the first of several internal
+> Blackcode apps (sales/CRM, bookkeeping, …), so this repo is now a **monorepo**:
+> apps live in `apps/*`, the `bk` CLI and `docs/` stay at the root, and Turborepo
+> drives the tasks. The agreed target architecture — shared `platform` Postgres
+> schema, per-app schemas, one `bk` CLI, cross-app links — is in
+> [`PLATFORM-ARCHITECTURE.md`](PLATFORM-ARCHITECTURE.md), and the ordered
+> migration in [`PLATFORM-MIGRATION-PLAN.md`](PLATFORM-MIGRATION-PLAN.md), with
+> the pre-migration baseline in
+> [`docs/migration/baseline.md`](docs/migration/baseline.md).
+>
+> **Only Phases 0–1 have landed.** There is no `packages/platform-*` yet, the CLI
+> is not namespaced per app, and the database is still one `public` schema. Read
+> those two documents before starting a second app or changing
+> `apps/issues/lib/db/schema.ts`, `apps/issues/lib/api/`, `apps/issues/lib/auth/`
+> or `cli/`.
 
 ## Quick start
 
@@ -65,7 +73,10 @@ docker compose up -d
 
 ### 2. Environment
 
-Create `.env.local` (see [`ENV_TEMPLATE.md`](ENV_TEMPLATE.md) for the full list).
+Create **`apps/issues/.env.local`** (see [`ENV_TEMPLATE.md`](ENV_TEMPLATE.md) for
+the full list). It lives inside the app workspace, not at the repo root — Next
+and `drizzle.config.ts` both read it relative to `apps/issues/`.
+
 The minimum to boot:
 
 ```env
@@ -80,9 +91,12 @@ to the local filesystem).
 
 ### 3. Install, migrate, run
 
+All commands run from the **repo root** — this is an npm-workspaces + Turborepo
+monorepo, and the root scripts delegate into `apps/issues`.
+
 ```bash
 npm install
-npm run db:migrate    # apply Drizzle migrations in lib/db/migrations/
+npm run db:migrate    # apply Drizzle migrations in apps/issues/lib/db/migrations/
 npm run dev
 ```
 
@@ -90,7 +104,7 @@ Visit **http://localhost:3000**. Sign up with email/password, and you'll be
 prompted to create your first workspace.
 
 > The `scripts/*.sql` files are legacy one-shot dumps. The source of truth for
-> the schema is `lib/db/schema.ts`; migrations are managed by `drizzle-kit`
+> the schema is `apps/issues/lib/db/schema.ts`; migrations are managed by `drizzle-kit`
 > (`npm run db:generate` to author one, `npm run db:migrate` to apply).
 
 ## What's in the box
