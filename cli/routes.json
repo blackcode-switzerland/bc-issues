@@ -28,6 +28,11 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/apps/{app}/access/{userId}",
+      "command": "bk app access revoke"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/comments/{id}",
       "command": "bk issue delete-comment"
     },
@@ -183,6 +188,16 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/apps",
+      "command": "bk app list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/apps/{app}/access",
+      "command": "bk app access list"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/attachments",
       "command": "bk storage attachments"
     },
@@ -313,6 +328,11 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/workspaces/{ws}/apps/{app}",
+      "command": "bk app enable"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/comments/{id}",
       "command": "bk issue edit-comment"
     },
@@ -395,6 +415,11 @@
       "method": "POST",
       "path": "/api/workspaces",
       "command": "bk workspace create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/apps/{app}/access",
+      "command": "bk app access grant"
     },
     {
       "method": "POST",

@@ -9,12 +9,10 @@
 // FK into platform.* freely; platform may never FK into an app. If you find
 // yourself importing from apps/*, the table does not belong here.
 //
-// NOT YET HERE — `comments`. It is polymorphic (parent_type/parent_id) and belongs
-// to the platform, but it still carries a legacy `issue_id` column with a live FK
-// to issues.issues. That single column is a platform->app dependency, so the table
-// stays in apps/issues until Phase 3 drops it. The data is already fully
-// backfilled (291 rows, 0 without parent_type, 0 mismatches) — what holds it in
-// place is four code sites, not the data.
+// `comments` landed here in Phase 3, once migration 0032 dropped its legacy
+// `issue_id` column — that one live FK to issues.issues was the only
+// platform->app dependency left, and it would have broken
+// `pg_dump --schema=issues`, the extraction path Phase 8 rehearses.
 
 import {
   pgSchema,
@@ -28,6 +26,7 @@ import {
   boolean,
   jsonb,
   primaryKey,
+  foreignKey,
   index,
   uniqueIndex,
   check,
@@ -114,6 +113,101 @@ export const workspaceMembers = platformSchema.table(
   })
 )
 
+// ---- the app registry (Phase 4) ----
+//
+// Three levels of identity, of which only the last two are per-app:
+//
+//   users              your account          global — one login, every app
+//   workspace_members  you are in this org   per workspace
+//   workspace_apps     this app is on here   per workspace, per app
+//   app_access         you may use it here   per workspace, per app, per user
+//
+// See PLATFORM-ARCHITECTURE.md §4.5. `apps` is the registry itself: one row per
+// app in the suite, which is what lets `bk meta` report the apps a token can
+// reach without any app hardcoding the list.
+
+/** Valid `workspace_apps.default_access` values. */
+export const DEFAULT_ACCESS_MODES = ['all_members', 'invite_only'] as const
+export type DefaultAccessMode = (typeof DEFAULT_ACCESS_MODES)[number]
+
+export const apps = platformSchema.table('apps', {
+  // The slug is the primary key on purpose: it is the identifier that appears in
+  // URNs (`bc:issues:…`), in `workspace_apps.app`, in guide topic folders and in
+  // the CLI namespace. A surrogate id would mean every one of those carried a
+  // number nobody could read.
+  slug: varchar('slug', { length: 40 }).primaryKey(),
+  name: varchar('name', { length: 80 }).notNull(),
+  description: text('description'),
+  // Where this app is deployed (e.g. https://issues.blackcode.ch). Nullable so a
+  // registry row can exist before the deployment does.
+  base_url: text('base_url'),
+  // Global kill switch for the app across every workspace. Distinct from
+  // workspace_apps, which is per-organisation.
+  enabled: boolean('enabled').default(true).notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const workspaceApps = platformSchema.table(
+  'workspace_apps',
+  {
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    app: varchar('app', { length: 40 })
+      .notNull()
+      .references(() => apps.slug, { onDelete: 'cascade' }),
+    enabled_at: timestamp('enabled_at', { withTimezone: true }).defaultNow().notNull(),
+    enabled_by: integer('enabled_by').references(() => users.id, { onDelete: 'set null' }),
+    // 'all_members' — joining the workspace grants access automatically.
+    // 'invite_only' — access is granted one person at a time.
+    default_access: varchar('default_access', { length: 20 })
+      .default('all_members')
+      .notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.workspace_id, t.app] }),
+    appIdx: index('idx_workspace_apps_app').on(t.app),
+    defaultAccessCheck: check(
+      'workspace_apps_default_access_check',
+      sql`${t.default_access} IN ('all_members', 'invite_only')`
+    ),
+  })
+)
+
+// app_access — "this user may use this app in this workspace".
+//
+// The composite FK to workspace_members is the point of this table's shape: it
+// makes "access without membership" unrepresentable, and it makes removing a
+// member remove their access by cascade rather than by remembering to. Deleting a
+// workspace cascades workspaces → workspace_members → app_access, so no direct FK
+// to workspaces is needed (and a second cascade path would just be noise).
+export const appAccess = platformSchema.table(
+  'app_access',
+  {
+    workspace_id: integer('workspace_id').notNull(),
+    app: varchar('app', { length: 40 })
+      .notNull()
+      .references(() => apps.slug, { onDelete: 'cascade' }),
+    user_id: integer('user_id').notNull(),
+    // Mirrors workspace_members.role today. Kept per-app so an app can eventually
+    // have its own roles without touching the platform membership row.
+    role: varchar('role', { length: 20 }).default('member').notNull(),
+    granted_at: timestamp('granted_at', { withTimezone: true }).defaultNow().notNull(),
+    // NULL = granted by the system (backfill, or the default_access policy).
+    granted_by: integer('granted_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.workspace_id, t.app, t.user_id] }),
+    userAppIdx: index('idx_app_access_user_app').on(t.user_id, t.app),
+    membershipFk: foreignKey({
+      name: 'app_access_membership_fk',
+      columns: [t.workspace_id, t.user_id],
+      foreignColumns: [workspaceMembers.workspace_id, workspaceMembers.user_id],
+    }).onDelete('cascade'),
+    roleCheck: check('app_access_role_check', sql`${t.role} IN ('owner', 'member')`),
+  })
+)
+
 export const workspaceCounters = platformSchema.table('workspace_counters', {
   workspace_id: integer('workspace_id')
     .primaryKey()
@@ -137,6 +231,10 @@ export const workspaceInvitations = platformSchema.table(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: varchar('role', { length: 20 }).default('member').notNull(),
+    // NULL = an org-level invite: on accept the invitee gets whatever the
+    // workspace's enabled apps grant by default. Set = invited straight into one
+    // app, and accepting grants that app explicitly even under 'invite_only'.
+    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
     token: varchar('token', { length: 64 }).notNull(),
     status: varchar('status', { length: 20 }).default('pending').notNull(),
     expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -457,6 +555,12 @@ export type NewWorkspace = typeof workspaces.$inferInsert
 export type WorkspaceMember = typeof workspaceMembers.$inferSelect
 export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert
 export type WorkspaceCounter = typeof workspaceCounters.$inferSelect
+export type App = typeof apps.$inferSelect
+export type NewApp = typeof apps.$inferInsert
+export type WorkspaceApp = typeof workspaceApps.$inferSelect
+export type NewWorkspaceApp = typeof workspaceApps.$inferInsert
+export type AppAccess = typeof appAccess.$inferSelect
+export type NewAppAccess = typeof appAccess.$inferInsert
 export type WorkspaceInvitation = typeof workspaceInvitations.$inferSelect
 export type NewWorkspaceInvitation = typeof workspaceInvitations.$inferInsert
 export type Event = typeof events.$inferSelect

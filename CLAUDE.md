@@ -9,9 +9,20 @@ PostgreSQL, next-auth, TanStack Query, Framer Motion.
 
 The target architecture is `PLATFORM-ARCHITECTURE.md`; the ordered migration to
 it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
-`docs/migration/baseline.md`. **Phases 2–8 are not done yet** —
-`packages/platform-*` does not exist, the CLI is not namespaced, and the database
-is still a single `public` schema. Do not write code that assumes otherwise.
+`docs/migration/baseline.md`. **Phases 0–4 have landed; 5–8 have not.** So:
+
+- `packages/platform-db`, `platform-api`, `platform-ui` and `platform-auth` exist.
+  `platform-storage` and `platform-agent` do **not** — they are Phases 7 and 5.
+  `platform-auth` currently holds only per-app access; `lib/auth.ts` moves there in
+  Phase 6.
+- The database is **`platform.*` + `issues.*`**, not `public` (Phase 3). Production
+  runs as the bounded role `issues_app`; migrations run as `MIGRATE_DATABASE_URL`.
+- Apps are real data (Phase 4): `platform.apps`, `workspace_apps`, `app_access`.
+  Workspace listings are app-scoped and `resolveWorkspace` enforces access behind
+  `PLATFORM_ENFORCE_APP_ACCESS`. See "Per-app access" in `docs/backend.md`.
+- The CLI is **not** namespaced per app yet — it is `bk issue create`, not
+  `bk issues issue create`. That is Phase 5, along with the guide/changelog/meta
+  splits. Do not write code that assumes it has happened.
 
 ## Repo layout
 

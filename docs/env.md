@@ -228,6 +228,39 @@ vercel env add RUN_MIGRATIONS production --value "1" --yes
 
 ---
 
+## PLATFORM_ENFORCE_APP_ACCESS
+
+| | |
+|---|---|
+| **Purpose** | The Phase 4 kill switch. Gates per-app access enforcement: the 403 on a workspace you have no app access to, **and** the filtering of workspace listings to the apps you can reach. |
+| **Status** | **Deliberately unset everywhere.** Unset means ENFORCED. |
+| **Value** | Only ever set it to `0`, and only to switch enforcement off. |
+| **Source** | Read by `isAppAccessEnforced()` in `packages/platform-auth/src/require-app-access.ts` |
+| **Impact if set to `0`** | Behaviour returns to pre-Phase-4: workspace membership alone decides access. `platform.app_access` keeps being written, so nothing has to be re-backfilled when you switch it on again. |
+
+**Why the default is on, not off.** Opt-in would mean the intended behaviour
+depended on remembering to set a variable in every environment — and the
+environment where you forget is the one that silently stops checking access.
+Opt-out means the safe direction needs no configuration, and recovery is one
+variable to ADD rather than a deploy to fix.
+
+**When to use it.** If members report empty workspace lists after a deploy —
+Phase 4's failure mode is quiet, so that is what a missed grant looks like. Set it,
+redeploy (or promote the previous deployment), then find the gap with the orphan
+report (`findOrphanedMembers` in `@blackcode/platform-db`, or the query in
+PLATFORM-MIGRATION-PLAN.md Phase 4). Every denial is already logged with the user,
+workspace and app, so the logs should name them.
+
+Recognised falsey values (enforcement off): empty, `0`, `false`, `no`, `off`.
+Anything else, including unset, enforces.
+
+```bash
+# only in an emergency:
+vercel env add PLATFORM_ENFORCE_APP_ACCESS production --value "0" --yes
+```
+
+---
+
 ## Local development
 
 Copy the following into **`apps/issues/.env.local`** (never commit this file).

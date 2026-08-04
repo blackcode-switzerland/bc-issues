@@ -31,11 +31,22 @@ and the rest of bk operates within it.`,
 	return cmd
 }
 
+// newWorkspaceListCmd lists the workspaces you can use THIS app in.
+//
+// The default is app-scoped (Phase 4): a workspace where issues is switched off,
+// or where you were never granted it, is not a workspace you can write to, and
+// offering it would offer a guaranteed 403.
+//
+// --all is the escape hatch, and it is not optional politeness. Without it, a
+// workspace that this app is not enabled in simply vanishes, and "where did my
+// workspace go?" would have no answer from inside the app that hid it. --all
+// shows every membership plus the apps you can reach in each.
 func newWorkspaceListCmd() *cobra.Command {
-	return &cobra.Command{
+	var all bool
+	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces"},
-		Short:       "List workspaces you are a member of",
+		Short:       "List workspaces you can use this app in (--all for every membership)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -45,11 +56,46 @@ func newWorkspaceListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			activeID := cfg.ActiveWorkspaceID
+
+			if all {
+				workspaces, err := c.ListAllMyWorkspaces()
+				if err != nil {
+					return err
+				}
+				return output.Render(format, workspaces, func(w io.Writer) error {
+					tw := output.Tabwriter(w)
+					fmt.Fprintln(tw, "\tID\tNAME\tSLUG\tROLE\tAPPS")
+					for _, ws := range workspaces {
+						mark := " "
+						if ws.ID == activeID {
+							mark = "*"
+						}
+						apps := "—"
+						if len(ws.Apps) > 0 {
+							apps = strings.Join(ws.Apps, ",")
+						}
+						fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n",
+							mark, ws.ID, ws.Name, ws.Slug, ws.MemberRole, apps)
+					}
+					if err := tw.Flush(); err != nil {
+						return err
+					}
+					if len(workspaces) == 0 {
+						fmt.Fprintln(cmd.ErrOrStderr(), "(no workspaces)")
+					} else {
+						fmt.Fprintln(cmd.ErrOrStderr(),
+							"\nAPPS is what YOU can open there. An empty column means you are a member "+
+								"but have no app access — ask an owner, or see `bk app access list`.")
+					}
+					return nil
+				})
+			}
+
 			workspaces, err := c.ListMyWorkspaces()
 			if err != nil {
 				return err
 			}
-			activeID := cfg.ActiveWorkspaceID
 
 			return output.Render(format, workspaces, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
@@ -66,12 +112,16 @@ func newWorkspaceListCmd() *cobra.Command {
 					return err
 				}
 				if len(workspaces) == 0 {
-					fmt.Fprintln(cmd.ErrOrStderr(), "(no workspaces)")
+					fmt.Fprintln(cmd.ErrOrStderr(),
+						"(no workspaces you can use this app in — try `bk workspace list --all`)")
 				}
 				return nil
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false,
+		"Show every workspace you are a member of, with the apps you can reach in each")
+	return cmd
 }
 
 func newWorkspaceShowCmd() *cobra.Command {

@@ -8,6 +8,8 @@ import { sendInvitationEmail } from '@/lib/email/send'
 import { isEmailAllowed, isSuperAdmin, isWhitelistEnabled } from '@/lib/auth/whitelist'
 import { addWhitelistEntry } from '@/lib/db/queries/whitelist'
 import { INVITE_EMAIL_MAX } from '@/lib/limits'
+import { db } from '@/lib/db/client'
+import { getWorkspaceApp } from '@blackcode/platform-db'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -66,12 +68,34 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     }
   }
 
+  // Optional: invite straight into one app (Phase 4). Omitted means an org-level
+  // invite, where accepting grants whatever the workspace's apps hand out by
+  // default. Naming an app also grants that app even where it is 'invite_only' —
+  // the invitation IS the grant, which is what makes invite_only usable.
+  let app: string | null = null
+  if (body?.app !== undefined && body?.app !== null) {
+    if (typeof body.app !== 'string' || !body.app.trim()) {
+      throw Errors.badRequest('invalid_app', 'app must be a non-empty string')
+    }
+    const requested: string = body.app.trim()
+    app = requested
+    const known = await getWorkspaceApp(db, ctx.workspace.id, requested)
+    if (!known) {
+      throw Errors.badRequest(
+        'app_not_enabled',
+        `The ${app} app is not enabled for this workspace, so an invitation into it would grant nothing.`,
+        `Run \`bk app list --ws ${ctx.workspace.slug}\` to see which apps are on here.`
+      )
+    }
+  }
+
   try {
     const result = await createInvitation({
       workspaceId: ctx.workspace.id,
       email,
       invitedBy: ctx.user.id,
       ttlDays: INVITE_TTL_DAYS,
+      app,
     })
 
     // Send the invitation email AFTER the invite is committed. Best-effort —

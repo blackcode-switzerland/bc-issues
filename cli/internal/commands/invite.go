@@ -78,11 +78,20 @@ func newInviteCandidatesCmd() *cobra.Command {
 }
 
 func newInviteSendCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:         "send <email>",
+	var app string
+	cmd := &cobra.Command{
+		Use:         "send <email> [--app <app>]",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/invitations"},
 		Short:       "Invite a teammate to the active workspace by email",
-		Args:        cobra.ExactArgs(1),
+		Long: `Invite someone to the active workspace by email.
+
+Without --app this is an org-level invite: on accept they are granted whichever
+apps the workspace hands out by default. With --app they are also granted that
+app specifically — which is how you invite someone into an app whose access mode
+is invite_only, since there the invitation IS the grant.
+
+Run ` + "`bk app list`" + ` to see which apps are enabled here and how each grants.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newClientAndConfig()
 			if err != nil {
@@ -92,7 +101,7 @@ func newInviteSendCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			res, err := c.SendInvitation(ws, args[0])
+			res, err := c.SendInvitation(ws, args[0], app)
 			if err != nil {
 				return err
 			}
@@ -104,9 +113,15 @@ func newInviteSendCmd() *cobra.Command {
 					strings.TrimRight(cfg.Server, "/"), res.Invitation.Token)
 				fmt.Fprintf(cmd.OutOrStdout(), "Share this link:\n  %s\n", inviteURL)
 			}
+			if app != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "On accept they will be granted the %s app.\n", app)
+			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&app, "app", "",
+		"Also grant this app on accept, even where its access mode is invite_only")
+	return cmd
 }
 
 func newInviteListCmd() *cobra.Command {

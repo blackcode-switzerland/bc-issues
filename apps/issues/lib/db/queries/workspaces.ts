@@ -1,10 +1,16 @@
 // Workspace CRUD + member queries.
 //
 // Membership rules (enforced here, mirrored in §1.2 of architecture-rebuild.md):
-//   - createWorkspace inserts the workspace + owner membership + counter atomically.
+//   - createWorkspace inserts the workspace + owner membership + counter + the
+//     app registry rows atomically.
 //   - getWorkspaceForUser returns the row only if the user is an active member.
+//     App access is a SEPARATE gate — see lib/api/workspace-context.ts.
 //   - transferOwnership moves the 'owner' role to another existing member.
 //   - deleteWorkspace cascades (FKs handle it) — caller verifies role first.
+//
+// Phase 4 added a second axis: a workspace can be visible to you as a member and
+// still not be a workspace you may use THIS app in. listMyWorkspaces takes an
+// optional `app` for that; see the note on it before changing a call site.
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../client'
@@ -16,13 +22,40 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from '../schema'
+import {
+  accessibleWorkspaceIds,
+  enableAllAppsForWorkspace,
+  syncAppAccessRole,
+} from '@blackcode/platform-db'
+import { isAppAccessEnforced } from '@blackcode/platform-auth'
 import { recordEvent } from './events'
 
 export type WorkspaceWithMembership = Workspace & {
   member_role: 'owner' | 'member'
 }
 
-export async function listMyWorkspaces(userId: number): Promise<WorkspaceWithMembership[]> {
+/**
+ * The workspaces this user belongs to.
+ *
+ * Pass `{ app }` to get the ones they may actually USE that app in — visibility
+ * follows access (PLATFORM-ARCHITECTURE.md §4.5). That is what every user-facing
+ * listing wants: logged into issues, you should not see a workspace where issues
+ * is off or where you were never granted it.
+ *
+ * Pass nothing for the raw membership list. Two callers genuinely need that and
+ * filtering them would be a bug, not a feature:
+ *   - ensureDefaultWorkspace — "do they belong to anything at all?" A filtered
+ *     empty answer there would mint a SECOND workspace for someone who already
+ *     has one they simply can't reach.
+ *   - `--all` listings, which exist precisely to show what the filter hides.
+ *
+ * The filter is a no-op when enforcement is off, so the kill switch restores the
+ * pre-Phase-4 behaviour here too, not just at the 403.
+ */
+export async function listMyWorkspaces(
+  userId: number,
+  opts: { app?: string } = {}
+): Promise<WorkspaceWithMembership[]> {
   const rows = await db
     .select({
       ws: workspaces,
@@ -33,7 +66,11 @@ export async function listMyWorkspaces(userId: number): Promise<WorkspaceWithMem
     .where(eq(workspaceMembers.user_id, userId))
     .orderBy(workspaces.updated_at)
 
-  return rows.map((r) => ({ ...r.ws, member_role: r.role as 'owner' | 'member' }))
+  const all = rows.map((r) => ({ ...r.ws, member_role: r.role as 'owner' | 'member' }))
+  if (!opts.app || !isAppAccessEnforced()) return all
+
+  const reachable = await accessibleWorkspaceIds(db, opts.app, userId)
+  return all.filter((w) => reachable.has(w.id))
 }
 
 // Resolve a workspace by numeric id or slug, asserting the user is a member.
@@ -152,6 +189,23 @@ export async function createWorkspace(input: CreateWorkspaceInput): Promise<Work
     await tx.insert(workspaceCounters).values({
       workspace_id: ws.id,
       last_issue_seq: 0,
+    })
+
+    // MEMBERSHIP INSERT SITE 1 of 2 (the other is acceptInvitation).
+    //
+    // Same transaction as the workspace_members insert above, and that is not
+    // stylistic: a membership row that commits without its app_access row is a
+    // person who is a member of a workspace they cannot open. This path serves
+    // three entry points — explicit workspace create, POST /api/auth/register,
+    // and OAuth first login via lib/auth.ts → ensureDefaultWorkspace — so getting
+    // it wrong here locks out every new account, not just one.
+    //
+    // Every globally-enabled app is turned on, not just this one: a workspace is
+    // the company, and the company is the same company in the next app.
+    await enableAllAppsForWorkspace(tx, {
+      workspaceId: ws.id,
+      ownerId: input.ownerId,
+      enabledBy: input.ownerId,
     })
 
     await recordEvent(tx, {
@@ -315,6 +369,13 @@ export async function transferOwnership(
       .set({ owner_id: newOwnerUserId, updated_at: new Date() })
       .where(eq(workspaces.id, workspaceId))
 
+    // Keep app_access.role in step. Nothing enforces on that column yet, but a
+    // row claiming 'owner' for a demoted member is a trap for whoever reads it
+    // first — and the backfill deliberately mirrored the roles, so leaving them
+    // to drift would make the mirror a lie after one transfer.
+    await syncAppAccessRole(tx, workspaceId, previousOwner, 'member')
+    await syncAppAccessRole(tx, workspaceId, newOwnerUserId, 'owner')
+
     await recordEvent(tx, {
       workspaceId,
       actorUserId,
@@ -362,6 +423,11 @@ export async function getMembership(
   return rows[0] ?? null
 }
 
+// Removing a member also removes their app_access — by FK cascade, not by code
+// here. app_access's primary FK is to workspace_members (workspace_id, user_id)
+// ON DELETE CASCADE, which is why this function needs no Phase 4 change and why a
+// future third removal path cannot forget to do it. Verified on the rehearsal
+// branch: deleting one membership row took its app_access row with it.
 export async function removeMember(
   workspaceId: number,
   userId: number,
@@ -392,30 +458,13 @@ export async function removeMember(
   })
 }
 
-export async function addMember(
-  workspaceId: number,
-  userId: number,
-  role: 'owner' | 'member' = 'member',
-  actorUserId?: number
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    const result = await tx
-      .insert(workspaceMembers)
-      .values({ workspace_id: workspaceId, user_id: userId, role })
-      .onConflictDoNothing()
-      .returning({ id: workspaceMembers.id })
-    if (result.length > 0) {
-      await recordEvent(tx, {
-        workspaceId,
-        actorUserId: actorUserId ?? null,
-        entityType: 'workspace_member',
-        entityId: userId,
-        action: 'member_added',
-        meta: { user_id: userId, role },
-      })
-    }
-  })
-}
+// NOTE: there is deliberately no `addMember` here. It existed until Phase 4 as a
+// third `insert(workspaceMembers)` with no callers — `invitations.ts` imported it
+// only to re-export it. Membership now carries an app_access grant written in the
+// same transaction (see grantDefaultAppAccess), so a bare membership insert is a
+// lockout waiting to be wired up. The two real membership paths are
+// createWorkspace (above) and acceptInvitation (invitations.ts); add a third only
+// by going through the same helper.
 
 // True if the user is the 'owner' of at least one (non-deleted) workspace.
 // Used to gate trust-bar UIs like the public error detail view.

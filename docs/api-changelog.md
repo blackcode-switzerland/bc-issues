@@ -8,13 +8,96 @@ complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your workspaces), run
 **`bk meta`**.
 
-Surfaced at: the [`/changelog`](/changelog) web page, `GET /api/changelog`
-(JSON or `?format=markdown`), and `bk changelog`.
+Surfaced at: `GET /api/changelog` (JSON or `?format=markdown`) and `bk changelog`.
+The `/changelog` web page was removed on 2026-08-03 — it had no human audience.
 
 > **Process rule:** every change to a route or user-facing feature must add a
 > dated entry here. Timestamp it and describe what changed and how to adapt.
 
 ---
+
+## 2026-08-04 — Apps are now a thing: per-workspace, per-user app access
+
+**What changed.** The platform learned that apps exist. A workspace is the
+organisation; an app is a capability inside it. Three levels now decide what you
+can reach:
+
+| Level | Means |
+|---|---|
+| workspace member | you are in this organisation |
+| workspace app | this app is turned on for this organisation |
+| app access | *you* may use this app here |
+
+Today there is one app, `issues`, and **every existing workspace and member was
+migrated with it enabled and granted**, so nothing about your access changed on
+the day this shipped. What changed is that access is now expressible, and two
+commands answer questions they could not answer before.
+
+**Not breaking, with one behaviour change to know about.** `bk workspace list`
+and the `workspaces` array in `bk meta` now list only the workspaces you can use
+**this app** in. Because of the backfill that is the same list you had yesterday —
+but it can differ from your raw membership list from now on, and `--all` is how
+you see the difference:
+
+```bash
+bk workspace list          # workspaces you can use this app in
+bk workspace list --all    # every workspace you are a member of, plus which
+                           # apps you can reach in each (empty = no access)
+```
+
+**New in `bk meta`:** `current_app` (the app you are talking to) and `apps`, an
+object keyed by app slug listing the apps your token can reach and the workspaces
+you can reach each one in. An app you have no access to anywhere does not appear
+at all. It is an **object, not an array**, because a later release moves each
+app's vocabulary and limits inside its entry — keyed means that stays additive.
+
+**New commands** — `bk app` (a platform verb, like `workspace`):
+
+```bash
+bk app list                                 # apps this workspace runs + how each grants
+bk app access list <app>                    # who has access, and who does NOT
+bk app access grant <app> --user <ref>      # owner only
+bk app access revoke <app> --user <ref>     # owner only
+bk app default-access <app> --mode all_members|invite_only
+bk app enable <app>                         # owner only
+bk app disable <app> --confirm <app>        # owner only; revokes every grant
+bk invite send <email> --app <app>          # invite someone straight into one app
+```
+
+`all_members` (the default everywhere today) means every member has the app and
+anyone joining gets it automatically. `invite_only` means access is granted one
+person at a time — and an invitation naming `--app` grants it on accept even
+there, because the invitation *is* the grant.
+
+**New failure to expect: exit 4 with `app_access_denied`.** Calling into a
+workspace where you are a member but hold no access to this app now returns 403
+with an actionable `suggestion`, which the CLI prints as a `hint:` line:
+
+```
+error: You do not have access to the issues app in this workspace. It is invite-only here.
+hint:  Ask a workspace owner to grant it: `bk app access grant issues --user <you> --ws <slug>`
+```
+
+Read the hint rather than retrying — the call will keep failing until someone
+grants access. The related refusals, all with hints: `app_not_enabled` (the app is
+off for that workspace), `cannot_revoke_owner` (nobody could grant it back), and
+`cannot_disable_current_app` — you cannot disable the app you are calling from,
+because it would lock the whole workspace out of the product with no way back in.
+
+**Routes** (private plumbing, listed for completeness):
+`GET /api/workspaces/{ws}/apps`, `PATCH /api/workspaces/{ws}/apps/{app}`,
+`GET|POST /api/workspaces/{ws}/apps/{app}/access`,
+`DELETE /api/workspaces/{ws}/apps/{app}/access/{userId}`, plus `?all=1` on
+`GET /api/workspaces` and an optional `app` on `POST /api/workspaces/{ws}/invitations`.
+
+**Rollback, if you need to know it exists:** enforcement sits behind
+`PLATFORM_ENFORCE_APP_ACCESS`. Setting it to `0` restores the previous behaviour
+(membership alone decides) without touching any data.
+
+**Still to come, and deliberately separate:** the session cookie moves to
+`.blackcode.ch` so one login covers every future subdomain. That may sign
+everyone out once, so it ships as its own scheduled change with its own entry
+here — not bundled into this one.
 
 ## 2026-08-03 — `bk skill check` no longer tells you to upgrade a current binary
 

@@ -351,10 +351,27 @@ Verify the row counts match `workspace_members` **before** enforcing anything.
 
    **But a query only proves the backfill — not the code.** The real risk is a
    path that creates membership *without* creating `app_access`, which no
-   historical check can catch. Cover all of them with tests before enforcing:
-   accepting an invitation, creating a workspace, the super-admin user tools,
-   and OAuth first-login. Each must produce an `app_access` row (or an explicit
-   `invite_only` denial) in the same transaction as the membership row.
+   historical check can catch.
+
+   **Corrected 2026-08-04** — an earlier draft of this step named four paths
+   including "super-admin tools". That was wrong: no route under
+   `app/api/super-admin/` inserts membership. The real surface is **two live
+   INSERT sites serving four entry points**:
+
+   | INSERT site | Entry points it serves |
+   |---|---|
+   | `invitations.ts:304` | accepting an invitation |
+   | `workspaces.ts:146` (`createWorkspace`) | explicit workspace create; `POST /api/auth/register`; OAuth first login via `lib/auth.ts:67` → `ensureDefaultWorkspace` |
+
+   Both must write the `app_access` row (or an explicit `invite_only` denial) in
+   the **same transaction** as the membership row, and both need a test.
+
+   **Delete `addMember` (`workspaces.ts:395-403`) first.** It is a third
+   membership INSERT with no callers — `invitations.ts` imports it solely to
+   re-export it, with a comment admitting the import is unused. Wired up after
+   enforcement lands, it would create membership with no `app_access` row and
+   lock out the next person. A dead function that can silently deny access is
+   worse than no function.
 
    Keep the kill switch for one release, and make every denial log loudly with
    the user, workspace and app. If something slips through, it is one env var to
@@ -644,6 +661,26 @@ Two traps, both hit for real:
   block for free. Phase 3 did exactly this and turned a would-be outage into a
   handoff.
 
+The same partiality is also an asset: **the bare `.vercel.app` project alias is
+a free pre-promote staging URL.** Because `--skip-domain` points it at the new
+build while the custom domain still serves the old one, the full verification
+sweep — login, endpoints, semantics, a real write — can run against the new code
+*before* promoting. Use it every time; a promote should confirm what you already
+know, not be the first test.
+
+**Two credentials, not one.** `RUN_MIGRATIONS=1` makes `postbuild` migrate using
+`DATABASE_URL`. Once that points at a bounded app role, every deploy fails —
+correctly, because the app role has no DDL and cannot read
+`drizzle.__drizzle_migrations`. Production therefore carries both:
+
+| Var | Role | Used by |
+|---|---|---|
+| `DATABASE_URL` | `issues_app` (DML only, owns nothing) | app runtime |
+| `MIGRATE_DATABASE_URL` | `neondb_owner` | `postbuild` migrations only |
+
+Keep a fallback to `DATABASE_URL` so local dev needs no second variable. Every
+future app repeats this pair.
+
 ## Decisions taken during the migration
 
 **No continuous deployment; Vercel stays disconnected from GitHub.** (Decided
@@ -754,6 +791,55 @@ bundling**. Phase 1's `lib/changelog.ts` reading `../../docs` — a path outside
 the app directory — is the archetype: it works locally without question, and
 whether it survives Next's file tracing into a serverless bundle is a separate
 fact. Trace files are good evidence; a real deploy is proof.
+
+**Five decisions taken in Phase 4.** (2026-08-04.)
+
+1. **`packages/platform-auth` was created now, containing only per-app access.**
+   The Phase 2 table defers `platform-auth` to Phase 6, and that still holds — it
+   is about extracting `lib/auth.ts`, which is blocked behind `events.ts`. But
+   `requireAppAccess` had to live somewhere, and the layering decided it: the data
+   layer is in `platform-db` (where the tables are, no HTTP knowledge), while the
+   enforcement wrapper needs `platform-api`'s `Errors`. Putting that in
+   `platform-db` would invert the dependency (db → api); leaving it in
+   `apps/issues` would mean app #2 copies its own access check. So the package
+   exists with one tenant, and Phase 6 moves the session/token half in beside it.
+
+2. **Enforcement defaults to ON; `PLATFORM_ENFORCE_APP_ACCESS=0` is the way off.**
+   Opt-in would make the intended behaviour depend on remembering to set a
+   variable in every environment — and the environment where you forget is the one
+   that silently stops checking. Opt-out means no environment needs configuring
+   for the safe behaviour, and recovery is one variable to ADD rather than a code
+   change. The switch gates the visibility filter as well as the 403, so flipping
+   it restores pre-Phase-4 behaviour completely.
+
+3. **`app_access`'s foreign key is to `workspace_members(workspace_id, user_id)`,
+   not to `workspaces`.** This makes "access without membership" unrepresentable
+   and makes removing a member drop their access by cascade rather than by
+   remembering to — so the *next* membership-removal path cannot get it wrong.
+   Both were verified on the rehearsal branch, including that Postgres accepts the
+   composite FK against the existing unique index. Workspace deletion still
+   cascades through `workspace_members`, so no second FK is needed.
+
+4. **`bk meta.apps` is an OBJECT keyed by slug, not an array.** Phase 5 moves each
+   app's vocabulary and limits *inside* its entry (§7.4). Keyed makes that
+   additive; an array would have to be replaced — breaking a field agents had
+   already been parsing for a release, which is exactly what this sequencing
+   exists to avoid. Phase 5 should add to `apps.issues`, not reshape `apps`.
+
+5. **An app cannot be disabled from inside itself** (`cannot_disable_current_app`).
+   Disabling an app revokes every member's access to it — including the owner's,
+   and including access to the route needed to undo it. It is an irreversible
+   action behind one toggle, and `--confirm`-style repetition does not help: the
+   problem is not whether the caller means it, it is that there is no way back.
+   The toggle stays real for every other app, which is the case it exists for. Same
+   reasoning gives `cannot_revoke_owner`.
+
+**A note for whoever reads the orphaned-member query after Phase 4.** It is a
+pass/fail gate only in the window *before* enforcement, where every member was
+just backfilled and a row means someone is about to be locked out. Afterwards a
+member with no grant is exactly what `invite_only` and a deliberate revoke
+produce, so the same query becomes a *report* of who lacks access, not a defect
+list. `findOrphanedMembers` in `platform-db` is that query as code.
 
 ## What is explicitly out of scope
 

@@ -8,7 +8,9 @@
 //      inbox). Anyone with the token can call /api/invitations/accept while
 //      authenticated as a matching email — we verify email match server-side.
 //   3. On accept: invitation marked accepted, accepted_by + accepted_at set,
-//      workspace_members row inserted (idempotent).
+//      workspace_members row inserted (idempotent) AND the matching app_access
+//      rows granted in the same transaction (Phase 4). An invitation may name an
+//      `app` to grant access to one app specifically.
 //
 // Tokens are 32 raw bytes encoded as base64url (43 chars). They are random,
 // not derived; we store the literal string. Tokens are unique by index.
@@ -17,8 +19,8 @@ import { randomBytes } from 'crypto'
 import { and, desc, eq, gt, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { inboxMessages, type WorkspaceInvitation, users, workspaceInvitations, workspaceMembers, workspaces } from '../schema'
+import { grantDefaultAppAccess } from '@blackcode/platform-db'
 import { recordEvent } from './events'
-import { addMember } from './workspaces'
 
 const TOKEN_BYTES = 32
 const DEFAULT_TTL_DAYS = 14
@@ -33,6 +35,13 @@ export interface CreateInvitationInput {
   invitedBy: number
   role?: 'member'
   ttlDays?: number
+  /**
+   * Invite this person straight into one app (Phase 4). Omit / null for an
+   * org-level invite, where accepting grants whatever the workspace's apps hand
+   * out by default. Set, it also grants that app even if the app is
+   * 'invite_only' there — the invitation is the grant.
+   */
+  app?: string | null
 }
 
 export interface CreateInvitationResult {
@@ -101,6 +110,7 @@ export async function createInvitation(
         email,
         invited_by: input.invitedBy,
         role: input.role ?? 'member',
+        app: input.app ?? null,
         token,
         status: 'pending',
         expires_at: expiresAt,
@@ -255,7 +265,7 @@ export async function listPendingInvitationsForEmail(
 }
 
 export type AcceptResult =
-  | { ok: true; workspace_id: number; already_member: boolean }
+  | { ok: true; workspace_id: number; already_member: boolean; apps_granted: string[] }
   | { ok: false; reason: 'not_found' | 'expired' | 'revoked' | 'accepted' | 'declined' | 'email_mismatch' }
 
 export async function acceptInvitation(
@@ -288,6 +298,7 @@ export async function acceptInvitation(
 
     // Idempotent membership insert.
     let alreadyMember = false
+    let grantedApps: string[] = []
     const existing = await tx
       .select({ id: workspaceMembers.id })
       .from(workspaceMembers)
@@ -306,13 +317,38 @@ export async function acceptInvitation(
         user_id: acceptingUserId,
         role: 'member',
       })
+
+      // MEMBERSHIP INSERT SITE 2 of 2 (the other is createWorkspace).
+      //
+      // Same transaction as the insert above. Without this the invitee becomes a
+      // member of a workspace that renders empty for them — the quiet failure this
+      // phase is built to avoid.
+      //
+      // `alsoGrantApp: inv.app` is what makes an invitation INTO one app work: the
+      // default_access policy is honoured for every other app, but the app the
+      // person was invited to is granted even under 'invite_only', because the
+      // invitation IS the grant. NULL (an org-level invite) changes nothing.
+      grantedApps = await grantDefaultAppAccess(tx, {
+        workspaceId: inv.workspace_id,
+        userId: acceptingUserId,
+        role: 'member',
+        grantedBy: inv.invited_by,
+        alsoGrantApp: inv.app,
+      })
+
       await recordEvent(tx, {
         workspaceId: inv.workspace_id,
         actorUserId: acceptingUserId,
         entityType: 'workspace_member',
         entityId: acceptingUserId,
         action: 'member_added',
-        meta: { user_id: acceptingUserId, role: 'member', via: 'invitation', invitation_id: inv.id },
+        meta: {
+          user_id: acceptingUserId,
+          role: 'member',
+          via: 'invitation',
+          invitation_id: inv.id,
+          apps_granted: grantedApps,
+        },
       })
     }
 
@@ -333,7 +369,12 @@ export async function acceptInvitation(
       action: 'invitation_accepted',
     })
 
-    return { ok: true, workspace_id: inv.workspace_id, already_member: alreadyMember }
+    return {
+      ok: true,
+      workspace_id: inv.workspace_id,
+      already_member: alreadyMember,
+      apps_granted: grantedApps,
+    }
   })
 }
 
@@ -434,7 +475,3 @@ export async function materializePendingInvitationsForUser(
     return created
   })
 }
-
-// Suppress unused-import warning if addMember is not used in this file
-// (kept exported via workspaces.ts for the accept path's idempotent insert).
-export { addMember }

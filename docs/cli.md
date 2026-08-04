@@ -223,7 +223,8 @@ Hits `GET /api/me`. Prints the authenticated user's id, email, name, role, and h
 Everything below the workspace level is partitioned by workspace: projects, tasks, issues, labels, members, invitations, activity, analytics. Pick the active workspace once, and the rest of `bk` operates within it.
 
 ```bash
-bk workspace list                 # workspaces you belong to (active row marked with *)
+bk workspace list                 # workspaces you can use this app in (active row marked with *)
+bk workspace list --all           # every workspace you are a member of, + apps you can reach
 bk workspace use acme             # set the active workspace by slug or numeric id
 bk workspace show                 # details of the active workspace
 ```
@@ -305,13 +306,36 @@ full; `--reference` prints only the baseline reference.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk workspace list` | `GET /api/workspaces` | Active row marked with `*`. |
+| `bk workspace list [--all]` | `GET /api/workspaces[?all=1]` | Active row marked with `*`. **App-scoped by default** (Phase 4): only workspaces you can use *this* app in. `--all` shows every workspace you are a member of plus an APPS column — the apps you can reach in each. An empty APPS column means member-without-access. |
 | `bk workspace show [slug\|id]` | `GET /api/workspaces/:ref` | Defaults to the active workspace. |
 | `bk workspace create --name N [--use]` | `POST /api/workspaces` | `--use` (default `true`) sets it active after creation. |
 | `bk workspace use <slug\|id>` | `GET /api/workspaces/:ref` + `POST /api/me/active-workspace` | Sets the active workspace. |
 | `bk workspace edit [slug\|id] --name N --slug S` | `PATCH /api/workspaces/:ref` | Refreshes the stored active slug if you renamed it. |
 | `bk workspace transfer [slug\|id] --to <user>` | `POST /api/workspaces/:ref/transfer` | Owner only; you become a regular member. |
 | `bk workspace delete <slug\|id> --confirm <slug\|id>` | `DELETE /api/workspaces/:ref` | Owner only, irreversible. `--confirm` must repeat the argument and is required even with `--yes` / `BK_NO_PROMPT=1`. Never defaults to the active workspace. Clears the active selection if it deleted it. |
+
+### Apps & access (workspace-scoped)
+
+Membership puts a person in the organisation; **app access** lets them open an app
+inside it. `bk app` is a PLATFORM verb, so it stays at the root when Phase 5 moves
+this app's nouns behind `bk issues …` — "which apps does this org run" is the same
+question from any app.
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk app list` | `GET /api/workspaces/:ws/apps` | Any member. Shows enabled state, `default_access`, and how many members hold access. |
+| `bk app enable <app> [--mode M]` | `PATCH /api/workspaces/:ws/apps/:app` | Owner only. `--mode all_members` (default) grants every current member immediately; `invite_only` grants nobody. |
+| `bk app disable <app> --confirm <app>` | `PATCH /api/workspaces/:ws/apps/:app` | Owner only. Revokes every grant. `--confirm` must repeat the slug, required even with `--yes`. **The server refuses to disable the app serving the request** (`cannot_disable_current_app`) — it would lock the workspace out of the product with no route back. |
+| `bk app default-access <app> --mode M` | `PATCH /api/workspaces/:ws/apps/:app` | Owner only. Switching TO `all_members` grants every current member; switching to `invite_only` keeps existing grants (revoke explicitly if that is the intent). |
+| `bk app access list <app>` | `GET /api/workspaces/:ws/apps/:app/access` | Any member. Lists members **without** access too — "who is missing it" is the question this gets asked. |
+| `bk app access grant <app> --user <ref>` | `POST /api/workspaces/:ws/apps/:app/access` | Owner only. `<ref>` is an id, email, name, or `me`. |
+| `bk app access revoke <app> --user <ref>` | `DELETE /api/workspaces/:ws/apps/:app/access/:userId` | Owner only. The workspace owner cannot be revoked (`cannot_revoke_owner`) — nobody could grant it back. |
+
+Calling into a workspace where you are a member but hold no access exits **4**
+with `app_access_denied` and a `hint:` line naming who can grant it. `bk meta`
+reports `current_app` and an `apps` object — the apps your token can reach, keyed
+by slug, with the workspaces you can reach each in. An app you cannot reach
+anywhere is absent entirely.
 
 ### Moving / copying items between workspaces
 
@@ -507,7 +531,7 @@ Operate on the active workspace; paths are `…/workspaces/{ws}/…`.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk invite send <email>` | `POST /api/workspaces/:ws/invitations` | If the invitee has no account, prints a shareable invite link. |
+| `bk invite send <email> [--app A]` | `POST /api/workspaces/:ws/invitations` | If the invitee has no account, prints a shareable invite link. `--app` invites them into one app and grants it on accept **even where that app is `invite_only`** — the invitation is the grant. Without it, accepting grants whatever the workspace's apps hand out by default. |
 | `bk invite list [--all]` | `GET /api/workspaces/:ws/invitations[?all=true]` | Owner only. `--all` includes accepted/revoked/expired. |
 | `bk invite revoke <id>` | `DELETE /api/workspaces/:ws/invitations/:id` | |
 | `bk invite accept <token>` | `POST /api/invitations/accept` | Accept by token. |

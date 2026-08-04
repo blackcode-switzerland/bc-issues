@@ -128,6 +128,7 @@ type WorkspaceInvitation struct {
 	WorkspaceID    int     `json:"workspace_id" yaml:"workspace_id"`
 	Email          string  `json:"email" yaml:"email"`
 	Role           string  `json:"role" yaml:"role"`
+	App            *string `json:"app,omitempty" yaml:"app,omitempty"`
 	Token          string  `json:"token" yaml:"token"`
 	Status         string  `json:"status" yaml:"status"`
 	InvitedBy      int     `json:"invited_by" yaml:"invited_by"`
@@ -143,11 +144,19 @@ type CreateInvitationResponse struct {
 	InviteeHasAccount bool                `json:"invitee_has_account"`
 }
 
-func (c *Client) SendInvitation(slugOrID, email string) (*CreateInvitationResponse, error) {
+// SendInvitation invites `email` to a workspace. `app` is optional: empty means
+// an org-level invite (accepting grants whatever the workspace's apps hand out by
+// default); set, it also grants that one app on accept, even where the app is
+// invite_only — that is what makes invite_only workable.
+func (c *Client) SendInvitation(slugOrID, email, app string) (*CreateInvitationResponse, error) {
+	body := map[string]string{"email": email}
+	if app != "" {
+		body["app"] = app
+	}
 	var resp CreateInvitationResponse
 	if err := c.postJSON(
 		fmt.Sprintf("/api/workspaces/%s/invitations", slugOrID),
-		map[string]string{"email": email},
+		body,
 		&resp,
 	); err != nil {
 		return nil, err

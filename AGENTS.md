@@ -13,9 +13,11 @@ tracker. Humans use the web UI; **agents use one interface: the `bk` CLI**
 
 Run every command from the **repo root**; Turborepo delegates into the workspace.
 `PLATFORM-ARCHITECTURE.md` is where this is going and `PLATFORM-MIGRATION-PLAN.md`
-is how — but only Phases 0–1 have landed, so there is no `packages/platform-*`,
-the CLI is not yet namespaced per app, and the database is still one `public`
-schema.
+is how. **Phases 0–4 have landed:** `packages/platform-{db,api,ui,auth}` exist,
+the database is `platform.*` + `issues.*` (not `public`), and apps are real data —
+workspace listings are app-scoped and every workspace-scoped route enforces per-app
+access. **The CLI is not yet namespaced per app** (`bk issue create`, not
+`bk issues issue create`); that is Phase 5.
 
 The HTTP API under `apps/issues/app/api/**` is **private plumbing with no public contract**.
 Do not document it for external consumers, and never reintroduce an OpenAPI spec

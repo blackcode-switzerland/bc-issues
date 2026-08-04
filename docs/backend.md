@@ -29,6 +29,7 @@ describes them as they are today.
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Authentication & authorization](#authentication--authorization)
 - [Database schema](#database-schema)
+- [Per-app access](#per-app-access-phase-4)
 - [The event spine](#the-event-spine)
 - [API reference](#api-reference)
 - [Query layer](#query-layer)
@@ -170,6 +171,14 @@ membership** in one step. If the workspace doesn't exist *or* the user isn't a
 member it throws `notFound` (404, not 403 — so we don't leak existence).
 `requireOwner(ctx)` throws `forbidden` unless `ctx.role === 'owner'`.
 
+Since Phase 4 there is a **second gate** after membership: `requireAppAccess`
+(`@blackcode/platform-auth`) throws 403 `app_access_denied` unless the caller may
+use *this app* in that workspace. Membership puts you in the organisation; app
+access lets you open an app inside it — see "Per-app access" below. That 403 is
+deliberately not a 404: the caller IS a member, so hiding the workspace would hide
+the one fact they need, which is that access is grantable and by whom. It is the
+only 403 in the codebase that carries a `suggestion`.
+
 > **Super admin** is env-based, not DB-based. Set `SUPER_ADMINS=email1,email2` in
 > the environment. Super admins bypass the access whitelist and get a "Super Admin"
 > section in the sidebar with platform-wide views. Guard API routes with
@@ -192,7 +201,10 @@ for exact column types, indexes, and check constraints.
 | `workspaces` | `name`, `slug` (unique), `owner_id`, `logo_url`, `deleted_at` |
 | `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
 | `workspace_counters` | per-workspace sequence allocators: `last_issue_seq`, `last_project_seq`, `last_task_seq` (allocated in-transaction by `allocateNext*Seq`) |
-| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at` |
+| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at`, `app` (nullable — NULL = org-level invite, set = invited into one app and granted it on accept even under `invite_only`) |
+| `apps` | the app registry (migration `0034`). `slug` PK — the same slug used in the CLI namespace and guide folders, so a surrogate id would just make every one of those unreadable. `name`, `description`, `base_url`, `enabled` (platform-wide kill switch) |
+| `workspace_apps` | "this app is on for this organisation". PK `(workspace_id, app)`; `default_access` ∈ `all_members` \| `invite_only`; `enabled_by`/`enabled_at` |
+| `app_access` | "this user may use this app here". PK `(workspace_id, app, user_id)`; `role` mirrors `workspace_members.role`; `granted_by` (NULL = granted by the system: the backfill or the `all_members` policy). Its FK is to **`workspace_members(workspace_id, user_id)`** ON DELETE CASCADE, not to `workspaces` — that makes access-without-membership unrepresentable and makes removing a member drop their access by cascade rather than by remembering to |
 | `api_tokens` | `token_hash` (unique), `token_prefix`, `scopes` (default `['full']`), `expires_at`, `last_used_at` |
 | `password_reset_otps` | `email`, `otp_hash`, `expires_at`, `consumed_at`, `attempts` |
 | `email_whitelist` | Platform access control (migration `0023`). `type` ∈ `email` \| `domain`; `value` is the address or domain; `added_by` FK to users. Active only when `SUPER_ADMINS` env var is set. |
@@ -206,7 +218,7 @@ for exact column types, indexes, and check constraints.
 | `tasks` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace — mirrors `issues.seq`), optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
 | `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
-| `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. Legacy `issue_id` retained for one release |
+| `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. The legacy `issue_id` column was dropped in migration `0032` — it was a platform→app FK that would have broken `pg_dump --schema=issues` |
 | `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by`. Issues-only; written via API/CLI (`bk issue attach`) |
 | `uploads` | **upload ledger** — one row per file stored through our pipeline, written at upload time: `workspace_id` (nullable), unique `url`, `pathname`, `filename`, `size` (bigint), `mime_type`, `uploaded_by`. Metadata only — never the authority for deletion (a live reference scan is); source for the Storage page |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
@@ -231,6 +243,79 @@ Status/priority **values** (the labels and colors the UI uses) are canonical in
 - Project status: `backlog`, `planned`, `in_progress`, `completed`, `cancelled`;
   priority `P0`–`P4`.
 - Project update health: `on_track`, `at_risk`, `off_track`.
+
+## Per-app access (Phase 4)
+
+Three levels decide what a person can reach. Only the last two are new:
+
+| Level | Table | Means |
+|---|---|---|
+| identity | `platform.users` | your account — one login, every app |
+| membership | `platform.workspace_members` | you are in this organisation |
+| app enabled | `platform.workspace_apps` | this app is on for this organisation |
+| app access | `platform.app_access` | *you* may use this app here |
+
+**This app's identity** is `APP_SLUG` in `lib/app.ts` (`'issues'`), and it lives in
+the app rather than in a platform package on purpose: a platform package that knew
+the slug would be a platform package that knew about one app. Every access check
+takes the slug as an argument.
+
+**Where the code is.** The data layer is
+`@blackcode/platform-db`'s `app-access.ts` — queries and grant/revoke helpers, no
+HTTP knowledge. The enforcement layer is `@blackcode/platform-auth`'s
+`requireAppAccess` — one place that decides what a denial looks like (403,
+`app_access_denied`, a `suggestion`, and a `console.warn` naming user + workspace +
+app). `platform-auth` currently contains only this; the session/token half of auth
+moves there in Phase 6, once `events.ts` stops hardcoding issue/task/project
+entity types.
+
+**The kill switch.** `PLATFORM_ENFORCE_APP_ACCESS` — enforced unless explicitly
+falsey (`0`/`false`/`no`/`off`/empty). Opt-out rather than opt-in because the
+environment where you forget to set a variable should be the one that keeps
+checking, not the one that quietly stops. It gates both the 403 *and* the
+visibility filter, so switching it off restores pre-Phase-4 behaviour completely.
+
+**Visibility follows access.** `listMyWorkspaces(userId, { app })` filters to the
+workspaces the user can use that app in; called with no `app` it returns raw
+membership. Both callers matter:
+
+- app-scoped — `GET /api/workspaces`, `/api/meta`, the dashboard layout, and
+  `getDefaultWorkspaceSlug`. Offering a workspace the caller cannot write to is
+  offering a guaranteed 403.
+- unfiltered — `ensureDefaultWorkspace` (a filtered empty answer there would mint
+  a *second* workspace for someone who already has one they cannot reach) and
+  `?all=1` (which exists precisely to show what the filter hides).
+
+**The two membership INSERT sites must grant in the same transaction.** There are
+exactly two, and both are covered by
+`lib/db/queries/app-access.integration.test.ts`:
+
+| Site | Entry points | Grants via |
+|---|---|---|
+| `createWorkspace` (`queries/workspaces.ts`) | workspace create, `POST /api/auth/register`, OAuth first login (`lib/auth.ts` → `ensureDefaultWorkspace`) | `enableAllAppsForWorkspace` |
+| `acceptInvitation` (`queries/invitations.ts`) | accepting an invitation | `grantDefaultAppAccess` (+ `alsoGrantApp` for a per-app invite) |
+
+A membership row that commits without its `app_access` row is a person who is a
+member of a workspace they cannot open — and it does not throw, it renders empty.
+`addMember` was a third INSERT site with no callers; Phase 4 **deleted** it rather
+than leave a function that would create that state the moment somebody wired it up.
+
+**Two guarantees are the database's, not the code's**, so a future third path
+cannot forget them:
+
+- removing a member removes their access — `app_access`'s FK is to
+  `workspace_members(workspace_id, user_id)` ON DELETE CASCADE.
+- access without membership is impossible — the same FK refuses the INSERT.
+
+Deleting a workspace cascades `workspaces → workspace_members → app_access`, so
+`app_access` needs no direct FK to `workspaces`.
+
+**One deliberate refusal.** `PATCH …/apps/{app}` will not disable the app serving
+the request (`cannot_disable_current_app`). It would revoke every member's access
+to the app that hosts the route needed to undo it — an irreversible action behind
+one toggle. `--confirm`-style repetition would not help: the problem is not intent,
+it is that there is no way back. The same reasoning gives `cannot_revoke_owner` on
+the revoke route.
 
 ## The event spine
 
@@ -452,7 +537,9 @@ reason.
 > own-domain id. No route emits an internal work-item serial.
 
 ```
-GET    /api/workspaces                          list my workspaces
+GET    /api/workspaces                          workspaces I can use THIS app in
+                                                (?all=1 → every membership + the
+                                                 apps I can reach in each)
 POST   /api/workspaces                          create workspace
 GET    /api/workspaces/{ws}                     workspace detail
 PATCH  /api/workspaces/{ws}                     update (owner)
@@ -464,8 +551,15 @@ POST   /api/workspaces/{ws}/leave               leave workspace
 GET    /api/workspaces/{ws}/members             list members
 DELETE /api/workspaces/{ws}/members/{userId}    remove member (owner)
 
+GET    /api/workspaces/{ws}/apps                apps this workspace runs (any member)
+PATCH  /api/workspaces/{ws}/apps/{app}          enable/disable + default_access (owner)
+GET    /api/workspaces/{ws}/apps/{app}/access   every member, flagged with access (any member)
+POST   /api/workspaces/{ws}/apps/{app}/access   grant one member ({user_id}) (owner)
+DELETE /api/workspaces/{ws}/apps/{app}/access/{userId}
+                                                revoke one member (owner)
+
 GET    /api/workspaces/{ws}/invitations         list (owner)
-POST   /api/workspaces/{ws}/invitations         invite by email (owner)
+POST   /api/workspaces/{ws}/invitations         invite by email (owner); optional `app`
 DELETE /api/workspaces/{ws}/invitations/{id}    revoke (owner)
 GET    /api/workspaces/{ws}/invite-candidates    suggested people to invite (owner)
 

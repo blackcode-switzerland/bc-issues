@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -79,8 +82,41 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 				if err := tw.Flush(); err != nil {
 					return err
 				}
+
+				// The apps block only appears from a Phase 4 server. Skipped rather
+				// than printed empty, so an older deployment reads as "this server
+				// doesn't report apps" instead of "you have no apps".
+				if len(meta.Apps) > 0 {
+					fmt.Fprintln(w)
+					at := output.Tabwriter(w)
+					fmt.Fprintln(at, "\tAPP\tNAME\tWORKSPACES")
+					for _, slug := range sortedAppSlugs(meta.Apps) {
+						a := meta.Apps[slug]
+						mark := " "
+						if a.IsCurrent {
+							mark = "*"
+						}
+						workspaces := "—"
+						if len(a.Workspaces) > 0 {
+							workspaces = strings.Join(a.Workspaces, ",")
+						}
+						fmt.Fprintf(at, "%s\t%s\t%s\t%s\n", mark, slug, a.Name, workspaces)
+					}
+					if err := at.Flush(); err != nil {
+						return err
+					}
+				}
+
 				if len(meta.Workspaces) == 0 {
-					fmt.Fprintln(cmd.ErrOrStderr(), "(no workspaces)")
+					if len(meta.Apps) > 0 {
+						// Membership without access is the quiet failure of Phase 4:
+						// nothing errored, the list is just empty. Say which it is.
+						fmt.Fprintln(cmd.ErrOrStderr(),
+							"(no workspaces you can use this app in — run `bk workspace list --all` to see "+
+								"every workspace you are a member of, then ask an owner for access)")
+					} else {
+						fmt.Fprintln(cmd.ErrOrStderr(), "(no workspaces)")
+					}
 				} else {
 					fmt.Fprintln(cmd.ErrOrStderr(), "\nPick your target by SLUG (e.g. `bk workspace use <slug>` or `--ws <slug>`), not the id.")
 				}
@@ -88,4 +124,15 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 			})
 		},
 	}
+}
+
+// sortedAppSlugs keeps `bk meta` output stable: Go map iteration is randomised,
+// and an agent diffing two runs must not see a reordered list as a change.
+func sortedAppSlugs(apps map[string]client.MetaApp) []string {
+	slugs := make([]string, 0, len(apps))
+	for slug := range apps {
+		slugs = append(slugs, slug)
+	}
+	sort.Strings(slugs)
+	return slugs
 }

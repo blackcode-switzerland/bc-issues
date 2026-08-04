@@ -28,8 +28,15 @@ export class ApiError extends Error {
 export const Errors = {
   unauthorized: (message = 'Authentication required') => new ApiError(401, 'unauthorized', message),
 
-  forbidden: (message = 'You do not have permission to perform this action') =>
-    new ApiError(403, 'forbidden', message),
+  // `suggestion` and `code` are optional so existing callers are unchanged. Pass
+  // them when a 403 is RECOVERABLE — "ask an owner to grant you the app" is
+  // actionable, a bare "forbidden" is a dead end, and the CLI prints the
+  // suggestion as its `hint:` line.
+  forbidden: (
+    message = 'You do not have permission to perform this action',
+    suggestion?: string,
+    code = 'forbidden'
+  ) => new ApiError(403, code, message, suggestion),
 
   notFound: (entity: string) =>
     new ApiError(404, `${entity}_not_found`, `${entity} not found`),

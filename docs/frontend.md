@@ -202,6 +202,20 @@ server-side `isSuperAdmin(user.email)` check and redirects non-admins to
         {children}
 ```
 
+`app/dashboard/layout.tsx` distinguishes **two different empties**, which is the
+whole reason it fetches the workspace list twice (app-scoped and unfiltered):
+
+| State | What renders |
+|---|---|
+| no memberships at all | `OnboardingCreateWorkspace` — "create your first workspace" |
+| a member somewhere, but no app access anywhere | a "No access to Blackcode Issues" screen naming the workspaces and pointing at Workspace settings → Apps |
+
+Collapsing those two into one check would show a member-without-access the
+onboarding screen — which quietly "works" (they would become owner of a brand-new
+workspace) while hiding the real problem and leaving them a second workspace
+nobody asked for. Phase 4's failure mode is a screen that looks fine, so this is
+the one place the UI has to be explicit about which empty it is.
+
 ## Components
 
 ### `components/ui/` — primitives
@@ -290,7 +304,15 @@ shadcn-style: `button`, `input`, `label`, `card`, `badge`, `alert`, `accordion`,
   `/dashboard/workspaces`).
 - **Settings:** `profile-settings-view`, `account-settings-view`,
   `api-tokens-settings`, `workspace-settings-view`, `storage-view` (owner-only
-  workspace file management at `/dashboard/workspaces/[slug]/storage`).
+  workspace file management at `/dashboard/workspaces/[slug]/storage`),
+  `workspace-apps-panel` (the **Apps** section of workspace settings: which apps
+  the workspace runs, each one's `default_access`, and the per-member access list).
+  The panel is **readable by any member** — seeing that a colleague has access and
+  you do not is how a person works out what to ask for — while the controls are
+  owner-only. It never renders a Disable button for the app you are currently in,
+  matching the server's `cannot_disable_current_app` refusal. Its fetch helper
+  concatenates the API's `suggestion` into the toast message, so the web UI is not
+  the one surface that says "no" without saying what to do.
 - **Super admin:** `super-admin-users-view` (platform-wide member table with workspace count),
   `super-admin-whitelist-view` (add/remove allowed domains and emails),
   `super-admin-errors-view` (error log with status/level/date filters, stat cards,

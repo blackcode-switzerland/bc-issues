@@ -239,6 +239,13 @@
       "when": 1785847414858,
       "tag": "0033_split_platform_and_issues_schemas",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785855395291,
+      "tag": "0034_app_registry_and_access",
+      "breakpoints": true
     }
   ]
 }

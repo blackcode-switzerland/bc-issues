@@ -62,7 +62,16 @@ type Meta struct {
 	User            MetaUser             `json:"user" yaml:"user"`
 	ActiveWorkspace *MetaActiveWorkspace `json:"active_workspace" yaml:"active_workspace"`
 	Workspaces      []MetaWorkspace      `json:"workspaces" yaml:"workspaces"`
-	Vocabulary      json.RawMessage      `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
+	// The app serving this server, and the apps this token can reach anywhere,
+	// keyed by slug (Phase 4). Keyed rather than a list because Phase 5 nests each
+	// app's vocabulary and limits inside its entry — additive, not a replacement.
+	//
+	// Absent from a pre-Phase-4 server, which is exactly why both are optional and
+	// why the table renderer skips the block when it is empty. A CLI that
+	// hard-required them would break against an older deployment.
+	CurrentApp string             `json:"current_app,omitempty" yaml:"current_app,omitempty"`
+	Apps       map[string]MetaApp `json:"apps,omitempty" yaml:"apps,omitempty"`
+	Vocabulary json.RawMessage    `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
 
 	// The unmodified response body. Not a wire field of its own.
 	Raw json.RawMessage `json:"-" yaml:"-"`
@@ -82,6 +91,16 @@ type MetaActiveWorkspace struct {
 	Name string `json:"name" yaml:"name"`
 	Slug string `json:"slug" yaml:"slug"`
 	Role string `json:"role" yaml:"role"`
+}
+
+type MetaApp struct {
+	Name    string  `json:"name" yaml:"name"`
+	BaseURL *string `json:"base_url" yaml:"base_url"`
+	// True for the app this server IS. Phase 5 namespaces the CLI per app; until
+	// then this is how an agent knows which nouns it is allowed to use.
+	IsCurrent bool `json:"is_current" yaml:"is_current"`
+	// Workspace slugs where the caller can use this app.
+	Workspaces []string `json:"workspaces" yaml:"workspaces"`
 }
 
 type MetaWorkspace struct {

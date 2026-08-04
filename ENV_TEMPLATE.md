@@ -54,6 +54,10 @@ NEXTAUTH_URL=https://your-deployment.vercel.app
 NEXTAUTH_SECRET=your-production-secret
 DATABASE_URL=postgres://…           # your hosted Postgres
 # plus any optional integrations above
+
+# Deliberately NOT set: PLATFORM_ENFORCE_APP_ACCESS. Unset means per-app access
+# IS enforced, which is what you want. Set it to 0 only to switch enforcement
+# off in an emergency — see docs/env.md.
 ```
 
 After setting `DATABASE_URL`, run the migrations against that database:

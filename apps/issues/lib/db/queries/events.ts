@@ -16,6 +16,9 @@ import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 export type EntityType =
   | 'workspace'
   | 'workspace_member'
+  // Which apps a workspace runs, and who may use them (Phase 4). entity_id is the
+  // workspace id; `meta.app` carries the slug, since the app is not a numeric row.
+  | 'workspace_app'
   | 'invitation'
   | 'project'
   | 'task'
@@ -34,6 +37,13 @@ export type EventAction =
   | 'member_added'
   | 'member_removed'
   | 'member_left'
+  // apps (Phase 4). None of these fan out to the inbox — fanOutEvent's default
+  // case handles that — so they are activity-feed only.
+  | 'app_enabled'
+  | 'app_disabled'
+  | 'app_default_access_changed'
+  | 'app_access_granted'
+  | 'app_access_revoked'
   // invitations
   | 'invitation_created'
   | 'invitation_revoked'

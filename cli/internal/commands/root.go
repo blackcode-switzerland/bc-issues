@@ -64,7 +64,9 @@ Exit codes (stable; for branching in scripts/agents):
 Command groups:
   guide       the embedded usage guide (--list, <topic>, --json)
   skill       install / check / sync the agent skill file
-  workspace   list, show, create, edit, transfer, use
+  workspace   list (--all for every workspace + per-app badges), show, create,
+              edit, transfer, use
+  app         which apps a workspace runs, and who may use them (access grants)
   move/copy   move (or copy) projects/tasks/issues to another workspace (--to)
   project     list, view, create, edit, delete, members, updates, comment(s)
   issue       list, view, create, edit, delete, assign, watch, comment(s),
@@ -118,6 +120,7 @@ func NewRoot() *cobra.Command {
 		newMetaCmd(),
 		newProfileCmd(),
 		newWorkspaceCmd(),
+		newAppCmd(),
 		newProjectCmd(),
 		newIssueCmd(),
 		newMoveCmd(),

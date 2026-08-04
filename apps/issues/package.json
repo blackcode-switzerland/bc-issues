@@ -20,6 +20,7 @@
   "dependencies": {
     "@auth/pg-adapter": "^1.4.1",
     "@blackcode/platform-api": "*",
+    "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",
     "@blackcode/platform-ui": "*",
     "@hello-pangea/dnd": "^16.6.0",

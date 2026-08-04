@@ -13,7 +13,8 @@
     "GOOGLE_CLIENT_SECRET",
     "BK_CLI_LATEST",
     "BK_CLI_MIN",
-    "RUN_MIGRATIONS"
+    "RUN_MIGRATIONS",
+    "PLATFORM_ENFORCE_APP_ACCESS"
   ],
   "tasks": {
     "build": {

@@ -4,9 +4,12 @@
 //   - user        : who you are + how you authenticated (via)
 //   - active_workspace : the resolved workspace (?ws= override, else the user's
 //                        active workspace; null if none / not a member)
-//   - workspaces  : EVERY workspace the caller belongs to (id, name, slug, role,
-//                   is_active) — so an agent can pick the right target BY NAME
-//                   instead of guessing an opaque numeric id
+//   - workspaces  : every workspace the caller belongs to AND may use THIS app in
+//                   (id, name, slug, role, is_active) — so an agent can pick the
+//                   right target BY NAME instead of guessing an opaque numeric id
+//   - current_app / apps : which app this is, and the apps the caller can reach
+//                   anywhere, keyed by slug (Phase 4). Grant-derived: an app the
+//                   caller has no access to does not appear
 //   - vocabulary  : the valid issue/project enum values (with labels + colors),
 //                   straight from lib/work-items — so an agent never guesses a
 //                   status/priority
@@ -42,6 +45,9 @@ import {
   PROJECT_UPDATE_STATUSES,
 } from '@/lib/work-items'
 import { META_LIMITS, META_MEDIA, META_CLI } from '@/lib/agent-meta'
+import { APP_SLUG } from '@/lib/app'
+import { db } from '@/lib/db/client'
+import { appsReachableByUser } from '@blackcode/platform-db'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await resolveAuth(request)
@@ -56,9 +62,22 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const slugOrId = wsParam ?? (fresh.active_workspace_id ? String(fresh.active_workspace_id) : null)
   const workspace = slugOrId ? await getWorkspaceForUser(slugOrId, auth.user.id) : null
 
-  // Every workspace the caller belongs to — the disambiguation list an agent
-  // needs to target the right tenant by (human-readable) name/slug.
-  const myWorkspaces = await listMyWorkspaces(auth.user.id)
+  // Every workspace the caller belongs to AND can use this app in — the
+  // disambiguation list an agent needs to target the right tenant by
+  // (human-readable) name/slug. App-scoped since Phase 4: offering a workspace
+  // the caller cannot write to would be offering a guaranteed 403.
+  // `bk workspace list --all` is the escape hatch that shows the rest.
+  const myWorkspaces = await listMyWorkspaces(auth.user.id, { app: APP_SLUG })
+
+  // The apps this token can reach, anywhere. An agent working for a user with no
+  // sales access must not be able to discover that a sales app exists
+  // (PLATFORM-ARCHITECTURE.md §4.5), so this is derived from grants, never from
+  // the registry. The unfiltered membership list is only used to turn the
+  // workspace ids those grants carry back into slugs.
+  const [reachableApps, allMyWorkspaces] = await Promise.all([
+    appsReachableByUser(db, auth.user.id),
+    listMyWorkspaces(auth.user.id),
+  ])
 
   const [labels, projects, members] = workspace
     ? await Promise.all([
@@ -95,6 +114,31 @@ export const GET = apiHandler(async (request: NextRequest) => {
       role: w.member_role,
       is_active: workspace ? w.id === workspace.id : false,
     })),
+    // Which app you are talking to. Phase 5 namespaces the CLI per app
+    // (`bk issues issue create`); until then this is how an agent can tell.
+    current_app: APP_SLUG,
+    // The apps this token can reach, keyed by slug, each with the workspace slugs
+    // it can be used in. Derived from grants — an app the caller has no access to
+    // anywhere does not appear at all.
+    //
+    // AN OBJECT, NOT AN ARRAY, on purpose: Phase 5 moves each app's vocabulary
+    // and limits INSIDE its entry here (PLATFORM-ARCHITECTURE.md §7.4). Keyed
+    // means that is an additive change; an array would have to be replaced, and
+    // replacing a field agents already parse is exactly the breakage this
+    // migration is sequenced to avoid.
+    apps: Object.fromEntries(
+      reachableApps.map((a) => [
+        a.slug,
+        {
+          name: a.name,
+          base_url: a.base_url,
+          is_current: a.slug === APP_SLUG,
+          workspaces: allMyWorkspaces
+            .filter((w) => a.workspace_ids.includes(w.id))
+            .map((w) => w.slug),
+        },
+      ])
+    ),
     vocabulary: {
       issue_statuses: ISSUE_STATUSES,
       issue_priorities: ISSUE_PRIORITIES,
