@@ -606,6 +606,44 @@ second app deployed without asking a question.
 - **5 before 8** — the template must reflect the final command and doc shape.
 - **Phase 7 can move** anywhere after 3 if it's convenient.
 
+## The production cutover pattern (use this for Phases 4, 6 and 7)
+
+Proven in Phase 3 on 2026-08-04. `RUN_MIGRATIONS=1` makes the production build
+run `drizzle-kit migrate`, so a plain `vercel --prod` migrates the database
+*mid-build* while the old code is still serving — broken for the rest of the
+build. Separate the build from the migration instead:
+
+1. Snapshot branch from `main`. Verify it exists before anything else.
+2. **Capture the rollback target by ID** — the deployment the custom domain
+   points at *right now* (`vercel alias ls`), not "whatever was latest".
+3. Remove `RUN_MIGRATIONS` from Production. Record the value.
+4. `vercel deploy --prod --skip-domain --yes` — builds, no traffic, no migration.
+   Abort here if it fails; nothing has touched the database.
+5. **Migration and promote as ONE chained command**, `&&` so the promote fires
+   the instant the migration succeeds and not at all if it fails:
+   ```bash
+   cd apps/issues && DATABASE_URL='<main>' npx drizzle-kit migrate \
+     && cd ../.. && vercel promote <deployment-url> --yes
+   ```
+   The inline `DATABASE_URL` wins over `.env.local` — dotenv never overwrites an
+   already-set variable — so local dev cannot be hit by accident.
+6. Verify against the **custom domain**, semantically, not for `200`s.
+7. Re-add `RUN_MIGRATIONS=1` and confirm it is Production-only.
+
+Two traps, both hit for real:
+
+- **`--skip-domain` is partial.** It protects the *custom* domain but not the
+  project's default `.vercel.app` aliases, which go live immediately. In Phase 3
+  the new build served broken against the old schema on
+  `bc-issues-…vercel.app` while `issues.blackcode.ch` correctly stayed on the
+  old deployment. Harmless only because nothing points at that alias. Read it as
+  *"custom domain unchanged"*, never as *"serves no traffic"*.
+- **`vercel promote` and `vercel deploy --prod` may be blocked** by an agent's
+  permission classifier. **Probe the blocked command before touching the
+  database** — promoting the already-live deployment is a no-op and reveals the
+  block for free. Phase 3 did exactly this and turned a would-be outage into a
+  handoff.
+
 ## Decisions taken during the migration
 
 **No continuous deployment; Vercel stays disconnected from GitHub.** (Decided

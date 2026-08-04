@@ -131,7 +131,12 @@ touches a database. Two things this protects: `npm run build` used to fail with
 exit 1 whenever the local Postgres was simply not running, and it would migrate
 whatever `DATABASE_URL` happened to be exported.
 
-> **⚠ `RUN_MIGRATIONS=1` must exist in Vercel Production.** `devops/release.sh`
+> **⚠ Production needs BOTH `RUN_MIGRATIONS=1` and `MIGRATE_DATABASE_URL`.**
+> `DATABASE_URL` is the app role and cannot migrate by design; `postbuild` uses
+> `MIGRATE_DATABASE_URL` (the schema owner). Without it, deploys fail at
+> postbuild with 42501. See docs/env.md.
+>
+> **`RUN_MIGRATIONS=1` must exist in Vercel Production.** `devops/release.sh`
 > does not run migrations, so `postbuild` is the only thing that applies them in
 > production. If that variable is ever removed, deploys will keep succeeding
 > while migrations silently stop. Do not delete the `postbuild` hook either — the

@@ -176,6 +176,33 @@ configured sender is `admin@issues.blackcode.ch`.
 
 ---
 
+## MIGRATE_DATABASE_URL
+
+| | |
+|---|---|
+| **Purpose** | The **migrator's** connection string. `postbuild` runs `drizzle-kit migrate` as this role, not as the app. |
+| **Status** | **Required in Production** once `DATABASE_URL` points at an app role. |
+| **Source** | Neon → the `neondb_owner` (schema owner) connection string |
+| **Impact if missing in Production** | **Every deploy fails at postbuild** with `permission denied for schema drizzle` (42501). |
+
+From Phase 3, `DATABASE_URL` is `issues_app` — a role that owns nothing and has
+no rights on the `drizzle` schema, so it **cannot** migrate. That is the whole
+point: it is what stops an app reshaping the shared `platform` schema. Verified,
+not assumed — `drizzle-kit migrate` as `issues_app` exits 1 because it cannot
+read `drizzle.__drizzle_migrations` to learn what has been applied.
+
+So the two credentials are split by job:
+
+| Var | Role | Used for |
+|---|---|---|
+| `DATABASE_URL` | `issues_app` | everything the app does at runtime |
+| `MIGRATE_DATABASE_URL` | `neondb_owner` | `postbuild` migrations only |
+
+Unset locally: `apps/issues/scripts/migrate-if-enabled.mjs` falls back to
+`DATABASE_URL`, so local dev — one role doing both jobs — needs no extra config.
+
+---
+
 ## RUN_MIGRATIONS
 
 | | |

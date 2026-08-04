@@ -22,9 +22,25 @@
  *
  * To run migrations by hand:  npm run db:migrate --workspace=issues
  */
+/**
+ * WHICH CREDENTIAL MIGRATES
+ * -------------------------
+ * `DATABASE_URL` is the APP's credential. From Phase 3 it is a role that owns
+ * nothing and has no rights on the `drizzle` schema, so it cannot migrate — by
+ * design. That is what stops an app reshaping the shared platform schema.
+ *
+ * Migrations therefore run as the MIGRATOR, via `MIGRATE_DATABASE_URL`. Verified
+ * rather than assumed: `drizzle-kit migrate` as the app role exits 1 with
+ * "permission denied for schema drizzle" (42501), because it cannot read
+ * drizzle.__drizzle_migrations to learn what is applied.
+ *
+ * Falls back to DATABASE_URL when unset, so local dev — where one superuser-ish
+ * role does both jobs — needs no extra configuration.
+ */
 import { spawnSync } from 'node:child_process'
 
 const flag = process.env.RUN_MIGRATIONS
+const migrateUrl = process.env.MIGRATE_DATABASE_URL ?? process.env.DATABASE_URL
 
 // Explicit opt-out values, so `RUN_MIGRATIONS=0` in a dashboard means what it looks like.
 const enabled = flag !== undefined && !['', '0', 'false', 'no', 'off'].includes(flag.toLowerCase())
@@ -38,9 +54,26 @@ if (!enabled) {
   process.exit(0)
 }
 
-console.log(`• postbuild: RUN_MIGRATIONS=${flag} — applying Drizzle migrations…`)
+if (!migrateUrl) {
+  console.error(
+    '✗ postbuild: RUN_MIGRATIONS is set but neither MIGRATE_DATABASE_URL nor DATABASE_URL is.'
+  )
+  process.exit(1)
+}
 
-const result = spawnSync('npx', ['drizzle-kit', 'migrate'], { stdio: 'inherit', shell: false })
+const usingMigrator = Boolean(process.env.MIGRATE_DATABASE_URL)
+console.log(
+  `• postbuild: RUN_MIGRATIONS=${flag} — applying Drizzle migrations as the ` +
+    `${usingMigrator ? 'MIGRATE_DATABASE_URL role (migrator)' : 'DATABASE_URL role (no MIGRATE_DATABASE_URL set)'}…`
+)
+
+// drizzle.config.ts reads DATABASE_URL, so hand the migrator's URL to the child
+// under that name. The parent process env is untouched.
+const result = spawnSync('npx', ['drizzle-kit', 'migrate'], {
+  stdio: 'inherit',
+  shell: false,
+  env: { ...process.env, DATABASE_URL: migrateUrl },
+})
 
 if (result.error) {
   console.error(`✗ postbuild: could not start drizzle-kit — ${result.error.message}`)
