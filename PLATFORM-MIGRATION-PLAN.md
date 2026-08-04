@@ -413,6 +413,35 @@ Enforcement is behind a flag — flip it off. The tables can stay; they're inert
 there is only one app to separate. **The only phase with user-visible breakage**,
 which is exactly why it happens now rather than with three apps live.
 
+### 5.0 Carried over from Phase 4 — do these first
+
+Four CLI defects found while verifying Phase 4 and deliberately not fixed there
+(out of scope). The first two are **live agent-facing failures today**, not
+cosmetics, and this is the phase that already opens every one of these files.
+
+1. **`bk invite accept <token>` fails when the token starts with `-`.** Cobra
+   reads it as a flag: `unknown shorthand flag: 'J'`. Invitation tokens are
+   base64url, so roughly **1 in 32** starts with `-` or `_` and simply cannot be
+   accepted — hit for real during Phase 4 verification. Fix **both ends**: make
+   the command tolerate a leading `-` (so already-installed binaries recover),
+   *and* stop generating such tokens in `generateInvitationToken`
+   (`lib/db/queries/invitations.ts`), so old binaries stop meeting the case at
+   all. Fixing only the CLI leaves every deployed version broken.
+2. **`client.UpdateWorkspaceMemberRole` calls `PATCH /api/workspaces/{ws}/members/{userId}`,
+   a route that only exports `DELETE`.** A broken client method. **The gap matters
+   more than the bug:** the parity test can only see routes a command *annotates*,
+   so a client method reachable from no command is invisible to it. Note that
+   limitation next to the fix — it is the second time a guardrail has been found
+   to have a blind spot, and the blind spot is the reusable finding.
+3. **Every `suggestion` prints twice** — once inside `client.APIError.Error()`
+   and again as `hintFor()`'s `hint:` line. Exactly the double-print that
+   `SilenceErrors` was added to `root.go` to stop, on the channel agents parse.
+   Phase 4 made it a common path (`app_access_denied` is expected traffic now).
+4. **`cli-parity.test.ts:218` uses a relative `walk('app/api')`** while the rest
+   of the file resolves from `APP_ROOT` — it passes only because vitest's cwd is
+   the app directory, which is the cwd dependence that file's own comment claims
+   to have removed.
+
 ### 5.1 CLI namespacing
 
 - Move `cli/internal/commands/` into `commands/platform/` and `commands/issues/`.
@@ -567,6 +596,11 @@ decides whether any of the previous seven were worth it.
 
 ### Steps
 
+0. **Write `docs/platform-db.md`.** Phase 3 step 7 says to document the
+   role-creation SQL there and it was never created — the SQL lives in
+   `docs/sql/app-role.sql` instead. The checklist below references it as step 2,
+   so this is the phase that makes that reference true rather than a dangling
+   pointer.
 1. **`docs/adding-an-app.md`** — the ordered checklist:
    1. `packages/` deps and `apps/<name>/` from the template
    2. `CREATE SCHEMA <app>` + role + grants (SQL in `docs/platform-db.md`)
