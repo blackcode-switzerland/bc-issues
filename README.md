@@ -45,9 +45,10 @@ for the historical design record.
 > **Going multi-app.** bc-issues is the first of several internal Blackcode apps
 > (sales/CRM, bookkeeping, …). The agreed target architecture — monorepo, shared
 > `platform` Postgres schema, per-app schemas, one `bk` CLI, cross-app links —
-> is in [`PLATFORM-ARCHITECTURE.md`](PLATFORM-ARCHITECTURE.md). Read it before
-> starting a second app or changing `lib/db/schema.ts`, `lib/api/`, `lib/auth/`
-> or `cli/`.
+> is in [`PLATFORM-ARCHITECTURE.md`](PLATFORM-ARCHITECTURE.md), and the ordered
+> migration in [`PLATFORM-MIGRATION-PLAN.md`](PLATFORM-MIGRATION-PLAN.md). Read
+> them before starting a second app or changing `lib/db/schema.ts`, `lib/api/`,
+> `lib/auth/` or `cli/`.
 
 ## Quick start
 

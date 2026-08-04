@@ -1,0 +1,201 @@
+================================================================================
+IMPLEMENTATION PROMPT — Blackcode Platform Migration
+Give this file to the implementing agent as its task.
+================================================================================
+
+## YOUR TASK
+
+Execute the migration described in PLATFORM-MIGRATION-PLAN.md, in the repo root
+of this project.
+
+Read these two files FIRST, completely, before writing any code:
+
+  1. PLATFORM-ARCHITECTURE.md   — the target design (the WHAT and WHY)
+  2. PLATFORM-MIGRATION-PLAN.md — the ordered migration (the HOW and WHEN)
+
+Also read CLAUDE.md and AGENTS.md — they carry the agent-surface contract and
+the docs sync rule, both of which stay in force for the whole migration.
+
+The goal is to turn this single-app repo into a monorepo where adding a new app
+is a checklist, not a project. You are NOT building a second app. You are
+preparing the ground for one.
+
+
+## THE SINGLE MOST IMPORTANT RULE
+
+bc-issues is in daily production use by a real team.
+
+NEVER leave it broken. Every phase must end in a state that is deployable and
+functionally identical to what users had before, unless the plan explicitly says
+a behaviour changes.
+
+
+## GROUND RULES — non-negotiable
+
+1. ONE PHASE AT A TIME. Complete a phase fully, verify it, report, and STOP.
+   Wait for a human go-ahead before starting the next phase. Never have two
+   phases in flight.
+
+2. VERIFY BEFORE CLAIMING DONE. A phase is done only when all of these pass:
+
+      npx tsc --noEmit
+      npm test
+      cd cli && go build ./... && go vet ./... && go test ./...
+      npm run build
+
+   Run them. Paste the real output. If something fails, say so plainly — do not
+   describe a phase as complete when it is not.
+
+3. NO DATABASE CHANGE WITHOUT A REHEARSAL. Every migration is first run against
+   a Neon branch created from main, exercised there, and only then applied to
+   main. This includes rollbacks — rehearse the rollback too.
+
+4. ASK BEFORE ANYTHING IRREVERSIBLE. Stop and ask a human before:
+     - applying any migration to the main Neon branch
+     - dropping or renaming any table or column
+     - changing DATABASE_URL or any Vercel environment variable
+     - promoting a deployment to production
+     - publishing to npm or running anything in devops/
+     - renaming the GitHub repo
+   Prepare the change, show it, wait for approval.
+
+5. DO NOT RAISE CLI_MIN_VERSION. Not in any phase. Publishing to npm must always
+   precede any floor change, and the floor change is explicitly deferred to
+   Phase 8. Raising it early locks every user out with nothing to upgrade to.
+
+6. STAY IN SCOPE. Do not refactor, rename, restyle or "improve" anything the
+   plan does not ask for. If you spot a real problem outside scope, write it in
+   your report and move on. Do not fix it inline.
+
+7. USE git mv WHEN MOVING FILES so history follows them. Phase 1 moves most of
+   the repo — history matters.
+
+8. KEEP THE CONTRACTS. The route -> bk command -> changelog entry rule in
+   CLAUDE.md holds for every agent-visible change. Internal refactors (Phases 1
+   and 2) are not agent-visible and get no changelog entry. Everything in Phases
+   4, 5 and 6 does.
+
+9. FOLLOW THE DOCS SYNC RULE. If a phase changes behaviour, update the affected
+   file in docs/ in the same commit.
+
+10. DATED LOGS ARE HISTORY. When Phase 5 splits docs/api-changelog.md, MOVE the
+    existing entries — never rewrite or re-date them. Add a dated note at the
+    top of each new file explaining the split.
+
+
+## ORDER OF WORK
+
+Follow the phases exactly as numbered in PLATFORM-MIGRATION-PLAN.md:
+
+   Phase 0 — Pre-flight & baseline
+   Phase 1 — Monorepo skeleton
+   Phase 2 — Extract packages/platform-*
+   Phase 3 — Postgres schemas + per-app roles
+   Phase 4 — App registry, access & identity
+   Phase 5 — Agent-surface separation
+   Phase 6 — Cross-app primitives
+   Phase 7 — Storage & blob attribution
+   Phase 8 — Harden + the "add an app" kit
+
+Do not reorder. The plan's "Sequencing constraints" section explains which
+dependencies are hard. Phase 7 is the only one that may move.
+
+Phases 3 and 5 carry the real risk. Slow down there.
+
+
+## PHASE-SPECIFIC WARNINGS
+
+Phase 0 — The GitHub repo rename to blackcode-platform is confirmed. The npm
+  package name stays @blackcode_sa/bc-issues; do not rename it.
+
+Phase 2 — Extract a module into packages/ ONLY if a future sales app would need
+  it unchanged. If you have to add a parameter to make it generic, leave it in
+  apps/issues. Do not pre-generalise. Under-extracting is cheap to fix later;
+  over-extracting is not.
+
+Phase 3 — ALTER TABLE ... SET SCHEMA moves data, indexes and FKs intact, and
+  cross-schema foreign keys stay valid. The app role must NOT own the tables —
+  a separate migrator role does. Verify the boundary actually denies: create a
+  throwaway role without a grant on the issues schema and confirm the SELECT is
+  refused.
+
+Phase 4 — This is where you can lock the whole team out of their daily tool.
+  Enforcement is ON from day one, but only after the orphaned-member query in
+  the plan returns ZERO rows, AND you have tests covering all four paths that
+  create membership (invitation accept, workspace create, super-admin tools,
+  OAuth first login). Each must write the app_access row in the same transaction
+  as the membership row. Keep the env kill switch.
+  The session cookie domain change may log everyone out once — schedule it at a
+  quiet hour and note it in the changelog.
+
+Phase 5 — The only user-visible breaking phase. Every old CLI spelling must keep
+  working as a deprecated alias with a row in cli/internal/commands/deprecations.go.
+  The old top-level bk meta keys stay alongside the new apps.* block for two
+  minor releases. Publish to npm before anything else, and do not touch the
+  version floor.
+
+Phase 6 — Write to platform.entities in the SAME transaction as the source row.
+  A projection that can drift is worse than no projection. Build the weekly
+  reconciliation job in this phase, not later.
+
+Phase 8 — apps/_template/ must actually build and pass the CLI-parity test. A
+  template that does not run is worse than no template.
+
+
+## REPORT AFTER EVERY PHASE
+
+Stop after each phase and produce a report in exactly this shape. It will be
+handed to a reviewing agent for verification, so be precise and honest.
+
+--------------------------------------------------------------------------------
+PHASE <n> — <name>
+STATUS: complete | complete-with-deviations | blocked
+
+WHAT CHANGED
+  - <file or area> — <what and why>
+  (list every file created, moved, deleted; note git mv vs new file)
+
+DATABASE
+  - migration file: <path>
+  - rehearsed on Neon branch: <branch name> — yes/no
+  - applied to main: yes/no — approved by: <who>
+  - rollback procedure: <exact steps, and whether they were rehearsed>
+
+VERIFICATION (paste real output, not a summary)
+  npx tsc --noEmit                 -> <result>
+  npm test                         -> <result, test counts>
+  cd cli && go build/vet/test      -> <result>
+  npm run build                    -> <result>
+  manual check                     -> <what you clicked/ran, what happened>
+
+DEVIATIONS FROM THE PLAN
+  - <anything you did differently, and why>
+  - "none" if none
+
+OUT-OF-SCOPE ISSUES SPOTTED
+  - <problems found but deliberately not fixed>
+
+RELEASES
+  - CLI published: yes/no — version
+  - CLI_MIN_VERSION changed: must be "no" until Phase 8
+  - Vercel promoted to production: yes/no — approved by: <who>
+
+CHANGELOG
+  - entry added: yes/no/not-applicable — file and date
+
+ROLLBACK
+  - exact command(s) to undo this phase
+
+NOT DONE / NEEDS ATTENTION
+  - <anything incomplete, uncertain, or needing a human decision>
+--------------------------------------------------------------------------------
+
+
+## IF YOU GET STUCK
+
+Say so. A blocked phase reported honestly is fine; a phase reported complete
+that is not is the one outcome that actually costs time. If the plan is wrong,
+ambiguous, or would break something, stop and explain the problem rather than
+improvising around it.
+
+================================================================================
