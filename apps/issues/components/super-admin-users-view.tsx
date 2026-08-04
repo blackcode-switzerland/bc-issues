@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Search, Building2 } from 'lucide-react'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface PlatformUser {
   id: number

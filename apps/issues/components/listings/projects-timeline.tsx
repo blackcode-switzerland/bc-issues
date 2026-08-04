@@ -5,7 +5,7 @@ import { addDays, differenceInDays, format, max as maxDate, min as minDate, star
 import { projectStatusColor } from '@/lib/work-items'
 import { ProjectIcon } from '../project-icon'
 import { HealthIcon, StatusIcon } from '@/components/ui/work-item-icons'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface ProjectRow {
   id: number

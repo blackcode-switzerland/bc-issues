@@ -6,11 +6,11 @@ import { formatDistanceToNow } from 'date-fns'
 import { CornerDownRight, Edit3, MessageSquare, Reply, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { uploadFile } from '@/lib/upload'
-import { richTextHasContent } from '@/lib/file-attachment'
-import { RichTextDisplay, RichTextEditor } from './rich-text-editor'
-import type { MentionItem } from './rich-text-editor'
-import { MemberAvatar } from '@/components/ui/member-avatar'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { richTextHasContent } from '@blackcode/platform-ui/file-attachment'
+import { RichTextDisplay, RichTextEditor } from '@blackcode/platform-ui/rich-text-editor'
+import type { MentionItem } from '@blackcode/platform-ui/rich-text-editor'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 
 export interface CommentItem {
   id: number

@@ -6,8 +6,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { AlertTriangle, ArrowLeft, Crown, HardDrive, Loader2, Save, Trash2, Upload } from 'lucide-react'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { avatarColor } from '@/components/ui/member-avatar'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
+import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_BYTES = 5 * 1024 * 1024

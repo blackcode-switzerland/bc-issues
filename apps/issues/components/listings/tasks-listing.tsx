@@ -13,10 +13,10 @@ import { sortItems, TASK_SORTS, SORT_MANUAL } from './sort'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
 import { ProgressRing, StatusIcon } from '@/components/ui/work-item-icons'
 import { ProjectIcon } from '@/components/project-icon'
-import { MemberAvatar } from '@/components/ui/member-avatar'
-import { PropertySelect } from '@/components/ui/property-select'
-import { DatePicker } from '@/components/ui/date-picker'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { PropertySelect } from '@blackcode/platform-ui/ui/property-select'
+import { DatePicker } from '@blackcode/platform-ui/ui/date-picker'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
 import { rankSearch, field, idTokens, stripTags } from '@/lib/listing-search'
 import {
@@ -26,7 +26,7 @@ import {
   motion,
   listContainerVariants,
   listItemVariants,
-} from '@/components/ui/motion'
+} from '@blackcode/platform-ui/ui/motion'
 
 interface TaskRow {
   id: number

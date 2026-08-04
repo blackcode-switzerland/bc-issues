@@ -32,7 +32,7 @@
 
 import { marked } from 'marked'
 import sanitizeHtml from 'sanitize-html'
-import { FILE_ATTACHMENT_ATTRS, renderFileAttachmentHtml } from './file-attachment'
+import { FILE_ATTACHMENT_ATTRS, renderFileAttachmentHtml } from '@blackcode/platform-ui/file-attachment'
 
 const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedTags: [

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, RotateCcw } from 'lucide-react'
-import { Modal } from './modal'
+import { Modal } from '@blackcode/platform-ui/ui/modal'
 
 /**
  * Shown before restoring items whose parent (project/task) is itself in

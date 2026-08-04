@@ -6,7 +6,7 @@ import { useActiveWorkspace } from './listings/use-active-workspace'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { toast } from 'sonner'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import {
   Users,
   UserPlus,

@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 
 interface AdminErrorRow {
   id: number

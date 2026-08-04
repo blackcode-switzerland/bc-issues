@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Moon, Sun } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@blackcode/platform-ui/ui/button'
 
 /**
  * Small icon toggle that switches between light and dark mode.

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2, Save, Trash2, Upload } from 'lucide-react'
-import { avatarColor } from '@/components/ui/member-avatar'
+import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface Me {
   id: number

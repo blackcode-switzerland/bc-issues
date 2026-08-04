@@ -2,7 +2,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
-import { cn } from "@/lib/utils"
+import { cn } from "../utils"
 
 // Source of truth for every clickable surface in the app. Heights/padding match
 // the marketing reference (38px default, 44px lg). cursor-pointer is included on

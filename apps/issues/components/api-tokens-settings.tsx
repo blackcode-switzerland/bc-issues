@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Copy, Key, Loader2, Plus, Trash2 } from 'lucide-react'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 
 interface TokenSummary {
   id: number

@@ -15,14 +15,14 @@ import { BulkActionBar, RowCheckbox, type BulkAction } from './bulk-action-bar'
 import { IssuesKanban } from './issues-kanban'
 import { IssuesTimeline } from './issues-timeline'
 import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { MultiAssigneeSelect } from '@/components/ui/multi-assignee-select'
-import { PropertySelect } from '@/components/ui/property-select'
+import { PropertySelect } from '@blackcode/platform-ui/ui/property-select'
 import { ProjectIcon } from '../project-icon'
 import { ISSUE_PRIORITIES, ISSUE_STATUSES, issueStatusLabel } from '@/lib/work-items'
 import { rankSearch, field, idTokens } from '@/lib/listing-search'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { EmptyState, IssueSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
+import { EmptyState, IssueSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@blackcode/platform-ui/ui/motion'
 
 interface IssueAssignee {
   id: number

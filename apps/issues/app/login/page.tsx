@@ -13,12 +13,12 @@ import {
 } from 'lucide-react'
 
 import { MarketingLayout } from '@/components/marketing/layout'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
+import { Button } from '@blackcode/platform-ui/ui/button'
+import { Input } from '@blackcode/platform-ui/ui/input'
+import { Label } from '@blackcode/platform-ui/ui/label'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@blackcode/platform-ui/ui/tabs'
+import { Separator } from '@blackcode/platform-ui/ui/separator'
+import { cn } from "@blackcode/platform-ui/utils"
 import { PasswordResetFlow } from '@/components/password-reset-flow'
 
 type Mode = 'signin' | 'signup'

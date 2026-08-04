@@ -6,9 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Crown, Search, UserPlus, X, Clock, Copy, Info } from 'lucide-react'
 import { format } from 'date-fns'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { useActiveWorkspace } from '@/components/listings/use-active-workspace'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface Workspace {
   id: number

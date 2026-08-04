@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowLeft, HardDrive, Loader2, Trash2, FileText } from 'lucide-react'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 
 interface StorageReference {
   type: 'issue' | 'task' | 'project' | 'comment' | 'project_update' | 'attachment'

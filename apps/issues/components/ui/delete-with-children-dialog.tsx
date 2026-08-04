@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
-import { Modal } from './modal'
+import { Modal } from '@blackcode/platform-ui/ui/modal'
 
 /**
  * Delete dialog for projects and tasks — where the user must choose what

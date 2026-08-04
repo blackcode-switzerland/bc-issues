@@ -22,9 +22,9 @@ import {
   StatusIcon,
   projectPriorityKey,
 } from '@/components/ui/work-item-icons'
-import { MemberAvatar } from '@/components/ui/member-avatar'
-import { PropertySelect } from '@/components/ui/property-select'
-import { DatePicker } from '@/components/ui/date-picker'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { PropertySelect } from '@blackcode/platform-ui/ui/property-select'
+import { DatePicker } from '@blackcode/platform-ui/ui/date-picker'
 import {
   PROJECT_STATUSES,
   PROJECT_PRIORITIES,
@@ -32,9 +32,9 @@ import {
   projectPriorityLabel,
   projectUpdateStatusLabel,
 } from '@/lib/work-items'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
-import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@/components/ui/motion'
+import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion, listContainerVariants, listItemVariants } from '@blackcode/platform-ui/ui/motion'
 import { rankSearch, field, idTokens, stripTags } from '@/lib/listing-search'
 
 interface ProjectRow {

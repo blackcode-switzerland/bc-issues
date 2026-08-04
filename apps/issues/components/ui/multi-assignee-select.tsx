@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Check, UserPlus } from 'lucide-react'
-import { MemberAvatar } from './member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 export interface AssigneeOption {
   user_id: number

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, Check, ChevronRight, Loader2, Plus, Settings } from 'lucide-react'
 import { toast } from 'sonner'
-import { avatarColor } from '@/components/ui/member-avatar'
+import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface WorkspaceItem {
   id: number

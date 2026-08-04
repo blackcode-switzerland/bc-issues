@@ -18,7 +18,7 @@ import {
   Calendar,
   User,
 } from 'lucide-react'
-import { DatePicker } from '@/components/ui/date-picker'
+import { DatePicker } from '@blackcode/platform-ui/ui/date-picker'
 
 interface Project {
   id: number

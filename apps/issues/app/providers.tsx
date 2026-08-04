@@ -4,7 +4,7 @@ import { SessionProvider } from 'next-auth/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
-import { ConfirmProvider } from '@/components/ui/confirm-dialog'
+import { ConfirmProvider } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { DeleteDialogProvider } from '@/components/ui/delete-with-children-dialog'
 import { GlobalErrorListener } from '@/components/global-error-listener'
 

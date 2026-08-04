@@ -23,16 +23,16 @@ import {
 
 import { MarketingLayout } from '@/components/marketing/layout'
 import { BrowserFrame } from '@/components/marketing/browser-frame'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@blackcode/platform-ui/ui/button'
+import { Badge } from '@blackcode/platform-ui/ui/badge'
+import { Card, CardContent } from '@blackcode/platform-ui/ui/card'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '@/components/ui/accordion'
-import { cn } from '@/lib/utils'
+} from '@blackcode/platform-ui/ui/accordion'
+import { cn } from "@blackcode/platform-ui/utils"
 
 type FeatureStatus = 'live' | 'preview' | 'soon'
 

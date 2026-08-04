@@ -34,7 +34,7 @@ import {
 import { ProjectMembersPanel } from './project-members-panel'
 import { CreateIssueModal } from './create-issue-modal'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { RichTextEditor, RichTextDisplay } from './rich-text-editor'
+import { RichTextEditor, RichTextDisplay } from '@blackcode/platform-ui/rich-text-editor'
 import { formatDistanceToNow } from 'date-fns'
 
 // Status configuration

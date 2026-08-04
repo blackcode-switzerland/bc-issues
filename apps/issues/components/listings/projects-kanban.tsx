@@ -15,7 +15,7 @@ import {
   StatusIcon,
   projectPriorityKey,
 } from '@/components/ui/work-item-icons'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { PROJECT_STATUSES } from '@/lib/work-items'
 
 interface ProjectRow {

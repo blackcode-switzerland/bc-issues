@@ -19,8 +19,8 @@ import {
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { MemberAvatar } from './ui/member-avatar'
-import { DatePicker } from './ui/date-picker'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { DatePicker } from '@blackcode/platform-ui/ui/date-picker'
 import {
   AreaLineChart,
   ColumnChart,

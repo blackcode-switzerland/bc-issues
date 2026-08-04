@@ -25,7 +25,7 @@ import {
   Skeleton,
   listContainerVariants,
   listItemVariants,
-} from '@/components/ui/motion'
+} from '@blackcode/platform-ui/ui/motion'
 
 // Notifications can be about issues or projects — resolve whichever vocabulary matches.
 function statusName(value: unknown): string {
@@ -36,7 +36,7 @@ function statusName(value: unknown): string {
 import { IssueDetailView } from './issue-detail-view'
 import { ProjectDetailView } from './project-detail-view'
 import { TaskDetailView } from './task-detail-view'
-import { avatarColor } from '@/components/ui/member-avatar'
+import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
 
 // The combined inbox spans every workspace the user belongs to, so each row
 // needs a small marker of which workspace it came from. We resolve that from the

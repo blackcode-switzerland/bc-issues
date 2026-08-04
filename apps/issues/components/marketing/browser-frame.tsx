@@ -3,7 +3,7 @@
 import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { cn } from '@/lib/utils'
+import { cn } from "@blackcode/platform-ui/utils"
 
 interface BrowserFrameProps {
   /** Image source for dark mode. */

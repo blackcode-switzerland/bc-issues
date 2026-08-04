@@ -13,9 +13,9 @@ import {
   motion,
   listContainerVariants,
   listItemVariants,
-} from '@/components/ui/motion'
+} from '@blackcode/platform-ui/ui/motion'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { BulkActionBar, RowCheckbox, type BulkAction } from './listings/bulk-action-bar'
 import { PRESET_COLORS, COLOR_NAMES } from './label-colors'
 

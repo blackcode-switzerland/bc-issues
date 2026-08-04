@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
-import { Modal } from './ui/modal'
+import { Modal } from '@blackcode/platform-ui/ui/modal'
 import { ImageUploadField } from './image-upload-field'
 
 interface Props {

@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Building2, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
-import { avatarColor } from '@/components/ui/member-avatar'
+import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface WorkspaceItem {
   id: number

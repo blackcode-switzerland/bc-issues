@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { addDays, differenceInDays, format, max as maxDate, min as minDate, startOfDay } from 'date-fns'
 import { issueStatusColor } from '@/lib/work-items'
 import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface IssueRow {
   id: number

@@ -37,17 +37,17 @@ import {
   useState,
 } from 'react'
 import { toast } from 'sonner'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { ImageLightbox } from '@/components/image-lightbox'
-import { MemberAvatar } from '@/components/ui/member-avatar'
-import { VoiceRecorderModal } from '@/components/voice-recorder-modal'
+import { useConfirm } from './ui/confirm-dialog'
+import { ImageLightbox } from './image-lightbox'
+import { MemberAvatar } from './ui/member-avatar'
+import { VoiceRecorderModal } from './voice-recorder-modal'
 import {
   FA_ATTR,
   FILE_ATTACHMENT_ATTRS,
   FILE_ATTACHMENT_SELECTOR,
   FILE_ATTACHMENT_TAG,
   FILE_ATTACHMENT_TYPE,
-} from '@/lib/file-attachment'
+} from './file-attachment'
 import {
   Bold,
   Italic,

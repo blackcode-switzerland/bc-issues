@@ -206,6 +206,14 @@ multi-app migration later.
 
 ### Steps
 
+0. **Resolve the drizzle-kit snapshot drift first.** `drizzle-kit generate`
+   currently cannot run non-interactively — it stops on a rename/conflict
+   prompt, meaning `schema.ts` has drifted from the last snapshot. `drizzle-kit
+   check` passes, so the migration files are self-consistent; the drift is
+   code-vs-snapshot. Found in Phase 2 and deliberately deferred to here, because
+   this is the first phase that generates a migration. Fix it before writing any
+   other Phase 3 code — a rename prompt during a schema move is how the wrong
+   migration gets generated.
 1. **Rehearse on a Neon branch.** Create `migration-rehearsal` from `main`, run
    everything below against it, point a local dev server at it, exercise the app.
 2. **Create schemas and move tables.**
@@ -599,16 +607,34 @@ branch and its own Blob store.
 
 Preview environment variables — the deliberate minimum:
 
+**Provisioned 2026-08-04.** All three are set on the Preview environment of the
+`bc-issues` Vercel project; Production values are untouched.
+
 | Var | Value |
 |---|---|
-| `DATABASE_URL` | the Neon `preview` branch — never `main` |
-| `NEXTAUTH_SECRET` | reused from Production |
-| `NEXTAUTH_URL` | the preview hostname |
-| `BLOB_READ_WRITE_TOKEN` | the **separate** preview Blob store |
+| `DATABASE_URL` | Neon branch `preview` (`br-proud-bread-assgcqxc`) — never `main` |
+| `NEXTAUTH_SECRET` | **preview-only, freshly generated** — not Production's |
+| `BLOB_READ_WRITE_TOKEN` | store `blackcode-platform-preview-blob` (`store_NLDwCIb2ZGX0rzF9`, public, fra1) |
+
+Two decisions differ from the first draft of this section:
+
+- **`NEXTAUTH_SECRET` is generated, not reused.** Reuse was proposed so a session
+  would carry across, but preview runs on `*.vercel.app` and production on
+  `blackcode.ch` — cookies never cross those origins, so sharing the secret buys
+  nothing and needlessly widens what a preview deploy can mint.
+- **`NEXTAUTH_URL` is deliberately unset on preview.** Every CLI preview deploy
+  gets a unique hostname, so any static value would be wrong for most of them.
+  next-auth v4 infers the URL from `VERCEL_URL` on Vercel. The only direct reads
+  of `NEXTAUTH_URL` in the codebase build absolute URLs for outbound email, and
+  email is disabled on preview anyway.
 
 Deliberately **not** set: `RESEND_*` and `GOOGLE_CLIENT_ID`/`SECRET`. Email and
 Google login therefore do not work on preview; both are exercised on production
 instead. `RUN_MIGRATIONS` is Production-only and must never be set on preview.
+
+When connecting a Blob store, always pass `--environment preview` explicitly.
+The default connect flow injects `BLOB_READ_WRITE_TOKEN` into every environment,
+which would point production at the empty preview store.
 
 The Blob store is separate for a specific reason, not tidiness:
 `sweepOrphanedUrls` in `lib/blob-gc.ts` runs on **user action** — hard-deleting a
@@ -627,6 +653,33 @@ references. Click-throughs include file upload, so this path gets exercised.
 | 6 — cross-app primitives | **required** | adds migrations |
 | 7 — storage | **required** | adds migrations, touches blob deletion |
 | 8 — harden | optional | judgement call |
+
+**Phase 2 extracts three packages, not six.** (Decided 2026-08-04, during
+Phase 2.) The plan assumed all six `platform-*` packages could be extracted
+before Phase 3. They cannot: three are blocked behind work already scheduled for
+a later phase, and forcing them now would mean doing that later phase early,
+badly, and without its migration.
+
+| Package | Lands in | Blocked by |
+|---|---|---|
+| `platform-db` | **Phase 2** ✅ | — |
+| `platform-api` | **Phase 2** ✅ | — |
+| `platform-ui` | **Phase 2** | — |
+| `platform-auth` | **Phase 6** | `events.ts` hardcodes `issues`/`projects`/`tasks`; generalising it *is* Phase 6's `app` + `subject_urn` work |
+| `platform-storage` | **Phase 7** | `blob-refs.ts` scans six app tables by name; Phase 7 replaces it with per-app registered scanners |
+| `platform-agent` | **Phase 5** | `agent-meta.ts` reads app enums; Phase 5 is where `bk meta` regroups under `apps.*` |
+
+The plan's "2 before 3" constraint only ever genuinely required `platform-db`,
+because it owns the platform schema that Phase 3 creates. That is done.
+
+**Consequence for Phase 3:** it also drops the vestigial `comments.issue_id`
+column in its first migration. `comments` is a platform concept and already
+polymorphic, but that live FK to `issues` is a platform→app dependency that
+would break `pg_dump --schema=issues`, the clean extraction path Phase 8
+rehearses. The data is fully backfilled (291 rows, zero without `parent_type`,
+zero where `issue_id` disagrees with `parent_id`) and four code sites write or
+read it. Doing it inside Phase 3 moves `comments` to both the package and the
+`platform` schema in one step instead of two.
 
 The one thing a preview catches that a local dev server cannot is **serverless
 bundling**. Phase 1's `lib/changelog.ts` reading `../../docs` — a path outside

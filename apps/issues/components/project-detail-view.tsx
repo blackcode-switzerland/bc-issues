@@ -11,11 +11,11 @@ import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { ProjectIcon } from './project-icon'
 import { IconPicker } from './icon-picker'
-import { RichTextEditor, RichTextDisplay, type MentionItem } from './rich-text-editor'
+import { RichTextEditor, RichTextDisplay, type MentionItem } from '@blackcode/platform-ui/rich-text-editor'
 import { ActivityFeed } from './activity-feed'
-import { DatePicker } from '@/components/ui/date-picker'
-import { MemberAvatar } from '@/components/ui/member-avatar'
-import { PropertySelect } from '@/components/ui/property-select'
+import { DatePicker } from '@blackcode/platform-ui/ui/date-picker'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { PropertySelect } from '@blackcode/platform-ui/ui/property-select'
 import {
   StatusIcon,
   PriorityIcon,
@@ -31,7 +31,7 @@ import {
   projectUpdateStatusColor,
 } from '@/lib/work-items'
 import { useDeleteDialog } from '@/components/ui/delete-with-children-dialog'
-import { DetailPageSkeleton } from '@/components/ui/motion'
+import { DetailPageSkeleton } from '@blackcode/platform-ui/ui/motion'
 
 interface ProjectMember {
   user_id: number

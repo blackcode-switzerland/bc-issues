@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { uploadFile } from '@/lib/upload'
-import { richTextHasContent } from '@/lib/file-attachment'
+import { richTextHasContent } from '@blackcode/platform-ui/file-attachment'
 import {
   ArrowUp,
   CalendarDays,
@@ -17,16 +17,16 @@ import {
   X,
 } from 'lucide-react'
 import { format } from 'date-fns'
-import type { MentionItem } from './rich-text-editor'
-import { RichTextDisplay, RichTextEditor } from './rich-text-editor'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import type { MentionItem } from '@blackcode/platform-ui/rich-text-editor'
+import { RichTextDisplay, RichTextEditor } from '@blackcode/platform-ui/rich-text-editor'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import {
   StatusIcon,
   PriorityIcon,
   issuePriorityKey,
   projectPriorityKey,
 } from '@/components/ui/work-item-icons'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import type { CommentItem } from './comment-section'
 import {
   issueStatusLabel,

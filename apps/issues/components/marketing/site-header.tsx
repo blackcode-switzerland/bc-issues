@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Brand } from './brand'
 import { ThemeToggle } from './theme-toggle'
-import { Button } from '@/components/ui/button'
+import { Button } from '@blackcode/platform-ui/ui/button'
 
 /**
  * Shared header for every marketing surface (landing, /login, /privacy, /terms).

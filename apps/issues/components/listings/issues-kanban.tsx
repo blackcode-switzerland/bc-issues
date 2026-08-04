@@ -9,7 +9,7 @@ import { format } from 'date-fns'
 import { Calendar } from 'lucide-react'
 import { ISSUE_STATUSES } from '@/lib/work-items'
 import { StatusIcon, PriorityIcon, issuePriorityKey } from '@/components/ui/work-item-icons'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { ProjectIcon } from '../project-icon'
 
 interface IssueAssignee {

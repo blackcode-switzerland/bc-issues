@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { FilterBar, MultiSelect, SearchInput } from './listings/filter-bar'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { issueStatusLabel, projectStatusLabel } from '@/lib/work-items'
 
 interface EventRow {

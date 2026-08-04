@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, X, Globe, Mail, ShieldCheck } from 'lucide-react'
 import { format } from 'date-fns'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 
 interface WhitelistEntry {
   id: number

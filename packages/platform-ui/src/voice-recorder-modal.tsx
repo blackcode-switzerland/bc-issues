@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mic, Square, RotateCcw, Loader2, MicOff } from 'lucide-react'
-import { Modal } from '@/components/ui/modal'
-import { Button } from '@/components/ui/button'
+import { Modal } from './ui/modal'
+import { Button } from './ui/button'
 
 interface VoiceRecorderModalProps {
   open: boolean

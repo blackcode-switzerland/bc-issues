@@ -30,8 +30,8 @@ import { useQuery } from '@tanstack/react-query'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { InboxBadge } from './inbox-badge'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface DashboardLayoutProps {
   children: React.ReactNode

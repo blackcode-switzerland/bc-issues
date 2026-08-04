@@ -1,0 +1,18 @@
+{
+  "root": true,
+  "extends": ["next/core-web-vitals"],
+  "plugins": ["@typescript-eslint"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/apps/**", "../../../apps/*", "@/*"],
+            "message": "A platform package may never import from an app. The dependency runs one way: apps depend on packages. If you need something from apps/, it does not belong in this package — leave it in the app until a second app genuinely needs it unchanged. See PLATFORM-ARCHITECTURE.md §7.6."
+          }
+        ]
+      }
+    ]
+  }
+}

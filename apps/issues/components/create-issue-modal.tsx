@@ -20,7 +20,7 @@ import {
   Minimize2,
   Check,
 } from 'lucide-react'
-import { RichTextEditor } from './rich-text-editor'
+import { RichTextEditor } from '@blackcode/platform-ui/rich-text-editor'
 
 // Canonical issue statuses — must match lib/work-items.ts (ISSUE_STATUSES).
 const STATUSES = [

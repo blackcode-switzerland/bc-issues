@@ -7,14 +7,14 @@ import { formatDistanceToNow } from 'date-fns'
 import { Folder, ListChecks, RotateCcw, Target, Trash2 } from 'lucide-react'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { BulkActionBar, RowCheckbox } from './listings/bulk-action-bar'
-import { MemberAvatar } from '@/components/ui/member-avatar'
-import { useConfirm } from '@/components/ui/confirm-dialog'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import {
   RestoreConflictDialog,
   type RestoreConflict,
   type RestoreResolution,
 } from '@/components/ui/restore-conflict-dialog'
-import { TrashSkeletonRow, AnimatePresence, motion } from '@/components/ui/motion'
+import { TrashSkeletonRow, AnimatePresence, motion } from '@blackcode/platform-ui/ui/motion'
 
 type TrashType = 'issue' | 'project' | 'task'
 

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowLeft, Check, Globe, Mail, Search, UserPlus, Users } from 'lucide-react'
-import { MemberAvatar } from '@/components/ui/member-avatar'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { useActiveWorkspace } from '@/components/listings/use-active-workspace'
 
 interface InviteCandidate {
