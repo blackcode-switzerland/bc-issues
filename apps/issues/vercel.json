@@ -9,6 +9,7 @@
       "main": false
     }
   },
+  "ignoreCommand": "npx turbo-ignore",
   "headers": [
     {
       "source": "/api/(.*)",
