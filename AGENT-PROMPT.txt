@@ -36,12 +36,18 @@ a behaviour changes.
    Wait for a human go-ahead before starting the next phase. Never have two
    phases in flight.
 
-2. VERIFY BEFORE CLAIMING DONE. A phase is done only when all of these pass:
+2. VERIFY BEFORE CLAIMING DONE. A phase is done only when all of these pass,
+   run FROM THE REPO ROOT:
 
-      npx tsc --noEmit
+      npm run typecheck
       npm test
-      cd cli && go build ./... && go vet ./... && go test ./...
       npm run build
+      cd cli && go build ./... && go vet ./... && go test ./...
+
+   Note: `npx tsc --noEmit` no longer works from the root and must not be used.
+   Phase 1 removed the root tsconfig.json on purpose — a root config that
+   compiles nothing reports a vacuous green. `npm run typecheck` fans out
+   through Turborepo instead.
 
    Run them. Paste the real output. If something fails, say so plainly — do not
    describe a phase as complete when it is not.

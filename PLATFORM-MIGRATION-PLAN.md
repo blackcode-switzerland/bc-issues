@@ -16,13 +16,19 @@ is the *how* and *in what order*.
 
 1. **Never break bc-issues.** It is in daily use. Every phase ends deployable.
 2. **One phase, one PR, one merge.** Never two phases in flight.
-3. **Green means green:**
+3. **Green means green** — all four, run **from the repo root**:
    ```bash
-   npx tsc --noEmit
+   npm run typecheck    # NOT `npx tsc --noEmit` — see below
    npm test
+   npm run build
    cd cli && go build ./... && go vet ./... && go test ./...
    ```
-   Plus `npm run build` before any deploy.
+   Plus `cd cli && make routes` whenever a `routes` annotation changed.
+
+   > Changed in Phase 1: there is deliberately no root `tsconfig.json`, because a
+   > root config that compiles nothing reports a **vacuous green** — worse than a
+   > loud failure. `npm run typecheck` fans out through Turborepo to every
+   > workspace. Use it everywhere the old command appeared.
 4. **Changelog discipline holds throughout.** Every agent-visible change gets a
    dated entry in the same commit. Internal refactors (Phases 1, 2) are *not*
    agent-visible and get no entry.
@@ -561,6 +567,72 @@ second app deployed without asking a question.
 - **4 before 5** — `bk meta` can't report `apps` before apps exist as data.
 - **5 before 8** — the template must reflect the final command and doc shape.
 - **Phase 7 can move** anywhere after 3 if it's convenient.
+
+## Decisions taken during the migration
+
+**No continuous deployment; Vercel stays disconnected from GitHub.** (Decided
+2026-08-04, during Phase 1.) Deploys are deliberate and manual — `vercel` for a
+preview, `vercel --prod` for production — which is how this project has always
+shipped.
+
+Consequences, all accepted:
+
+- Preview deployments are created from the CLI (`vercel`, no `--prod`), not by
+  pushing a branch. Every phase's "click through a preview" step uses that.
+- Preview env vars are set in the dashboard against the Preview environment.
+- `ignoreCommand: npx turbo-ignore` in `apps/issues/vercel.json` is a **no-op**,
+  because it only runs on Git-triggered builds. It is kept, not removed, so
+  per-app filtered builds work the day CD is ever wanted.
+- `git.deploymentEnabled.main = false` is likewise inert but kept as a safety
+  net against an accidental future Git connection.
+
+Do not re-propose connecting Git as a prerequisite for anything. If a later
+phase seems to need it, the need is `turbo-ignore`, and the answer is that
+manual deploys already choose what ships.
+
+**Preview deployments: same project, four phases only.** (Decided 2026-08-04.)
+
+A preview is **not a separate Vercel project** — it is the same project deployed
+to a different target (`vercel` vs `vercel --prod`). No second project, no extra
+project cost. What costs something is the preview *environment*: its own Neon
+branch and its own Blob store.
+
+Preview environment variables — the deliberate minimum:
+
+| Var | Value |
+|---|---|
+| `DATABASE_URL` | the Neon `preview` branch — never `main` |
+| `NEXTAUTH_SECRET` | reused from Production |
+| `NEXTAUTH_URL` | the preview hostname |
+| `BLOB_READ_WRITE_TOKEN` | the **separate** preview Blob store |
+
+Deliberately **not** set: `RESEND_*` and `GOOGLE_CLIENT_ID`/`SECRET`. Email and
+Google login therefore do not work on preview; both are exercised on production
+instead. `RUN_MIGRATIONS` is Production-only and must never be set on preview.
+
+The Blob store is separate for a specific reason, not tidiness:
+`sweepOrphanedUrls` in `lib/blob-gc.ts` runs on **user action** — hard-deleting a
+comment, purging from trash — not on a schedule. With a shared store and a
+drifted preview database, a purge on preview deletes bytes production still
+references. Click-throughs include file upload, so this path gets exercised.
+
+**When a preview deploy is required:**
+
+| Phase | Preview? | Why |
+|---|---|---|
+| 2 — extract packages | skip | no schema change; local + production is enough |
+| 3 — schema move | **required** | code against an unmigrated database fails instantly; production is not an acceptable first try |
+| 4 — access enforcement | **required** | this is the phase that can lock the team out |
+| 5 — agent surface | skip | CLI-side; no schema change |
+| 6 — cross-app primitives | **required** | adds migrations |
+| 7 — storage | **required** | adds migrations, touches blob deletion |
+| 8 — harden | optional | judgement call |
+
+The one thing a preview catches that a local dev server cannot is **serverless
+bundling**. Phase 1's `lib/changelog.ts` reading `../../docs` — a path outside
+the app directory — is the archetype: it works locally without question, and
+whether it survives Next's file tracing into a serverless bundle is a separate
+fact. Trace files are good evidence; a real deploy is proof.
 
 ## What is explicitly out of scope
 
