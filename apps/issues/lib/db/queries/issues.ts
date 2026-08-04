@@ -60,7 +60,7 @@ const issueListSelect = sql`
   p.icon AS project_icon,
   p.color AS project_color,
   p.seq AS project_seq,
-  (SELECT COUNT(*)::int FROM ${comments} c WHERE c.issue_id = i.id) AS comment_count,
+  (SELECT COUNT(*)::int FROM ${comments} c WHERE c.parent_type = 'issue' AND c.parent_id = i.id) AS comment_count,
   (SELECT COUNT(*)::int FROM ${attachments} a WHERE a.issue_id = i.id) AS attachment_count,
   COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM ${issueLabels} il JOIN ${labels} lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
 `
