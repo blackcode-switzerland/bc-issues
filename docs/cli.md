@@ -44,11 +44,20 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 | Property | Value |
 |---|---|
 | Language | Go (see `go.mod`; currently 1.26) |
-| Module | `github.com/blackcode-switzerland/bc-issues/cli` |
+| Module | `github.com/blackcode-switzerland/bc-issues/cli` — see note below |
 | Binary | `bk` |
 | Framework | [cobra](https://github.com/spf13/cobra) |
 | Auth | Bearer API tokens (same `api_tokens` table the web uses) |
 | Default server | `http://localhost:3000` |
+
+> **Module path vs repo name.** The GitHub repo was renamed
+> `bc-issues` → `blackcode-platform` on 2026-08-04. The Go module path keeps the
+> old name deliberately: GitHub redirects, the module is never fetched by path
+> (it is built from the checkout), and renaming it would churn every import in
+> `cli/` for no benefit. `cli/npm/install.js` and `devops/release.sh` **were**
+> repointed at the new name, because they build URLs for future releases.
+> Versions published before the rename still reference the old URL and keep
+> working via the redirect.
 
 The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, undo, moving/copying items between workspaces, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
 

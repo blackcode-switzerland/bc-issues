@@ -227,7 +227,7 @@ release_cli() {
   local go
   read -r -p "Proceed? [y/N] " go
   [[ "$go" =~ ^[Yy]$ ]] || die "Aborted."
-  local repo="blackcode-switzerland/bc-issues"
+  local repo="blackcode-switzerland/blackcode-platform"
   local npm_package="@blackcode_sa/bc-issues"
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

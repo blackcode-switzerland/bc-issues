@@ -5,7 +5,9 @@ const path = require('path')
 const { execSync } = require('child_process')
 
 const VERSION = require('./package.json').version
-const REPO = 'blackcode-switzerland/bc-issues'
+// Repo renamed bc-issues → blackcode-platform on 2026-08-04. Versions published
+// before that still point at the old name; GitHub redirects, so they keep working.
+const REPO = 'blackcode-switzerland/blackcode-platform'
 const BIN_DIR = path.join(__dirname, 'bin')
 
 const PLATFORM_MAP = {
