@@ -30,6 +30,61 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-05 — Blob cleanup works across deployments: a shared, database-maintained reference index
+
+**Not breaking.** Nothing you run changes shape. One new super-admin command,
+one behaviour that stops being a dead end before it ever becomes one.
+
+**The problem this fixes.** The previous entry made blob deletion ask *every*
+enabled app whether it still references a file, and refuse if any app could not
+answer. That is the right safety property and it was, as shipped, unsatisfiable:
+each app's deployment connects as its own Postgres role and cannot read another
+app's tables, so it could never obtain the proof. The moment a second app had
+been registered, **blob deletion would have stopped working entirely** — correctly
+and uselessly. It never bit anyone only because exactly one app exists.
+
+**What changed.**
+
+- **`platform.blob_references`** — a shared index of `(url, app, source_type,
+  source_id, workspace_id)`. Any deployment can read the whole picture without
+  reading any app's tables, so "does anything still point at this file?" is now
+  answerable across deployments.
+- **It is maintained by Postgres triggers, not by application code.** Every
+  content table that can hold a file URL carries a trigger that recomputes that
+  row's references on insert, update and delete. This is the important detail: an
+  index maintained by application writes can be forgotten by a new write path,
+  and a *missing* row means a file still in use is reported as an orphan and
+  deleted. Triggers move the obligation from every writer to the schema.
+- **`platform.apps.maintains_blob_index`** — set by an app's own migration, in
+  the same file that installs its triggers. An enabled app is answerable either
+  because its scanner runs in this process (scanned live, and still preferred) or
+  because it has declared the index. Neither is still an **error**, never a
+  "no references": the gate did not loosen, it gained a second admissible proof.
+- **`bk super-admin blob-drift`** (`GET`/`POST /api/super-admin/blob-drift`) —
+  re-derives the index from a live scan and reports the difference, the sibling of
+  `bk super-admin entity-drift`. `--repair` fixes it; `--workspace` narrows it.
+  Read a repair that changes something as a bug report. Two counts are kept apart
+  deliberately: `missing` is a file another deployment could delete while it is in
+  use, `orphaned` is only leaked bytes.
+- **App roles hold `SELECT` on the index and nothing more.** The triggers are
+  `SECURITY DEFINER`, so no app can forge or erase another app's references. If
+  you add an app role, `docs/sql/app-role.sql` step 5b is not optional.
+
+**Also fixed along the way.** `issues.attachments.workspace_id` had been NULL on
+every row since the column was added, which meant the Storage page and
+`bk storage list` never attributed attachment references to a workspace. It is
+backfilled from the parent issue. The delete gate was never affected — it matches
+on URL alone — but the reconciler would have had a silent blind spot over a fifth
+of the index, so `blob-drift` now also counts rows no workspace pass can reach and
+reports them separately from drift.
+
+**How to adapt.** Nothing, unless you are adding an app: then run its migration's
+trigger installation and set `maintains_blob_index`, or blob deletion in every
+other deployment will refuse (safely) until you do. `docs/adding-an-app.md` has
+the ordered steps.
+
+---
+
 ## 2026-08-05 — Uploads are attributed to an app, and cleanup asks every app before deleting
 
 **What changed.**

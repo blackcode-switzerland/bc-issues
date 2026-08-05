@@ -296,6 +296,68 @@ which a difference it reports is unambiguously a bug in that writer rather than 
 race with another one. **A repair that changes something is a bug report, not
 maintenance.**
 
+### The blob reference index (Phase 8)
+
+| Table | Purpose / notable columns |
+|-------|---------------------------|
+| `blob_references` | who points at which stored file, across apps. PK `(app, source_type, source_id, url)`; `workspace_id` (nullable, no FK). `app` is `'platform'` for platform-owned content (comments), which belongs to no single app |
+
+**Why it exists.** Phase 7 made blob deletion require a proven negative from
+*every* enabled app. Per-app Postgres roles make that proof unobtainable across
+deployments — the `issues` deployment cannot read `sales.*` — so with a second
+app, deletion would have refused everything. This index is how an app proves its
+own references to the others without exposing its tables. `platform.apps
+.maintains_blob_index`, set by the app's own migration, is the declaration that
+it does so; an app with neither a locally-registered scanner nor that flag is
+still an **error**, never a `false`.
+
+**It is maintained by Postgres triggers, and that is not an implementation
+detail.** The reflex is to write it from application code in the source write's
+transaction — the `entities` pattern above. The risk profiles are not the same:
+
+| Projection | Drift costs |
+|---|---|
+| `entities` | a stale title in `bk search`. Cosmetic |
+| `blob_references`, **extra** row | a refused delete. Leaked bytes, never data |
+| `blob_references`, **missing** row | a file still in use is reported as an orphan and **deleted**. Vercel Blob `del()` has no undo |
+
+So the dangerous direction is "a write path forgot", and application-level
+maintenance makes that both possible and silent. Triggers fire for every write
+regardless of which code, ORM or psql session did it, so no write path can be
+forgotten. What stays forgettable is adding a *new content column* without a
+trigger — a one-time, checklist-sized surface (`docs/adding-an-app.md`).
+
+The price is one duplication: migration `0037` reimplements the URL recognizer
+from `packages/platform-storage/src/assets.ts` in SQL
+(`platform.extract_uploaded_urls`, `is_uploaded_asset`, `blob_url_host`).
+`apps/issues/lib/storage/sql-parity.integration.test.ts` runs one adversarial
+corpus through both and fails on a single disagreement. Change one, change the
+other.
+
+**App roles hold `SELECT` and nothing more.** The trigger function is
+`SECURITY DEFINER` and owned by the migrator, so the only writer is the trigger
+and no app can forge or erase another app's references. `docs/sql/app-role.sql`
+step 5b revokes the DML that `ALTER DEFAULT PRIVILEGES` would otherwise hand a
+new app role. The single sanctioned delete is
+`platform.blob_refs_purge(app, type, id)`, which the reconciler uses for orphans
+and which refuses a caller naming an app that is not its own.
+
+**Reconciliation.** `reconcileBlobReferences()` (`apps/issues/lib/storage/drift.ts`)
+compares the index against a live scan, at `GET`/`POST /api/super-admin/blob-drift`
+→ `bk super-admin blob-drift [--repair] [--workspace <slug>]`. It matters more
+than `entity-drift`: every future app will have the index and no scanner, while
+`issues` has both, so this is the standing proof — run by the only app that can
+run it — that the mechanism everything else depends on works. A `missing` row is
+repaired by re-triggering the source (`UPDATE t SET col = col`), which is the only
+repair that cannot disagree with the trigger, because it *is* the trigger.
+
+The report also carries `unreconciled_count`: index rows no workspace pass could
+reach (`workspace_id` null, or a workspace that is gone). Not drift — rows nobody
+looked at. It exists because every `attachment` row was in exactly that state when
+the index was first built (`issues.attachments.workspace_id` had never been
+backfilled; `0037` repairs it), and the report cheerfully said "no drift" over a
+fifth of the index.
+
 ### App-owned tables
 
 The ten work-item tables (`issues`, `tasks`, `projects`, `project_updates`,
@@ -720,6 +782,8 @@ PATCH /api/super-admin/errors/{id}     toggle triage state ({ resolved: boolean 
 DELETE /api/super-admin/errors/{id}    permanently delete one event
 GET  /api/super-admin/entity-drift     reconciliation report: re-derive platform.entities from the source tables (?ws=<slug> to narrow)
 POST /api/super-admin/entity-drift     same, and repair the drift it finds
+GET  /api/super-admin/blob-drift       reconciliation report: platform.blob_references vs a live scan (?ws=<slug> to narrow)
+POST /api/super-admin/blob-drift       same, and repair the drift it finds
 ```
 
 All super-admin routes are guarded by `requireSuperAdminUser(req)` — 401 if

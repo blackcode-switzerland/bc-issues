@@ -50,6 +50,20 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA platform, issues
 ALTER DEFAULT PRIVILEGES IN SCHEMA platform, issues
   GRANT USAGE, SELECT ON SEQUENCES TO issues_app;
 
+-- 5b. THE ONE EXCEPTION TO STEP 5: `platform.blob_references`.
+--
+--    The default privileges above hand every future `platform` table full DML to
+--    the app role. That is wrong for exactly one table. `blob_references` is how
+--    each app proves to the OTHERS what files it still points at, and a role with
+--    DELETE on it could erase a rival app's references — after which a delete
+--    that should have been refused goes ahead and the bytes are gone. It is
+--    written only by the SECURITY DEFINER triggers migration 0037 installs, so
+--    the app never needs to write it itself.
+--
+--    Run this AFTER step 5, and re-run it for every new app role.
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON platform.blob_references FROM issues_app;
+GRANT SELECT ON platform.blob_references TO issues_app;
+
 -- 6. search_path is a safety net, not the mechanism. Drizzle writes every table
 --    schema-qualified; this only stops an unqualified ad-hoc query from silently
 --    finding nothing. `public` is deliberately absent — nothing lives there now.

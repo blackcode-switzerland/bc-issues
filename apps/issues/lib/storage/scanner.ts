@@ -21,7 +21,7 @@
 // references": `platform-storage` treats a rejection as "cannot delete", which
 // is the safe answer, and a caught error would turn it into the unsafe one.
 
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import {
   extractUploadedUrls,
   isUploadedAsset,
@@ -34,6 +34,56 @@ import { attachments, comments, issues, projectUpdates, projects, tasks } from '
 
 interface Row {
   [k: string]: unknown
+}
+
+// ---------------------------------------------------------------------------
+// THE INDEX SIDE OF THE SAME SIX SURFACES (Phase 8)
+// ---------------------------------------------------------------------------
+// Migration 0037 puts a trigger on every table scanned below, so that a
+// deployment which cannot read `issues.*` can still learn what this app
+// references. These two maps are the seam between the two mechanisms, and they
+// live HERE — beside the queries — so that adding a seventh surface means
+// editing one file rather than remembering three.
+//
+// If you add a surface: add it to `scanWorkspace` and `isUrlReferenced` above, a
+// trigger in a new migration, and a line to each map below.
+// `lib/storage/drift.integration.test.ts` fails if the maps and the scanner
+// disagree about which types exist.
+
+/**
+ * Which app the index attributes each scanned reference type to.
+ *
+ * `comment` is `'platform'` and the rest are `'issues'`, because
+ * `platform.comments` is a platform-owned table every app writes into: its
+ * references belong to no single app, so the delete gate always consults
+ * `'platform'` regardless of which scanners are registered.
+ */
+export const INDEX_APP_BY_TYPE: Record<string, string> = {
+  issue: APP_SLUG,
+  task: APP_SLUG,
+  project: APP_SLUG,
+  project_update: APP_SLUG,
+  attachment: APP_SLUG,
+  comment: 'platform',
+}
+
+/**
+ * How to make the trigger recompute one row's references: assign the content
+ * column(s) to themselves.
+ *
+ * An `UPDATE OF col` trigger fires on the column being ASSIGNED, not on the
+ * value changing, so this rebuilds the index entry for that row using the exact
+ * code that maintains it — no second implementation to keep in step. It is what
+ * `bk super-admin blob-drift --repair` and migration 0037's backfill both use.
+ */
+export const RETRIGGER_SQL: Record<string, (id: number) => SQL> = {
+  issue: (id) => sql`UPDATE ${issues} SET description = description WHERE id = ${id}`,
+  task: (id) => sql`UPDATE ${tasks} SET description = description WHERE id = ${id}`,
+  project: (id) =>
+    sql`UPDATE ${projects} SET summary = summary, description = description WHERE id = ${id}`,
+  project_update: (id) => sql`UPDATE ${projectUpdates} SET body = body WHERE id = ${id}`,
+  attachment: (id) => sql`UPDATE ${attachments} SET file_url = file_url WHERE id = ${id}`,
+  comment: (id) => sql`UPDATE ${comments} SET content = content WHERE id = ${id}`,
 }
 
 export const issuesReferenceScanner: ReferenceScanner = {

@@ -117,3 +117,28 @@ func (c *Client) EntityDrift(ws string, repair bool) (*EntityDriftReport, error)
 	}
 	return &out, nil
 }
+
+// BlobDrift checks the trigger-maintained `platform.blob_references` index
+// against a live scan of the app's own tables. Same GET-reports / POST-repairs
+// shape as EntityDrift.
+func (c *Client) BlobDrift(ws string, repair bool) (*BlobDriftReport, error) {
+	q := url.Values{}
+	if ws != "" {
+		q.Set("ws", ws)
+	}
+	path := "/api/super-admin/blob-drift"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out BlobDriftReport
+	if repair {
+		if err := c.postJSON(path, nil, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	}
+	if err := c.get(path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

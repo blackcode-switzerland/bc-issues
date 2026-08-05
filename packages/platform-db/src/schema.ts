@@ -144,6 +144,18 @@ export const apps = platformSchema.table('apps', {
   // Global kill switch for the app across every workspace. Distinct from
   // workspace_apps, which is per-organisation.
   enabled: boolean('enabled').default(true).notNull(),
+  // Does this app's schema carry the `platform.blob_references` triggers?
+  //
+  // This is the flag that lets a DIFFERENT deployment answer "does <app>
+  // reference this file?" without reading <app>'s tables — which its Postgres
+  // role forbids (§4.3). It is set by the app's own migration, in the same file
+  // that installs the triggers, and it is the ONLY thing that makes an app
+  // without a locally-registered scanner safe to skip in the delete gate. See
+  // packages/platform-storage/src/references.ts.
+  //
+  // Default false, deliberately: an app that has not proved it maintains the
+  // index blocks blob deletion rather than being assumed absent.
+  maintains_blob_index: boolean('maintains_blob_index').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
@@ -421,6 +433,83 @@ export const uploads = platformSchema.table(
     urlUniq: uniqueIndex('uq_uploads_url').on(t.url),
     workspaceIdx: index('idx_uploads_workspace').on(t.workspace_id),
     workspaceAppIdx: index('idx_uploads_workspace_app').on(t.workspace_id, t.app),
+  })
+)
+
+/**
+ * `platform.blob_references` — who points at which stored file, across apps.
+ *
+ * ── WHY THIS TABLE EXISTS ───────────────────────────────────────────────────
+ * Phase 7's delete gate refuses to remove a blob unless EVERY enabled app has
+ * proved it holds no reference. Correct, and impossible to satisfy across
+ * deployments: per-app Postgres roles (§4.3) mean the `issues` deployment can
+ * never read `sales.*`, so it can never obtain that proof. The moment a second
+ * row landed in `platform.apps`, blob deletion would have stopped working
+ * entirely. This index is how an app proves its own references to everyone else
+ * without exposing its tables.
+ *
+ * ── WHY POSTGRES TRIGGERS AND NOT APPLICATION WRITES ────────────────────────
+ * The migration plan proposed maintaining this from application code, in the
+ * same transaction as the content change — the `platform.entities` pattern from
+ * Phase 6. The risk profile is NOT the same, and that is the one thing to
+ * understand before touching any of this:
+ *
+ *   entities drift  → `bk search` shows a stale title.        Cosmetic.
+ *   blob_references drift, EXTRA row   → a delete is refused.  Safe (leaks bytes).
+ *   blob_references drift, MISSING row → a file still in use is DELETED. There
+ *                                        is no undo behind Vercel Blob `del()`.
+ *
+ * So the dangerous direction is "a write path forgot to update the index", and
+ * application-level maintenance makes that failure both possible and silent —
+ * the next person to add a content column or a write path has to remember. They
+ * will not. Triggers move the obligation from every writer to the schema: they
+ * fire for every INSERT/UPDATE/DELETE regardless of which code, which ORM or
+ * which psql session did it, so no write path can be forgotten. What remains
+ * forgettable is adding a *new content column* without a trigger — a much
+ * smaller, one-time, checklist-sized surface (docs/adding-an-app.md step 2).
+ *
+ * ── THE ROWS ARE NOT WRITABLE BY APPS ───────────────────────────────────────
+ * App roles hold SELECT only. The trigger function is SECURITY DEFINER and owned
+ * by the migrator, so the only writer is the trigger, and an app cannot forge a
+ * reference for another app or delete one. See docs/sql/app-role.sql.
+ *
+ * ── STILL A PROJECTION, SO STILL RECONCILED ─────────────────────────────────
+ * `bk super-admin blob-drift` re-derives the index from the live scanner and
+ * reports the difference — the same guarantee `bk super-admin entity-drift`
+ * gives the Phase 6 projection. It matters more here: it is the standing proof
+ * that the trigger mechanism is actually working, run continuously by the one
+ * app that also has a scanner to check it against.
+ */
+export const blobReferences = platformSchema.table(
+  'blob_references',
+  {
+    // The stored file's public URL — the join key, matching `uploads.url`. No
+    // FK: the ledger row can legitimately be missing (an old upload, or a URL
+    // pasted between workspaces) and a reference must still count.
+    url: text('url').notNull(),
+    // Who holds the reference. `'platform'` for content in platform-owned
+    // tables (comments), which belongs to no single app. No FK to apps.slug,
+    // for that reason and because deregistering an app must not silently drop
+    // its references and unblock a delete.
+    app: varchar('app', { length: 40 }).notNull(),
+    // The referencing row, in the app's own vocabulary — the same `type`/`id`
+    // pair the scanner's `Reference` carries, so the reconciler can compare the
+    // two directly. Deliberately NOT a URN: comments, project updates and
+    // attachments have no #number and therefore no URN, and half the index
+    // being unaddressable would make the column a trap.
+    source_type: varchar('source_type', { length: 40 }).notNull(),
+    source_id: bigint('source_id', { mode: 'number' }).notNull(),
+    // Nullable, and never a cascade target: this column exists so the Storage
+    // page can attribute a foreign app's reference to a workspace. Losing it
+    // must not lose the reference.
+    workspace_id: integer('workspace_id'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.app, t.source_type, t.source_id, t.url] }),
+    // The delete gate's query: "is this url referenced by any of these apps?"
+    urlAppIdx: index('idx_blob_references_url_app').on(t.url, t.app),
+    wsIdx: index('idx_blob_references_workspace').on(t.workspace_id),
   })
 )
 

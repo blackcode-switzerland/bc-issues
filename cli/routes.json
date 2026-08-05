@@ -133,6 +133,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/super-admin/blob-drift",
+      "command": "bk super-admin blob-drift"
+    },
+    {
+      "method": "GET",
       "path": "/api/super-admin/entity-drift",
       "command": "bk super-admin entity-drift"
     },
@@ -405,6 +410,11 @@
       "method": "POST",
       "path": "/api/me/inbox/unarchive",
       "command": "bk inbox unarchive"
+    },
+    {
+      "method": "POST",
+      "path": "/api/super-admin/blob-drift",
+      "command": "bk super-admin blob-drift"
     },
     {
       "method": "POST",

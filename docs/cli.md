@@ -668,6 +668,7 @@ workspace-scoped — the whitelist and error log are platform-wide.
 | `bk super-admin errors delete <id> [id ...] [--yes]` | `DELETE /api/super-admin/errors/{id}` (single) or `DELETE /api/super-admin/errors` `{ids}` (bulk) | Permanent. Prompts to confirm. |
 | `bk super-admin errors stats` | `GET /api/super-admin/errors?stats=1` | Total / open / resolved counts. |
 | `bk super-admin entity-drift [--repair] [--workspace S]` | `GET` / `POST /api/super-admin/entity-drift` | The Phase 6 reconciliation job: re-derives `platform.entities` from each app's source tables and reports `missing` / `stale` / `orphaned`. Exits 0 either way — branch on `drift_count`, not the exit code. `--repair` switches to `POST`. **A repair that changes something is a bug report, not maintenance:** there is one writer, so anything it fixes means that writer is wrong. |
+| `bk super-admin blob-drift [--repair] [--workspace S]` | `GET` / `POST /api/super-admin/blob-drift` | The Phase 8 storage reconciliation job: compares the trigger-maintained `platform.blob_references` index against a live scan. Exits 0 either way — branch on `missing_count` first: a `missing` row is a file another deployment could delete while it is still in use, an `orphaned` one is only leaked bytes. Also reports `unreconciled_count` — index rows no workspace pass could reach, which are **not** drift but were never checked, so a zero `drift_count` beside a non-zero one is not a clean bill of health. |
 
 ```bash
 bk super-admin whitelist add --type domain --value blackcode.ch

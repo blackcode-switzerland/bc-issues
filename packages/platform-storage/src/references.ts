@@ -32,17 +32,31 @@
 //      not permit one.
 //   3. An unknown URL counts as referenced.
 //
-// The consequence is deliberate and worth stating plainly: **once a second app
-// is registered in `platform.apps`, blob deletion stops working in this
-// deployment until that app's scanner is registered in this process.** That is
-// the correct failure. One app's deployment cannot read another app's schema —
-// its Postgres role has no grant (§4.3) — so it genuinely cannot prove a file is
-// unreferenced, and a delete it cannot justify is a delete it must refuse.
-// Making that work across deployments is a cross-app protocol, not a scan; it is
-// out of Phase 7's scope and recorded as a carry-forward.
+// ── PHASE 8: THE SECOND WAY AN APP CAN BE ANSWERED FOR ───────────────────────
+//
+// As Phase 7 shipped it, the only way to cover an app was to register its
+// scanner in this process — which a *different deployment* can never do. One
+// app's deployment cannot read another app's schema (its Postgres role has no
+// grant, §4.3), so the moment a second row landed in `platform.apps`, blob
+// deletion here would have stopped working entirely. Correctly, and uselessly.
+//
+// Phase 8 adds the missing half: `platform.blob_references`, an index each app
+// maintains **from Postgres triggers on its own content tables**, which any
+// deployment may read. So an enabled app is answerable when EITHER
+//
+//   (a) its scanner is registered here — authoritative, a live scan of the
+//       real tables, and still what we use whenever it is available; or
+//   (b) `platform.apps.maintains_blob_index` is true — its migration installed
+//       the triggers, so the index speaks for it.
+//
+// Neither → still an ERROR, never a `false`. The gate did not loosen; it grew a
+// second admissible proof. See `packages/platform-db/src/schema.ts` at
+// `blobReferences` for why the index is maintained by triggers rather than by
+// application code, which is the part that actually makes (b) safe.
 
 import { type SQL } from 'drizzle-orm'
-import { listAppSlugs } from './apps'
+import { listAppSlugs, listEnabledAppCoverage } from './apps'
+import { isUrlReferencedByIndex, listIndexedWorkspaceReferences } from './index-refs'
 
 /**
  * The narrow slice of a Drizzle client this module needs. Both `db` and a
@@ -120,58 +134,96 @@ export function clearReferenceScanners(): void {
   scanners.clear()
 }
 
+/** How each enabled app will be answered for, once coverage has been proven. */
+export interface Coverage {
+  /** Enabled apps whose scanner is registered here — scanned live. */
+  scanned: string[]
+  /** Enabled apps answered for through `platform.blob_references`. */
+  indexed: string[]
+}
+
 /**
- * Throw unless every enabled app in `platform.apps` has a registered scanner.
+ * Throw unless every enabled app in `platform.apps` can be answered for, and
+ * return how each one will be.
  *
  * This is the gate that turns "nobody claimed it" into a fact rather than an
  * assumption. It runs before every reference answer — both the delete-time one
  * and the one the Storage page shows, because a count of 0 on that page is the
  * signal a human acts on.
+ *
+ * A registered scanner WINS over the index even when both are available. The
+ * scanner reads the live tables; the index is a projection, and a projection is
+ * only ever consulted when the real thing is out of reach. That ordering is also
+ * what makes `bk super-admin blob-drift` meaningful: the app that can do both
+ * continuously proves the index right for the apps that cannot.
  */
-export async function assertScannerCoverage(db: Executor): Promise<void> {
-  const enabled = await listAppSlugs(db, { enabledOnly: true })
+export async function assertScannerCoverage(db: Executor): Promise<Coverage> {
+  const enabled = await listEnabledAppCoverage(db)
 
   if (enabled.length === 0) {
     throw new ReferenceCoverageError(
       'no enabled app in platform.apps — refusing to answer a reference question with an empty registry'
     )
   }
-  const missing = enabled.filter((slug) => !scanners.has(slug))
+
+  const scanned: string[] = []
+  const indexed: string[] = []
+  const missing: string[] = []
+  for (const app of enabled) {
+    if (scanners.has(app.slug)) scanned.push(app.slug)
+    else if (app.maintains_blob_index) indexed.push(app.slug)
+    else missing.push(app.slug)
+  }
+
   if (missing.length > 0) {
     throw new ReferenceCoverageError(
-      `no reference scanner registered for enabled app(s): ${missing.join(', ')}. ` +
-        'Refusing to report references, because an unscanned app may still be using the file.'
+      `no reference scanner registered, and no blob-reference index declared, for enabled app(s): ${missing.join(', ')}. ` +
+        'Refusing to report references, because an unscanned app may still be using the file. ' +
+        "Either register that app's scanner in this process, or run its migration that installs " +
+        'the platform.blob_references triggers and sets platform.apps.maintains_blob_index.'
     )
   }
+  return { scanned, indexed }
 }
 
 /**
- * url → references[] for one workspace, across every registered app.
+ * url → references[] for one workspace, across every app.
  *
- * Used by the Storage page and `bk storage list`. O(total content size) per app.
- * Scanners run concurrently; if any rejects, so does this.
+ * Used by the Storage page and `bk storage list`. O(total content size) per
+ * locally-scanned app, one indexed query for all the rest. Scanners run
+ * concurrently; if any rejects, so does this.
+ *
+ * Platform-owned content (comments) always comes from the index — see
+ * `PLATFORM_REF_APP` — so it is accounted for even when a locally-registered
+ * scanner also covers it. The duplicate is harmless: both say "referenced".
  */
 export async function computeWorkspaceReferences(
   db: Executor,
   workspaceId: number
 ): Promise<Map<string, Reference[]>> {
-  await assertScannerCoverage(db)
+  const coverage = await assertScannerCoverage(db)
 
   const map = new Map<string, Reference[]>()
-  const results = await Promise.all(
-    [...scanners.values()].map(async (scanner) => ({
-      app: scanner.app,
-      found: await scanner.scanWorkspace(db, workspaceId),
-    }))
-  )
-
-  for (const { app, found } of results) {
-    for (const [url, refs] of found) {
-      const list = map.get(url) ?? []
-      for (const ref of refs) list.push({ app, ...ref })
-      map.set(url, list)
-    }
+  const add = (url: string, refs: Reference[]) => {
+    const list = map.get(url) ?? []
+    list.push(...refs)
+    map.set(url, list)
   }
+
+  const [scanned, indexed] = await Promise.all([
+    Promise.all(
+      coverage.scanned.map(async (app) => ({
+        app,
+        found: await scanners.get(app)!.scanWorkspace(db, workspaceId),
+      }))
+    ),
+    listIndexedWorkspaceReferences(db, workspaceId, coverage.indexed),
+  ])
+
+  for (const { app, found } of scanned) {
+    for (const [url, refs] of found) add(url, refs.map((ref) => ({ app, ...ref })))
+  }
+  for (const [url, refs] of indexed) add(url, refs)
   return map
 }
 
@@ -184,12 +236,15 @@ export async function computeWorkspaceReferences(
  */
 export async function isUrlReferencedAnywhere(db: Executor, url: string): Promise<boolean> {
   if (!url) return true // unknown → treat as referenced (fail safe)
-  await assertScannerCoverage(db)
+  const coverage = await assertScannerCoverage(db)
 
   // Every scanner runs, and a rejection is not swallowed: Promise.all rejects on
-  // the first failure and the caller must treat that as "cannot delete".
-  const answers = await Promise.all(
-    [...scanners.values()].map((scanner) => scanner.isUrlReferenced(db, url))
-  )
+  // the first failure and the caller must treat that as "cannot delete". The
+  // index query is in the same Promise.all for the same reason — a failure to
+  // read it is a failure to answer, never a "no".
+  const answers = await Promise.all([
+    ...coverage.scanned.map((app) => scanners.get(app)!.isUrlReferenced(db, url)),
+    isUrlReferencedByIndex(db, url, coverage.indexed),
+  ])
   return answers.some(Boolean)
 }

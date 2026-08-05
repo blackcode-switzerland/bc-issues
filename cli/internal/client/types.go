@@ -698,3 +698,34 @@ type EntityDrift struct {
 	Kind       string `json:"kind" yaml:"kind"`
 	Detail     string `json:"detail" yaml:"detail"`
 }
+
+// BlobDriftReport is the storage reconciler's answer. The two counts are kept
+// apart on purpose: `missing` is a file that another deployment could delete
+// while it is still in use, `orphaned` is only leaked bytes. Collapsing them
+// into one number would hide the difference between "act now" and "tidy up".
+type BlobDriftReport struct {
+	Scope         string         `json:"scope" yaml:"scope"`
+	ScannedCounts map[string]int `json:"scanned_counts" yaml:"scanned_counts"`
+	IndexedCounts map[string]int `json:"indexed_counts" yaml:"indexed_counts"`
+	MissingCount  int            `json:"missing_count" yaml:"missing_count"`
+	OrphanedCount int            `json:"orphaned_count" yaml:"orphaned_count"`
+	DriftCount    int            `json:"drift_count" yaml:"drift_count"`
+	// Index rows no workspace pass could reach — `workspace_id` null, or pointing
+	// at a workspace that is gone. NOT drift: rows nobody looked at. Kept as its
+	// own number because a zero DriftCount over a partially-examined index is the
+	// most reassuring wrong answer this report can give.
+	UnreconciledCount int         `json:"unreconciled_count" yaml:"unreconciled_count"`
+	Drift             []BlobDrift `json:"drift" yaml:"drift"`
+	DriftTruncated    int         `json:"drift_truncated" yaml:"drift_truncated"`
+	Repaired          int         `json:"repaired" yaml:"repaired"`
+}
+
+type BlobDrift struct {
+	URL         string `json:"url" yaml:"url"`
+	App         string `json:"app" yaml:"app"`
+	SourceType  string `json:"source_type" yaml:"source_type"`
+	SourceID    int    `json:"source_id" yaml:"source_id"`
+	WorkspaceID int    `json:"workspace_id" yaml:"workspace_id"`
+	Kind        string `json:"kind" yaml:"kind"`
+	Detail      string `json:"detail" yaml:"detail"`
+}

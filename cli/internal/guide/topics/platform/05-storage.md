@@ -38,11 +38,12 @@ usage total is always the whole workspace's — filtering the list never changes
 it.
 
 Reference counting spans **every** app, and a delete needs a proven negative: a
-file is removable only when no app references it. If that cannot be established —
-an app whose scanner is unavailable — the delete is **refused** rather than
-allowed. Read an unexpected refusal as *"could not prove this file is unused"*,
-not as *"the file is in use"*; retrying later is the right response, and no
-amount of `--yes` overrides it.
+file is removable only when no app references it. An app the deployment can read
+directly is scanned live; every other app is answered for out of a shared index
+that app's own database keeps up to date. If neither is available for some app,
+the delete is **refused** rather than allowed. Read an unexpected refusal as
+*"could not prove this file is unused"*, not as *"the file is in use"*; retrying
+later is the right response, and no amount of `--yes` overrides it.
 
 These commands require workspace **owner** role; anything else gets exit **4**.
 

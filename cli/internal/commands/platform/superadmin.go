@@ -22,7 +22,8 @@ Everything here affects the WHOLE platform, across every workspace:
   users         list every member on the platform
   whitelist     manage which emails/domains may register or be invited
   errors        browse, triage, and clear the server error log
-  entity-drift  check the cross-app entity index against each app's tables`
+  entity-drift  check the cross-app entity index against each app's tables
+  blob-drift    check the cross-app blob-reference index against a live scan`
 
 func newSuperAdminCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -36,7 +37,109 @@ func newSuperAdminCmd() *cobra.Command {
 		newSuperAdminWhitelistCmd(),
 		newSuperAdminErrorsCmd(),
 		newSuperAdminEntityDriftCmd(),
+		newSuperAdminBlobDriftCmd(),
 	)
+	return cmd
+}
+
+// ---------- blob-drift (the Phase 8 storage reconciliation job) ----------
+
+func newSuperAdminBlobDriftCmd() *cobra.Command {
+	var (
+		repair bool
+		ws     string
+	)
+	cmd := &cobra.Command{
+		Use: "blob-drift",
+		Annotations: map[string]string{
+			"routes": "GET /api/super-admin/blob-drift, POST /api/super-admin/blob-drift",
+		},
+		Short: "Check platform.blob_references against a live scan of this app's tables",
+		Long: `Check the cross-app blob-reference index against a live scan.
+
+platform.blob_references is how one deployment learns what ANOTHER app's content
+points at, without being able to read its tables. It is maintained by Postgres
+triggers, so no application write path can forget it — this command is what
+proves that is still true.
+
+  missing   a live reference the index does not have. THE SERIOUS ONE: another
+            deployment would read the index, find nothing, and delete a file
+            that is still in use. Vercel Blob del() has no undo.
+  orphaned  an index entry nothing references any more. Costs a refused delete
+            (leaked bytes), never data.
+
+Exit is 0 whether or not there is drift; read missing_count first. --repair
+re-triggers the affected source rows and purges true orphans, but read a repair
+that changes something as a BUG REPORT: a trigger did not fire, and that is a
+fault in the schema. --workspace narrows it to one workspace.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, err := cmdutil.NewClient()
+			if err != nil {
+				return err
+			}
+			if ws == "" {
+				ws = cmdutil.WSOverride
+			}
+			rep, err := c.BlobDrift(ws, repair)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, rep, func(w io.Writer) error {
+				fmt.Fprintf(w, "Scope:   %s\n", rep.Scope)
+				tw := output.Tabwriter(w)
+				fmt.Fprintln(tw, "APP\tSCANNED\tINDEXED")
+				for app, n := range rep.ScannedCounts {
+					fmt.Fprintf(tw, "%s\t%d\t%d\n", app, n, rep.IndexedCounts[app])
+				}
+				if err := tw.Flush(); err != nil {
+					return err
+				}
+				// Printed BEFORE the verdict, and on stdout, because it qualifies
+				// the verdict: "no drift" over an index a fifth of which was never
+				// examined is not the same statement as "no drift".
+				if rep.UnreconciledCount > 0 {
+					fmt.Fprintf(w, "\nUnreconciled: %d index row(s) no workspace pass could reach\n",
+						rep.UnreconciledCount)
+					fmt.Fprintln(w, "  (workspace_id null, or a workspace that no longer exists — these were NOT checked)")
+				}
+				if rep.DriftCount == 0 {
+					fmt.Fprintln(w, "\nNo drift.")
+					return nil
+				}
+				fmt.Fprintf(w, "\nDrift: %d missing, %d orphaned\n", rep.MissingCount, rep.OrphanedCount)
+				dt := output.Tabwriter(w)
+				fmt.Fprintln(dt, "KIND\tAPP\tSOURCE\tURL")
+				for _, d := range rep.Drift {
+					fmt.Fprintf(dt, "%s\t%s\t%s:%d\t%s\n", d.Kind, d.App, d.SourceType, d.SourceID,
+						cmdutil.Truncate(d.URL, 60))
+				}
+				if err := dt.Flush(); err != nil {
+					return err
+				}
+				// Never let a cap read as a clean bill of health.
+				if rep.DriftTruncated > 0 {
+					fmt.Fprintf(cmd.ErrOrStderr(), "(%d more not listed)\n", rep.DriftTruncated)
+				}
+				// A missing row is the one that ends in a deleted file. Say so on
+				// stderr, where a script that only parses stdout still shows it.
+				if rep.MissingCount > 0 {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"warning: %d live reference(s) are absent from the index — a deployment that cannot scan this app would consider those files unreferenced\n",
+						rep.MissingCount)
+				}
+				if repair {
+					fmt.Fprintf(w, "Repaired: %d\n", rep.Repaired)
+				}
+				return nil
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&repair, "repair", false, "Fix the drift as well as reporting it")
+	cmd.Flags().StringVar(&ws, "workspace", "", "Only this workspace (slug); default is every workspace")
 	return cmd
 }
 
