@@ -16,12 +16,26 @@
 // working version to move to. Because both values read from env, the floor can
 // also be rolled back instantly without a redeploy.
 //
-// Current state (2026-08-03): 1.9.0 adds `bk guide` and `bk skill`, which is what
-// makes the CLI self-describing and self-repairing. The floor stays at 1.8.7
-// deliberately — a 1.8.x client still works, it just doesn't have those commands.
-// Raise the floor to 1.9.0 only after 1.9.0 has soaked (see
-// AGENT-SURFACE-SIMPLIFICATION-PLAN.md §8.6), by setting BK_CLI_MIN=1.9.0 — no
-// redeploy needed.
+// Current state (2026-08-04): 1.10.0 namespaces app commands behind their app
+// name — `bk issues issue create`, not `bk issue create`. Every pre-1.10.0
+// spelling still runs as a deprecated alias that prints one stderr line, and
+// those aliases are pruned in 1.12.0.
+//
+// The floor stays at 1.9.1 deliberately, and that is the whole point of the
+// deprecation window: a 1.9.x client still works against this server, it just
+// uses the old spellings. Raising the floor now would break the callers the
+// aliases exist to protect. **The floor moves in Phase 8** of
+// PLATFORM-MIGRATION-PLAN.md, once 1.10.0 adoption is visible — by setting
+// BK_CLI_MIN, no redeploy needed.
+//
+// NOTE (2026-08-04): production is currently serving X-BK-CLI-Latest 1.9.3, not
+// 1.10.0. The release commit that bumped this constant landed AFTER the web
+// deploy — an unavoidable consequence of deploying the server before publishing
+// the CLI, which was the right order (the new server is backwards compatible
+// with 1.9.x clients; a 1.10.0 client against the old server would have got an
+// unfiltered feed from `bk changelog --app`). Effect: 1.9.x users get no soft
+// "update available" nudge yet. Fix with either a redeploy or BK_CLI_LATEST=1.10.0
+// in Vercel — the env override exists for exactly this.
 
 export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '1.10.0'
 export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '1.9.1'
