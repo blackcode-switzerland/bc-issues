@@ -30,11 +30,36 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
-## 2026-08-05 — `bk trash` refs are now #numbers, and `bk undo` is removed
+## 2026-08-05 — CLI 1.12.0: three breaking changes
 
-**Two breaking changes, both in the CLI. Read the trash one before upgrading.**
+**All three are in the CLI. Read all three before upgrading — the trash one can
+destroy the wrong item if you reuse an old ref.**
 
-### `bk trash` refs are `#number`s, not row ids
+1. **The pre-1.10.0 command spellings stop working.** `bk issue …`, `bk task …`,
+   `bk project …`, `bk move`, `bk copy`, `bk analytics` have been deprecated
+   aliases since 1.10.0 (two minors, as promised) and are now removed. Use
+   `bk issues issue …` and friends. A removed spelling still prints the new one
+   rather than "unknown command", so a stale script recovers instead of dying.
+2. **`bk trash` refs are `#number`s, not row ids.**
+3. **`bk undo` is removed.** It never worked.
+
+Each is detailed below.
+
+### 1. The pre-1.10.0 aliases are gone
+
+On schedule. `cli/internal/commands/deprecations.go` keeps a row for each, so:
+
+```
+$ bk issue create --title x
+error: unknown command "issue" for "bk"
+hint: `bk issue …` is now `bk issues issue …` — app verbs sit behind their app
+      name. Same flags, same output.
+```
+
+If you pinned to 1.11.x you are unaffected until you upgrade. Agents that read
+`bk guide` or ran `bk skill sync` since 1.10.0 already use the new spellings.
+
+### 2. `bk trash` refs are `#number`s, not row ids
 
 `bk trash list`'s **REF** column used to print an internal database row id — the
 one place the platform exposed a serial instead of the `#number` used by URNs,
@@ -63,15 +88,21 @@ The wire format keeps the two unambiguous rather than redefining one:
 still means the row id. **Every pre-1.12.0 binary therefore keeps working
 unchanged** — it sends `id`, and the server reads it as a row id exactly as
 before. An item carrying both is rejected as ambiguous rather than guessed at.
-Redefining `id` would have made every installed binary silently purge the wrong
-row, which is why it was not an option.
+
+**Why the field changed shape instead of meaning.** Both spellings were driven
+against the same server before this shipped. A 1.11.0 binary printed `issue:953`
+and restored the right item; the 1.12.0 binary printed `issue:16` and restored the
+right item. **Had `id` simply been redefined to mean the #number, that first call
+would have acted on a completely different issue — and on `purge`, destroyed it**,
+silently, on every installed binary at once. That counterfactual is the entire
+reason for the two-field design.
 
 Also fixed: `bk trash list` reported a `#number` for issues but `null` for
 projects and tasks, even though both have had one since migration 0030. All three
 now report it. A row with no `#number` shows `—` and a stderr warning rather than
 falling back to a row id — such a row can only be restored with `--batch`.
 
-### `bk undo` is removed
+### 3. `bk undo` is removed
 
 It never worked. `platform.transaction_log` had no writer, so the table was empty
 in production and `bk undo` reported zero operations every time it has ever been
@@ -85,12 +116,26 @@ bk trash list
 bk trash restore issue:42
 ```
 
-`bk undo` now exits non-zero with a hint naming Trash, and `limits.undo_max_count`
-no longer appears in `bk meta`. **`GET`/`POST /api/undo` return `410 Gone` with a
-`suggestion`** rather than disappearing: a pre-1.12.0 binary still has the command
-and still calls the route, and a deleted route would have handed it Next's HTML
-404 page — ~2KB of markup on stderr with nothing to act on. Found by running the
-published 1.11.0 binary against the new build before promoting it. The empty
+**If your binary is older than 1.12.0 it still HAS `bk undo`**, and running it now
+gets this — not a crash, and not a wall of HTML:
+
+```
+$ bk undo --count 1 --yes
+error: `bk undo` was removed in 1.12.0. It never recorded anything and could not
+       undo — the transaction log it read was never written. (410)
+hint:  deletes are restorable: `bk trash list`, then `bk trash restore <type>:<#number>`
+```
+
+`GET`/`POST /api/undo` return **410 Gone with a `suggestion`** rather than
+disappearing. Deleting the route outright handed installed binaries Next's HTML
+404 page — roughly 2KB of markup on stderr, no code, no hint, nothing an agent
+could act on. That was caught by running the published 1.11.0 binary against the
+new build before promoting it, and it is the same treatment `/api/openapi.json`
+has had since 2026-08-03. Upgrading is still the right move; you are not stuck
+either way.
+
+On 1.12.0 itself, `bk undo` is gone from the command tree and
+`limits.undo_max_count` no longer appears in `bk meta`. The empty
 `platform.transaction_log` table is left in place for now; dropping it is a
 separate change.
 
@@ -98,7 +143,7 @@ The per-issue activity view lost its "changes" half, which read the same empty
 table and has returned nothing for its entire existence. Real history is
 `platform.events`, which the activity feed and inbox already read.
 
-### `platform.events.app` and `platform.uploads.app` are now `NOT NULL`
+### Not breaking: `platform.events.app` and `platform.uploads.app` are now `NOT NULL`
 
 The contract half of the expand → migrate → contract started in migrations 0035
 and 0036. No client-visible change: all current code sets `app`, which is exactly

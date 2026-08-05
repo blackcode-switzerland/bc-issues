@@ -116,16 +116,17 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(issues.NewGroup())
 	root.AddCommand(template.NewCmd())
 
-	// …and the pre-1.10.0 spellings, still working. Registered before
-	// rejectUnknownSubcommands so the groups get their RunE, and deprecated
-	// after it so that RunE is what carries the warning.
-	aliases := registerAppAliases(root, issues.LegacyTopLevel())
+	// The pre-1.10.0 spellings (`bk issue …`, `bk task …`, …) were registered
+	// here as working, warning aliases from 1.10.0. **Removed in 1.12.0**, on the
+	// two-minor schedule promised when they were introduced.
+	//
+	// The rows in deprecations.go deliberately STAY for one more release. Cobra
+	// now answers `bk issue create` with `unknown command "issue" for "bk"`, and
+	// hintFor() turns that into the new spelling — so the removal still names its
+	// own exit instead of dead-ending an agent mid-run. A hint outliving the
+	// thing it replaces is the point.
 
 	rejectUnknownSubcommands(root)
-
-	for _, c := range aliases {
-		deprecateTree(c, issues.Slug)
-	}
 	return root
 }
 

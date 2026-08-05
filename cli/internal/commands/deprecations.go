@@ -79,6 +79,19 @@ func DeprecationHint(errMsg string) string {
 		if note, ok := deprecations[sub]; ok {
 			return note
 		}
+		// `sub` is cobra's whole remaining argv, not one word. A removed
+		// TOP-LEVEL command is reported as `unknown command "issue list" for
+		// "bk"` — so the lookup above misses `issue`, and the three most-used
+		// spellings (`bk issue …`, `bk task …`, `bk project …`) fell through to
+		// the generic hint while the single-word ones (`bk move`, `bk copy`,
+		// `bk analytics`) matched. Found by running the built binary; the test
+		// that should have caught it was asserting a hand-written single-word
+		// error string instead of the one cobra actually emits.
+		if first, _, found := strings.Cut(sub, " "); found {
+			if note, ok := deprecations[first]; ok {
+				return note
+			}
+		}
 	}
 	return ""
 }
