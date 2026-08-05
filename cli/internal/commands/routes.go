@@ -152,7 +152,19 @@ func CollectRoutes(root *cobra.Command) ([]RouteEntry, []string) {
 						Command: c.CommandPath(),
 						App:     appForCommand(c.CommandPath()),
 					}
-					seen[e.Method+" "+e.Path] = e
+					// Keyed by APP + method + path, not method + path.
+					//
+					// Two apps are two deployments, so `GET /api/workspaces/{ws}/notes`
+					// on one is a different route from the same path on the other.
+					// Deduping without the app silently dropped the second app's
+					// entry — and because the parity guard then found NO commands
+					// for that app, its "discovers both sides" assertion was the
+					// only thing standing between that and a vacuous green.
+					//
+					// Found by walking docs/adding-an-app.md: the new app copied
+					// the scaffold's route path, and its parity test reported that
+					// no bk command belonged to it.
+					seen[e.App+" "+e.Method+" "+e.Path] = e
 				}
 			}
 		}

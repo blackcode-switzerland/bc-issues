@@ -628,6 +628,35 @@ decides whether any of the previous seven were worth it.
 6. **Final CLI release** and, one release later, raise `CLI_MIN_VERSION` to the
    first namespaced version.
 
+### The Phase 8 cutover — pinned 2026-08-05, before the window opened
+
+Phase 8 carries two migrations with different characters, and the second decides
+the shape:
+
+| | | |
+|---|---|---|
+| `0037`, `0038` | additive | **already applied to main**, deliberately early, to soak the triggers against real production writes |
+| `0039` | contract | `events.app` / `uploads.app` → `NOT NULL`. Satisfied by code already in production |
+| `0040` | **BREAKING** | `workspace_counters` changes schema. Old code reads the old location, so applying it breaks running production |
+
+**0040 dominates, so the cutover is Phase 3's shape, not Phase 4's:**
+
+1. Snapshot branch from `main`. Verify it exists before anything else.
+2. Record the rollback target **by alias** (`vercel alias ls`), not "whatever was
+   latest".
+3. **REMOVE `RUN_MIGRATIONS`. Not optional.** With it set, the staged build
+   applies 0039 *and 0040* during `postbuild` — breaking production before
+   anything is promoted. This is the trap the ordering table exists for, and
+   0040 turns it from a benign no-op into a real outage.
+4. `vercel deploy --prod --skip-domain --yes`, **from the repo root**.
+5. **Step 4b** — the production build run LOCALLY against the preview database
+   and preview Blob store, driven by the PUBLISHED binary. Not a Vercel URL:
+   Deployment Protection covers preview and production-target `.vercel.app`
+   aliases alike.
+6. Migration and promote as ONE chained command (`&&`), back to back.
+7. Restore `RUN_MIGRATIONS=1`; confirm it is Production-only.
+8. Verify semantically on the custom domain.
+
 ### Done when
 
 Someone who has never seen the repo can follow `docs/adding-an-app.md` and get a

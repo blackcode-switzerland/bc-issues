@@ -29,15 +29,57 @@
 \echo '--- app boundary probe, running as:'
 SELECT current_user AS connected_as, session_user;
 
--- (1) The app may read and write its OWN schema. (Substitute your app's table.)
-\echo '\n(1) own schema readable — expect a count'
-SELECT count(*) AS rows FROM issues.issues;
+-- (1) The app may read its OWN schema. Derived from the role name rather than
+--     hardcoded, so this file runs unchanged as any app's role.
+\echo '\n(1) own schema readable — expect ok'
+DO $probe1$
+DECLARE t text; n bigint;
+BEGIN
+  SELECT quote_ident(schemaname) || '.' || quote_ident(tablename) INTO t
+    FROM pg_tables WHERE schemaname = replace(session_user, '_app', '') LIMIT 1;
+  IF t IS NULL THEN
+    RAISE EXCEPTION '(1) FAILED: schema % has no tables — did the migration run?',
+      replace(session_user, '_app', '');
+  END IF;
+  EXECUTE 'SELECT count(*) FROM ' || t INTO n;
+  RAISE NOTICE '(1) ok: % readable (% rows)', t, n;
+END
+$probe1$;
 
--- (2) The app may NOT read another app's schema. With one app there is nothing
---     to point at yet; keep this and fill it in the moment app #2 exists.
---     Expect: ERROR 42501 permission denied for schema/table.
--- \echo '\n(2) foreign schema refused — expect 42501'
--- SELECT count(*) FROM sales.quotes;
+-- (2) The app may NOT read ANOTHER app's schema. The important one, and the one
+--     that cannot be written as a static query: the other app's table name is
+--     not known here. So it finds one.
+--
+--     It SKIPS LOUDLY when no other app schema exists rather than passing
+--     silently — this line was commented out entirely until 2026-08-05, when a
+--     second schema first existed, and a commented-out probe is a probe that
+--     reports success. Verified for real that day: a fresh `sales_app` reading
+--     `issues.issues` → 42501.
+\echo '\n(2) foreign schema refused — expect 42501'
+DO $probe2$
+DECLARE t text;
+BEGIN
+  -- Candidate schemas come from `platform.apps`, not from a list of names to
+  -- exclude. A blocklist picked `neon_auth.invitation` on the first real run —
+  -- a correct refusal of the wrong thing, which would have read as a pass while
+  -- never touching another APP. The registry is the authority on what an app is.
+  SELECT quote_ident(pt.schemaname) || '.' || quote_ident(pt.tablename) INTO t
+    FROM pg_tables pt
+    JOIN platform.apps a ON a.slug = pt.schemaname
+   WHERE pt.schemaname <> replace(session_user, '_app', '')
+   LIMIT 1;
+  IF t IS NULL THEN
+    RAISE NOTICE '(2) SKIPPED: no other app schema exists yet — this check is structural until one does';
+    RETURN;
+  END IF;
+  BEGIN
+    EXECUTE 'SELECT 1 FROM ' || t || ' LIMIT 1';
+    RAISE EXCEPTION '(2) FAILED: % is READABLE by % — the app boundary is not there', t, session_user;
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE '(2) ok: % refused (42501)', t;
+  END;
+END
+$probe2$;
 
 -- (3) The app owns nothing, so it can do no DDL. Expect: ERROR 42501.
 \echo '\n(3) DDL refused — expect 42501'
