@@ -758,24 +758,47 @@ func (c *Client) UploadFile(filePath string) (*UploadResponse, error) {
 	// When the server has a Blob store (production), upload client-direct so we
 	// aren't capped by the serverless ~4.5MB request-body limit. Otherwise
 	// (local dev) POST multipart through the function.
-	if c.blobEnabled() {
-		return c.uploadViaBlob(f, base, ctype)
+	if caps := c.uploadCaps(); caps.Blob {
+		return c.uploadViaBlob(f, base, ctype, blobPath(caps, base))
 	}
 	return c.uploadMultipart(f, base, ctype)
 }
 
-func (c *Client) blobEnabled() bool {
+// uploadCapabilities is what GET /api/upload reports: whether the server has a
+// Blob store, and — since the app-prefix convention landed — which app and
+// workspace this caller's files belong under.
+type uploadCapabilities struct {
+	Blob      bool   `json:"blob"`
+	App       string `json:"app"`
+	Workspace string `json:"workspace"`
+}
+
+func (c *Client) uploadCaps() uploadCapabilities {
+	var meta uploadCapabilities
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/upload", nil)
 	if err != nil {
-		return false
-	}
-	var meta struct {
-		Blob bool `json:"blob"`
+		return meta
 	}
 	if err := c.do(req, &meta); err != nil {
-		return false
+		return uploadCapabilities{}
 	}
-	return meta.Blob
+	return meta
+}
+
+// blobPath is where this upload should be written: <app>/<workspace>/<file>.
+//
+// Both halves come from the SERVER, so the client never invents a convention.
+// An older server returns neither, and then the bare filename is correct — the
+// server accepts an unprefixed path precisely so a client and a server of
+// different vintages still work together. Never build this from a local guess.
+func blobPath(caps uploadCapabilities, base string) string {
+	if caps.App == "" || caps.Workspace == "" {
+		return base
+	}
+	clean := func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(s, "/", "_"), "\\", "_")
+	}
+	return clean(caps.App) + "/" + clean(caps.Workspace) + "/" + clean(base)
 }
 
 func (c *Client) uploadMultipart(f *os.File, base, ctype string) (*UploadResponse, error) {
@@ -818,7 +841,7 @@ func (c *Client) uploadMultipart(f *os.File, base, ctype string) (*UploadRespons
 // (2) PUT the bytes straight to Blob storage. The PUT headers + api-version
 // track @vercel/blob's wire protocol; the version is pinned in blobAPIVersion
 // (see its doc comment) and a 4xx on the PUT surfaces a clear "bump me" error.
-func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse, error) {
+func (c *Client) uploadViaBlob(f *os.File, base, ctype, pathname string) (*UploadResponse, error) {
 	// File metadata + target workspace travel in clientPayload so the server can
 	// record the upload ledger row in onUploadCompleted. Marshalled (not
 	// hand-built) so filenames with quotes/specials can't corrupt the JSON.
@@ -837,7 +860,7 @@ func (c *Client) uploadViaBlob(f *os.File, base, ctype string) (*UploadResponse,
 	handshake := map[string]any{
 		"type": "blob.generate-client-token",
 		"payload": map[string]any{
-			"pathname":      base,
+			"pathname":      pathname,
 			"callbackUrl":   c.BaseURL + "/api/upload/blob",
 			"clientPayload": string(clientPayload),
 			"multipart":     false,
