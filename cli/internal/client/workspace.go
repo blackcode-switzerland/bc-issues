@@ -542,24 +542,20 @@ func (c *Client) RestoreTrash(slugOrID string, req RestoreTrashRequest) (*Restor
 	return &resp, nil
 }
 
-func (c *Client) PurgeTrash(slugOrID string, req PurgeTrashRequest) (int, error) {
-	var resp struct {
-		Purged int `json:"purged"`
-	}
+func (c *Client) PurgeTrash(slugOrID string, req PurgeTrashRequest) (*PurgeTrashResult, error) {
+	var resp PurgeTrashResult
 	if err := c.deleteJSON(fmt.Sprintf("/api/workspaces/%s/trash/purge", slugOrID), req, &resp); err != nil {
-		return 0, err
+		return nil, err
 	}
-	return resp.Purged, nil
+	return &resp, nil
 }
 
-func (c *Client) EmptyTrash(slugOrID string) (int, error) {
-	var resp struct {
-		Purged int `json:"purged"`
-	}
+func (c *Client) EmptyTrash(slugOrID string) (*PurgeTrashResult, error) {
+	var resp PurgeTrashResult
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/trash/empty", slugOrID), nil, &resp); err != nil {
-		return 0, err
+		return nil, err
 	}
-	return resp.Purged, nil
+	return &resp, nil
 }
 
 // ---------- inbox unarchive ----------

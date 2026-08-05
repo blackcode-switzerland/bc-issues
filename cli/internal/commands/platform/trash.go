@@ -250,11 +250,11 @@ func newTrashPurgeCmd() *cobra.Command {
 			if !cmdutil.Confirm(fmt.Sprintf("Permanently delete %s? This cannot be undone.", target), yes) {
 				return fmt.Errorf("aborted")
 			}
-			purged, err := c.PurgeTrash(ws, req)
+			res, err := c.PurgeTrash(ws, req)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "permanently deleted %d item(s)\n", purged)
+			printPurged(cmd.OutOrStdout(), res)
 			return nil
 		},
 	}
@@ -285,11 +285,11 @@ func newTrashEmptyCmd() *cobra.Command {
 			if !cmdutil.Confirm("Permanently delete everything in the Trash? This cannot be undone.", yes) {
 				return fmt.Errorf("aborted")
 			}
-			purged, err := c.EmptyTrash(ws)
+			res, err := c.EmptyTrash(ws)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "emptied Trash (%d item(s))\n", purged)
+			printPurged(cmd.OutOrStdout(), res)
 			return nil
 		},
 	}
@@ -303,4 +303,27 @@ func truncateTitle(s string) string {
 		return s
 	}
 	return s[:max-1] + "…"
+}
+
+// printPurged echoes WHAT a purge destroyed, one line per item, then the count.
+//
+// Purge is the only irreversible action in the product. A count alone ("deleted
+// 3 item(s)") is the difference between a wrong purge someone catches
+// immediately and one nobody notices for a month — especially now that refs are
+// #numbers, where a ref pasted from a pre-1.12.0 run could name a real but
+// different item. The title is the thing a human recognises as wrong.
+//
+// stdout, deliberately: this is the command's result, not a diagnostic.
+func printPurged(w io.Writer, res *client.PurgeTrashResult) {
+	for _, it := range res.Items {
+		ref := it.Type
+		if it.Number != nil {
+			ref = fmt.Sprintf("%s:%d", it.Type, *it.Number)
+		}
+		fmt.Fprintf(w, "destroyed %s  %s\n", ref, truncateTitle(it.Title))
+	}
+	if res.ItemsTruncated > 0 {
+		fmt.Fprintf(w, "…and %d more not listed\n", res.ItemsTruncated)
+	}
+	fmt.Fprintf(w, "permanently deleted %d item(s)\n", res.Purged)
 }

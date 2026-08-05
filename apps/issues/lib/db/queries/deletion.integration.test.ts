@@ -362,4 +362,41 @@ run('deletion engine (integration)', () => {
     })
   })
 
+  // -------------------------------------------------------------------------
+  // A purge says WHAT it destroyed
+  // -------------------------------------------------------------------------
+  // Purge is the only irreversible action in the product. A bare count is the
+  // difference between a wrong purge someone catches immediately and one nobody
+  // notices for a month — and the titles only exist up until the row is gone, so
+  // if they are not captured inside `purgeOne` they cannot be recovered at all.
+  describe('purge echo', () => {
+    it('reports the type, #number and title of every item it destroyed', async () => {
+      const [i] = await db
+        .insert(schema.issues)
+        .values({ workspace_id: wsId, seq: 8801, title: 'Delete me, loudly' })
+        .returning({ id: schema.issues.id })
+      await engine.softDeleteEntity(wsId, 'issue', i.id, userId, 'detach')
+
+      const res = await engine.purgeItems(wsId, [{ type: 'issue', id: i.id }], userId)
+
+      expect(res.purged).toBe(1)
+      expect(res.items).toEqual([
+        { type: 'issue', id: i.id, number: 8801, title: 'Delete me, loudly' },
+      ])
+    })
+
+    it('reports nothing for a ref that was not in the bin', async () => {
+      // purgeOne refuses a row that is not soft-deleted, and the echo must agree
+      // with the count rather than claiming an item that survived.
+      const [i] = await db
+        .insert(schema.issues)
+        .values({ workspace_id: wsId, seq: 8802, title: 'Still alive' })
+        .returning({ id: schema.issues.id })
+
+      const res = await engine.purgeItems(wsId, [{ type: 'issue', id: i.id }], userId)
+
+      expect(res.purged).toBe(0)
+      expect(res.items).toEqual([])
+    })
+  })
 })

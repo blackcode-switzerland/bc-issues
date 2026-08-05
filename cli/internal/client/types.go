@@ -625,6 +625,30 @@ type RestoreTrashResponse struct {
 	Count    int              `json:"count"`
 }
 
+// PurgedItem is one thing a purge destroyed, captured server-side BEFORE the row
+// was removed — the only moment its title still existed.
+//
+// Purge is the product's one irreversible action, so it reports WHAT it
+// destroyed rather than only how many. That is also the last line of defence
+// against a stale ref: a caller that pasted a pre-1.12.0 row id as a #number
+// sees the title of what it actually deleted.
+type PurgedItem struct {
+	Type   string `json:"type" yaml:"type"`
+	ID     int    `json:"id" yaml:"id"`
+	Number *int   `json:"number" yaml:"number"`
+	Title  string `json:"title" yaml:"title"`
+}
+
+// PurgeTrashResult is what `purge` and `empty` report back.
+type PurgeTrashResult struct {
+	Purged int          `json:"purged" yaml:"purged"`
+	Items  []PurgedItem `json:"items" yaml:"items"`
+	// Set by `empty` when more was destroyed than is listed. Purged is always
+	// exact; Items is a sample, and a sample that reads as the whole list is its
+	// own kind of lie.
+	ItemsTruncated int `json:"items_truncated,omitempty" yaml:"items_truncated,omitempty"`
+}
+
 // PurgeTrashRequest permanently deletes a batch or an explicit item list.
 type PurgeTrashRequest struct {
 	BatchID *int             `json:"batch_id,omitempty"`

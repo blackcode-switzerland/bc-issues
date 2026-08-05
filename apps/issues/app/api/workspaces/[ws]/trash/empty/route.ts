@@ -13,5 +13,13 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const ctx = await resolveWorkspace(req, ws)
   requireOwner(ctx)
   const result = await emptyTrash(ctx.workspace.id, ctx.user.id)
-  return NextResponse.json({ purged: result.purged })
+  // `items` echoes WHAT was destroyed, not just how many. A wrong purge should
+  // be visible the moment it happens rather than discovered a month later, and
+  // this is the only moment the titles still exist. Capped and truncation
+  // reported — a sample that reads as the whole list is its own kind of lie.
+  return NextResponse.json({
+    purged: result.purged,
+    items: result.items,
+    items_truncated: result.items_truncated,
+  })
 })

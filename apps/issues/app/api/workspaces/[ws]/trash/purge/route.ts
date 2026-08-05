@@ -27,5 +27,10 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
     selection.batchId !== null
       ? await purgeBatch(ctx.workspace.id, selection.batchId, ctx.user.id)
       : await purgeItems(ctx.workspace.id, items, ctx.user.id)
-  return NextResponse.json({ purged: result.purged })
+  // `items` echoes WHAT was destroyed — type, #number and title — captured
+  // before the rows were removed. Purge is the one irreversible action in the
+  // product, so it reports its effect in full rather than a count. It is also
+  // the only defence left against a stale ref: an agent that pasted a ref from
+  // before 1.12.0 sees the title of what it actually destroyed.
+  return NextResponse.json({ purged: result.purged, items: result.items })
 })

@@ -51,6 +51,13 @@ valid `#number` for a *different* item, and `purge` is not recoverable. Re-run
 `bk trash list` and take the current REF. If you have a stored script or an agent
 holding refs across this release, that is the one thing to check.
 
+**`bk trash purge` and `bk trash empty` now echo what they destroyed** — type,
+`#number` and title, one line per item, followed by the count (`items` in JSON).
+Purge is the product's only irreversible action, and the titles exist only up to
+the moment the row is deleted. This is also the last defence against a stale ref:
+if a pasted ref names something other than what you meant, the title says so
+immediately rather than a month later.
+
 The wire format keeps the two unambiguous rather than redefining one:
 `{"type":"issue","number":42}` means the #number, `{"type":"issue","id":905}`
 still means the row id. **Every pre-1.12.0 binary therefore keeps working

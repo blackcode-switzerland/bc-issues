@@ -42,6 +42,20 @@ error.
 `purge` and `empty` are terminal. They also free the files that the content
 referenced (see `bk guide platform/storage`). Nothing brings them back.
 
+Both **echo what they destroyed** — type, `#number` and title, one line each,
+followed by the count:
+
+```
+destroyed issue:42  Crash on upload
+destroyed issue:57  Duplicate of #42
+permanently deleted 2 item(s)
+```
+
+Read those lines. They are the only chance to notice that a ref named something
+other than what you meant, and there is no undo behind them. `--json` carries the
+same list as `items`. `bk trash empty` caps the list and reports the remainder as
+`items_truncated`; the count is always exact.
+
 ## Cascade vs detach
 
 Deleting a project or task decides what happens to its children:

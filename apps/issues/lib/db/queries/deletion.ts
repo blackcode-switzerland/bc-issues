@@ -840,13 +840,14 @@ export async function purgeItems(
   workspaceId: number,
   refs: EntityRef[],
   actorUserId: number
-): Promise<{ purged: number }> {
+): Promise<{ purged: number; items: PurgedItem[] }> {
   // URLs embedded in the purged content (bodies, attachments, cascaded comments
   // and project updates), gathered before the hard delete so we can free their
   // storage afterwards.
   const candidateUrls: string[] = []
   const out = await db.transaction(async (tx) => {
     let purged = 0
+    const items: PurgedItem[] = []
     const order: TrashType[] = ['issue', 'task', 'project']
     const sorted = [...refs].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
     for (const ref of sorted) {
@@ -854,6 +855,7 @@ export async function purgeItems(
       if (res.ok) {
         purged++
         candidateUrls.push(...res.urls)
+        if (res.item) items.push(res.item)
       }
     }
 
@@ -861,7 +863,7 @@ export async function purgeItems(
     // its links with it, by cascade. Re-derived from the source, so a purge that
     // cascades to children cannot leave a projection pointing at nothing.
     await purgeMissingEntities(tx, workspaceId)
-    return { purged }
+    return { purged, items }
   })
 
   // After the rows are permanently gone, auto-remove any files they referenced
@@ -908,20 +910,29 @@ async function collectPurgeUrls(
   return urls
 }
 
+/** What a purge destroyed, captured before the row is gone. */
+export interface PurgedItem {
+  type: TrashType
+  id: number
+  /** The workspace #number, or null for a row that never had one. */
+  number: number | null
+  title: string
+}
+
 async function purgeOne(
   tx: Tx,
   workspaceId: number,
   type: TrashType,
   id: number,
   actorUserId: number
-): Promise<{ ok: boolean; urls: string[] }> {
+): Promise<{ ok: boolean; urls: string[]; item: PurgedItem | null }> {
   const table = type === 'issue' ? issues : type === 'task' ? tasks : projects
   const [before] = await tx
     .select()
     .from(table)
     .where(and(eq(table.id, id), eq(table.workspace_id, workspaceId), isNotNull(table.deleted_at)))
     .limit(1)
-  if (!before) return { ok: false, urls: [] }
+  if (!before) return { ok: false, urls: [], item: null }
 
   // Gather embedded file URLs before the hard delete cascades them away.
   const urls = await collectPurgeUrls(tx, workspaceId, type, id, before as Record<string, unknown>)
@@ -937,38 +948,62 @@ async function purgeOne(
     meta: { title: (before as { title?: string; name?: string }).title ?? (before as { name?: string }).name ?? null },
   })
 
+  // Captured BEFORE the delete, for the same reason the event is recorded first:
+  // afterwards there is nothing left to read. This is what lets the CLI echo
+  // WHICH items it destroyed rather than only how many — a wrong purge should be
+  // visible the moment it happens, not discovered a month later.
+  const row = before as { title?: string; name?: string; seq?: number | null }
+  const item: PurgedItem = {
+    type,
+    id,
+    number: row.seq ?? null,
+    title: row.title ?? row.name ?? '',
+  }
+
   const result = await tx.delete(table).where(and(eq(table.id, id), eq(table.workspace_id, workspaceId)))
-  return { ok: (result.rowCount ?? 0) > 0, urls }
+  return { ok: (result.rowCount ?? 0) > 0, urls, item }
 }
 
 export async function purgeBatch(
   workspaceId: number,
   batchId: number,
   actorUserId: number
-): Promise<{ purged: number }> {
+): Promise<{ purged: number; items: PurgedItem[] }> {
   const refs = await batchMembers(workspaceId, batchId)
   return purgeItems(workspaceId, refs, actorUserId)
 }
+
+/** How many purged items `bk trash empty` echoes back before it just counts. */
+const EMPTY_TRASH_ECHO_MAX = 50
 
 // Permanently delete everything in the bin for this workspace. Owner-only.
 export async function emptyTrash(
   workspaceId: number,
   actorUserId: number
-): Promise<{ purged: number }> {
+): Promise<{ purged: number; items: PurgedItem[]; items_truncated: number }> {
   const all = await listTrash(workspaceId, { limit: 1000 })
+  const destroyed: PurgedItem[] = []
   // listTrash caps at 1000; loop until the bin is dry so very large bins fully
   // empty.
   let total = 0
   let page = all
   while (page.length > 0) {
-    const { purged } = await purgeItems(
+    const { purged, items } = await purgeItems(
       workspaceId,
       page.map((i) => ({ type: i.type, id: i.id })),
       actorUserId
     )
     total += purged
+    // Capped, because emptying a 10,000-item bin must not build a 10,000-entry
+    // response. The COUNT is always exact; the list is a sample, and the route
+    // says so rather than letting a truncated list read as the whole thing.
+    for (const it of items) if (destroyed.length < EMPTY_TRASH_ECHO_MAX) destroyed.push(it)
     if (page.length < 1000) break
     page = await listTrash(workspaceId, { limit: 1000 })
   }
-  return { purged: total }
+  return {
+    purged: total,
+    items: destroyed,
+    items_truncated: Math.max(0, total - destroyed.length),
+  }
 }
