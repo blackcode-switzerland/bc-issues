@@ -152,6 +152,27 @@ This directory is also what gives your CLI routes their app attribution — the
 parity guard reads `guide.AppSections()`. An app with no topics directory has its
 routes attributed to `platform`, and its parity test will tell you so.
 
+---
+
+> ## ⚠️ STEPS 7–10 ARE UNVERIFIED
+>
+> Everything above was walked on 2026-08-05. **Steps 7 to 10 were not**, and
+> deliberately: they need a Vercel project, a subdomain and DNS for an app that
+> must never be deployed — a real resource with a real chance of being forgotten,
+> to test four steps that are ordinary platform mechanics rather than anything
+> this architecture invented.
+>
+> **Whoever ships the first real app must walk them and update this document**
+> with the date and the app name, replacing this box. Until then, treat 7–10 as a
+> best-effort reconstruction from how `apps/issues` is configured, not as
+> instructions anyone has followed.
+>
+> | | |
+> |---|---|
+> | Walked | steps 1–6, 2026-08-05, against a throwaway `apps/sales` |
+> | Unverified | steps 7–10 |
+> | Closed by | *(first real app — put your name, the app and the date here)* |
+
 ## 7. `docs/changelog/sales.md`
 
 One file. It is discovered by reading the directory, so there is no registry to

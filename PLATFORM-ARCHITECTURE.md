@@ -496,6 +496,14 @@ genuinely new product surface. Step 6 is the first real app.
 
 ## 11. On selling these later
 
+> **Rehearsed 2026-08-05.** It works, and it takes ~20 minutes — but the obvious
+> command is the wrong one and fails silently: `pg_dump --schema=issues` emits
+> the blob-reference triggers and every foreign key into `platform`, all of which
+> fail at restore, and `psql` exits **0** anyway. The result looks complete and
+> populated with the index maintenance silently gone. The procedure that works,
+> the numbers, and what an extraction still owes beyond the database are in
+> [`docs/extracting-an-app.md`](docs/extracting-an-app.md).
+
 Monorepo + shared database does **not** block it. The hard prerequisite for
 selling is multi-tenancy, and that is already solved — `workspace_id` is on
 everything.
