@@ -715,6 +715,35 @@ correctly, because the app role has no DDL and cannot read
 Keep a fallback to `DATABASE_URL` so local dev needs no second variable. Every
 future app repeats this pair.
 
+## Releasing the CLI: web deploy, then npm, then web deploy AGAIN
+
+Found in Phase 5, 2026-08-05. It applies to every future CLI release.
+
+`devops/release.sh cli` bumps `CLI_LATEST_VERSION` in `apps/issues/lib/cli-version.ts`
+**in a commit it creates itself**. That commit therefore lands *after* the web
+deploy, so production keeps advertising the previous version in
+`x-bk-cli-latest` — and no installed client is told an update exists. Since the
+"update available" nudge is the adoption signal that has to precede any
+`CLI_MIN_VERSION` raise, a stale header quietly stalls the next release cycle.
+
+The order:
+
+1. **Deploy web first.** The new server must be backwards compatible with the
+   *old* clients that are still installed. The reverse is not true — a new
+   client against an old server fails in ways the user sees.
+2. **`./devops/release.sh cli minor`** — answer **`normal`**, never `forced`.
+   `forced` raises `CLI_MIN_VERSION`, which is Phase 8's decision.
+3. **Deploy web AGAIN** to pick up the version bump, and verify:
+   ```bash
+   curl -sI https://issues.blackcode.ch/api/meta | grep x-bk-cli
+   ```
+   `x-bk-cli-latest` must equal the version now on npm.
+
+Do **not** paper over it with `BK_CLI_LATEST` in Vercel. The env override exists
+for emergency rollback of the advertised version, not for routine releases —
+using it here creates a second source of truth that goes stale the moment
+someone forgets to clear it.
+
 ## Decisions taken during the migration
 
 **No continuous deployment; Vercel stays disconnected from GitHub.** (Decided

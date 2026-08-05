@@ -32,15 +32,33 @@ Runs preflight checks (Vercel auth, git branch, clean working tree), then deploy
 
 The version is auto-resolved from the latest git tag — you never need to type a version number manually.
 
+> **Three steps, not one: deploy web → release CLI → deploy web AGAIN.**
+> Step 4 below bumps `CLI_LATEST_VERSION` **in a commit the script creates
+> itself**, so it necessarily lands *after* whatever deploy preceded it —
+> production keeps advertising the previous version, and no installed client is
+> ever told an update exists. Since that nudge is the adoption signal a
+> `CLI_MIN_VERSION` raise depends on, skipping the second deploy quietly stalls
+> the next release. Full reasoning, and why `BK_CLI_LATEST` is the wrong fix, in
+> `PLATFORM-MIGRATION-PLAN.md` → *Releasing the CLI: web deploy, then npm, then
+> web deploy AGAIN*. Confirm the last step:
+>
+> ```bash
+> curl -sI https://issues.blackcode.ch/api/meta | grep x-bk-cli
+> ```
+
 Full CLI release pipeline:
 1. Preflight — checks gh auth, npm auth, git branch, clean tree, no duplicate tag/version
 2. Resolves the next version from the latest git tag + bump type
 3. Bumps version in `cli/npm/package.json` and `cli/npm/install.js`
-4. Commits + pushes the version bump to `main`
-5. Creates and pushes the git tag
-6. Builds binaries for all 6 platforms via `make dist`
-7. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
-8. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP)
+4. Bumps `CLI_LATEST_VERSION` in `apps/issues/lib/cli-version.ts` — and
+   `CLI_MIN_VERSION` too, **only** if you answer `forced` at the upgrade-policy
+   prompt. Answer `normal` unless you have deliberately decided to hard-block
+   every older client; publishing must always precede a floor raise.
+5. Commits + pushes the version bump to `main`
+6. Creates and pushes the git tag
+7. Builds binaries for all 6 platforms via `make dist`
+8. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
+9. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP)
 
 **Have your authenticator app ready** — npm requires a 2FA code during publish.
 
