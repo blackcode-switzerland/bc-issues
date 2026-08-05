@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, requireOwner, resolveWorkspace } from '@/lib/api'
 import { purgeBatch, purgeItems } from '@/lib/db/queries/deletion'
 import { parseSelection } from '../parse'
+import { resolveSelection } from '../resolve'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -15,11 +16,16 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   requireOwner(ctx)
 
   const body = await req.json().catch(() => null)
-  const { batchId, items } = parseSelection(body)
+  const selection = parseSelection(body)
+
+  // Resolve BEFORE purging, and let an unknown #number 404 the whole call. A
+  // partially-resolved selection on the one irreversible route is how the wrong
+  // row gets destroyed.
+  const items = await resolveSelection(ctx.workspace.id, selection)
 
   const result =
-    batchId !== null
-      ? await purgeBatch(ctx.workspace.id, batchId, ctx.user.id)
+    selection.batchId !== null
+      ? await purgeBatch(ctx.workspace.id, selection.batchId, ctx.user.id)
       : await purgeItems(ctx.workspace.id, items, ctx.user.id)
   return NextResponse.json({ purged: result.purged })
 })

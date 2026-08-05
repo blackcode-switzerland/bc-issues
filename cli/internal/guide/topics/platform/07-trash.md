@@ -1,0 +1,54 @@
+# Trash — recovering from a mistake
+
+Deletes are **soft**. `bk issues project delete`, `bk issues task delete` and
+`bk issues issue delete` move the item to the workspace Trash rather than
+destroying it, and Trash is what brings it back.
+
+> **`bk undo` was removed in 1.12.0.** It never recorded anything — the table
+> behind it had no writer, so it reported zero operations every time it ran.
+> Trash is the recovery path and always was. If you have a script that calls
+> `bk undo` and treats success as "the write was rolled back", that script has
+> never been rolled back and should use Trash instead.
+
+## The commands
+
+```bash
+bk trash list --json                 # paginated: --limit / --cursor
+bk trash restore issue:42            # <type>:<#number>, repeatable
+bk trash purge issue:42              # permanently destroy specific items
+bk trash empty                       # permanently destroy everything in Trash
+```
+
+## Refs are #numbers
+
+`bk trash list` prints a **REF** column, and a ref is `<type>:<#number>` — the
+same `#number` you use everywhere else, so `issue:42` in Trash is the same issue
+as `bk issues issue view 42`.
+
+**This changed in 1.12.0.** Before that, the REF column printed an internal row
+id, which was the one place the platform exposed one. If you are holding a ref
+from an older run, **do not reuse it** — re-run `bk trash list` and take the
+current REF. An old row id is usually a valid `#number` for a *different* item,
+and on `purge` that is not recoverable.
+
+Passing a ref that is not in this workspace's Trash fails with exit 5 and names
+the ref. A rejected restore is atomic: pass one bad ref alongside good ones and
+nothing is restored. The count reports what was actually brought back —
+restoring something that was never binned is a no-op and counts zero, not an
+error.
+
+## Terminal actions
+
+`purge` and `empty` are terminal. They also free the files that the content
+referenced (see `bk guide platform/storage`). Nothing brings them back.
+
+## Cascade vs detach
+
+Deleting a project or task decides what happens to its children:
+
+```bash
+bk issues project delete 42 --cascade     # bin the attached tasks and issues too
+bk issues project delete 42 --detach      # keep them, unlinked (the default)
+```
+
+Related commands: `bk trash list|restore|purge|empty`, `bk issues project delete`, `bk issues task delete`, `bk issues issue delete`

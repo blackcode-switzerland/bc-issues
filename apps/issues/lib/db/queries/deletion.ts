@@ -38,6 +38,126 @@ export interface EntityRef {
   id: number
 }
 
+// ---------------------------------------------------------------------------
+// #number ↔ row id, at the boundary and NOWHERE else
+// ---------------------------------------------------------------------------
+// Trash was the one place the platform exposed a row id to an agent
+// (`issue:905`), while every other surface — URNs, `bk issue view`, search —
+// speaks the workspace #number. That inconsistency cost a real mistake during
+// Phase 6 verification, and the restore route's 404 hint still exists to explain
+// it away.
+//
+// The fix translates at the ROUTE BOUNDARY and stops there. Everything below —
+// `loadRow`, the recursion keys, `restoreEntity`'s parent links — stays row-id
+// based, because that is what the foreign keys are: `issues.project_id` holds a
+// row id, and a restore that re-links a child to its parent is following an FK,
+// not an address. Converting the internals would mean resolving a #number on
+// every recursion step of the one code path in the app that permanently deletes
+// data. The translation is a lookup; the internals are the safety-critical part,
+// and they do not change.
+//
+// A #number is unique only WITHIN a workspace, so every function here takes a
+// workspaceId and no caller may skip it. That is the whole correctness argument:
+// resolve in the wrong workspace and you purge the wrong row.
+
+/** A ref as an agent addresses it: the workspace #number, never the row id. */
+export interface NumberedRef {
+  type: TrashType
+  number: number
+}
+
+/** Raised when a #number matches nothing in this workspace. Never resolved silently. */
+export class TrashRefNotFoundError extends Error {
+  constructor(public refs: NumberedRef[]) {
+    super(`unknown_ref:${refs.map((r) => `${r.type}:${r.number}`).join(',')}`)
+    this.name = 'TrashRefNotFoundError'
+  }
+}
+
+const TABLE_FOR: Record<TrashType, typeof issues | typeof tasks | typeof projects> = {
+  issue: issues,
+  task: tasks,
+  project: projects,
+}
+
+/**
+ * `#number → row id`, scoped to one workspace.
+ *
+ * Throws `TrashRefNotFoundError` listing every ref that matched nothing —
+ * ALL of them, not just the first, so an agent fixes one call rather than
+ * discovering them one at a time. Never returns a partial list: a purge built
+ * from a partially-resolved selection is how the wrong thing gets deleted.
+ *
+ * Deliberately does NOT filter on `deleted_at`. Whether the row is in the bin is
+ * the caller's question (`restoreItems` already rejects refs that are not), and
+ * conflating "not in the bin" with "no such #number" produces a 404 that sends
+ * the agent looking for the wrong problem.
+ */
+export async function resolveNumberedRefs(
+  workspaceId: number,
+  refs: NumberedRef[]
+): Promise<EntityRef[]> {
+  if (refs.length === 0) return []
+
+  const byType = new Map<TrashType, number[]>()
+  for (const r of refs) {
+    const list = byType.get(r.type) ?? []
+    list.push(r.number)
+    byType.set(r.type, list)
+  }
+
+  const found = new Map<string, number>()
+  for (const [type, numbers] of byType) {
+    const table = TABLE_FOR[type]
+    const rows = await db
+      .select({ id: table.id, seq: table.seq })
+      .from(table)
+      .where(and(eq(table.workspace_id, workspaceId), inArray(table.seq, numbers)))
+    for (const row of rows) {
+      if (row.seq != null) found.set(`${type}:${row.seq}`, row.id)
+    }
+  }
+
+  const missing = refs.filter((r) => !found.has(`${r.type}:${r.number}`))
+  if (missing.length > 0) throw new TrashRefNotFoundError(missing)
+
+  // Order preserved: the caller's selection order is what the response echoes.
+  return refs.map((r) => ({ type: r.type, id: found.get(`${r.type}:${r.number}`)! }))
+}
+
+/**
+ * `row id → #number`, scoped to one workspace — the reverse, for responses.
+ *
+ * A row with no `seq` is simply absent from the map. Callers render the row id
+ * in that case rather than inventing a number; production has no such rows, but
+ * a response that silently dropped an item would be worse than an ugly one.
+ */
+export async function numbersForRefs(
+  workspaceId: number,
+  refs: EntityRef[]
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (refs.length === 0) return out
+
+  const byType = new Map<TrashType, number[]>()
+  for (const r of refs) {
+    const list = byType.get(r.type) ?? []
+    list.push(r.id)
+    byType.set(r.type, list)
+  }
+  for (const [type, ids] of byType) {
+    const table = TABLE_FOR[type]
+    const rows = await db
+      .select({ id: table.id, seq: table.seq })
+      .from(table)
+      .where(and(eq(table.workspace_id, workspaceId), inArray(table.id, ids)))
+    for (const row of rows) {
+      if (row.seq != null) out.set(`${type}:${row.id}`, row.seq)
+    }
+  }
+  return out
+}
+
 export interface ChildCounts {
   issues: number
   tasks: number
@@ -348,12 +468,15 @@ export async function listTrash(
       FROM ${issues} i
       WHERE i.workspace_id = ${workspaceId} AND i.deleted_at IS NOT NULL
       UNION ALL
-      SELECT 'project', p.id, p.name, NULL, p.status,
+      -- p.seq / m.seq, not NULL. Projects and tasks have had a #number since
+      -- migration 0030; this listing was still reporting them as unnumbered,
+      -- which is why the REF column could only ever have been a row id.
+      SELECT 'project', p.id, p.name, p.seq, p.status,
              p.deleted_at, p.deleted_by, p.delete_batch_id, NULL, NULL
       FROM ${projects} p
       WHERE p.workspace_id = ${workspaceId} AND p.deleted_at IS NOT NULL
       UNION ALL
-      SELECT 'task', m.id, m.name, NULL, m.status,
+      SELECT 'task', m.id, m.name, m.seq, m.status,
              m.deleted_at, m.deleted_by, m.delete_batch_id, m.project_id, NULL
       FROM ${tasks} m
       WHERE m.workspace_id = ${workspaceId} AND m.deleted_at IS NOT NULL

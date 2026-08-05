@@ -1,0 +1,189 @@
+================================================================================
+PHASE 8 IMPLEMENTATION PROMPT — Blackcode Platform Migration (FINAL PHASE)
+Fresh context. Phases 0-7 are done, live in production, and verified.
+================================================================================
+
+## READ FIRST, COMPLETELY
+
+  1. PLATFORM-ARCHITECTURE.md   — the target design (WHAT and WHY)
+  2. PLATFORM-MIGRATION-PLAN.md — the ordered migration (HOW and WHEN)
+  3. AGENT-PROMPT.txt           — standing ground rules, all still apply
+  4. CLAUDE.md and AGENTS.md    — agent-surface contract and docs sync rule
+
+In the plan, these sections are load-bearing for your phase. They were written
+from seven real production changes and one outage:
+  - "OWED BEFORE APP #2: cross-deployment blob reference checking"  <- YOUR BLOCKER
+  - "The production cutover pattern", including "Step 4b" and
+    "Who owns the migration depends on the ORDER"
+  - "Releasing the CLI: web deploy, then npm, then web deploy AGAIN"
+
+
+## WHERE THE MIGRATION STANDS — Phases 0-7 DONE and live
+
+  0  baseline; repo renamed bc-issues -> blackcode-platform
+  1  monorepo: apps/issues + turbo + packages workspace
+  2  platform-db, platform-api, platform-ui extracted
+  3  platform.* + issues.* schemas; production runs as bounded role issues_app
+  4  platform.apps / workspace_apps / app_access; enforcement LIVE
+  5  CLI namespaced (bk issues …); guide, changelog and docs split; CLI 1.10.0
+  6  platform.entities + links; events carry app + subject_urn; bk search,
+     bk link, bk activity, bk super-admin entity-drift; CLI 1.11.0
+  7  platform-storage; uploads attributed per app; blob GC asks every app via a
+     scanner registry that FAILS CLOSED
+
+Production right now:
+  issues.blackcode.ch healthy · 37 migrations (latest 0036)
+  DATABASE_URL -> issues_app · MIGRATE_DATABASE_URL -> neondb_owner
+  RUN_MIGRATIONS=1 Production-only
+  x-bk-cli-latest 1.11.0 · x-bk-cli-min 1.9.1 · npm latest 1.11.0
+  packages: platform-db, platform-api, platform-ui, platform-auth,
+            platform-agent, platform-storage  (all six)
+  platform.apps holds EXACTLY ONE ROW, and must until your blocker is resolved
+  Neon branches kept: main, preview, phase7-pre-apply, phase4-pre-apply,
+                      phase3-pre-apply, pre-platform-migration
+  Smoke-test fixture: user 44 phase3-verify@blackcode.ch — reuse, never prune
+
+This is the LAST phase. When it is done the migration is done.
+
+
+## YOUR TASK — PHASE 8, IN THIS ORDER
+
+The plan's Phase 8 section is authoritative for items 2-6. Item 1 is a blocker
+inherited from Phase 7 and comes first.
+
+### 1. THE BLOCKER — cross-deployment blob reference checking
+
+Read "OWED BEFORE APP #2" in the plan. In short: Phase 7's scanner registry
+correctly refuses to delete a blob unless every enabled app proves it holds no
+reference — but per-app Postgres roles mean the issues deployment can never read
+sales tables, so it can never obtain that proof. The moment a second row lands in
+platform.apps, blob deletion stops working entirely.
+
+Recommended shape (option A in the plan): platform.blob_references
+(url, app, source_urn), written in the SAME TRANSACTION as the content change
+that creates or removes a reference, plus a `bk super-admin blob-drift`
+reconciler. This is exactly the platform.entities pattern from Phase 6 — same
+risk, same proven mitigation.
+
+You may argue for option B or C if you find A does not hold. Do not loosen the
+delete gate; that is not on the table.
+
+**Everything else in this phase is a lie until this ships.** A checklist that
+says "adding an app is nine steps" while step ten is "storage cleanup silently
+stops working" is worse than no checklist.
+
+### 2. The four carry-forwards
+
+  - `bk trash` refs are internal database ids (issue:905) — the one place the
+    platform exposes a work-item serial instead of its #number. DECIDE: map them
+    to #number, or document Trash as a deliberate exception in the guide. Do not
+    leave it undecided a third time.
+  - `bk undo` is INERT — logTransaction has no callers, so platform.transaction_log
+    is never written. A documented agent-facing feature that does nothing is
+    worse than a missing one. Fix it or remove it and say so in the changelog.
+  - app/api/openapi.json/route.ts still exists as a 410 stub while CLAUDE.md says
+    the spec was deleted. Reconcile code and doc.
+  - Tighten events.app AND uploads.app to NOT NULL, once no deployed code can
+    write a NULL. Verify that precondition rather than assuming it.
+
+### 3. Missing guardrails
+
+  - platform-storage, platform-auth and platform-agent have NO ESLint config, so
+    `npm run lint` does not check three of six packages. Add configs.
+  - CLI-parity test must run PER APP.
+  - Guide test: a topic under topics/<app>/ may not name another app.
+  - ESLint: no apps/<a> -> apps/<b> imports.
+  - A test asserting no app queries another app's schema.
+  Every guardrail you add, PROVE IT FIRES: break something deliberately, watch
+  it fail, restore. A guardrail you have not seen fire is one you cannot claim
+  works.
+
+### 4. apps/_template/
+
+A minimal working app: one entity, one route, one CLI command group, one guide
+topic, one page. **It must build and pass the parity test on day one.** A
+template that does not run is worse than no template.
+
+### 5. docs/adding-an-app.md
+
+The ordered checklist — packages deps and apps/<name>/ from the template;
+CREATE SCHEMA + role + grants; a row in platform.apps; commands + routes
+annotations; guide topics; docs/changelog/<app>.md; Vercel project pointed at
+the EXISTING Neon project and Blob store; Root Directory; subdomain; app docs.
+
+**Then actually follow it**, end to end, against apps/_template. Time it. Write
+down what hurt. A checklist nobody has walked is a draft.
+
+### 6. The extraction rehearsal
+
+Actually run it: `pg_dump --schema=issues`, stand it up beside a vendored copy of
+the platform packages, confirm it boots. This validates the "we could sell one of
+these" claim from PLATFORM-ARCHITECTURE.md §11 while it is still cheap to fix.
+
+### 7. Docs, then the floor
+
+  - Rewrite CLAUDE.md and AGENTS.md for the finished monorepo.
+  - Final CLI release in the documented three-step order.
+  - **RAISE CLI_MIN_VERSION LAST, and as its own change.** Target 1.10.0 — the
+    first namespaced version. Publish first, confirm adoption via
+    x-bk-cli-latest having been advertised for long enough that installed
+    clients have seen the nudge, and only then raise the floor. Raising it
+    strands every user with nothing to upgrade to. This is the single most
+    dangerous one-line change in the whole migration.
+
+
+## THE FAILURE MODE THIS PHASE HAS
+
+Phase 3 failed loudly. Phase 4 quietly. Phase 5 later. Phase 6 slowly. Phase 7
+destructively.
+
+**Phase 8 fails FALSELY.** Its deliverable is a promise about work nobody has
+done yet. A checklist with a missing step, a template that does not build, a
+guardrail that never fires — all of them look finished and stay wrong until
+someone builds app #2, months from now, without you there to explain.
+
+The only way to test a promise is to keep it. So:
+  - the template must actually build and pass parity
+  - the checklist must actually be walked, by you, end to end
+  - each guardrail must actually be seen to fail
+  - the extraction must actually boot
+
+"I wrote it and it looks right" is not evidence in this phase.
+
+
+## HARD RULES
+
+- Rehearse every migration AND its rollback on a fresh Neon branch.
+- Decide the cutover ORDERING explicitly and follow the RUN_MIGRATIONS table.
+- Step 4b before any promote that touches a path the CLI takes: the production
+  build run LOCALLY against the preview database and preview Blob store, driven
+  by the PUBLISHED binary. Deployment Protection covers preview AND
+  production-target .vercel.app aliases — do not test reachability with curl -L,
+  it follows the SSO redirect and reports 200 for the login page.
+- Run `vercel deploy` FROM THE REPO ROOT.
+- `vercel deploy --prod`, `vercel promote` and env changes are BLOCKED for you.
+  Probe the blocked command BEFORE anything irreversible; hand exact commands
+  to the user.
+- Ask before: applying any migration to main, any Vercel env change, promoting,
+  publishing to npm, deleting any Neon branch or Blob object, and ESPECIALLY
+  before raising CLI_MIN_VERSION.
+
+## STILL DEFERRED — decide, do not silently drop
+
+  - The session cookie -> .blackcode.ch. It may sign everyone out once. It has
+    been deferred since Phase 4. Either schedule it in this phase with the user,
+    or write down explicitly that it is not happening and why.
+
+## REPORT
+
+Use the report format in AGENT-PROMPT.txt. Stop after Phase 8.
+
+Then write a short closing summary: what the migration delivered, what it cost,
+what is still owed, and what the next person needs to know. That summary is the
+last artifact of this work and the first thing whoever adds app #2 will read.
+
+If you find the plan is wrong, say so and stop. That has happened on every phase
+so far — including twice where the verifier's own instructions were the thing
+that was wrong — and each time it was the most valuable output of the phase.
+
+================================================================================

@@ -145,6 +145,15 @@ facts that lived elsewhere, and they had already drifted (the manifest claimed
 uploads accept any file type; SVG is rejected. The platform reference described
 a `GET /api/upload` field that never existed, and pinned a stale CLI version).
 
+**The `/api/openapi.json` and `/api/docs` ROUTES still exist, and are meant to.**
+The documents are gone; what remains is a 410 Gone carrying a `suggestion`
+(`app/api/openapi.json/route.ts`, `lib/api/retired.ts`). A 410 with a suggestion
+is something an agent working from stale context can act on inside the same run —
+it names the fix. A 404 just looks like a bug, and the agent retries or gives up.
+They are excluded from the CLI-parity test with that reason, they have no `bk`
+command by design, and they have no expiry: an agent carrying a two-year-old
+prompt can turn up at any time. Do not "clean them up".
+
 ### Where knowledge lives
 
 Two homes, and the split is the whole trick:

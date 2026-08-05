@@ -31,12 +31,16 @@ func newTrashCmd() *cobra.Command {
 }
 
 // parseRefs turns "issue:42 project:3" style args into entity refs.
+//
+// The number is the workspace #NUMBER, as printed in `bk trash list`'s REF
+// column and as used by every other command. Before 1.12.0 it was the row id;
+// see TrashEntityRef for why the wire field changed name rather than meaning.
 func parseRefs(args []string) ([]client.TrashEntityRef, error) {
 	refs := make([]client.TrashEntityRef, 0, len(args))
 	for _, a := range args {
 		parts := strings.SplitN(a, ":", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid ref %q — use <type>:<id>, e.g. issue:42", a)
+			return nil, fmt.Errorf("invalid ref %q — use <type>:<#number>, e.g. issue:42", a)
 		}
 		typ := strings.ToLower(strings.TrimSpace(parts[0]))
 		switch typ {
@@ -44,11 +48,14 @@ func parseRefs(args []string) ([]client.TrashEntityRef, error) {
 		default:
 			return nil, fmt.Errorf("invalid type %q — must be issue, project, or task", parts[0])
 		}
-		id, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		n, err := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil {
-			return nil, fmt.Errorf("invalid id in %q: %w", a, err)
+			return nil, fmt.Errorf("invalid #number in %q: %w", a, err)
 		}
-		refs = append(refs, client.TrashEntityRef{Type: typ, ID: id})
+		if n < 1 {
+			return nil, fmt.Errorf("invalid #number in %q: must be 1 or greater", a)
+		}
+		refs = append(refs, client.TrashEntityRef{Type: typ, Number: n})
 	}
 	return refs, nil
 }
@@ -84,8 +91,19 @@ func newTrashListCmd() *cobra.Command {
 			return output.Render(format, items, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
 				fmt.Fprintln(tw, "REF\tTITLE\tDELETED\tBY\tBATCH")
+				unaddressable := 0
 				for _, it := range items {
-					ref := fmt.Sprintf("%s:%d", it.Type, it.ID)
+					// The REF column is what a user pastes straight back into
+					// `restore`/`purge`, so it must be the #number the server now
+					// expects. A row with no #number cannot be addressed at all —
+					// say so rather than printing the row id, which would be read
+					// as a #number and act on a different row.
+					ref := "—"
+					if it.Seq != nil {
+						ref = fmt.Sprintf("%s:%d", it.Type, *it.Seq)
+					} else {
+						unaddressable++
+					}
 					by := "—"
 					if it.DeletedByName != nil {
 						by = *it.DeletedByName
@@ -105,6 +123,11 @@ func newTrashListCmd() *cobra.Command {
 				if len(items) == 0 {
 					fmt.Fprintln(cmd.ErrOrStderr(), "(trash is empty)")
 				}
+				if unaddressable > 0 {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"warning: %d item(s) have no #number and cannot be restored or purged by ref; use --batch\n",
+						unaddressable)
+				}
 				return nil
 			})
 		},
@@ -117,11 +140,12 @@ func newTrashRestoreCmd() *cobra.Command {
 	var batch int
 	var restoreParents, standalone bool
 	cmd := &cobra.Command{
-		Use:         "restore [<type:id>...]",
+		Use:         "restore [<type:#number>...]",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/trash/restore"},
 		Short:       "Restore items (or a whole batch) from the recycle bin",
 		Long: "Restore deleted items back to the workspace.\n\n" +
-			"Pass refs like `issue:42 project:3`, or restore a whole delete group with\n" +
+			"Pass refs like `issue:42 project:3` (the #number, as printed in the REF\n" +
+			"column), or restore a whole delete group with\n" +
 			"--batch <id> (see the BATCH column in `bk trash list`).\n\n" +
 			"If a restored item's project/task is also in the Trash, by default it\n" +
 			"comes back as a group when they were deleted together, otherwise standalone.\n" +
@@ -152,7 +176,7 @@ func newTrashRestoreCmd() *cobra.Command {
 					return err
 				}
 				if len(refs) == 0 {
-					return fmt.Errorf("provide one or more <type:id> refs, or --batch <id>")
+					return fmt.Errorf("provide one or more <type:#number> refs, or --batch <id>")
 				}
 				req.Items = refs
 				if restoreParents || standalone {
@@ -162,7 +186,7 @@ func newTrashRestoreCmd() *cobra.Command {
 					}
 					req.Resolutions = map[string]string{}
 					for _, r := range refs {
-						req.Resolutions[fmt.Sprintf("%s:%d", r.Type, r.ID)] = res
+						req.Resolutions[fmt.Sprintf("%s:%d", r.Type, r.Number)] = res
 					}
 				}
 			}
@@ -187,11 +211,12 @@ func newTrashPurgeCmd() *cobra.Command {
 	var batch int
 	var yes bool
 	cmd := &cobra.Command{
-		Use:         "purge [<type:id>...]",
+		Use:         "purge [<type:#number>...]",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/trash/purge"},
 		Short:       "Permanently delete items from the recycle bin (owner only)",
 		Long: "Permanently delete binned items. This cannot be undone and requires the\n" +
-			"workspace owner role. Pass refs like `issue:42`, or --batch <id>.\n\n" +
+			"workspace owner role. Pass refs like `issue:42` (the #number, as printed\n" +
+			"in the REF column), or --batch <id>.\n\n" +
 			"Any files embedded in the deleted items are automatically removed from\n" +
 			"storage once nothing else in the workspace references them (same safety\n" +
 			"check the Storage page uses).",
@@ -216,7 +241,7 @@ func newTrashPurgeCmd() *cobra.Command {
 					return err
 				}
 				if len(refs) == 0 {
-					return fmt.Errorf("provide one or more <type:id> refs, or --batch <id>")
+					return fmt.Errorf("provide one or more <type:#number> refs, or --batch <id>")
 				}
 				req.Items = refs
 				target = fmt.Sprintf("%d item(s)", len(refs))

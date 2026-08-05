@@ -379,12 +379,6 @@ type CreateCommentRequest struct {
 	ParentCommentID int    `json:"parent_comment_id,omitempty"`
 }
 
-type UndoResponse struct {
-	Success     bool            `json:"success" yaml:"success"`
-	UndoneCount int             `json:"undone_count" yaml:"undone_count"`
-	Operations  json.RawMessage `json:"operations" yaml:"-"`
-}
-
 type UploadResponse struct {
 	URL         string `json:"url" yaml:"url"`
 	Filename    string `json:"filename" yaml:"filename"`
@@ -583,9 +577,21 @@ type UpdateProfileRequest struct {
 // --- Recycle bin (trash) ---
 
 // TrashEntityRef identifies one binned item.
+//
+// `Number` is the workspace #number and is what this binary SENDS — the same
+// address `bk issue view` and every URN uses. `ID` is the row id: never sent,
+// only read back from a response that still carries it.
+//
+// The two are separate fields rather than one renamed field, and that is
+// load-bearing. Before 1.12.0 this struct sent `id` meaning the row id; if the
+// server had simply reinterpreted `id` as a #number, every INSTALLED binary
+// would have gone on sending row ids into the purge path and deleted whatever
+// happened to have that #number. Distinct names make the two eras
+// distinguishable, so an old client keeps working and a new one is unambiguous.
 type TrashEntityRef struct {
-	Type string `json:"type" yaml:"type"`
-	ID   int    `json:"id" yaml:"id"`
+	Type   string `json:"type" yaml:"type"`
+	Number int    `json:"number,omitempty" yaml:"number,omitempty"`
+	ID     int    `json:"id,omitempty" yaml:"id,omitempty"`
 }
 
 // TrashItem is one row in the recycle bin.

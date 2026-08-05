@@ -821,7 +821,6 @@ POST     /api/cli/authorize                       mint a token for the CLI
 
 POST     /api/upload                              multipart file upload (local dev / small files)
 POST     /api/upload/blob                          Vercel Blob client-upload token handshake (prod; large files)
-GET/POST /api/undo                                transaction history / rollback
 GET      /api/status                              public health probe
 GET      /api/status/errors , /errors/{id}        error log (owner-gated detail)
 POST     /api/errors/client                       client error beacon
@@ -878,7 +877,6 @@ these; they never write SQL inline.
 | `analytics.ts` | workspace/project/task/member analytics — see below |
 | `deletion.ts` | soft-delete engine — `softDelete*`, `previewDeletion`, `listTrash`, `previewRestore`, `restoreItems/Batch`, `purgeItems/Batch`, `emptyTrash` |
 | `move.ts` | cross-workspace transfer — `moveItems` (copy or move projects/tasks/issues + all satellite data into another workspace). **One transaction:** copies into the target (fresh `seq`, labels matched/created by name, comments/attachments/watchers/assignees/members/updates carried) then, for `mode='move'`, soft-deletes the source into one recycle-bin batch. Any failure rolls back everything — source untouched, no partial target rows, no data loss. User refs not in the target's membership (assignee/reporter/lead/owner/watcher/member/@mention) are dropped and returned under `adjustments`; a parent link (project/task) not in the same transfer is cleared. Backs `POST /api/workspaces/{ws}/move`. |
-| `transaction.ts` | transaction log + `undoLastOperations` |
 | `error-events.ts` | error log reads (public list redacts; detail is gated) |
 | `password-reset.ts` | OTP issue/verify/consume |
 | `whitelist.ts` | `isEmailAllowedByDb`, `listWhitelist`, `addWhitelistEntry`, `removeWhitelistEntry` |
@@ -921,12 +919,20 @@ See [The event spine](#the-event-spine). Anything user-visible that "happened"
 should `recordEvent` so it shows up in activity and (where appropriate) the
 inbox — don't write to `inbox_messages` directly from a route.
 
-### Transaction log / undo
+### Transaction log / undo — REMOVED 2026-08-05
 
-`transaction.ts` + `/api/undo`. `GET` returns recent entries; `POST {count}`
-(clamped 1–10) reverses the caller's last operations (issue updates restore
-`old_data`, inserts are deleted) and marks them `rolled_back`. This log is
-separate from the event spine.
+`transaction.ts` and `/api/undo` are gone, along with `bk undo`. The feature
+never worked: `logTransaction` had no callers, so `platform.transaction_log` was
+empty in production (0 rows, against 3,630 in `platform.events`) and every `undo`
+returned zero operations. A documented agent-facing feature that does nothing is
+worse than a missing one.
+
+Recovery is the recycle bin (`deletion.ts`, `bk trash`), which is what users and
+agents have actually been using. History is the event spine.
+
+The empty `platform.transaction_log` table is still there; dropping it is a
+separate change. Do not wire a new writer to it — if per-field undo is ever
+wanted, build it on `platform.events`, which already records every mutation.
 
 ### File uploads (`app/api/upload/route.ts`, `app/api/upload/blob/route.ts`)
 

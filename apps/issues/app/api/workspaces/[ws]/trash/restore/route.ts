@@ -6,39 +6,82 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace } from '@/lib/api'
 import {
   batchMembers,
+  numbersForRefs,
   previewRestore,
   restoreBatch,
   restoreItems,
   TrashItemNotFoundError,
+  type RestorePreview,
 } from '@/lib/db/queries/deletion'
 import { parseResolutions, parseSelection } from '../parse'
+import { remapResolutionKeys, resolveSelection } from '../resolve'
 
 interface Params {
   params: Promise<{ ws: string }>
+}
+
+/**
+ * Add `#number` alongside every row id in a conflict preview.
+ *
+ * The client keys its resolutions off what this returns, so the preview has to
+ * speak the same addresses as the listing. Row ids stay in the payload: the UI
+ * still uses them, and dropping a field an existing client reads is the kind of
+ * break that shows up only in production.
+ */
+async function withNumbers(workspaceId: number, preview: RestorePreview) {
+  const refs = [
+    ...preview.items,
+    ...preview.conflicts.map((c) => ({ type: c.type, id: c.id })),
+    ...preview.conflicts.map((c) => ({ type: c.parent_type, id: c.parent_id })),
+  ]
+  const numbers = await numbersForRefs(workspaceId, refs)
+  const numberOf = (type: string, id: number) => numbers.get(`${type}:${id}`) ?? null
+  return {
+    items: preview.items.map((r) => ({ ...r, number: numberOf(r.type, r.id) })),
+    conflicts: preview.conflicts.map((c) => ({
+      ...c,
+      number: numberOf(c.type, c.id),
+      parent_number: numberOf(c.parent_type, c.parent_id),
+    })),
+  }
 }
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
   const ctx = await resolveWorkspace(req, ws)
   const body = await req.json().catch(() => null)
-  const { batchId, items } = parseSelection(body)
+  const selection = parseSelection(body)
+  const batchId = selection.batchId
   const dryRun = !!(body && typeof body === 'object' && (body as Record<string, unknown>).dry_run)
 
-  // Resolve the working set of refs.
+  // Resolve the working set of refs. A `#number` that matches nothing 404s here,
+  // before anything is touched.
+  const items = await resolveSelection(ctx.workspace.id, selection)
   const refs = batchId !== null ? await batchMembers(ctx.workspace.id, batchId) : items
 
   if (dryRun) {
     const preview = await previewRestore(ctx.workspace.id, refs)
-    return NextResponse.json(preview)
+    return NextResponse.json(await withNumbers(ctx.workspace.id, preview))
   }
 
-  const resolutions = parseResolutions(body)
+  // Resolution keys arrive keyed by whatever the client used to address the
+  // item — #number for 1.12.0+, row id before that. `restoreEntity` looks them
+  // up by row id, so they are normalised here rather than deeper down, where a
+  // missed key silently becomes "use the default resolution".
+  const resolutions = remapResolutionKeys(selection, items, parseResolutions(body))
   try {
     const result =
       batchId !== null
         ? await restoreBatch(ctx.workspace.id, batchId, ctx.user.id)
         : await restoreItems(ctx.workspace.id, items, ctx.user.id, resolutions)
-    return NextResponse.json({ restored: result.restored, count: result.restored.length })
+    const numbers = await numbersForRefs(ctx.workspace.id, result.restored)
+    return NextResponse.json({
+      restored: result.restored.map((r) => ({
+        ...r,
+        number: numbers.get(`${r.type}:${r.id}`) ?? null,
+      })),
+      count: result.restored.length,
+    })
   } catch (err) {
     // A ref that is not in this workspace's bin is a 404, not a silent success.
     // The suggestion names the one command that produces valid refs, because the

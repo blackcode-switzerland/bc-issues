@@ -30,6 +30,74 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-05 — `bk trash` refs are now #numbers, and `bk undo` is removed
+
+**Two breaking changes, both in the CLI. Read the trash one before upgrading.**
+
+### `bk trash` refs are `#number`s, not row ids
+
+`bk trash list`'s **REF** column used to print an internal database row id — the
+one place the platform exposed a serial instead of the `#number` used by URNs,
+`bk issues issue view`, `bk search` and everything else. It now prints the
+`#number`, so `issue:42` in Trash is the same issue as `bk issues issue view 42`.
+
+```bash
+bk trash restore issue:42        # 42 is now the #number
+bk trash purge   issue:42
+```
+
+**⚠️ Do not reuse a ref captured before upgrading.** An old row id is usually a
+valid `#number` for a *different* item, and `purge` is not recoverable. Re-run
+`bk trash list` and take the current REF. If you have a stored script or an agent
+holding refs across this release, that is the one thing to check.
+
+The wire format keeps the two unambiguous rather than redefining one:
+`{"type":"issue","number":42}` means the #number, `{"type":"issue","id":905}`
+still means the row id. **Every pre-1.12.0 binary therefore keeps working
+unchanged** — it sends `id`, and the server reads it as a row id exactly as
+before. An item carrying both is rejected as ambiguous rather than guessed at.
+Redefining `id` would have made every installed binary silently purge the wrong
+row, which is why it was not an option.
+
+Also fixed: `bk trash list` reported a `#number` for issues but `null` for
+projects and tasks, even though both have had one since migration 0030. All three
+now report it. A row with no `#number` shows `—` and a stderr warning rather than
+falling back to a row id — such a row can only be restored with `--batch`.
+
+### `bk undo` is removed
+
+It never worked. `platform.transaction_log` had no writer, so the table was empty
+in production and `bk undo` reported zero operations every time it has ever been
+run. A documented agent-facing command that does nothing is worse than a missing
+one: an agent that believes it can undo takes risks it otherwise would not.
+
+**Use Trash instead** — it is the working recovery path and always was:
+
+```bash
+bk trash list
+bk trash restore issue:42
+```
+
+`bk undo` now exits non-zero with a hint naming Trash. `GET`/`POST /api/undo` are
+gone, and `limits.undo_max_count` no longer appears in `bk meta`. The empty
+`platform.transaction_log` table is left in place for now; dropping it is a
+separate change.
+
+The per-issue activity view lost its "changes" half, which read the same empty
+table and has returned nothing for its entire existence. Real history is
+`platform.events`, which the activity feed and inbox already read.
+
+### `platform.events.app` and `platform.uploads.app` are now `NOT NULL`
+
+The contract half of the expand → migrate → contract started in migrations 0035
+and 0036. No client-visible change: all current code sets `app`, which is exactly
+the precondition that was verified before tightening (0 NULLs across 3,630 event
+rows and 105 upload rows, and neither `recordEvent` nor `recordUpload` lets a
+call site omit it). It only matters if you roll the deployment back to a
+pre-Phase-6 build — see `docs/sql/phase8-app-not-null-rollback.sql`.
+
+---
+
 ## 2026-08-05 — Blob cleanup works across deployments: a shared, database-maintained reference index
 
 **Not breaking.** Nothing you run changes shape. One new super-admin command,

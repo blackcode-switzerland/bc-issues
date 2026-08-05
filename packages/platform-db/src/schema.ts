@@ -426,7 +426,15 @@ export const uploads = platformSchema.table(
     // ON DELETE set null, not cascade: deregistering an app must not delete the
     // ledger rows for files that still exist in the store. An unattributed row
     // is recoverable; a missing one hides bytes nobody can find again.
-    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
+    //
+    // NOT NULL since 0039 (Phase 8, the contract half of expand → migrate →
+    // contract). The precondition was verified rather than assumed: 0 NULLs in
+    // production, and `apps/issues/lib/db/queries/uploads.ts` injects the slug in
+    // a wrapper whose parameter type does not accept `app` at all — so no call
+    // site can omit it.
+    app: varchar('app', { length: 40 })
+      .notNull()
+      .references(() => apps.slug, { onDelete: 'set null' }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
@@ -614,9 +622,15 @@ export const events = platformSchema.table(
     // *old* code is still inserting rows with no `app`. A NOT NULL would make
     // every one of those inserts fail; a DEFAULT 'issues' would hardcode one
     // app's name into a platform table. Migration 0035 backfills every existing
-    // row and all current code sets it. Tightening to NOT NULL is a Phase 8
-    // contract step, once no deployed code can write a NULL.
-    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
+    // row and all current code sets it.
+    //
+    // NOT NULL since 0039 (Phase 8) — the contract step. Verified rather than
+    // assumed: 0 NULLs in production across 3,630 rows, and `recordEvent` sets
+    // `app: APP_SLUG` centrally rather than at the ~40 call sites, so no call
+    // site can omit it.
+    app: varchar('app', { length: 40 })
+      .notNull()
+      .references(() => apps.slug, { onDelete: 'set null' }),
     entity_type: varchar('entity_type', { length: 30 }).notNull(),
     entity_id: integer('entity_id').notNull(),
     // The cross-app address of what this event is about — the join key between

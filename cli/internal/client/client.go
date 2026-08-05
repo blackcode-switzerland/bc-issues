@@ -679,26 +679,6 @@ func (c *Client) DeleteTask(id int, mode string) error {
 	return c.deleteJSON(path, nil, nil)
 }
 
-// UndoLog fetches GET /api/undo — the recent transaction log, so you can see
-// what `bk undo` would roll back before committing to it. Returned verbatim as
-// raw JSON so new fields flow through without a client change.
-func (c *Client) UndoLog() (json.RawMessage, error) {
-	var raw json.RawMessage
-	if err := c.get("/api/undo", &raw); err != nil {
-		return nil, err
-	}
-	return raw, nil
-}
-
-func (c *Client) Undo(count int) (*UndoResponse, error) {
-	body := map[string]any{"count": count}
-	var resp UndoResponse
-	if err := c.postJSON("/api/undo", body, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
 func (c *Client) AttachExisting(issueID int, up *UploadResponse) (*Attachment, error) {
 	return c.AttachToIssue(issueID, up)
 }

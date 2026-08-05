@@ -1,0 +1,163 @@
+================================================================================
+PHASE 6 IMPLEMENTATION PROMPT — Blackcode Platform Migration
+Fresh context. Phases 0-5 are done and live in production.
+================================================================================
+
+## READ FIRST, COMPLETELY
+
+  1. PLATFORM-ARCHITECTURE.md   — target design (WHAT and WHY). §5 is your phase.
+  2. PLATFORM-MIGRATION-PLAN.md — ordered migration (HOW and WHEN)
+  3. AGENT-PROMPT.txt           — standing ground rules, all still apply
+  4. CLAUDE.md and AGENTS.md    — agent-surface contract and docs sync rule
+
+In the plan, read these three sections before writing any code:
+  - "The production cutover pattern" — written from five real production
+    changes. Not optional.
+  - "Releasing the CLI: web deploy, then npm, then web deploy AGAIN"
+  - "Decisions taken during the migration"
+
+
+## WHERE THE MIGRATION STANDS — Phases 0-5 DONE and live
+
+  0  baseline; repo renamed bc-issues -> blackcode-platform
+  1  monorepo: apps/issues + turbo + packages workspace
+  2  packages/platform-db, platform-api, platform-ui extracted
+  3  platform.* (16 tables) + issues.* (10), public empty; production runs as
+     the bounded role issues_app (DML only, owns nothing, no DDL)
+  4  platform.apps / workspace_apps / app_access; enforcement LIVE;
+     packages/platform-auth created early holding ONLY requireAppAccess
+  5  CLI namespaced (bk issues …), guide split, changelog split, bk meta
+     regrouped, docs split. CLI v1.10.0 published.
+
+Production right now:
+  issues.blackcode.ch healthy, 35 migrations (latest 0034)
+  DATABASE_URL         -> issues_app       MIGRATE_DATABASE_URL -> neondb_owner
+  RUN_MIGRATIONS=1     Production-only
+  x-bk-cli-latest 1.10.0 · x-bk-cli-min 1.9.1 · npm latest 1.10.0
+  main: 17 workspaces / 17 workspace_apps, 42 members / 42 app_access, 0 orphans
+  Neon branches kept: main, preview, phase4-pre-apply, phase3-pre-apply,
+                      pre-platform-migration
+  Smoke-test fixture: user 44 phase3-verify@blackcode.ch — REUSE IT, never prune
+
+FIRST ACT: `git push origin main`. Commit 88a2b81 (docs/devops + the committed
+agent skill) is local-only. Verify origin/main == 88a2b81 before starting work.
+
+REMAINING: Phase 6 (yours), then 7, 8.
+
+
+## YOUR TASK — PHASE 6 ONLY
+
+Cross-app primitives. The plan's Phase 6 section is authoritative. Do it,
+verify, report, STOP. Do not begin Phase 7.
+
+This is the phase that makes a second app worth having. Everything before it was
+rearrangement; this is the first new capability.
+
+### 6.1 The primitives
+
+  platform.entities (urn PK, app, workspace_id, entity_type, number,
+                     title, url, updated_at, deleted_at)
+  platform.links    (from_urn, to_urn, rel, created_by, created_at)
+  platform.events   -- generalise the existing table: + app, + subject_urn
+
+URN format: bc:<app>:<workspace-slug>/<entity-type>/<number>
+  e.g. bc:issues:kali-sa/issue/482
+Use the workspace #number, NEVER the global db id — that rule is enforced
+everywhere else in this codebase and agents depend on it.
+
+### 6.2 Order of work
+
+  1. Push 88a2b81. Confirm origin/main matches.
+  2. Migration + backfill: an entities row for every existing issue, task and
+     project; events gains app + subject_urn, backfilled with app='issues'.
+     Rehearse on a FRESH Neon branch from main, and rehearse the rollback.
+  3. platform-db exposes URN parse/format and upsertEntity.
+  4. apps/issues writes entities on every create/update/delete of an issue, task
+     or project — IN THE SAME TRANSACTION as the source write. A projection that
+     can drift is worse than no projection.
+  5. Reconciliation job that re-derives entities from source tables and reports
+     drift. Build it NOW, while there is exactly one writer.
+  6. New commands: bk link create|list|rm, bk activity --ws <slug> --since,
+     bk search <query> — all reading platform.*, all app-agnostic, all at the
+     TOP level (they are platform verbs, not `bk issues` verbs).
+  7. Guide topic platform/cross-app.md explaining URNs and links to agents.
+  8. Changelog entry in docs/changelog/platform.md — this is platform data, NOT
+     docs/changelog/issues.md, even though issues is what prompted it.
+
+### 6.3 Also in scope — two deferred package extractions
+
+  packages/platform-auth — lib/auth.ts and lib/auth/*. It was blocked because
+    events.ts hardcodes issues/projects/tasks, and generalising events IS this
+    phase's work. Once events carries app + subject_urn, the blocker is gone.
+    platform-auth already exists holding only requireAppAccess; this fills it.
+
+  packages/platform-agent — lib/changelog.ts, lib/cli-version.ts, llms.txt
+    renderer, /agent-updator content, the CLI-parity harness.
+    ⚠ WARNING carried from Phase 5: changelog.ts resolves docs/changelog/ at
+    runtime by walking up from cwd, and is wired into outputFileTracingIncludes.
+    Moving it into a package CHANGES TRACE-ROOT BEHAVIOUR. That failure does not
+    appear in a local build — it appears as a 500 on a serverless deploy. Phase 5
+    correctly declined to move it because Phase 5 had no preview deploy. THIS
+    phase has one. Verify /api/changelog on the preview deployment specifically,
+    and check route.js.nft.json contains docs/changelog/*.md.
+
+  Apply the standing stop rule to both: extract only what a future sales app
+  would need UNCHANGED. If you must add a parameter to generalise it, leave it.
+
+
+## HARD RULES
+
+- Rehearse the migration AND the rollback on a Neon branch first.
+- PREVIEW DEPLOY IS REQUIRED this phase — migration plus the trace-root risk
+  above. Preview env is already configured (DATABASE_URL as issues_app on the
+  preview branch, NEXTAUTH_SECRET, a separate Blob store).
+- Use the cutover pattern. 0035 will be ADDITIVE, so — as in Phase 4 — apply the
+  migration BEFORE the promote and there is no outage window at all. Confirm
+  additivity before relying on that.
+- `vercel deploy --prod` and `vercel promote` are BLOCKED for you by the
+  permission classifier. Probe the blocked command BEFORE anything irreversible;
+  promoting the already-live deployment is a free no-op. Hand exact commands to
+  the user.
+- NEVER raise CLI_MIN_VERSION. Still Phase 8.
+- If you release a CLI, follow the three-step order: web deploy, npm, web deploy
+  again. Answer `normal`, never `forced`.
+- Ask before: applying any migration to main, any Vercel env change, promoting
+  to production, publishing to npm.
+
+
+## THE FAILURE MODE THIS PHASE HAS
+
+Phase 3 failed loudly. Phase 4 failed quietly. Phase 5 failed later.
+Phase 6 fails SLOWLY — a projection that drifts.
+
+entities is derived data. If a write path forgets to upsert, nothing breaks
+today: search returns slightly stale results, activity misses an entry, and
+nobody notices for weeks. By then you cannot tell which rows are wrong.
+
+So:
+  - every entities write is in the SAME TRANSACTION as its source write; a test
+    must prove a rolled-back source write leaves no entities row
+  - the reconciliation job ships in this phase, not later
+  - verification asserts entities COUNTS MATCH source counts per type, not that
+    queries return something
+
+## STILL DEFERRED — do NOT do these
+
+  - The session cookie -> .blackcode.ch. Separate scheduled change; it may sign
+    everyone out once. Ask before touching it.
+  - Raising CLI_MIN_VERSION — Phase 8.
+  - packages/platform-storage — Phase 7; blob-refs.ts app coupling IS Phase 7's
+    work.
+  - Building any second app.
+
+
+## REPORT
+
+Use the report format in AGENT-PROMPT.txt. Stop after Phase 6.
+
+If you find the plan is wrong, say so and stop. That has happened on every phase
+so far and each time it was the most valuable output. A blocked phase reported
+honestly is fine; a phase reported complete that is not is the only outcome that
+costs real time.
+
+================================================================================

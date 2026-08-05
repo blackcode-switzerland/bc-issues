@@ -26,9 +26,6 @@ export const PROFILE_NAME_MAX = 255
 export const PROFILE_TAGLINE_MAX = 140
 /** Invitation `email` — `app/api/workspaces/[ws]/invitations/route.ts`. */
 export const INVITE_EMAIL_MAX = 255
-/** `POST /api/undo { count }` is CLAMPED to this — it does not error above it. */
-export const UNDO_MAX_COUNT = 10
-
 /** Keyset-paginated feeds (activity, trash, inbox, super-admin errors). */
 export const PAGE_SIZE_DEFAULT = 50
 export const PAGE_SIZE_MAX = 200
@@ -50,7 +47,6 @@ export const PLATFORM_LENGTH_LIMITS = {
   profile_name_max: PROFILE_NAME_MAX,
   profile_tagline_max: PROFILE_TAGLINE_MAX,
   invite_email_max: INVITE_EMAIL_MAX,
-  undo_max_count: UNDO_MAX_COUNT,
   page_size_default: PAGE_SIZE_DEFAULT,
   page_size_max: PAGE_SIZE_MAX,
   search_query_min: SEARCH_QUERY_MIN,

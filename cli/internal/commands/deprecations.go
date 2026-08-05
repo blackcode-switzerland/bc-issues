@@ -41,6 +41,15 @@ var deprecations = map[string]string{
 	"move":      "`bk move …` is now `bk issues move …` — app verbs sit behind their app name. Same flags, same output.",
 	"copy":      "`bk copy …` is now `bk issues copy …` — app verbs sit behind their app name. Same flags, same output.",
 	"analytics": "`bk analytics …` is now `bk issues analytics …` — it reports this app's statuses and priorities, so it moved with the app. Same flags, same output.",
+
+	// --- 1.12.0 (2026-08-05): `bk undo` removed ---
+	//
+	// It never worked. `platform.transaction_log` had no writer, so the table was
+	// empty in production and `undo` reported "0 operations" every time it was
+	// run. A documented agent-facing command that does nothing is worse than a
+	// missing one: an agent that believes it can undo takes risks it would not
+	// otherwise take. Trash is the working undo and always was.
+	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk trash list` then `bk trash restore <type>:<#number>`.",
 }
 
 // flagRe pulls the offending token out of a cobra usage error, e.g.

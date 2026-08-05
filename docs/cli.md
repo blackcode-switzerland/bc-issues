@@ -76,7 +76,7 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 > Versions published before the rename still reference the old URL and keep
 > working via the redirect.
 
-The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, undo, moving/copying items between workspaces, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
+The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, moving/copying items between workspaces, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
 
 A typical session:
 
@@ -88,7 +88,6 @@ bk issues project list                                 # show your projects
 bk issues issue create --project 1 --title "Fix login" --priority 2
 bk issues issue list --project 1 --mine
 bk issues issue comment 42 --body "Investigating now"
-bk undo --count 1                               # roll back the last operation
 ```
 
 ---
@@ -419,7 +418,7 @@ bk issues copy --to growth --project 42 --cascade-issues=false
 | `bk issues issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
 | `bk issues issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
 | `bk issues issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
-| `bk issues issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<id>`. |
+| `bk issues issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<#number>`. |
 | `bk issues issue comment <id> --body "..." \| --body - \| --body-file F [--reply-to C] [--file F ...]` | `POST /api/workspaces/:ws/issues/:id/comments` | Body or `--file` required. `--reply-to` threads under comment id C. `--file` uploads + embeds inline. |
 | `bk issues issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
 | `bk issues issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
@@ -509,9 +508,9 @@ All deletes (issues, projects, tasks) are soft — rows move to a per-workspace 
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk trash list [--type issue\|project\|task]` | `GET /api/workspaces/:ws/trash` | Shows binned items grouped by deletion batch. |
-| `bk trash restore <type:id> [<type:id> …]` | `POST /api/workspaces/:ws/trash/restore` | e.g. `bk trash restore issue:42 project:3`. Detects and reports conflicts. |
+| `bk trash restore <type:#number> [<type:#number> …]` | `POST /api/workspaces/:ws/trash/restore` | e.g. `bk trash restore issue:42 project:3`. Refs are **#numbers** since 1.12.0 (they were row ids before — do not reuse an old one). Detects and reports conflicts. |
 | `bk trash restore --batch <id> [--restore-parents\|--standalone]` | same | Restore a whole cascade-delete group at once. |
-| `bk trash purge <type:id> [--yes]` | `DELETE /api/workspaces/:ws/trash/purge` | Permanent hard-delete. **Owner only.** |
+| `bk trash purge <type:#number> [--yes]` | `DELETE /api/workspaces/:ws/trash/purge` | Permanent hard-delete. **Owner only.** Refs are **#numbers** since 1.12.0. The wire format keeps both spellings distinct (`{type,number}` vs the legacy `{type,id}`) so a pre-1.12.0 binary is never misread — see `app/api/workspaces/[ws]/trash/parse.ts`. |
 | `bk trash purge --batch <id> [--yes]` | same | Purge a whole batch. |
 | `bk trash empty [--yes]` | `POST /api/workspaces/:ws/trash/empty` | Hard-delete everything in the bin. **Owner only.** |
 
@@ -616,13 +615,12 @@ URN shape: `bc:<app>:<workspace-slug>/<entity-type>/<number>`, where `<number>`
 is the workspace #number and never the row id. Do not hand-assemble one; take it
 from `bk search` or from an activity entry's `subject_urn`.
 
-### Activity / analytics / undo
+### Activity / analytics
 
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk activity [--limit N] [--cursor N] [--since 24h] [--app A] [--subject URN]` | `GET /api/workspaces/:ws/activity` | Cross-app change feed (keyset-paginated). `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. `--since` takes a relative window (`30m`/`24h`/`7d`) and is mutually exclusive with a raw `from=` (400 `since_and_from`). `--subject` gives one entity's whole history in one call. Each row carries the producing `app`. |
 | `bk issues analytics [flags]` | `GET /api/workspaces/:ws/analytics` | Workspace analytics with full web-dashboard parity (see below). `--ws <slug\|id>` targets another workspace via the path. Any member; not admin-only. |
-| `bk undo [--count N] [--yes]` | `POST /api/undo` | Rolls back your last N operations (clamped to 1–10). Prompts to confirm. |
 
 **`bk issues analytics` flags** — all optional; defaults to the active workspace,
 workspace scope, last-30-days window, daily buckets:
@@ -892,8 +890,12 @@ bk issues issue list --project 1 --status todo --json \
 ### Recover from a misstep
 
 ```bash
-bk undo --count 1 --yes
+bk trash list                    # REF column gives <type>:<#number>
+bk trash restore issue:42
 ```
+
+`bk undo` was removed in 1.12.0 — it never recorded anything. Deletes are soft,
+so Trash is the recovery path.
 
 ### Authenticate headlessly
 

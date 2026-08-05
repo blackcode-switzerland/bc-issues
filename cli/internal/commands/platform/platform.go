@@ -45,7 +45,6 @@ func NewCommands() []*cobra.Command {
 		newUploadCmd(),
 		newStorageCmd(),
 		newTrashCmd(),
-		newUndoCmd(),
 		newChangelogCmd(),
 		newSuperAdminCmd(),
 		newVersionCmd(),

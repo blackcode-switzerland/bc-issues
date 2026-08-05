@@ -168,11 +168,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/undo",
-      "command": "bk undo"
-    },
-    {
-      "method": "GET",
       "path": "/api/upload",
       "command": "bk upload"
     },
@@ -430,11 +425,6 @@
       "method": "POST",
       "path": "/api/tokens",
       "command": "bk token create"
-    },
-    {
-      "method": "POST",
-      "path": "/api/undo",
-      "command": "bk undo"
     },
     {
       "method": "POST",

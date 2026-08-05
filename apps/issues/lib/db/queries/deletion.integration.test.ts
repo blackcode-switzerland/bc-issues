@@ -243,4 +243,123 @@ run('deletion engine (integration)', () => {
     const got = await issuesQ.getIssue(iss.id)
     expect(got?.seq).toBe(6001)
   })
+
+  // -------------------------------------------------------------------------
+  // #number → row id (1.12.0)
+  // -------------------------------------------------------------------------
+  // `bk trash` used to print row ids. It now prints #numbers, which means a
+  // lookup sits in front of restore and purge. The lookup is one query; the
+  // consequence of getting it wrong is destroying a row the caller did not name.
+  // So these tests are all about the resolution being EXACT and WORKSPACE-SCOPED.
+  describe('#number resolution', () => {
+    let otherWsId: number
+    let mine: { issue: number; project: number; task: number }
+    let theirs: { issue: number }
+
+    beforeAll(async () => {
+      const suffix = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+      const [w] = await db
+        .insert(schema.workspaces)
+        .values({ name: 'Other WS', slug: `other-${suffix}`.slice(0, 40), owner_id: userId })
+        .returning({ id: schema.workspaces.id })
+      otherWsId = w.id
+
+      // The SAME #number 7777 in both workspaces, on purpose.
+      const [i1] = await db.insert(schema.issues)
+        .values({ workspace_id: wsId, seq: 7777, title: 'mine' })
+        .returning({ id: schema.issues.id })
+      const [p1] = await db.insert(schema.projects)
+        .values({ workspace_id: wsId, seq: 7777, name: 'mine-p', owner_id: userId })
+        .returning({ id: schema.projects.id })
+      const [t1] = await db.insert(schema.tasks)
+        .values({ workspace_id: wsId, seq: 7777, name: 'mine-t' })
+        .returning({ id: schema.tasks.id })
+      const [i2] = await db.insert(schema.issues)
+        .values({ workspace_id: otherWsId, seq: 7777, title: 'theirs' })
+        .returning({ id: schema.issues.id })
+      mine = { issue: i1.id, project: p1.id, task: t1.id }
+      theirs = { issue: i2.id }
+    })
+
+    afterAll(async () => {
+      if (otherWsId) await db.delete(schema.workspaces).where(eqId(schema.workspaces.id, otherWsId))
+    })
+
+    it('resolves a #number to the row with that seq, per type', async () => {
+      const refs = await engine.resolveNumberedRefs(wsId, [
+        { type: 'issue', number: 7777 },
+        { type: 'project', number: 7777 },
+        { type: 'task', number: 7777 },
+      ])
+      expect(refs).toEqual([
+        { type: 'issue', id: mine.issue },
+        { type: 'project', id: mine.project },
+        { type: 'task', id: mine.task },
+      ])
+    })
+
+    it('NEVER crosses a workspace boundary', async () => {
+      // The same #number exists in both workspaces. This is the assertion that
+      // stands between a purge and someone else's data.
+      const here = await engine.resolveNumberedRefs(wsId, [{ type: 'issue', number: 7777 }])
+      const there = await engine.resolveNumberedRefs(otherWsId, [{ type: 'issue', number: 7777 }])
+      expect(here[0].id).toBe(mine.issue)
+      expect(there[0].id).toBe(theirs.issue)
+      expect(here[0].id).not.toBe(there[0].id)
+    })
+
+    it('does not confuse a #number with a row id', async () => {
+      // The row id of `mine.issue` is some serial; asking for it AS a #number
+      // must not find it (unless they coincide, which the guard below excludes).
+      if (mine.issue === 7777) return
+      await expect(
+        engine.resolveNumberedRefs(wsId, [{ type: 'issue', number: mine.issue }])
+      ).rejects.toBeInstanceOf(engine.TrashRefNotFoundError)
+    })
+
+    it('throws listing EVERY unknown ref, not just the first', async () => {
+      // An agent should fix one call, not discover the bad refs one at a time.
+      const err = await engine
+        .resolveNumberedRefs(wsId, [
+          { type: 'issue', number: 999001 },
+          { type: 'issue', number: 7777 },
+          { type: 'task', number: 999002 },
+        ])
+        .catch((e) => e)
+      expect(err).toBeInstanceOf(engine.TrashRefNotFoundError)
+      expect(err.refs).toEqual([
+        { type: 'issue', number: 999001 },
+        { type: 'task', number: 999002 },
+      ])
+    })
+
+    it('returns nothing at all when any ref is unknown', async () => {
+      // Partial resolution is the dangerous shape: purge would proceed on the
+      // subset that happened to resolve.
+      await expect(
+        engine.resolveNumberedRefs(wsId, [
+          { type: 'issue', number: 7777 },
+          { type: 'issue', number: 999003 },
+        ])
+      ).rejects.toBeInstanceOf(engine.TrashRefNotFoundError)
+    })
+
+    it('round-trips through numbersForRefs', async () => {
+      const map = await engine.numbersForRefs(wsId, [
+        { type: 'issue', id: mine.issue },
+        { type: 'project', id: mine.project },
+      ])
+      expect(map.get(`issue:${mine.issue}`)).toBe(7777)
+      expect(map.get(`project:${mine.project}`)).toBe(7777)
+    })
+
+    it('lists a #number for projects and tasks, not just issues', async () => {
+      // These reported NULL before, which is why the REF column could only ever
+      // have been a row id.
+      await engine.softDeleteEntity(wsId, 'project', mine.project, userId, 'detach')
+      const trash = await engine.listTrash(wsId, { type: 'project' })
+      expect(trash.find((t) => t.id === mine.project)?.seq).toBe(7777)
+    })
+  })
+
 })

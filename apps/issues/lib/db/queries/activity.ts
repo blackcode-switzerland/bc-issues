@@ -1,5 +1,14 @@
+// Per-issue activity: the comments on an issue, newest first.
+//
+// This used to UNION a second half read from `platform.transaction_log`, the
+// table behind the old `bk undo`. That table was never written — `logTransaction`
+// had no callers — so the "changes" half returned an empty list on every call
+// this feature has ever served. It went with `bk undo` in 1.12.0; the real
+// history is `platform.events` (see queries/events.ts), which the activity feed
+// and inbox already read.
+
 import { sql } from 'drizzle-orm'
-import { comments, transactionLog, users } from '../schema'
+import { comments, users } from '../schema'
 import { db } from '../client'
 
 export async function getIssueActivity(issueId: number) {
@@ -20,27 +29,7 @@ export async function getIssueActivity(issueId: number) {
     `)
   ).rows
 
-  const changes = (
-    await db.execute(sql`
-      SELECT
-        t.id,
-        'change' as type,
-        t.operation_type,
-        t.old_data,
-        t.new_data,
-        t.user_id,
-        u.name as user_name,
-        u.avatar_url as user_avatar,
-        t.created_at
-      FROM ${transactionLog} t
-      LEFT JOIN ${users} u ON u.id = t.user_id
-      WHERE t.table_name = 'issues' AND t.record_id = ${issueId}
-      ORDER BY t.created_at DESC
-      LIMIT 50
-    `)
-  ).rows
-
-  return [...commentRows, ...changes].sort(
+  return [...commentRows].sort(
     (a, b) =>
       new Date((b as { created_at: string }).created_at).getTime() -
       new Date((a as { created_at: string }).created_at).getTime()
