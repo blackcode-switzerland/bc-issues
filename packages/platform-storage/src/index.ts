@@ -8,6 +8,7 @@
 // The barrel is safe to import from a server module; nothing here has an import
 // side effect. Registering a scanner is an explicit call the app makes, not
 // something a barrel can do for it — see references.ts.
+export * from './apps'
 export * from './assets'
 export * from './paths'
 export * from './references'

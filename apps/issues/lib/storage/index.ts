@@ -19,6 +19,7 @@
 import {
   computeWorkspaceReferences as computeReferences,
   isUrlReferencedAnywhere as isReferenced,
+  listAppSlugs,
   registerReferenceScanner,
   sweepOrphanedUrls as sweep,
   type Reference,
@@ -50,4 +51,12 @@ export async function isUrlReferencedAnywhere(url: string): Promise<boolean> {
 /** Delete the bytes behind each url that no app references any more. */
 export async function sweepOrphanedUrls(urls: Array<string | null | undefined>): Promise<void> {
   return sweep(await getDb(), urls)
+}
+
+/**
+ * Every app slug in `platform.apps`, enabled or not — the input to the upload
+ * handshake's "is this path someone else's?" check.
+ */
+export async function knownAppSlugs(): Promise<string[]> {
+  return listAppSlugs(await getDb())
 }

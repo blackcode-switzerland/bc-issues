@@ -67,6 +67,12 @@ is registered but its scanner is unreachable. A refusal you did not expect means
   that shrank with a filter would read as free space.
 - Files uploaded before this release keep their flat pathnames and are attributed
   by the ledger, so `--app issues` includes them.
+- **Older `bk` binaries keep uploading normally.** The CLI uploads client-direct
+  too, and a client that predates the prefix convention sends a bare filename;
+  the server accepts it and the file lands flat at the store root, still
+  attributed to `issues` in the ledger. Nothing about uploading requires an
+  upgrade. From the next CLI release, `bk` reads `app` and `workspace` from
+  `GET /api/upload` and sends the prefixed path itself.
 
 ---
 

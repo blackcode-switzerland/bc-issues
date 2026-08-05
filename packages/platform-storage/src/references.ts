@@ -41,8 +41,8 @@
 // Making that work across deployments is a cross-app protocol, not a scan; it is
 // out of Phase 7's scope and recorded as a carry-forward.
 
-import { sql, type SQL } from 'drizzle-orm'
-import { apps } from '@blackcode/platform-db/schema'
+import { type SQL } from 'drizzle-orm'
+import { listAppSlugs } from './apps'
 
 /**
  * The narrow slice of a Drizzle client this module needs. Both `db` and a
@@ -129,8 +129,7 @@ export function clearReferenceScanners(): void {
  * signal a human acts on.
  */
 export async function assertScannerCoverage(db: Executor): Promise<void> {
-  const res = await db.execute(sql`SELECT slug FROM ${apps} WHERE enabled = true`)
-  const enabled = res.rows.map((r) => String(r.slug))
+  const enabled = await listAppSlugs(db, { enabledOnly: true })
 
   if (enabled.length === 0) {
     throw new ReferenceCoverageError(

@@ -7,9 +7,12 @@ import {
   UNATTRIBUTED_WORKSPACE,
   appFromPathname,
   appPrefix,
-  assertOwnPathname,
+  assertPathnameWritable,
   blobPathname,
 } from '@blackcode/platform-storage/paths'
+
+// Every app in platform.apps, as the upload handshake passes them.
+const KNOWN_APPS = ['issues', 'sales']
 
 describe('blobPathname', () => {
   it('writes under <app>/<workspace>/<file>', () => {
@@ -56,20 +59,39 @@ describe('appPrefix / appFromPathname', () => {
   })
 })
 
-describe('assertOwnPathname', () => {
+describe('assertPathnameWritable', () => {
   it('accepts this app’s own prefix', () => {
-    expect(() => assertOwnPathname('issues', 'issues/acme/x.png')).not.toThrow()
+    expect(() => assertPathnameWritable('issues', 'issues/acme/x.png', KNOWN_APPS)).not.toThrow()
   })
 
   it('refuses another app’s prefix', () => {
-    expect(() => assertOwnPathname('issues', 'sales/acme/x.png')).toThrow()
-  })
-
-  it('refuses an unprefixed path', () => {
-    expect(() => assertOwnPathname('issues', 'x.png')).toThrow()
+    expect(() => assertPathnameWritable('issues', 'sales/acme/x.png', KNOWN_APPS)).toThrow()
   })
 
   it('refuses traversal', () => {
-    expect(() => assertOwnPathname('issues', 'issues/../sales/x.png')).toThrow()
+    expect(() => assertPathnameWritable('issues', 'issues/../sales/x.png', KNOWN_APPS)).toThrow()
+  })
+
+  it('refuses an empty path', () => {
+    expect(() => assertPathnameWritable('issues', '   ', KNOWN_APPS)).toThrow()
+  })
+
+  // ── THE REGRESSION ────────────────────────────────────────────────────────
+  // This check once demanded the prefix, which broke every installed `bk` in
+  // production on 2026-08-05: the CLI uses the same client-direct flow as the
+  // browser and sends a bare filename (client.go → uploadViaBlob). An old client
+  // cannot know a convention that shipped after it did, so an unprefixed path
+  // must be accepted — it lands flat at the store root, where every
+  // pre-Phase-7 file already is, and `uploads.app` attributes it regardless.
+  it('ACCEPTS an unprefixed path — an older client that predates the convention', () => {
+    expect(() => assertPathnameWritable('issues', 'phase7-probe.txt', KNOWN_APPS)).not.toThrow()
+  })
+
+  it('accepts a first segment that is not an app at all', () => {
+    expect(() => assertPathnameWritable('issues', 'holiday photos/x.png', KNOWN_APPS)).not.toThrow()
+  })
+
+  it('accepts anything but a foreign prefix when no other app exists yet', () => {
+    expect(() => assertPathnameWritable('issues', 'sales/x.png', ['issues'])).not.toThrow()
   })
 })

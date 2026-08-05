@@ -136,7 +136,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // the client needs both halves to build the same path the server would.
     // POST /api/upload/blob rejects anything outside `app`'s prefix.
     app: APP_SLUG,
-    workspace: (await attributeUpload(user)).slug,
+    // `?workspace=` is resolved exactly as the upload itself resolves it, so the
+    // folder a file lands in and the workspace the ledger attributes it to are
+    // decided by the same input. The CLI passes its --ws target here; the web
+    // client passes nothing and gets the active workspace.
+    workspace: (await attributeUpload(user, request.nextUrl.searchParams.get('workspace'))).slug,
     blockedMimeTypes: BLOCKED_UPLOAD_MIME_TYPES,
     note: `All content types accepted except ${BLOCKED_UPLOAD_MIME_TYPES.join(', ')} (blocked for XSS safety)`,
   })

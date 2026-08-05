@@ -78,19 +78,50 @@ export function appFromPathname(pathname: string | null | undefined): string | n
 }
 
 /**
- * Throw unless `pathname` is inside `app`'s own prefix.
+ * Throw if `pathname` belongs to an app other than `app`.
  *
  * Called server-side before a client-direct upload token is minted: the client
  * chooses the pathname in that flow (the Blob SDK gives the server no way to
  * rewrite it), so this is the only place a caller can be stopped from writing
  * into another app's prefix.
+ *
+ * ── WHY THIS IS LENIENT ABOUT UNPREFIXED PATHS ───────────────────────────────
+ * It once demanded the prefix, and that took production down on 2026-08-05: the
+ * `bk` CLI also uses the client-direct flow (`client.go` → `uploadViaBlob`) and
+ * every *installed* binary sends a bare filename. Requiring the prefix rejected
+ * every one of them — `bk upload`, `--file` embedding, `issue attach` — the
+ * moment the deploy went live. The rule that was broken is the one that governs
+ * every server change: **the new server must be backwards compatible with the
+ * old clients that are still installed.** A client cannot be asked to know a
+ * convention that shipped after it did.
+ *
+ * So an unprefixed path is ACCEPTED. Such a file lands flat at the store root —
+ * exactly where every pre-Phase-7 file already sits — and stays correctly
+ * attributed anyway, because `uploads.app` is stamped server-side by
+ * `recordUpload` and never derived from the path.
+ *
+ * What is refused is a path under a DIFFERENT known app's prefix, which is the
+ * thing this check exists for and which no legitimate client of ours ever sends.
+ *
+ * @param knownApps every slug in `platform.apps`. Enabled or not: a disabled
+ *                  app's files are still its own.
  */
-export function assertOwnPathname(app: string, pathname: string): void {
-  const prefix = appPrefix(app)
-  if (!pathname.startsWith(prefix)) {
-    throw new Error(`upload path must start with "${prefix}"`)
+export function assertPathnameWritable(
+  app: string,
+  pathname: string,
+  knownApps: readonly string[]
+): void {
+  if (!pathname || !pathname.trim()) {
+    throw new Error('upload path must not be empty')
   }
   if (pathname.includes('..')) {
     throw new Error('upload path must not contain ".."')
   }
+  if (pathname.startsWith(appPrefix(app))) return
+
+  const owner = appFromPathname(pathname)
+  if (owner && owner !== app && knownApps.includes(owner)) {
+    throw new Error(`upload path belongs to another app ("${owner}/")`)
+  }
+  // Unprefixed, or a first segment that is not an app: an older client. Allowed.
 }

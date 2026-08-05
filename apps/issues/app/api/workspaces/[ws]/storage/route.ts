@@ -42,7 +42,13 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
       app: u.app,
       url: u.url,
       filename: u.filename,
-      size: u.size,
+      // `size` is a bigint, and a raw-SQL read hands bigints back as STRINGS —
+      // Drizzle's `mode: 'number'` only applies to the query builder. Serialised
+      // unconverted, it made `bk storage list` fail to decode for every
+      // workspace holding a sized file (found 2026-08-05; the bug predates
+      // Phase 7 and is not caused by it). The web page survived only because JS
+      // coerces a string in arithmetic.
+      size: u.size == null ? null : Number(u.size),
       mime_type: u.mime_type,
       uploaded_by: u.uploaded_by,
       uploader_name: u.uploader_name,

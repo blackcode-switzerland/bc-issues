@@ -775,7 +775,13 @@ type uploadCapabilities struct {
 
 func (c *Client) uploadCaps() uploadCapabilities {
 	var meta uploadCapabilities
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/upload", nil)
+	// Ask about the workspace this command targets (--ws / the active one), so
+	// the folder the file lands in matches the workspace the ledger records.
+	capsURL := c.BaseURL + "/api/upload"
+	if strings.TrimSpace(c.WorkspaceSlug) != "" {
+		capsURL += "?workspace=" + url.QueryEscape(c.WorkspaceSlug)
+	}
+	req, err := http.NewRequest(http.MethodGet, capsURL, nil)
 	if err != nil {
 		return meta
 	}
@@ -890,7 +896,15 @@ func (c *Client) uploadViaBlob(f *os.File, base, ctype, pathname string) (*Uploa
 	if err != nil {
 		return nil, err
 	}
-	putURL := "https://blob.vercel-storage.com/" + url.PathEscape(base)
+	// The PUT path must be the SAME pathname the token was minted for, or Blob
+	// answers 403 "does not match the token payload". Escape per SEGMENT: the
+	// separators in <app>/<workspace>/<file> are structure, and PathEscape on the
+	// whole string would turn them into %2F and flatten the prefix away.
+	segments := strings.Split(pathname, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	putURL := "https://blob.vercel-storage.com/" + strings.Join(segments, "/")
 	preq, err := http.NewRequest(http.MethodPut, putURL, f)
 	if err != nil {
 		return nil, err

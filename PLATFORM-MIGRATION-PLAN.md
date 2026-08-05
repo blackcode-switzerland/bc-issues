@@ -689,6 +689,44 @@ Two traps, both hit for real:
   `bc-issues-…vercel.app` while `issues.blackcode.ch` correctly stayed on the
   old deployment. Harmless only because nothing points at that alias. Read it as
   *"custom domain unchanged"*, never as *"serves no traffic"*.
+### Step 4b — test the staged build with the REAL binary, before promoting
+
+Added after the Phase 7 incident, 2026-08-05. **This step is not optional for
+any change that touches a path the CLI takes.**
+
+Earlier phases recorded "Deployment Protection blocks `bk` from authenticating
+against a deployment URL, so verify after the promote with the published
+binary." That was accepted as a limitation. It is not one:
+
+- Protection hides **preview** deployments. A **production-target** deployment
+  (`vercel deploy --prod --skip-domain`) is **publicly reachable** — it just has
+  no domain pointing at it.
+- `bk` reads its server from config, and `BK_CONFIG_DIR` can redirect that.
+
+So the staged build can be exercised by the exact binary your agents run,
+*before* it takes traffic:
+
+```bash
+mkdir -p /tmp/bk-stage
+sed 's#"server": *"[^"]*"#"server": "https://<deployment-url>"#' \
+  ~/.config/bk/config.json > /tmp/bk-stage/config.json
+BK_CONFIG_DIR=/tmp/bk-stage bk upload ./somefile.png
+BK_CONFIG_DIR=/tmp/bk-stage bk storage list | head
+```
+
+No bypass secret is involved.
+
+**What it costs to skip it.** Phase 7 made uploads require an `<app>/<ws>/`
+pathname prefix, on the assumption that the client-direct Blob flow was the
+browser's alone. `bk` uses it too, so the promoted build rejected **every
+installed binary** — a total outage of agent uploads. `/api/status` was green
+throughout, because a health check exercises the server's own code paths, not a
+client's. Only the real binary could have found it, and the real binary was
+available all along.
+
+The rule this generalises to: **a health check proves the server is up; only the
+client your users run proves the contract still holds.**
+
 - **`vercel promote` and `vercel deploy --prod` may be blocked** by an agent's
   permission classifier. **Probe the blocked command before touching the
   database** — promoting the already-live deployment is a no-op and reveals the

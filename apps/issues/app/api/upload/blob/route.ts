@@ -12,7 +12,8 @@ import { resolveUser } from '@/lib/auth/resolve'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload'
 import { recordUpload } from '@/lib/db/queries/uploads'
 import { attributeUpload } from '@/lib/storage/attribution'
-import { assertOwnPathname } from '@blackcode/platform-storage/paths'
+import { assertPathnameWritable } from '@blackcode/platform-storage/paths'
+import { knownAppSlugs } from '@/lib/storage'
 import { APP_SLUG } from '@/lib/app'
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -29,12 +30,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
         // The CLIENT chooses the pathname in this flow and the Blob SDK gives us
         // no way to rewrite it — the token is minted for the path it asked for.
-        // So this is the one place a caller can be stopped from writing outside
-        // this app's prefix, and it is a hard refusal rather than a correction.
+        // So this is the one place a caller can be stopped from writing into
+        // ANOTHER app's prefix. It deliberately accepts an unprefixed path: the
+        // `bk` CLI uses this same flow and every installed binary sends a bare
+        // filename. Demanding the prefix here broke every one of them in
+        // production on 2026-08-05 — see assertPathnameWritable's header.
         // (Prefixes are for attribution, not authorisation: the store has one
         // token per deployment. What this prevents is a confused client, not a
         // determined attacker with our token.)
-        assertOwnPathname(APP_SLUG, pathname)
+        assertPathnameWritable(APP_SLUG, pathname, await knownAppSlugs())
 
         // The client forwards file metadata in clientPayload (contentType,
         // filename, size) and may name a target workspace (slug/id).

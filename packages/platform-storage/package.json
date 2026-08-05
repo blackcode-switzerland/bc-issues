@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./apps": "./src/apps.ts",
     "./assets": "./src/assets.ts",
     "./paths": "./src/paths.ts",
     "./references": "./src/references.ts",
