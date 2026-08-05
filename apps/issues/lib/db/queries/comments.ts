@@ -20,8 +20,7 @@ import {
 } from '../schema'
 import { recordEvent } from './events'
 import { toRichTextHtml } from '@/lib/rich-text'
-import { extractUploadedUrls } from '@/lib/blob-refs'
-import { sweepOrphanedUrls } from '@/lib/blob-gc'
+import { extractUploadedUrls, sweepOrphanedUrls } from '@/lib/storage'
 
 const MENTION_RE = /@([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g
 

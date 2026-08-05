@@ -9,10 +9,10 @@ PostgreSQL, next-auth, TanStack Query, Framer Motion.
 
 The target architecture is `PLATFORM-ARCHITECTURE.md`; the ordered migration to
 it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
-`docs/migration/baseline.md`. **Phases 0–6 have landed; 7–8 have not.** So:
+`docs/migration/baseline.md`. **Phases 0–7 have landed; 8 has not.** So:
 
-- `packages/platform-db`, `platform-api`, `platform-ui`, `platform-auth` and
-  `platform-agent` exist. `platform-storage` does **not** — that is Phase 7.
+- `packages/platform-db`, `platform-api`, `platform-ui`, `platform-auth`,
+  `platform-agent` and `platform-storage` exist.
   `platform-auth` holds per-app access, `bk_live_` tokens, the platform whitelist
   and password hashing; `platform-agent` holds the merged changelog feed and the
   advertised CLI versions. **`lib/auth.ts` (next-auth `authOptions`) deliberately
@@ -35,8 +35,18 @@ it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
   `apps/issues/lib/db/queries/entities.ts`'s header before touching a write path,
   and `bk super-admin entity-drift` is the reconciler that proves it has not
   drifted.
-- Still not done (Phases 7–8): app-aware blob attribution, `apps/_template/`,
-  raising `CLI_MIN_VERSION`, tightening `events.app` to NOT NULL.
+- **Storage is shared and app-attributed (Phase 7):** `platform.uploads.app`
+  records who uploaded each file, new uploads land under
+  `<app>/<workspace>/<file>`, and **existing blobs were not moved** — `pathname`
+  is where a file is, `app` is who owns it. Reference counting is a **registry**:
+  each app registers a scanner (`apps/issues/lib/storage/`), and the platform
+  refuses to answer — not answers "no references" — when any enabled app has no
+  scanner. Read `packages/platform-storage/src/references.ts`'s header before
+  touching anything that can reach `del()`; that file is the only thing standing
+  between a code change and unrecoverable data loss. Import storage from
+  `@/lib/storage`, never from the package directly.
+- Still not done (Phase 8): `apps/_template/`, raising `CLI_MIN_VERSION`,
+  tightening `events.app` and `uploads.app` to NOT NULL.
 
 ## Repo layout
 

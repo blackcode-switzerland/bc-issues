@@ -28,15 +28,20 @@ Owner only.`,
 }
 
 func newStorageListCmd() *cobra.Command {
-	return &cobra.Command{
+	var app string
+	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/storage"},
 		Short:       "List uploaded files with reference counts and total usage",
 		Long: `List every uploaded file in the workspace.
 
+APP is the app that uploaded the file; --app <slug> narrows the list to one.
+Storage is shared across apps, so the usage total stays workspace-wide whether
+or not the list is filtered.
+
 REFS is how many things reference the file (descriptions, comments, attachments —
-including items in the recycle bin). A file with REFS = 0 is an orphan and can be
-removed with "bk storage rm <id>".`,
+including items in the recycle bin), counted across every app. A file with
+REFS = 0 is an orphan and can be removed with "bk storage rm <id>".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -46,20 +51,24 @@ removed with "bk storage rm <id>".`,
 			if err != nil {
 				return err
 			}
-			listing, err := c.ListStorage()
+			listing, err := c.ListStorage(app)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, listing, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "ID\tFILENAME\tSIZE\tREFS\tUPLOADED BY\tURL")
+				fmt.Fprintln(tw, "ID\tAPP\tFILENAME\tSIZE\tREFS\tUPLOADED BY\tURL")
 				for _, f := range listing.Data {
 					uploader := "—"
 					if f.UploaderName != nil && *f.UploaderName != "" {
 						uploader = *f.UploaderName
 					}
-					fmt.Fprintf(tw, "%d\t%s\t%s\t%d\t%s\t%s\n",
-						f.ID, f.Filename, humanSize(f.Size), f.ReferenceCount, uploader, f.URL)
+					appName := "—"
+					if f.App != nil && *f.App != "" {
+						appName = *f.App
+					}
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%s\t%s\n",
+						f.ID, appName, f.Filename, humanSize(f.Size), f.ReferenceCount, uploader, f.URL)
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -73,6 +82,8 @@ removed with "bk storage rm <id>".`,
 			})
 		},
 	}
+	cmd.Flags().StringVar(&app, "app", "", "Only files uploaded by this app (e.g. issues)")
+	return cmd
 }
 
 func newStorageRmCmd() *cobra.Command {

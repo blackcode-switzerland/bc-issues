@@ -11,6 +11,7 @@
 // the only place a failed upload becomes a human-readable error.
 
 import { upload } from '@vercel/blob/client'
+import { blobPathname } from '@blackcode/platform-storage/paths'
 
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 export const MAX_UPLOAD_LABEL = '100MB'
@@ -21,18 +22,33 @@ export const MAX_UPLOAD_LABEL = '100MB'
 // hardcode the list — see lib/limits.ts.
 export const BLOCKED_UPLOAD_MIME_TYPES = ['image/svg+xml'] as const
 
-// Cache the capability check for the session.
-let blobEnabled: boolean | null = null
-async function isBlobEnabled(): Promise<boolean> {
-  if (blobEnabled === null) {
+// What the server told us about uploading: whether Blob is configured, and
+// where this caller's files belong in the store. Memoized for the session — the
+// answer only changes when the user switches workspace, and a full page
+// navigation happens on that path.
+interface UploadCapabilities {
+  blob: boolean
+  app: string
+  workspace: string | null
+}
+
+let capabilities: UploadCapabilities | null = null
+
+async function getCapabilities(): Promise<UploadCapabilities> {
+  if (capabilities === null) {
     try {
       const res = await fetch('/api/upload')
-      blobEnabled = res.ok ? Boolean((await res.json()).blob) : false
+      const json = res.ok ? await res.json() : null
+      capabilities = {
+        blob: Boolean(json?.blob),
+        app: typeof json?.app === 'string' ? json.app : 'issues',
+        workspace: typeof json?.workspace === 'string' ? json.workspace : null,
+      }
     } catch {
-      blobEnabled = false
+      capabilities = { blob: false, app: 'issues', workspace: null }
     }
   }
-  return blobEnabled
+  return capabilities
 }
 
 export async function uploadFile(file: File): Promise<string> {
@@ -41,11 +57,18 @@ export async function uploadFile(file: File): Promise<string> {
     throw new Error(`File is too large — the maximum is ${MAX_UPLOAD_LABEL}`)
   }
 
-  if (await isBlobEnabled()) {
+  const caps = await getCapabilities()
+
+  if (caps.blob) {
     // Client-direct to Blob; the token handshake hits /api/upload/blob. The
     // payload carries file metadata so the server can record the upload ledger
     // row (the workspace is resolved server-side from the active workspace).
-    const blob = await upload(file.name, file, {
+    //
+    // The PATH is built here because this flow gives the server no chance to
+    // rewrite it (Phase 7) — `app` and `workspace` come from the same server
+    // that will then check the prefix and refuse anything outside it, so client
+    // and server cannot disagree about where a file goes.
+    const blob = await upload(blobPathname(caps.app, caps.workspace, file.name), file, {
       access: 'public',
       handleUploadUrl: '/api/upload/blob',
       contentType: file.type || undefined,

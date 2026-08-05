@@ -774,6 +774,37 @@ for emergency rollback of the advertised version, not for routine releases —
 using it here creates a second source of truth that goes stale the moment
 someone forgets to clear it.
 
+## OWED BEFORE APP #2: cross-deployment blob reference checking
+
+Found in Phase 7, 2026-08-05. **This is a hard blocker on shipping a second
+app**, and the "add an app" checklist in Phase 8 is incomplete until it is
+resolved.
+
+Phase 7's scanner registry fails **closed against `platform.apps`**: a blob may
+be deleted only when every enabled app has proven it holds no reference. That is
+the correct safety property — a delete you cannot justify is one you must refuse.
+
+But the app boundary makes the proof impossible across deployments. Per-app
+Postgres roles (§4.3) mean the `issues` deployment cannot read `sales.*`, so it
+can never prove a file is unreferenced by sales. The moment a second row lands
+in `platform.apps`, **blob deletion in the issues deployment stops working
+entirely** — correctly, and uselessly.
+
+The answer is not to loosen the gate. Three ways to actually close it:
+
+| Option | Shape | Cost |
+|---|---|---|
+| **A — a maintained index** (recommended) | `platform.blob_references (url, app, source_urn)`, written **in the same transaction** as the content change that creates or removes a reference. Any app can then read the whole picture without reading another app's tables. | Exactly the `platform.entities` pattern from Phase 6 — same drift risk, same mitigation: a reconciler (`bk super-admin blob-drift`). |
+| B — cross-app HTTP | The deleting app asks each other app's API "do you reference this URL?" | Needs service-to-service auth, and a down app blocks deletion. |
+| C — a central sweeper | Only one job, holding read access to every schema, ever deletes. Apps mark candidates and never call `del()`. | Simplest safety story; adds a component and a schedule. |
+
+**A is recommended** because the precedent already exists and is proven: Phase 6
+projects `platform.entities` in-transaction and reconciles with
+`bk super-admin entity-drift`. Reference tracking is the same problem with the
+same solution, and it keeps deletion synchronous.
+
+Until this ships, `platform.apps` must contain exactly one row.
+
 ## Decisions taken during the migration
 
 **No continuous deployment; Vercel stays disconnected from GitHub.** (Decided
@@ -933,6 +964,42 @@ just backfilled and a row means someone is about to be locked out. Afterwards a
 member with no grant is exactly what `invite_only` and a deliberate revoke
 produce, so the same query becomes a *report* of who lacks access, not a defect
 list. `findOrphanedMembers` in `platform-db` is that query as code.
+
+**Three decisions taken in Phase 7.** (2026-08-05.)
+
+1. **The reference registry fails closed against `platform.apps`, not against
+   itself.** The obvious registry answers "does any registered scanner claim
+   this file?" — and then "no scanner registered" is indistinguishable from "no
+   references", which is a silent path to `del()`. So coverage is checked against
+   the *database's* list of enabled apps: an enabled app with no registered
+   scanner makes every reference answer an error. The deliberate consequence is
+   that **once a second app is registered, blob deletion in the issues deployment
+   refuses until that app's scanner is registered in that process.** That is
+   correct rather than unfortunate: per-app Postgres roles (§4.3) mean one
+   deployment genuinely cannot read another app's tables, so it cannot prove a
+   file is unused, and a delete it cannot justify is one it must refuse. Making
+   deletion work across deployments is a cross-app protocol — a scan cannot do
+   it — and it is not built. **Phase 8 or later owes this an answer before app #2
+   ships**, and the answer is not "loosen the gate".
+
+2. **`lib/upload.ts` stayed in `apps/issues`.** The standing rule is to extract
+   only what a second app needs *unchanged*. The ledger, the paths, the
+   recognizer, the registry and the GC qualify and moved. The client-side
+   uploader does not: making it generic means parameterising the app slug, the
+   size cap and the block list, at which point it is a factory the app has to
+   configure rather than a library it can use. It is ~40 lines; a second app
+   copying them is cheaper than the wrong abstraction. `file-attachment.ts` was
+   named in the Phase 7 brief too, but it was already extracted — to
+   `platform-ui`, in Phase 2 — and moving it to `platform-storage` would be
+   churn: it is the rich-text node's wire format, which is a UI fact.
+
+3. **Existing blobs were not moved, and the ledger is the only attribution.**
+   New uploads go under `<app>/<workspace>/<file>`; everything older stays flat at
+   the store root. `pathname` records where a file *is*, `uploads.app` records who
+   *owns* it, and `appFromPathname` returns null rather than guessing for an
+   unprefixed path. Moving ~700 live files to make a prefix uniform would risk
+   real data to satisfy a cosmetic invariant, and every url is absolute anyway —
+   nothing reads the prefix to find a file.
 
 ## What is explicitly out of scope
 

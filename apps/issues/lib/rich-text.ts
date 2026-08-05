@@ -33,6 +33,7 @@
 import { marked } from 'marked'
 import sanitizeHtml from 'sanitize-html'
 import { FILE_ATTACHMENT_ATTRS, renderFileAttachmentHtml } from '@blackcode/platform-ui/file-attachment'
+import { isUploadedAsset } from '@blackcode/platform-storage/assets'
 
 const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -199,16 +200,13 @@ const EXT_MIME: Record<string, string> = {
 // True only for URLs that came out of OUR upload pipeline — Vercel Blob in
 // production or the /uploads static dir in local dev. We never rewrite arbitrary
 // external links into embeds.
-export function isUploadedAsset(url: string): boolean {
-  if (!url) return false
-  if (url.startsWith('/uploads/')) return true
-  try {
-    const host = new URL(url).hostname
-    return host === 'blob.vercel-storage.com' || host.endsWith('.blob.vercel-storage.com')
-  } catch {
-    return false
-  }
-}
+//
+// The recognizer itself moved to @blackcode/platform-storage in Phase 7: the
+// cleanup scanners need the identical test, and embedding and cleanup
+// disagreeing about what "ours" means is how a still-embedded file becomes
+// invisible to the scan that protects it. Re-exported so this module stays the
+// import site for the rich-text layer.
+export { isUploadedAsset }
 
 function extOf(url: string): string {
   const path = url.split(/[?#]/)[0]

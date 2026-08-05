@@ -1,5 +1,8 @@
+// URL extraction — the front half of the reference engine. Unchanged by Phase 7
+// (the code moved from lib/blob-refs.ts into @blackcode/platform-storage), so
+// these assertions are the regression check that the move changed nothing.
 import { describe, it, expect } from 'vitest'
-import { extractUploadedUrls } from './blob-refs'
+import { extractUploadedUrls } from '@blackcode/platform-storage/assets'
 
 const BLOB = 'https://abc123.public.blob.vercel-storage.com'
 

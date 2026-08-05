@@ -404,11 +404,23 @@ export const uploads = platformSchema.table(
     size: bigint('size', { mode: 'number' }),
     mime_type: varchar('mime_type', { length: 100 }),
     uploaded_by: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    // Which app wrote the file (Phase 7). Nullable for the same reason
+    // `events.app` is: the migration lands before the deploy that writes it, and
+    // the code running in that window does not know the column exists. NOT NULL
+    // would fail every upload made in it, and a DEFAULT would hardcode one app's
+    // name into a platform table. Backfilled to 'issues', written by all current
+    // code, tightened in Phase 8 — expand → migrate → contract.
+    //
+    // ON DELETE set null, not cascade: deregistering an app must not delete the
+    // ledger rows for files that still exist in the store. An unattributed row
+    // is recoverable; a missing one hides bytes nobody can find again.
+    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
     urlUniq: uniqueIndex('uq_uploads_url').on(t.url),
     workspaceIdx: index('idx_uploads_workspace').on(t.workspace_id),
+    workspaceAppIdx: index('idx_uploads_workspace_app').on(t.workspace_id, t.app),
   })
 )
 

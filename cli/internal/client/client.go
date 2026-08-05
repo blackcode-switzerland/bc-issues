@@ -600,11 +600,17 @@ func (c *Client) DeleteAttachment(issueID, attachmentID int) error {
 // --- Storage (owner-only) ---
 
 // ListStorage returns every uploaded file in the active workspace with its live
-// references and the workspace's total usage.
-func (c *Client) ListStorage() (*StorageListing, error) {
+// references and the workspace's total usage. A non-empty app filters to that
+// app's files; usage is always the workspace-wide total.
+func (c *Client) ListStorage(app string) (*StorageListing, error) {
 	path, err := c.wsPath("storage")
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(app) != "" {
+		q := url.Values{}
+		q.Set("app", app)
+		path += "?" + q.Encode()
 	}
 	var out StorageListing
 	if err := c.get(path, &out); err != nil {

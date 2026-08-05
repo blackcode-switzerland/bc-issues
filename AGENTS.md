@@ -13,11 +13,12 @@ tracker. Humans use the web UI; **agents use one interface: the `bk` CLI**
 
 Run every command from the **repo root**; Turborepo delegates into the workspace.
 `PLATFORM-ARCHITECTURE.md` is where this is going and `PLATFORM-MIGRATION-PLAN.md`
-is how. **Phases 0–6 have landed:** `packages/platform-{db,api,ui,auth,agent}`
+is how. **Phases 0–7 have landed:** `packages/platform-{db,api,ui,auth,agent,storage}`
 exist, the database is `platform.*` + `issues.*` (not `public`), apps are real
 data — workspace listings are app-scoped and every workspace-scoped route enforces
 per-app access — **the CLI, guide, changelog, `bk meta` and docs are all split per
-app**, and **everything is addressable by URN**.
+app**, **everything is addressable by URN**, and **storage is shared, app-prefixed
+and reference-counted across apps**.
 
 Commands are `bk issues issue create`, not `bk issue create`. Every old spelling
 still runs as a deprecated alias that prints one stderr line naming the new one;

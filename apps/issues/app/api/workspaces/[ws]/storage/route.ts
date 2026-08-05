@@ -2,7 +2,7 @@
 // workspace, with what currently references each one and the workspace's total
 // usage. This is the data behind the Storage settings page and `bk storage list`.
 //
-// References are computed by a live scan of the content tables (lib/blob-refs.ts)
+// References are computed by a live scan of every registered app's content
 // INCLUDING trashed items, so a file shown with 0 references is genuinely an
 // orphan and safe to delete. Deletion itself re-checks at delete time — see
 // ./[id]/route.ts.
@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, resolveWorkspace, requireOwner } from '@/lib/api'
 import { listWorkspaceUploads, computeWorkspaceStorageUsage } from '@/lib/db/queries/uploads'
-import { computeWorkspaceReferences } from '@/lib/blob-refs'
+import { computeWorkspaceReferences } from '@/lib/storage'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -21,8 +21,13 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const ctx = await resolveWorkspace(req, ws)
   requireOwner(ctx)
 
+  // `?app=` filters the LEDGER to one app's files. Usage stays workspace-wide
+  // and unfiltered on purpose: the quota belongs to the workspace, not to an
+  // app, and a total that shrank with a filter would read as free space.
+  const app = req.nextUrl.searchParams.get('app')
+
   const [rows, refMap, usageBytes] = await Promise.all([
-    listWorkspaceUploads(ctx.workspace.id),
+    listWorkspaceUploads(ctx.workspace.id, { app }),
     computeWorkspaceReferences(ctx.workspace.id),
     computeWorkspaceStorageUsage(ctx.workspace.id),
   ])
@@ -31,6 +36,10 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     const references = refMap.get(u.url) ?? []
     return {
       id: u.id,
+      // Which app wrote the file. NULL only for rows written in the window
+      // between migration 0036 and the deploy that stamps it — the backfill
+      // covers everything older.
+      app: u.app,
       url: u.url,
       filename: u.filename,
       size: u.size,

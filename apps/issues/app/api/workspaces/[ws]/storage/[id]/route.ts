@@ -10,8 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, Errors, resolveWorkspace, requireOwner } from '@/lib/api'
 import { getUpload, deleteUploadRow } from '@/lib/db/queries/uploads'
-import { isUrlReferencedAnywhere } from '@/lib/blob-refs'
-import { removeBlobBytes } from '@/lib/blob-gc'
+import { isUrlReferencedAnywhere, removeBlobBytes } from '@/lib/storage'
 
 interface Params {
   params: Promise<{ ws: string; id: string }>

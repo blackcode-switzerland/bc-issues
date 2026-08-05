@@ -30,6 +30,46 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-05 — Uploads are attributed to an app, and cleanup asks every app before deleting
+
+**What changed.**
+
+- **Every stored file now records which app uploaded it.** `platform.uploads`
+  gained an `app` column, backfilled to `issues` for everything that already
+  existed. `bk storage list` shows it in a new **APP** column, and
+  `--app <slug>` (`?app=` on `GET /api/workspaces/{ws}/storage`) narrows the list
+  to one app's files.
+- **New uploads are written under an app prefix:** `<app>/<workspace>/<file>` —
+  e.g. `issues/acme/1712-report.pdf`. **Existing files were not moved**, and never
+  will be: every url is absolute and the ledger records where each file actually
+  lives, so a path is a historical fact, not something to derive.
+- **Reference counting is app-aware.** Whether a file may be deleted used to be
+  answered by scanning this app's tables. It is now answered by every app that
+  has registered a reference scanner, and a file is deletable only when **no
+  app** references it.
+
+**Why it matters to you.** Deleting is the operation that got safer, and in one
+direction only: the checks that refuse a delete were added to, never relaxed.
+`bk storage rm` and the automatic sweep behind a comment hard-delete or a Trash
+purge now refuse whenever the answer cannot be *proven* — including when an app
+is registered but its scanner is unreachable. A refusal you did not expect means
+"could not prove this file is unused", not "the file is in use".
+
+**How to adapt.**
+
+- Nothing is required. `bk storage list` gains a column; existing JSON fields are
+  unchanged and additive (`app` on each file, `app` on each entry of
+  `references`).
+- If you parse the table output of `bk storage list` by column position, the new
+  APP column sits between ID and FILENAME. Use `--json` if that matters.
+- `bk storage list --app issues` is the filtered form. Usage totals stay
+  workspace-wide whichever filter is applied — storage is shared, and a total
+  that shrank with a filter would read as free space.
+- Files uploaded before this release keep their flat pathnames and are attributed
+  by the ledger, so `--app issues` includes them.
+
+---
+
 ## 2026-08-05 — **FIX:** `bk trash restore` reported success for a ref that did not exist
 
 **What changed.** `POST /api/workspaces/{ws}/trash/restore` now answers **404

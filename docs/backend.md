@@ -11,10 +11,11 @@
 > (PLATFORM-ARCHITECTURE.md §7.5).
 >
 > **Paths in this file are relative to `apps/issues/`** where they name
-> `lib/…`, `app/…` or `components/…`. Most of what is described here still
-> physically lives in that app and moves out over Phases 6–7 (`lib/auth.ts` →
-> `packages/platform-auth`, `lib/upload.ts`/`blob-refs.ts` →
-> `packages/platform-storage`). `cli/…` and `docs/…` are at the repo root.
+> `lib/…`, `app/…` or `components/…`. Some of what is described here still
+> physically lives in that app: `lib/auth.ts` (next-auth `authOptions`) stays
+> there deliberately, and `lib/upload.ts` keeps the client-side uploader and this
+> app's size cap. The rest of storage moved to `packages/platform-storage` in
+> Phase 7. `cli/…` and `docs/…` are at the repo root.
 
 > **Internal.** The HTTP API is private plumbing — **the only public contract is
 > the `bk` CLI.** This document is for people working on this repo. Do not treat
@@ -225,7 +226,7 @@ one of them unchanged, which is the test that put them in `platform.*`.
 | Table | Purpose / notable columns |
 |-------|---------------------------|
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. The legacy `issue_id` column was dropped in migration `0032` — it was a platform→app FK that would have broken `pg_dump --schema=issues` |
-| `uploads` | **upload ledger** — one row per file stored through our pipeline, written at upload time: `workspace_id` (nullable), unique `url`, `pathname`, `filename`, `size` (bigint), `mime_type`, `uploaded_by`. Metadata only — never the authority for deletion (a live reference scan is); source for the Storage page |
+| `uploads` | **upload ledger** — one row per file stored through our pipeline, written at upload time: `workspace_id` (nullable), unique `url`, `pathname`, `filename`, `size` (bigint), `mime_type`, `uploaded_by`, `app` (FK → `apps.slug`, nullable, `ON DELETE set null`). Metadata only — never the authority for deletion (a live reference scan is); source for the Storage page. `app` is the ATTRIBUTION — never derive it from `pathname`, which records where a file physically is (pre-Phase-7 files sit flat at the store root) |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
 
 ### Cross-app primitives (Phase 6)
@@ -654,22 +655,56 @@ GET    /api/workspaces/{ws}/attachments         workspace-wide attachments table
 **Storage / file cleanup.** Uploaded files are recorded in the `uploads` ledger
 (written at upload time on every path — multipart `/api/upload`, the client-direct
 `/api/upload/blob` handshake's `onUploadCompleted`, all attributed to an explicit
-workspace or the user's active one). Blob removal happens in exactly two places,
-both gated by `isUrlReferencedAnywhere` (`lib/blob-refs.ts`) — a live, system-wide
-scan of all content bodies + attachment rows, **including trashed items**:
+workspace or the user's active one, and stamped with the writing app). Blob
+removal happens in exactly two places, both gated by `isUrlReferencedAnywhere`
+(`@/lib/storage`) — a live, cross-app, cross-workspace scan of all content bodies
++ attachment rows, **including trashed items**:
 
 1. **Owner-confirmed delete** — the `storage` routes / Storage page, for any
    0-reference file (including orphans left by editing).
-2. **Automatic GC** (`sweepOrphanedUrls`, `lib/blob-gc.ts`) — fires on terminal
-   deletes: `deleteComment` (comment/reply) and `purgeItems` (trash purge/batch/
-   empty, via `purgeBatch`/`emptyTrash`). It gathers the URLs the removed content
-   embedded (bodies, issue attachments, project updates, cascaded comments),
-   then, after the rows are gone, deletes each file nothing else references.
+2. **Automatic GC** (`sweepOrphanedUrls`) — fires on terminal deletes:
+   `deleteComment` (comment/reply) and `purgeItems` (trash purge/batch/empty, via
+   `purgeBatch`/`emptyTrash`). It gathers the URLs the removed content embedded
+   (bodies, issue attachments, project updates, cascaded comments), then, after
+   the rows are gone, deletes each file nothing else references.
 
 Both call `removeBlobBytes` (`@vercel/blob` `del()`, or `fs.rm` for local
 `/uploads`). *Editing* a file out of a still-living body never deletes bytes
 (undo/restore stay safe); all blob deletion is best-effort and never fails the
 user's action.
+
+**The reference registry (Phase 7).** `packages/platform-storage` owns the ledger,
+the path convention and the delete gate; each app registers a **reference
+scanner** describing the only thing the platform cannot know — which of its
+tables can hold a file url. `apps/issues` registers
+`lib/storage/scanner.ts` as an import side effect of `lib/storage/index.ts`.
+**Import storage from `@/lib/storage`, never from the package directly** — that
+import is what guarantees the registration happened before a delete path runs.
+
+The registry **fails closed**, and this is the property to preserve above any
+other in this area:
+
+- Coverage is asserted against `platform.apps`, not against the registry. An
+  enabled app with no registered scanner makes every reference answer an
+  **error**, never a `false`. "Nobody claimed it" must be a proven fact, because
+  the caller of that answer calls `del()` and there is no undo.
+- A scanner that throws propagates; it is never downgraded to "no references from
+  that app". `sweepOrphanedUrls` catches, logs and **keeps the file**.
+- An unknown url counts as referenced.
+
+The deliberate consequence: once a second app is registered in `platform.apps`,
+blob deletion in this deployment refuses until that app's scanner is registered in
+this process. One app's Postgres role has no grant on another app's schema (§4.3),
+so it genuinely cannot prove a file is unused — and a delete it cannot justify is
+one it must refuse. A cross-deployment protocol for this is not built.
+
+**Blob paths.** New uploads are written to `<app>/<workspace-slug>/<file>`
+(`blobPathname`). Existing files were **not** moved; `pathname` records where each
+one actually is. The prefix is for attribution and extraction (an app's files are
+a prefix copy), not authorisation — the store has one token per deployment. In
+the client-direct flow the *client* chooses the pathname and the Blob SDK gives
+the server no way to rewrite it, so `POST /api/upload/blob` calls
+`assertOwnPathname` and refuses anything outside this app's prefix.
 
 ### Super admin (requires `SUPER_ADMINS` env var)
 
@@ -770,7 +805,7 @@ these; they never write SQL inline.
 | `comments.ts` | polymorphic comments + `@email` mention resolution |
 | `labels.ts` | workspace labels; case-insensitive unique names |
 | `attachments.ts` | issue attachments; `getWorkspaceAttachments` (owner-wide view) |
-| `uploads.ts` | upload ledger: `recordUpload` (idempotent on url), `listWorkspaceUploads`, `getUpload`, `deleteUploadRow`, `computeWorkspaceStorageUsage` |
+| `uploads.ts` | this app's binding to the shared upload ledger — the queries live in `@blackcode/platform-storage`; what stays here is stamping `APP_SLUG` on every `recordUpload` |
 | `watchers.ts` | issue watchers (manual/assigned/reporter) |
 | `events.ts` | the event spine — `recordEvent`, `EntityType`/`EventAction` |
 | `fanout.ts` | event → per-user inbox materialization |
@@ -843,7 +878,10 @@ helper used by every editor/avatar uploader). The size cap (`MAX_UPLOAD_BYTES`,
 - **Local dev (no `BLOB_READ_WRITE_TOKEN`)** — `uploadFile` POSTs multipart to
   `POST /api/upload`, which writes to `public/uploads/`.
 
-The client picks the path from `GET /api/upload` (`{ blob: boolean }`, memoized).
+The client picks the path from `GET /api/upload` (memoized), which also returns
+`app` and the caller's `workspace` slug so the client-direct flow can build the
+same `<app>/<workspace>/<file>` pathname the server would — and which the
+handshake then re-checks.
 Both reject `image/svg+xml` (XSS). `POST /api/upload` returns
 `{ url, filename, size, contentType }`. No new env var is needed —
 `BLOB_READ_WRITE_TOKEN` (already required for Blob) activates the prod path.

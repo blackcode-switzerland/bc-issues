@@ -23,6 +23,7 @@
     "@blackcode/platform-api": "*",
     "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",
+    "@blackcode/platform-storage": "*",
     "@blackcode/platform-ui": "*",
     "@hello-pangea/dnd": "^16.6.0",
     "@neondatabase/serverless": "^1.0.2",

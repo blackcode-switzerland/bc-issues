@@ -589,8 +589,8 @@ trash-restore stay safe) — use these to review usage and delete unused files.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk storage list` | `GET /api/workspaces/:ws/storage` | Files with `REFS` (how many things reference each, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. |
-| `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Irreversible. |
+| `bk storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
+| `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
 | `bk storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. |
 
 ### Cross-app: search & links (Phase 6)

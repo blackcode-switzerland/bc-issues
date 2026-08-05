@@ -11,22 +11,9 @@ import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { resolveUser } from '@/lib/auth/resolve'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload'
 import { recordUpload } from '@/lib/db/queries/uploads'
-import { getWorkspaceForUser } from '@/lib/db/queries/workspaces'
-import type { User } from '@/lib/db/schema'
-
-// Attribute an upload to a workspace for the ledger. Prefer an explicit slug/id
-// from the client payload, else the user's active workspace. Never throws.
-async function attributeWorkspace(user: User, explicit?: string | null): Promise<number | null> {
-  if (explicit) {
-    try {
-      const ws = await getWorkspaceForUser(explicit, user.id)
-      if (ws) return ws.id
-    } catch {
-      /* fall through */
-    }
-  }
-  return user.active_workspace_id ?? null
-}
+import { attributeUpload } from '@/lib/storage/attribution'
+import { assertOwnPathname } from '@blackcode/platform-storage/paths'
+import { APP_SLUG } from '@/lib/app'
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody
@@ -35,10 +22,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const result = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
         // Only authenticated members may mint an upload token.
         const user = await resolveUser(request)
         if (!user) throw new Error('Authentication required')
+
+        // The CLIENT chooses the pathname in this flow and the Blob SDK gives us
+        // no way to rewrite it — the token is minted for the path it asked for.
+        // So this is the one place a caller can be stopped from writing outside
+        // this app's prefix, and it is a hard refusal rather than a correction.
+        // (Prefixes are for attribution, not authorisation: the store has one
+        // token per deployment. What this prevents is a confused client, not a
+        // determined attacker with our token.)
+        assertOwnPathname(APP_SLUG, pathname)
 
         // The client forwards file metadata in clientPayload (contentType,
         // filename, size) and may name a target workspace (slug/id).
@@ -54,7 +50,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           throw new Error('SVG files are not allowed for security reasons')
         }
 
-        const workspaceId = await attributeWorkspace(user, payload.workspace ?? null)
+        const workspace = await attributeUpload(user, payload.workspace ?? null)
 
         return {
           addRandomSuffix: true,
@@ -62,7 +58,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           maximumSizeInBytes: MAX_UPLOAD_BYTES,
           // Forwarded verbatim to onUploadCompleted to write the ledger row.
           tokenPayload: JSON.stringify({
-            workspace_id: workspaceId,
+            workspace_id: workspace.id,
             uploaded_by: user.id,
             filename: payload.filename ?? null,
             size: payload.size ?? null,

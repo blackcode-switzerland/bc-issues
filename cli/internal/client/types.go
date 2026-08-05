@@ -424,6 +424,9 @@ type workspaceAttachmentsEnvelope struct {
 
 // StorageReference is one thing that references a stored file.
 type StorageReference struct {
+	// App that owns the referencing row (Phase 7). Empty for a server that
+	// predates it.
+	App     string  `json:"app,omitempty" yaml:"app,omitempty"`
 	Type    string  `json:"type" yaml:"type"`
 	ID      int     `json:"id" yaml:"id"`
 	Seq     *int    `json:"seq" yaml:"seq"`
@@ -433,7 +436,9 @@ type StorageReference struct {
 
 // StorageFile is one file in workspace storage with its live references.
 type StorageFile struct {
-	ID             int                `json:"id" yaml:"id"`
+	ID int `json:"id" yaml:"id"`
+	// Which app wrote the file. Null/empty for rows a pre-Phase-7 server wrote.
+	App            *string            `json:"app,omitempty" yaml:"app,omitempty"`
 	URL            string             `json:"url" yaml:"url"`
 	Filename       string             `json:"filename" yaml:"filename"`
 	Size           *int               `json:"size" yaml:"size"`

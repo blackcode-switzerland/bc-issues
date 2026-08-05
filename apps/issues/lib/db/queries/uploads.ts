@@ -1,14 +1,29 @@
-// Query helpers for the upload ledger (see schema.ts `uploads`).
+// This app's binding to the shared upload ledger.
 //
-// The ledger records every file stored through our pipeline. It is metadata
-// only — it never decides whether a file may be deleted (that is a live
-// reference scan, lib/blob-refs.ts). recordUpload is idempotent on `url`, so the
-// various upload paths can call it freely without worrying about duplicates.
+// The queries themselves moved to `@blackcode/platform-storage` in Phase 7 —
+// `platform.uploads` is a platform table and a second app would need exactly
+// these statements unchanged. What stays here is the one thing the platform
+// cannot supply: which app is writing. `recordUpload` stamps `APP_SLUG` so no
+// upload path has to remember to, and forgetting is not representable.
+//
+// The ledger is still metadata only. It never decides whether a file may be
+// deleted — that is a live reference scan (lib/storage) — so a stale or missing
+// row here can never cause data loss.
 
-import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { uploads, users } from '../schema'
+import {
+  computeWorkspaceStorageUsage as computeUsage,
+  deleteUploadByUrl as deleteByUrl,
+  deleteUploadRow as deleteRow,
+  getUpload as get,
+  listWorkspaceUploads as list,
+  recordUpload as record,
+  type UploadRow,
+} from '@blackcode/platform-storage'
 import type { Upload } from '../schema'
+import { APP_SLUG } from '@/lib/app'
+
+export type { UploadRow }
 
 export async function recordUpload(data: {
   url: string
@@ -19,57 +34,28 @@ export async function recordUpload(data: {
   workspace_id?: number | null
   uploaded_by?: number | null
 }): Promise<void> {
-  // ON CONFLICT (url) DO NOTHING — re-recording the same upload is a no-op, and a
-  // ledger write must never break an upload, so failures are swallowed by the
-  // caller. We keep this query minimal and dependency-light on purpose.
-  await db
-    .insert(uploads)
-    .values({
-      url: data.url,
-      pathname: data.pathname ?? null,
-      filename: data.filename,
-      size: data.size ?? null,
-      mime_type: data.mime_type ?? null,
-      workspace_id: data.workspace_id ?? null,
-      uploaded_by: data.uploaded_by ?? null,
-    })
-    .onConflictDoNothing({ target: uploads.url })
+  return record(db, { ...data, app: APP_SLUG })
 }
 
-// All ledger rows for a workspace, with uploader name, newest first.
-export async function listWorkspaceUploads(workspaceId: number): Promise<
-  Array<Upload & { uploader_name: string | null; uploader_avatar: string | null }>
-> {
-  const res = await db.execute(sql`
-    SELECT u.*, usr.name AS uploader_name, usr.avatar_url AS uploader_avatar
-    FROM ${uploads} u
-    LEFT JOIN ${users} usr ON usr.id = u.uploaded_by
-    WHERE u.workspace_id = ${workspaceId}
-    ORDER BY u.created_at DESC
-  `)
-  return res.rows as Array<Upload & { uploader_name: string | null; uploader_avatar: string | null }>
+export async function listWorkspaceUploads(
+  workspaceId: number,
+  opts: { app?: string | null } = {}
+): Promise<UploadRow[]> {
+  return list(db, workspaceId, opts)
 }
 
 export async function getUpload(id: number): Promise<Upload | null> {
-  const rows = await db.select().from(uploads).where(eq(uploads.id, id)).limit(1)
-  return rows[0] ?? null
+  return get(db, id) as Promise<Upload | null>
 }
 
 export async function deleteUploadRow(id: number): Promise<void> {
-  await db.delete(uploads).where(eq(uploads.id, id))
+  return deleteRow(db, id)
 }
 
-// Remove the ledger row for a url (used by automatic GC after the bytes are
-// deleted). No-op if the url was never recorded.
 export async function deleteUploadByUrl(url: string): Promise<void> {
-  await db.delete(uploads).where(eq(uploads.url, url))
+  return deleteByUrl(db, url)
 }
 
-// Total bytes currently recorded for a workspace — the basis for future storage
-// quotas (compared against workspaces.storage_limit_bytes). NULL sizes count 0.
 export async function computeWorkspaceStorageUsage(workspaceId: number): Promise<number> {
-  const res = await db.execute(sql`
-    SELECT COALESCE(SUM(size), 0)::bigint AS used FROM ${uploads} WHERE workspace_id = ${workspaceId}
-  `)
-  return Number((res.rows[0] as { used: string | number })?.used ?? 0)
+  return computeUsage(db, workspaceId)
 }

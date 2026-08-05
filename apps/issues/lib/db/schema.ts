@@ -223,7 +223,7 @@ export const attachments = issuesSchema.table(
 //
 // IMPORTANT: this ledger is metadata only. It is NEVER the authority for whether
 // a file may be deleted — deletion is gated by a live reference scan over the
-// content tables (see lib/blob-refs.ts), so a stale/missing ledger row can never
+// content tables (see lib/storage), so a stale/missing ledger row can never
 // cause data loss. `url` is unique so re-recording the same upload is a no-op.
 
 export const issueLabels = issuesSchema.table(
