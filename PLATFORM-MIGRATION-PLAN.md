@@ -694,27 +694,34 @@ Two traps, both hit for real:
 Added after the Phase 7 incident, 2026-08-05. **This step is not optional for
 any change that touches a path the CLI takes.**
 
-Earlier phases recorded "Deployment Protection blocks `bk` from authenticating
-against a deployment URL, so verify after the promote with the published
-binary." That was accepted as a limitation. It is not one:
+**Deployment Protection covers preview AND production-target `.vercel.app`
+aliases.** Both return 401 (`"vercel_auth_enabled": true`) to a bearer token —
+`bk` cannot authenticate against either. Do not test this with `curl -L`: it
+follows the SSO redirect and reports **200 for the login page**, which reads as
+"publicly reachable" and is not. Check without `-L`; a 302 means protected.
 
-- Protection hides **preview** deployments. A **production-target** deployment
-  (`vercel deploy --prod --skip-domain`) is **publicly reachable** — it just has
-  no domain pointing at it.
-- `bk` reads its server from config, and `BK_CONFIG_DIR` can redirect that.
-
-So the staged build can be exercised by the exact binary your agents run,
-*before* it takes traffic:
+So the staging target is **not a Vercel URL**. It is the production build run
+**locally**, against the **preview** database and the **preview** Blob store —
+the only pre-promote environment where `bk` can authenticate without a bypass
+secret, and one that still exercises the real handshake code and a real store:
 
 ```bash
+cd apps/issues && \
+  DATABASE_URL='<preview, issues_app>' \
+  BLOB_READ_WRITE_TOKEN='<preview>' \
+  NEXTAUTH_URL=http://localhost:3100 NEXTAUTH_SECRET=… \
+  npx next build && npx next start -p 3100
+
+# then point the PUBLISHED binary at it:
 mkdir -p /tmp/bk-stage
-sed 's#"server": *"[^"]*"#"server": "https://<deployment-url>"#' \
+sed 's#"server": *"[^"]*"#"server": "http://localhost:3100"#' \
   ~/.config/bk/config.json > /tmp/bk-stage/config.json
 BK_CONFIG_DIR=/tmp/bk-stage bk upload ./somefile.png
 BK_CONFIG_DIR=/tmp/bk-stage bk storage list | head
 ```
 
-No bypass secret is involved.
+Run it with **both** binaries — the currently published one (proving backwards
+compatibility for what users have installed) and the new one.
 
 **What it costs to skip it.** Phase 7 made uploads require an `<app>/<ws>/`
 pathname prefix, on the assumption that the client-direct Blob flow was the
