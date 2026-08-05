@@ -72,6 +72,7 @@ const EXCLUDED_PATHS = new Map<string, string>([
   ['/api/status/errors/{id}', 'public status-page feed; triage is `bk super-admin errors`'],
 
   // --- retired surfaces (delete these entries when the 410 stubs go) ---
+  ['/api/undo', 'retired 1.12.0: 410 Gone stub so a pre-1.12.0 binary that still has `bk undo` gets an actionable answer instead of an HTML 404'],
   ['/api/openapi.json', 'retired: 410 Gone deprecation stub'],
   ['/api/docs', 'retired: 410 Gone deprecation stub'],
 ])

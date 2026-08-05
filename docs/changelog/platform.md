@@ -85,8 +85,12 @@ bk trash list
 bk trash restore issue:42
 ```
 
-`bk undo` now exits non-zero with a hint naming Trash. `GET`/`POST /api/undo` are
-gone, and `limits.undo_max_count` no longer appears in `bk meta`. The empty
+`bk undo` now exits non-zero with a hint naming Trash, and `limits.undo_max_count`
+no longer appears in `bk meta`. **`GET`/`POST /api/undo` return `410 Gone` with a
+`suggestion`** rather than disappearing: a pre-1.12.0 binary still has the command
+and still calls the route, and a deleted route would have handed it Next's HTML
+404 page — ~2KB of markup on stderr with nothing to act on. Found by running the
+published 1.11.0 binary against the new build before promoting it. The empty
 `platform.transaction_log` table is left in place for now; dropping it is a
 separate change.
 
