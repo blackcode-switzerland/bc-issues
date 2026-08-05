@@ -25,6 +25,19 @@ bk trash purge issue:42              # permanently destroy specific items
 bk trash empty                       # permanently destroy everything in Trash
 ```
 
+**Take the ref from `bk trash list`, exactly as printed in its REF column.** It
+is NOT the `#number` you use everywhere else, and the two do not interchange —
+`bk trash list` is the only thing that produces a valid one.
+
+Passing a ref that is not in this workspace's Trash now fails with exit 5 and
+names the ref. It used to report `restored 1 item(s)` and exit 0 while restoring
+nothing, so if you are branching on the count, make sure you are running a build
+that refuses instead. A rejected restore is atomic: pass one bad ref alongside
+good ones and nothing is restored.
+
+The count reports what was actually brought back. Restoring something that was
+never binned is a no-op and counts zero — not an error.
+
 `purge` and `empty` are terminal: they also free the files that content
 referenced (see `bk guide platform/storage`). Nothing brings them back — not even `undo`.
 

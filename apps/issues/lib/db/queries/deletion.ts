@@ -529,18 +529,22 @@ async function restoreEntity(
   actorUserId: number,
   resolutions: Record<string, RestoreResolution>,
   selection: Set<string>,
-  restored: Set<string>
+  visited: Set<string>,
+  restoredRefs: Set<string>
 ): Promise<void> {
   const key = `${type}:${id}`
-  if (restored.has(key)) return
+  if (visited.has(key)) return
   const row = await loadRow(tx, workspaceId, type, id)
   if (!row) {
-    restored.add(key)
+    // Does not exist here. Marked visited so recursion stops; NOT reported as
+    // restored, because nothing was. An explicitly requested ref never reaches
+    // this branch — restoreItems rejects those up front.
+    visited.add(key)
     return
   }
   if (!row.deleted) {
     // Already active — nothing to restore, but mark so children can link to it.
-    restored.add(key)
+    visited.add(key)
     return
   }
 
@@ -558,7 +562,7 @@ async function restoreEntity(
           ? 'restore_parent'
           : resolutions[key] ?? defaultResolution(row.delete_batch_id, parent)
         if (res === 'restore_parent') {
-          await restoreEntity(tx, workspaceId, 'project', row.project_id, actorUserId, resolutions, selection, restored)
+          await restoreEntity(tx, workspaceId, 'project', row.project_id, actorUserId, resolutions, selection, visited, restoredRefs)
         } else {
           nextProjectId = null
         }
@@ -574,7 +578,7 @@ async function restoreEntity(
         ? 'restore_parent'
         : resolutions[key] ?? defaultResolution(row.delete_batch_id, parent)
       if (res === 'restore_parent') {
-        await restoreEntity(tx, workspaceId, 'task', row.task_id, actorUserId, resolutions, selection, restored)
+        await restoreEntity(tx, workspaceId, 'task', row.task_id, actorUserId, resolutions, selection, visited, restoredRefs)
       } else {
         nextTaskId = null
       }
@@ -601,7 +605,26 @@ async function restoreEntity(
     action: 'restored',
     meta: { title: row.title },
   })
-  restored.add(key)
+  visited.add(key)
+  restoredRefs.add(key)
+}
+
+/**
+ * One or more requested refs do not exist in this workspace. Route → 404.
+ *
+ * This exists because the alternative was silence. `restoreEntity` used to add a
+ * non-existent ref to the same set it used to report what came back, so
+ * `restore issue:99999` answered `restored 1 item(s)` with exit 0 and restored
+ * nothing — and an id belonging to ANOTHER workspace answered the same way. An
+ * agent branching on exit code and count was told the item was back while it was
+ * still binned, which is the one failure mode this project treats as worse than
+ * a crash. Found in production during Phase 6 verification.
+ */
+export class TrashItemNotFoundError extends Error {
+  constructor(public refs: EntityRef[]) {
+    super(`not_in_trash:${refs.map((r) => `${r.type}:${r.id}`).join(',')}`)
+    this.name = 'TrashItemNotFoundError'
+  }
 }
 
 export async function restoreItems(
@@ -611,21 +634,40 @@ export async function restoreItems(
   resolutions: Record<string, RestoreResolution> = {}
 ): Promise<{ restored: EntityRef[] }> {
   return await db.transaction(async (tx) => {
-    const restored = new Set<string>()
+    // Every EXPLICITLY requested ref must exist in this workspace. Checked up
+    // front, inside the transaction, so a bad ref rolls the whole call back
+    // instead of half-restoring and reporting success. Refs reached by recursion
+    // (a binned parent) are deliberately not covered — a missing parent is a
+    // normal case there, handled by clearing the link.
+    const missing: EntityRef[] = []
+    for (const ref of refs) {
+      if (!(await loadRow(tx, workspaceId, ref.type, ref.id))) missing.push(ref)
+    }
+    if (missing.length > 0) throw new TrashItemNotFoundError(missing)
+
+    // TWO sets, because one was doing three jobs and the third was wrong.
+    //   visited      — recursion guard, and "this row is active now, so a child
+    //                  may link to it". A row that does not exist, or was never
+    //                  binned, belongs here: children may link either way.
+    //   restoredRefs — what was actually brought back out of the bin. ONLY this
+    //                  one is reported. Conflating the two is what let a no-op
+    //                  answer `restored 1`.
+    const visited = new Set<string>()
+    const restoredRefs = new Set<string>()
     const selection = new Set(refs.map((r) => `${r.type}:${r.id}`))
     // Restore projects first, then tasks, then issues, so parents exist as
     // active rows before children link to them.
     const order: TrashType[] = ['project', 'task', 'issue']
     const sorted = [...refs].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
     for (const ref of sorted) {
-      await restoreEntity(tx, workspaceId, ref.type, ref.id, actorUserId, resolutions, selection, restored)
+      await restoreEntity(tx, workspaceId, ref.type, ref.id, actorUserId, resolutions, selection, visited, restoredRefs)
     }
     // Clears deleted_at in the projection for everything that came back,
     // including batch-mates restored alongside the explicit selection.
     await syncEntityDeletedState(tx, workspaceId)
 
     const result: EntityRef[] = []
-    for (const k of restored) {
+    for (const k of restoredRefs) {
       const [t, idStr] = k.split(':')
       result.push({ type: t as TrashType, id: Number(idStr) })
     }

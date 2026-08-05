@@ -30,6 +30,46 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-05 — **FIX:** `bk trash restore` reported success for a ref that did not exist
+
+**What changed.** `POST /api/workspaces/{ws}/trash/restore` now answers **404
+`not_in_trash`** when a requested ref is not in that workspace's Trash. It used to
+answer `200 { count: 1 }` — so `bk trash restore` printed `restored 1 item(s)` and
+exited **0** while restoring nothing.
+
+**Why it mattered more than it looks.** The ref you pass is the one `bk trash
+list` prints in its REF column, which is *not* the `#number` used everywhere else.
+Pass the `#number` by mistake — the natural thing to do — and you got a
+confident success for a no-op. An id belonging to a **different workspace** got
+the same answer. An agent branching on exit code and count was told the item was
+back while it was still binned, and nothing anywhere reported otherwise. Found
+against production while verifying Phase 6.
+
+**Cause,** for anyone reading the diff: one `Set` was doing three jobs — recursion
+guard, "this parent is active so children may re-link", and the report of what
+came back — and the does-not-exist branch added to all three. It is now two sets,
+and only the one holding rows actually taken out of the bin is reported.
+
+**How to adapt.**
+
+- A bad ref is now **exit 5** with the ref named and a `hint:` pointing at
+  `bk trash list`. If you were treating a non-zero count as proof, you can now
+  treat the exit code as proof.
+- **A rejected restore is atomic** — pass one bad ref alongside good ones and
+  nothing is restored, rather than a partial restore reported as complete.
+- **The count is now what was actually restored.** Restoring something that was
+  never binned is a no-op that counts **zero** and still succeeds; previously it
+  counted one.
+- `purge` and `empty` were never affected: `purgeOne` already reported only what
+  it removed.
+
+Not fixed here, and carried forward: `bk trash` refs are internal database ids
+(`issue:905`), which is the one place the platform exposes a work-item serial
+instead of its `#number`. That is a design decision — map them, or document Trash
+as a deliberate exception — not a one-function fix.
+
+---
+
 ## 2026-08-05 — Cross-app entities: URNs, `bk search`, `bk link`, and a merged `bk activity`
 
 **What changed.** Everything in every app is now addressable by one string, and

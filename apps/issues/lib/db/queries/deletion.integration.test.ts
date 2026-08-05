@@ -150,6 +150,89 @@ run('deletion engine (integration)', () => {
     expect(trash.find((t) => t.id === issueIds[0])).toBeUndefined()
   })
 
+  // ---- restore must never claim to have restored something it did not ----
+  //
+  // Found in PRODUCTION during Phase 6 verification: `restore issue:32` (the
+  // #number, not the ref `trash list` prints) answered `restored 1 item(s)` with
+  // exit 0 and restored nothing. One Set was doing three jobs — recursion guard,
+  // "parent is active so children may link", and the report — and the
+  // does-not-exist branch added to all three.
+  //
+  // These assert the REFUSAL and the COUNT, because "no exception" was exactly
+  // what the broken version produced.
+
+  it('REFUSES a ref that does not exist in this workspace', async () => {
+    await expect(
+      engine.restoreItems(wsId, [{ type: 'issue', id: 999_999_99 }], userId)
+    ).rejects.toThrow(/not_in_trash/)
+  })
+
+  it('REFUSES a ref belonging to another workspace, and restores nothing', async () => {
+    const [otherWs] = await db
+      .insert(schema.workspaces)
+      .values({ name: `Other ${Date.now()}`, slug: `other-${Date.now()}`, owner_id: userId })
+      .returning({ id: schema.workspaces.id })
+    try {
+      const [foreign] = await db
+        .insert(schema.issues)
+        .values({ workspace_id: otherWs.id, seq: 7001, title: 'Foreign' })
+        .returning({ id: schema.issues.id })
+      await engine.softDeleteIssue(otherWs.id, foreign.id, userId)
+
+      // Asking THIS workspace to restore it must fail, and must leave it binned.
+      await expect(
+        engine.restoreItems(wsId, [{ type: 'issue', id: foreign.id }], userId)
+      ).rejects.toThrow(/not_in_trash/)
+      const still = await db
+        .select({ deleted_at: schema.issues.deleted_at })
+        .from(schema.issues)
+        .where(eqId(schema.issues.id, foreign.id))
+      expect(still[0].deleted_at, 'the other workspace\'s item must stay binned').not.toBeNull()
+    } finally {
+      await db.delete(schema.workspaces).where(eqId(schema.workspaces.id, otherWs.id))
+    }
+  })
+
+  it('reports a count of what it ACTUALLY restored, not what it was asked about', async () => {
+    const [a] = await db
+      .insert(schema.issues)
+      .values({ workspace_id: wsId, seq: 7101, title: 'CountA' })
+      .returning({ id: schema.issues.id })
+    const [b] = await db
+      .insert(schema.issues)
+      .values({ workspace_id: wsId, seq: 7102, title: 'CountB' })
+      .returning({ id: schema.issues.id })
+    await engine.softDeleteIssue(wsId, a.id, userId)
+    // `b` exists but was never binned — restoring it is a no-op and must be
+    // reported as one, or the count means nothing.
+    const res = await engine.restoreItems(
+      wsId,
+      [{ type: 'issue', id: a.id }, { type: 'issue', id: b.id }],
+      userId
+    )
+    expect(res.restored.map((r) => r.id)).toEqual([a.id])
+  })
+
+  it('a rejected restore is atomic — a good ref alongside a bad one restores nothing', async () => {
+    const [good] = await db
+      .insert(schema.issues)
+      .values({ workspace_id: wsId, seq: 7201, title: 'Atomic' })
+      .returning({ id: schema.issues.id })
+    await engine.softDeleteIssue(wsId, good.id, userId)
+    await expect(
+      engine.restoreItems(
+        wsId,
+        [{ type: 'issue', id: good.id }, { type: 'issue', id: 999_999_98 }],
+        userId
+      )
+    ).rejects.toThrow(/not_in_trash/)
+    const still = await db
+      .select({ deleted_at: schema.issues.deleted_at })
+      .from(schema.issues)
+      .where(eqId(schema.issues.id, good.id))
+    expect(still[0].deleted_at, 'the valid item must NOT have been restored').not.toBeNull()
+  })
+
   it('seq is preserved across delete and restore', async () => {
     const [iss] = await db
       .insert(schema.issues)
