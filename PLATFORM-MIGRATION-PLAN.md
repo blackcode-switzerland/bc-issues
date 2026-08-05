@@ -1,5 +1,13 @@
 # Platform Migration Plan
 
+> **COMPLETE — all nine phases (0–8) shipped, the last on 2026-08-05.**
+> The record of what went wrong, what it cost and what is still owed is
+> [`docs/migration/closing-summary.md`](docs/migration/closing-summary.md).
+> Read that before this: eight guardrails in this repo were found reporting
+> success while checking nothing, and four of the instructions below were wrong
+> in ways only doing the work revealed. The corrections are in place; the
+> reasoning is in the summary.
+
 **Goal:** turn today's single-app `bc-issues` repo into `blackcode-platform` —
 a monorepo where **adding a new app is a checklist, not a project**.
 
