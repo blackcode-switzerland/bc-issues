@@ -281,6 +281,13 @@
       "when": 1785949831936,
       "tag": "0039_tighten_app_not_null",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1785949891936,
+      "tag": "0040_move_workspace_counters_to_issues",
+      "breakpoints": true
     }
   ]
 }

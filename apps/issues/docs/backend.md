@@ -102,7 +102,7 @@ exactly why `bk meta` carries them.
 
 
 Sequence allocation is per workspace **and** per entity type, in-transaction, via
-`allocateNext*Seq` against `platform.workspace_counters`.
+`allocateNext*Seq` against `issues.workspace_counters` (moved out of `platform` in migration 0040 — the columns name this app's entity types, so it is app data).
 
 ## Routes
 

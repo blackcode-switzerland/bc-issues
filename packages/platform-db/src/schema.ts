@@ -352,16 +352,17 @@ export const links = platformSchema.table(
   })
 )
 
-export const workspaceCounters = platformSchema.table('workspace_counters', {
-  workspace_id: integer('workspace_id')
-    .primaryKey()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  last_issue_seq: integer('last_issue_seq').default(0).notNull(),
-  // Per-workspace, per-type sequences for the human-facing #number shown in the
-  // UI and URL. Allocated alongside the row insert (see allocateNext*Seq).
-  last_project_seq: integer('last_project_seq').default(0).notNull(),
-  last_task_seq: integer('last_task_seq').default(0).notNull(),
-})
+// `workspace_counters` MOVED to the `issues` schema in migration 0040.
+//
+// It never belonged here. Its columns are `last_issue_seq`, `last_project_seq`,
+// `last_task_seq` — one app's entity types, sitting in the schema that is
+// supposed to hold only what every app shares. PLATFORM-ARCHITECTURE.md §4.6
+// used to prescribe reshaping it to `(workspace_id, app, entity_type, last_seq)`
+// so apps could share it; building `apps/_template` showed the better answer is
+// that they should not share it at all. A counter is app data. Each app keeps
+// its own, in its own schema, and no app ever has to ALTER a platform table to
+// add an entity type.
+//
 
 export const workspaceInvitations = platformSchema.table(
   'workspace_invitations',
@@ -820,7 +821,6 @@ export type Workspace = typeof workspaces.$inferSelect
 export type NewWorkspace = typeof workspaces.$inferInsert
 export type WorkspaceMember = typeof workspaceMembers.$inferSelect
 export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert
-export type WorkspaceCounter = typeof workspaceCounters.$inferSelect
 export type App = typeof apps.$inferSelect
 export type NewApp = typeof apps.$inferInsert
 export type WorkspaceApp = typeof workspaceApps.$inferSelect

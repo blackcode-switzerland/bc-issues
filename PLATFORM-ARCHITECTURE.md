@@ -206,23 +206,32 @@ Consequence worth having: **`bk meta` returns only the apps that token can
 reach.** An agent working for a sales-only user cannot discover that the issues
 app exists.
 
-### 4.6 Three reshapes shared tables need before a second app
+### 4.6 Reshapes shared tables need before a second app
 
-These are small migrations today and painful ones later. All three exist because
+These are small migrations today and painful ones later. They exist because
 today's tables were written when there was exactly one app.
 
-**`workspace_counters` — columns become rows.** Today it is one row per
-workspace with `last_issue_seq`, `last_project_seq`, `last_task_seq`. Sales
-would have to add `last_deal_seq` — an app editing a *platform* table, which is
-the coupling we are removing.
+**`workspace_counters` — DONE, and not the way this section first proposed.**
+It used to say the table should stay in `platform` and become
+`(workspace_id, app, entity_type, last_seq)` so every app could share one
+counter. Building `apps/_template` in Phase 8 showed that to be the wrong trade,
+and migration **0040 moved the table to `issues.workspace_counters`** instead.
 
-```
-platform.workspace_counters (workspace_id, app, entity_type, last_seq)
-  PRIMARY KEY (workspace_id, app, entity_type)
-```
+The argument that changed it: sharing a counter buys **nothing**. No query ever
+spans two apps' counters, so the only things a shared table adds are a shared
+write point and a shared migration every time any app invents an entity type.
+An app's #number sequence is app data. Each app keeps its own, in its own
+schema — `apps/_template` does it in three lines — and no app ever ALTERs a
+platform table to add an entity.
 
-Each app then allocates its own #numbers independently; issue #482 and deal #17
-coexist.
+Reshaping it in place would also have left the harder half unsolved: the table
+would still have been a platform table that apps write to, which is the coupling
+§4.3 exists to forbid. Moving it removed the question.
+
+**The general rule this produced:** before reshaping a shared table so more apps
+can use it, ask whether they should be sharing it at all. "Make it generic" is
+the reflex; "move it to the app that owns it" is often the smaller change and
+always the cleaner boundary.
 
 **`comments.parent_type` becomes app-qualified.** `'issue'` → `'issues:issue'`,
 so sales can store `'sales:deal'` without collision.

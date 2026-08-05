@@ -44,6 +44,41 @@ import { users, workspaces, labels } from '@blackcode/platform-db'
 // site for the whole schema.
 export * from '@blackcode/platform-db/schema'
 
+/**
+ * This app's #number counters — one row per workspace.
+ *
+ * ── WHY IT LIVES HERE AND NOT IN `platform` ─────────────────────────────────
+ * It was `platform.workspace_counters` until migration 0040, and it was wrong
+ * there: its columns name THIS app's entity types (`last_issue_seq`,
+ * `last_project_seq`, `last_task_seq`), so a second app could not allocate a
+ * #number without ALTERing a platform table — exactly the app→platform coupling
+ * Phase 3 spent its whole budget removing.
+ *
+ * PLATFORM-ARCHITECTURE.md §4.6 originally prescribed reshaping it to
+ * `(workspace_id, app, entity_type, last_seq)` so every app could share one
+ * table. Building `apps/_template` in Phase 8 showed a better answer: apps
+ * should not share a counter at all. Sharing it buys nothing — no query ever
+ * spans two apps' counters — and costs a shared write point and a shared
+ * migration. Each app keeps its own, in its own schema. `_template` does the
+ * same, in three lines.
+ *
+ * Allocation is `UPDATE … RETURNING`, never read-then-write: two concurrent
+ * creates would otherwise read the same value and collide on the unique index.
+ * See `allocateNextIssueSeq` and friends in `lib/db/queries/workspaces.ts`.
+ */
+export const workspaceCounters = issuesSchema.table('workspace_counters', {
+  workspace_id: integer('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  last_issue_seq: integer('last_issue_seq').default(0).notNull(),
+  // Per-workspace, per-type sequences for the human-facing #number shown in the
+  // UI and URL. Allocated alongside the row insert.
+  last_project_seq: integer('last_project_seq').default(0).notNull(),
+  last_task_seq: integer('last_task_seq').default(0).notNull(),
+})
+
+export type WorkspaceCounter = typeof workspaceCounters.$inferSelect
+
 export const projects = issuesSchema.table(
   'projects',
   {
