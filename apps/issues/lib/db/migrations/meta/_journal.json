@@ -267,6 +267,13 @@
       "when": 1785944187798,
       "tag": "0037_blob_reference_index",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1785944247798,
+      "tag": "0038_blob_refs_purge_caller_identity",
+      "breakpoints": true
     }
   ]
 }

@@ -93,3 +93,17 @@ REVOKE ALL ON SCHEMA drizzle FROM issues_app;
 --   CREATE ROLE probe_app LOGIN PASSWORD '...';
 --   GRANT USAGE ON SCHEMA platform TO probe_app;   -- deliberately NOT issues
 --   -- then, as probe_app:  SELECT * FROM issues.issues LIMIT 1;  -> must fail 42501
+
+-- (d) RUN docs/sql/app-boundary-probe.sql AS THE NEW APP ROLE. Not optional, and
+--     not replaceable by `SET ROLE` from the owner: `session_user` ignores
+--     SET ROLE, and inside a SECURITY DEFINER function `current_user` is the
+--     function's owner rather than the caller — so a SET ROLE probe reports the
+--     boundary as present when it is not.
+--
+--     That is not hypothetical. The blob-index purge guard shipped in 0037
+--     checking `current_user` and was therefore inert: any app could purge any
+--     other app's references, the one kind of index damage that ends in deleted
+--     bytes. It was found by running the probe as the real role, and fixed in
+--     0038. Connect as the app and run it:
+--
+--       psql "postgres://<app>_app:<pw>@<host>/<db>" -f docs/sql/app-boundary-probe.sql
