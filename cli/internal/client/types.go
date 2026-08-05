@@ -286,7 +286,14 @@ type activityFeedEnvelope struct {
 }
 
 type ActivityFeedItem struct {
-	ID          int             `json:"id" yaml:"id"`
+	ID int `json:"id" yaml:"id"`
+	// Which app produced the event, and the cross-app address of its subject
+	// (Phase 6). App is a pointer because rows written during the window between
+	// migration 0035 and the deploy that sets it carry NULL — see the migration's
+	// note on expand→migrate→contract. SubjectURN is null for subjects that are
+	// not projected entities: a member, an invitation, a label.
+	App         *string         `json:"app,omitempty" yaml:"app,omitempty"`
+	SubjectURN  *string         `json:"subject_urn,omitempty" yaml:"subject_urn,omitempty"`
 	EntityType  string          `json:"entity_type" yaml:"entity_type"`
 	EntityID    *int            `json:"entity_id" yaml:"entity_id"` // #number for issue/task/project, own id otherwise; null if purged
 	Action      string          `json:"action" yaml:"action"`
@@ -611,4 +618,78 @@ type RestoreTrashResponse struct {
 type PurgeTrashRequest struct {
 	BatchID *int             `json:"batch_id,omitempty"`
 	Items   []TrashEntityRef `json:"items,omitempty"`
+}
+
+// ---- cross-app primitives (Phase 6) ----
+//
+// An Entity is one row of platform.entities: whatever an app has made
+// addressable by URN. The CLI never has to know what an "issue" is to print one
+// — which is the point of the projection, and why `bk search` works unchanged
+// the day a second app starts writing to it.
+
+type Entity struct {
+	URN        string  `json:"urn" yaml:"urn"`
+	App        string  `json:"app" yaml:"app"`
+	EntityType string  `json:"entity_type" yaml:"entity_type"`
+	Number     int     `json:"number" yaml:"number"`
+	Title      string  `json:"title" yaml:"title"`
+	URL        *string `json:"url,omitempty" yaml:"url,omitempty"`
+	UpdatedAt  *string `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
+	DeletedAt  *string `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
+}
+
+// Link is one relation, reported from the point of view of the URN asked about:
+// Direction says whether that URN is the from ("out") or the to ("in") side, and
+// the Other* fields describe the far end. Links are directed and stored once, so
+// this is how the same row reads from both sides.
+type Link struct {
+	Direction       string  `json:"direction" yaml:"direction"`
+	Rel             string  `json:"rel" yaml:"rel"`
+	FromURN         string  `json:"from_urn" yaml:"from_urn"`
+	ToURN           string  `json:"to_urn" yaml:"to_urn"`
+	OtherURN        string  `json:"other_urn" yaml:"other_urn"`
+	OtherApp        string  `json:"other_app" yaml:"other_app"`
+	OtherEntityType string  `json:"other_entity_type" yaml:"other_entity_type"`
+	OtherNumber     int     `json:"other_number" yaml:"other_number"`
+	OtherTitle      string  `json:"other_title" yaml:"other_title"`
+	OtherURL        *string `json:"other_url,omitempty" yaml:"other_url,omitempty"`
+	OtherDeleted    bool    `json:"other_deleted" yaml:"other_deleted"`
+	CreatedByName   *string `json:"created_by_name,omitempty" yaml:"created_by_name,omitempty"`
+	CreatedAt       *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+}
+
+type CreateLinkRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Rel  string `json:"rel"`
+}
+
+type CreateLinkResponse struct {
+	From string `json:"from" yaml:"from"`
+	To   string `json:"to" yaml:"to"`
+	Rel  string `json:"rel" yaml:"rel"`
+	// False when the link already existed. Creating one twice is not an error —
+	// an agent retrying after a timeout must not see a failure.
+	Created bool `json:"created" yaml:"created"`
+}
+
+// EntityDriftReport is the reconciliation job's answer: how many rows the
+// projection and the source tables disagree about, and which.
+type EntityDriftReport struct {
+	Scope           string         `json:"scope" yaml:"scope"`
+	SourceCounts    map[string]int `json:"source_counts" yaml:"source_counts"`
+	ProjectedCounts map[string]int `json:"projected_counts" yaml:"projected_counts"`
+	CountsMatch     bool           `json:"counts_match" yaml:"counts_match"`
+	DriftCount      int            `json:"drift_count" yaml:"drift_count"`
+	Drift           []EntityDrift  `json:"drift" yaml:"drift"`
+	DriftTruncated  int            `json:"drift_truncated" yaml:"drift_truncated"`
+	Repaired        int            `json:"repaired" yaml:"repaired"`
+}
+
+type EntityDrift struct {
+	URN        string `json:"urn" yaml:"urn"`
+	EntityType string `json:"entity_type" yaml:"entity_type"`
+	Number     int    `json:"number" yaml:"number"`
+	Kind       string `json:"kind" yaml:"kind"`
+	Detail     string `json:"detail" yaml:"detail"`
 }

@@ -1,24 +1,12 @@
 import { db } from '@/lib/db/client'
 import { emailWhitelist } from '@/lib/db/schema'
-import { eq, and, or } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
-export async function isEmailAllowedByDb(email: string): Promise<boolean> {
-  const domain = email.split('@')[1]
-  if (!domain) return false
-
-  const result = await db
-    .select({ id: emailWhitelist.id })
-    .from(emailWhitelist)
-    .where(
-      or(
-        and(eq(emailWhitelist.type, 'email'), eq(emailWhitelist.value, email)),
-        and(eq(emailWhitelist.type, 'domain'), eq(emailWhitelist.value, domain))
-      )
-    )
-    .limit(1)
-
-  return result.length > 0
-}
+// `isEmailAllowedByDb` moved to @blackcode/platform-auth in Phase 6 — who may
+// exist on the platform is not one app's decision. Re-exported through
+// `@/lib/auth/whitelist`, which binds this app's `db`. The CRUD below stays here:
+// it backs this app's super-admin screens, not the gate itself.
+export { isEmailAllowedByDb } from '@/lib/auth/whitelist'
 
 export async function listWhitelist() {
   return db

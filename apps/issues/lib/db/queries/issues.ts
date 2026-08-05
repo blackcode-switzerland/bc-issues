@@ -16,6 +16,7 @@ import { searchClause } from './search'
 import { db } from '../client'
 import { attachments, comments, issueAssignees, issueLabels, issues, labels, projects, tasks, type Issue, users } from '../schema'
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
+import { projectEntity } from './entities'
 import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
@@ -285,6 +286,14 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       }
     }
 
+    // Same transaction as the insert above — see lib/db/queries/entities.ts.
+    await projectEntity(tx, {
+      workspaceId: input.workspaceId,
+      entityType: 'issue',
+      number: row.seq,
+      title: row.title,
+    })
+
     return row
   })
 }
@@ -495,6 +504,19 @@ export async function updateIssue(
         coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS,
       })
     }
+
+    // Re-project unconditionally rather than only when the title changed. The
+    // upsert is idempotent, and "only when X changed" is a condition somebody
+    // eventually gets wrong — silently, because a stale projection still
+    // resolves. It also keeps entities.updated_at meaning "last touched", which
+    // is what `bk search` orders by.
+    await projectEntity(tx, {
+      workspaceId,
+      entityType: 'issue',
+      number: after.seq,
+      title: after.title,
+      deletedAt: after.deleted_at,
+    })
 
     return after
   })

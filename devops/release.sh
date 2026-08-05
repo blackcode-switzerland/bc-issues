@@ -84,7 +84,7 @@ ${BOLD}USAGE${RESET}
   $(basename "$0") cli [bump]         Release CLI to GitHub Releases + npm.
                                       Omit [bump] to be prompted; also asks
                                       force-vs-normal upgrade and whether to
-                                      deploy web, then updates lib/cli-version.ts.
+                                      deploy web, then updates cli-version.ts.
   $(basename "$0") --help             Show this help
 
 ${BOLD}BUMP OPTIONS${RESET}
@@ -196,7 +196,7 @@ release_cli() {
   version=$(resolve_version "$bump")
   local version_number="${version#v}"   # strip leading 'v' for package.json
 
-  # Upgrade policy — drives the server version gate (lib/cli-version.ts):
+  # Upgrade policy — drives the server version gate (cli-version.ts):
   #   normal → CLI_LATEST advertises the new version (soft "update available").
   #   forced → also raise CLI_MIN so older CLIs are hard-blocked (exit code 8).
   echo
@@ -275,14 +275,29 @@ release_cli() {
   # bump (one commit, then the tag/build/publish come from it). CLI_LATEST always;
   # CLI_MIN only when forced.
   #
-  # The gate lives in the app that serves the version headers. It was at
-  # <root>/lib/cli-version.ts until Phase 1 of the platform migration moved the
-  # whole app under apps/issues/ — this path was not updated with it, so every
-  # release since would have died here on `sed: no such file`, after bumping
-  # package.json and install.js and before the release commit. Caught in Phase 5,
-  # which is the first release attempt since the move.
-  local cli_version_ts="${root_dir}/apps/issues/lib/cli-version.ts"
-  [[ -f "$cli_version_ts" ]] || die "Version gate not found at ${cli_version_ts} — has the app moved again?"
+  # The gate has now moved twice, so it is SEARCHED FOR rather than hardcoded.
+  #
+  # History, because it is the reason for the search: it was <root>/lib/cli-version.ts
+  # until Phase 1 put the app under apps/issues/, and this path was not updated
+  # with it — so every release since would have died here on `sed: no such file`,
+  # after bumping package.json and install.js and before the release commit.
+  # Caught in Phase 5, the first release attempt after the move. Phase 6 then
+  # moved it again, into packages/platform-agent/, because one binary has one
+  # advertised version and a second app must not answer that question differently.
+  #
+  # A hardcoded path that breaks halfway through a release is a bad trade for the
+  # two lines this costs. The candidate list is ordered newest-first and the
+  # failure names every place it looked.
+  local cli_version_ts=""
+  local candidate
+  for candidate in \
+    "${root_dir}/packages/platform-agent/src/cli-version.ts" \
+    "${root_dir}/apps/issues/lib/cli-version.ts" \
+    "${root_dir}/lib/cli-version.ts"; do
+    if [[ -f "$candidate" ]]; then cli_version_ts="$candidate"; break; fi
+  done
+  [[ -n "$cli_version_ts" ]] || die "Version gate (cli-version.ts) not found in packages/platform-agent/src, apps/issues/lib or <root>/lib — has it moved again?"
+  info "Version gate: ${cli_version_ts#$root_dir/}"
   sed -i '' -E "s/(CLI_LATEST_VERSION = process\.env\.BK_CLI_LATEST \?\? ')[^']*'/\1${version_number}'/" "$cli_version_ts"
   success "CLI_LATEST_VERSION → ${version_number}"
   if [[ "$forced" == true ]]; then

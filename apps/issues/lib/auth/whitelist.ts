@@ -1,34 +1,22 @@
-// Super admin + email whitelist utilities.
+// Moved to @blackcode/platform-auth in Phase 6. `platform.users` is one table
+// shared by every app, so "who may register" cannot be one app's decision.
 //
-// SUPER_ADMINS env var:  comma-separated email list of platform super admins.
-//                        Super admins bypass all whitelist checks and gain access
-//                        to the /dashboard/super-admin section.
-//
-// Whitelist feature is active when SUPER_ADMINS is set (non-empty).
-// When active, only whitelisted emails/domains + super admins can register
-// or sign in via Google OAuth.
+// The package's functions take the database handle as their first argument — the
+// same shape as `requireAppAccess` — because a platform package must not import
+// an app's client. The wrappers here bind this app's `db` so every existing
+// `@/lib/auth/whitelist` call site is unchanged.
+import { db } from '@/lib/db/client'
+import {
+  isEmailAllowed as isEmailAllowedImpl,
+  isEmailAllowedByDb as isEmailAllowedByDbImpl,
+} from '@blackcode/platform-auth'
 
-import { isEmailAllowedByDb } from '@/lib/db/queries/whitelist'
+export { getSuperAdminEmails, isSuperAdmin, isWhitelistEnabled } from '@blackcode/platform-auth'
 
-export function getSuperAdminEmails(): string[] {
-  return (process.env.SUPER_ADMINS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
+export function isEmailAllowed(email: string): Promise<boolean> {
+  return isEmailAllowedImpl(db, email)
 }
 
-export function isSuperAdmin(email: string): boolean {
-  const admins = getSuperAdminEmails()
-  return admins.length > 0 && admins.includes(email.toLowerCase())
-}
-
-export function isWhitelistEnabled(): boolean {
-  return getSuperAdminEmails().length > 0
-}
-
-export async function isEmailAllowed(email: string): Promise<boolean> {
-  if (!isWhitelistEnabled()) return true
-  const normalized = email.toLowerCase()
-  if (isSuperAdmin(normalized)) return true
-  return isEmailAllowedByDb(normalized)
+export function isEmailAllowedByDb(email: string): Promise<boolean> {
+  return isEmailAllowedByDbImpl(db, email)
 }

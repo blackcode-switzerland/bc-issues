@@ -18,10 +18,10 @@
 // than letting an old client read `undefined`.
 //
 // Source of truth is docs/changelog/*.md — one file per app plus platform.md,
-// merged by date in lib/changelog.ts.
+// merged by date in @blackcode/platform-agent (packages/platform-agent/src/changelog.ts).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getChangelog, getChangelogFor, getChangelogMarkdown } from '@/lib/changelog'
+import { getChangelog, getChangelogFor, getChangelogMarkdown } from '@blackcode/platform-agent'
 
 export function GET(request: NextRequest) {
   const format = request.nextUrl.searchParams.get('format')

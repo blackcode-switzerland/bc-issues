@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { issues, transactionLog, users } from '../schema'
+import { projectEntity, purgeProjectedEntity } from './entities'
 
 export async function logTransaction(data: {
   user_id: number
@@ -53,27 +54,54 @@ export async function undoLastOperations(userId: number, count = 1) {
   const results: typeof ops = []
   for (const op of ops) {
     try {
-      if (op.table_name === 'issues' && op.operation_type === 'UPDATE' && op.old_data) {
-        const old = op.old_data as Record<string, unknown>
-        await db
-          .update(issues)
-          .set({
-            title: old.title as string,
-            description: (old.description as string) ?? null,
-            status: (old.status as string) ?? 'backlog',
-            priority: (old.priority as number) ?? 3,
-            task_id: (old.task_id as number) ?? null,
-            updated_at: new Date(),
-          })
-          .where(eq(issues.id, op.record_id))
-      } else if (op.table_name === 'issues' && op.operation_type === 'INSERT') {
-        await db.delete(issues).where(eq(issues.id, op.record_id))
-      }
+      // Each op is its own transaction so the entity projection is written with
+      // the row change and not after it. These two branches are the only paths
+      // in the app that mutate an issue without going through issues.ts, and the
+      // INSERT branch is a HARD delete — leave it unhandled and `bk search`
+      // keeps returning an issue that no longer exists.
+      await db.transaction(async (tx) => {
+        if (op.table_name === 'issues' && op.operation_type === 'UPDATE' && op.old_data) {
+          const old = op.old_data as Record<string, unknown>
+          const [after] = await tx
+            .update(issues)
+            .set({
+              title: old.title as string,
+              description: (old.description as string) ?? null,
+              status: (old.status as string) ?? 'backlog',
+              priority: (old.priority as number) ?? 3,
+              task_id: (old.task_id as number) ?? null,
+              updated_at: new Date(),
+            })
+            .where(eq(issues.id, op.record_id))
+            .returning()
+          if (after?.workspace_id != null) {
+            await projectEntity(tx, {
+              workspaceId: after.workspace_id,
+              entityType: 'issue',
+              number: after.seq,
+              title: after.title,
+              deletedAt: after.deleted_at,
+            })
+          }
+        } else if (op.table_name === 'issues' && op.operation_type === 'INSERT') {
+          const [gone] = await tx
+            .delete(issues)
+            .where(eq(issues.id, op.record_id))
+            .returning({ workspace_id: issues.workspace_id, seq: issues.seq })
+          if (gone?.workspace_id != null) {
+            await purgeProjectedEntity(tx, {
+              workspaceId: gone.workspace_id,
+              entityType: 'issue',
+              number: gone.seq,
+            })
+          }
+        }
 
-      await db
-        .update(transactionLog)
-        .set({ rolled_back: true })
-        .where(eq(transactionLog.id, op.id))
+        await tx
+          .update(transactionLog)
+          .set({ rolled_back: true })
+          .where(eq(transactionLog.id, op.id))
+      })
       results.push(op)
     } catch (error) {
       console.error('Undo operation failed:', error)

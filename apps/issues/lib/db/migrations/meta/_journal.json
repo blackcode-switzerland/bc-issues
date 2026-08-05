@@ -246,6 +246,13 @@
       "when": 1785855395291,
       "tag": "0034_app_registry_and_access",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1785924430559,
+      "tag": "0035_cross_app_entities_and_links",
+      "breakpoints": true
     }
   ]
 }

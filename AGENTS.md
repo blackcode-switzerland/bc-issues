@@ -13,15 +13,24 @@ tracker. Humans use the web UI; **agents use one interface: the `bk` CLI**
 
 Run every command from the **repo root**; Turborepo delegates into the workspace.
 `PLATFORM-ARCHITECTURE.md` is where this is going and `PLATFORM-MIGRATION-PLAN.md`
-is how. **Phases 0–5 have landed:** `packages/platform-{db,api,ui,auth}` exist,
-the database is `platform.*` + `issues.*` (not `public`), apps are real data —
-workspace listings are app-scoped and every workspace-scoped route enforces per-app
-access — and **the CLI, guide, changelog, `bk meta` and docs are all split per app.**
+is how. **Phases 0–6 have landed:** `packages/platform-{db,api,ui,auth,agent}`
+exist, the database is `platform.*` + `issues.*` (not `public`), apps are real
+data — workspace listings are app-scoped and every workspace-scoped route enforces
+per-app access — **the CLI, guide, changelog, `bk meta` and docs are all split per
+app**, and **everything is addressable by URN**.
 
 Commands are `bk issues issue create`, not `bk issue create`. Every old spelling
 still runs as a deprecated alias that prints one stderr line naming the new one;
 they go away in 1.12.0. Platform verbs (`workspace`, `label`, `upload`, `trash`,
-`invite`, …) stay bare — they mean the same thing in every app.
+`invite`, `search`, `link`, …) stay bare — they mean the same thing in every app.
+
+**URNs (Phase 6).** `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the
+workspace #number like everything else. Every issue, task and project is mirrored
+into `platform.entities`, and that mirror is written **in the same transaction as
+the source row** — a projection that can drift is worse than no projection. If you
+add or change a write path for an issue/task/project, project it in the same
+transaction, and read the header of `apps/issues/lib/db/queries/entities.ts` first.
+`bk super-admin entity-drift` is the reconciler that catches what you missed.
 
 The HTTP API under `apps/issues/app/api/**` is **private plumbing with no public contract**.
 Do not document it for external consumers, and never reintroduce an OpenAPI spec

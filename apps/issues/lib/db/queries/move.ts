@@ -46,6 +46,7 @@ import {
   workspaceMembers,
 } from '../schema'
 import { recordEvent } from './events'
+import { projectEntity, syncEntityDeletedState } from './entities'
 import { resolveOrCreateLabels } from './labels'
 import {
   allocateNextIssueSeq,
@@ -279,6 +280,10 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
         action: 'created',
         meta: { seq, moved_from_workspace_id: srcWs, source_seq: p.seq },
       })
+
+      // The copy is a new entity in the target workspace with its own #number,
+      // so it needs its own projection — same transaction as the insert.
+      await projectEntity(tx, { workspaceId: tgtWs, entityType: 'project', number: seq, title: p.name })
     }
 
     // ---- 4. Copy tasks ----
@@ -321,6 +326,8 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
         action: 'created',
         meta: { seq, moved_from_workspace_id: srcWs, source_seq: t.seq },
       })
+
+      await projectEntity(tx, { workspaceId: tgtWs, entityType: 'task', number: seq, title: t.name })
     }
 
     // ---- 5. Copy issues ----
@@ -412,6 +419,8 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
         action: 'created',
         meta: { seq, moved_from_workspace_id: srcWs, source_seq: i.seq },
       })
+
+      await projectEntity(tx, { workspaceId: tgtWs, entityType: 'issue', number: seq, title: i.title })
     }
 
     // ---- 6. For a MOVE: soft-delete the source rows (same transaction) ----
@@ -425,6 +434,10 @@ export async function moveItems(input: MoveItemsInput): Promise<MoveReport> {
         [...issueRows.values()]
       )
       report.source_deleted = true
+      // The source rows are now binned; mirror that into the SOURCE workspace's
+      // projection. Without this a moved issue stays searchable in the workspace
+      // it left, which is precisely the kind of drift nobody notices.
+      await syncEntityDeletedState(tx, srcWs)
     }
 
     return report

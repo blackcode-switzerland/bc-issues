@@ -19,9 +19,10 @@ SUPER_ADMINS env var); any other token gets a permission error (exit 4).
 
 Everything here affects the WHOLE platform, across every workspace:
 
-  users       list every member on the platform
-  whitelist   manage which emails/domains may register or be invited
-  errors      browse, triage, and clear the server error log`
+  users         list every member on the platform
+  whitelist     manage which emails/domains may register or be invited
+  errors        browse, triage, and clear the server error log
+  entity-drift  check the cross-app entity index against each app's tables`
 
 func newSuperAdminCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -34,7 +35,92 @@ func newSuperAdminCmd() *cobra.Command {
 		newSuperAdminUsersCmd(),
 		newSuperAdminWhitelistCmd(),
 		newSuperAdminErrorsCmd(),
+		newSuperAdminEntityDriftCmd(),
 	)
+	return cmd
+}
+
+// ---------- entity-drift (the Phase 6 reconciliation job) ----------
+
+func newSuperAdminEntityDriftCmd() *cobra.Command {
+	var (
+		repair bool
+		ws     string
+	)
+	cmd := &cobra.Command{
+		Use: "entity-drift",
+		// Both verbs on one command: GET reports, POST repairs. Annotated with
+		// both so cli-parity sees the POST route is reachable.
+		Annotations: map[string]string{
+			"routes": "GET /api/super-admin/entity-drift, POST /api/super-admin/entity-drift",
+		},
+		Short: "Check platform.entities against each app's source tables",
+		Long: `Check the cross-app entity index against each app's source tables.
+
+platform.entities is a PROJECTION: the apps' own tables are the truth, and every
+write is supposed to update both in one transaction. This re-derives the whole
+projection and reports the difference.
+
+  missing   a source row with no entry — a write path did not project
+  stale     title, url or trashed state disagree
+  orphaned  an entry with no source row
+
+Exit is 0 whether or not there is drift; read drift_count. --repair fixes all
+three, but read a repair that changes something as a BUG REPORT, not as
+maintenance: there is one writer, so anything it fixes means that writer is
+wrong. --ws narrows it to one workspace.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, err := cmdutil.NewClient()
+			if err != nil {
+				return err
+			}
+			if ws == "" {
+				ws = cmdutil.WSOverride
+			}
+			rep, err := c.EntityDrift(ws, repair)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, rep, func(w io.Writer) error {
+				fmt.Fprintf(w, "Scope:   %s\n", rep.Scope)
+				tw := output.Tabwriter(w)
+				fmt.Fprintln(tw, "TYPE\tSOURCE\tPROJECTED")
+				for t, n := range rep.SourceCounts {
+					fmt.Fprintf(tw, "%s\t%d\t%d\n", t, n, rep.ProjectedCounts[t])
+				}
+				if err := tw.Flush(); err != nil {
+					return err
+				}
+				if rep.DriftCount == 0 {
+					fmt.Fprintln(w, "\nNo drift.")
+					return nil
+				}
+				fmt.Fprintf(w, "\nDrift: %d row(s)\n", rep.DriftCount)
+				dt := output.Tabwriter(w)
+				fmt.Fprintln(dt, "KIND\tURN\tDETAIL")
+				for _, d := range rep.Drift {
+					fmt.Fprintf(dt, "%s\t%s\t%s\n", d.Kind, d.URN, d.Detail)
+				}
+				if err := dt.Flush(); err != nil {
+					return err
+				}
+				// Never let a cap read as a clean bill of health.
+				if rep.DriftTruncated > 0 {
+					fmt.Fprintf(cmd.ErrOrStderr(), "(%d more not listed)\n", rep.DriftTruncated)
+				}
+				if repair {
+					fmt.Fprintf(w, "Repaired: %d\n", rep.Repaired)
+				}
+				return nil
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&repair, "repair", false, "Fix the drift as well as reporting it")
+	cmd.Flags().StringVar(&ws, "workspace", "", "Only this workspace (slug); default is every workspace")
 	return cmd
 }
 

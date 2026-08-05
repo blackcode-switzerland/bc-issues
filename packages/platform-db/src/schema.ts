@@ -208,6 +208,138 @@ export const appAccess = platformSchema.table(
   })
 )
 
+// ---- cross-app primitives (Phase 6) ----
+//
+// Two tables and one generalisation are what make a second app worth having.
+// Everything before this phase was rearrangement; this is the first thing that
+// could not be done at all with one app per database.
+//
+// A URN is the one string that addresses any entity in any app:
+//
+//   bc:<app>:<workspace-slug>/<entity-type>/<number>
+//   bc:issues:kali-sa/issue/482
+//
+// `<number>` is the workspace #number, never the global row id — the same rule
+// every route and every `bk` command already follows. See urn.ts for the parser.
+
+/**
+ * `platform.entities` — the cross-app index of what exists.
+ *
+ * This is a PROJECTION. `issues.issues` is the truth; a row here is a copy kept
+ * for the questions no single app can answer — federated search, a merged
+ * activity feed, a link whose other end lives in another app's schema (which
+ * this app has no grant to read).
+ *
+ * Because it is derived, it can drift, and drift here is silent: search returns
+ * slightly stale titles and nobody notices for weeks. Two things keep it honest,
+ * and both are load-bearing rather than belt-and-braces:
+ *
+ *   1. every write goes in the SAME transaction as its source write
+ *      (`upsertEntity` takes the caller's `tx`, never opens its own), and
+ *   2. `reconcileEntities` re-derives the whole projection from the source
+ *      tables and reports the difference.
+ *
+ * NOTE the two keys. `urn` is the primary key because it is what links point at
+ * and what agents pass around. But the urn embeds the workspace slug, and a slug
+ * is editable — so the *stable* identity is the natural key below, and that is
+ * what upserts conflict on. Renaming a workspace rewrites the urn and cascades
+ * into `links`; it does not create a second row.
+ */
+export const entities = platformSchema.table(
+  'entities',
+  {
+    urn: text('urn').primaryKey(),
+    app: varchar('app', { length: 40 })
+      .notNull()
+      .references(() => apps.slug, { onDelete: 'cascade' }),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // 'issue' | 'task' | 'project' today. Each app owns its own vocabulary here
+    // — platform deliberately does not enumerate them.
+    entity_type: varchar('entity_type', { length: 40 }).notNull(),
+    // The workspace #number, matching `issues.issues.seq`. Never the row id.
+    number: integer('number').notNull(),
+    title: text('title').notNull(),
+    // Absolute where the app registered a `base_url`, app-relative otherwise.
+    // Derived, like everything else here — reconciliation repairs it if the
+    // app's base_url changes.
+    url: text('url'),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    // Mirrors the source row's soft delete. The row STAYS so links and history
+    // still resolve; `deleted_at` is what search and activity filter on.
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => ({
+    // The stable identity — see the note above. Upserts conflict on this.
+    naturalUniq: uniqueIndex('uq_entities_natural').on(
+      t.workspace_id,
+      t.app,
+      t.entity_type,
+      t.number
+    ),
+    wsUpdatedIdx: index('idx_entities_ws_updated').on(t.workspace_id, t.updated_at),
+    wsAppIdx: index('idx_entities_ws_app').on(t.workspace_id, t.app, t.entity_type),
+  })
+)
+
+/**
+ * The relation vocabulary `platform.links.rel` accepts.
+ *
+ * Deliberately NOT a database CHECK constraint. A future app will want a
+ * relation this list does not have, and "add a value" should be a code change
+ * plus a changelog line, not a platform migration every app has to sequence
+ * around. The API route validates against this list and `/api/meta` serves it,
+ * which also keeps it out of the guide — it is a dynamic value.
+ *
+ * Links are DIRECTED and no inverse row is written: `A blocks B` is one row, and
+ * `bk link list B` reports it as an incoming `blocks` from A. Storing both
+ * directions would create a second thing that can disagree.
+ */
+export const LINK_RELATIONS = [
+  'blocks',
+  'relates_to',
+  'duplicates',
+  'caused_by',
+  'part_of',
+  'billed_as',
+] as const
+export type LinkRelation = (typeof LINK_RELATIONS)[number]
+
+/**
+ * `platform.links` — typed relations between any two URNs, in any two apps.
+ *
+ * This is the referential integrity that a URL pasted into a description does
+ * not have. Both ends are real foreign keys into `entities`:
+ *
+ *   ON UPDATE CASCADE — a workspace slug rename rewrites every urn, and Postgres
+ *     carries the links along. This is why "a link survives a rename" is a
+ *     property of the schema rather than something a code path must remember.
+ *   ON DELETE CASCADE — a *purge* (the hard delete) takes its links with it. A
+ *     soft delete does not: the entities row stays with `deleted_at` set, so a
+ *     link to something in the recycle bin still resolves and still restores.
+ */
+export const links = platformSchema.table(
+  'links',
+  {
+    from_urn: text('from_urn')
+      .notNull()
+      .references(() => entities.urn, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    to_urn: text('to_urn')
+      .notNull()
+      .references(() => entities.urn, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    rel: varchar('rel', { length: 40 }).notNull(),
+    created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.from_urn, t.to_urn, t.rel] }),
+    // `bk link list <urn>` asks in both directions; from_urn is covered by the PK.
+    toIdx: index('idx_links_to').on(t.to_urn),
+    noSelf: check('links_no_self_link', sql`${t.from_urn} <> ${t.to_urn}`),
+  })
+)
+
 export const workspaceCounters = platformSchema.table('workspace_counters', {
   workspace_id: integer('workspace_id')
     .primaryKey()
@@ -375,8 +507,25 @@ export const events = platformSchema.table(
     actor_token_id: integer('actor_token_id').references(() => apiTokens.id, {
       onDelete: 'set null',
     }),
+    // Which app produced this event (Phase 6). NULLABLE on purpose, and it is
+    // expand→migrate→contract rather than timidity: the migration lands before
+    // the deploy that writes the column, so for the length of that window the
+    // *old* code is still inserting rows with no `app`. A NOT NULL would make
+    // every one of those inserts fail; a DEFAULT 'issues' would hardcode one
+    // app's name into a platform table. Migration 0035 backfills every existing
+    // row and all current code sets it. Tightening to NOT NULL is a Phase 8
+    // contract step, once no deployed code can write a NULL.
+    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
     entity_type: varchar('entity_type', { length: 30 }).notNull(),
     entity_id: integer('entity_id').notNull(),
+    // The cross-app address of what this event is about — the join key between
+    // the activity feed and `entities`/`links`. NULL for events whose subject is
+    // not a projected entity (a member added, an invitation, a label).
+    //
+    // No foreign key, deliberately: events are append-only history and must
+    // outlive a purge of their subject. `entity_type`/`entity_id` stay as the
+    // in-app coordinates; this is the same fact addressed platform-wide.
+    subject_urn: text('subject_urn'),
     action: varchar('action', { length: 40 }).notNull(),
     diff: jsonb('diff'),
     meta: jsonb('meta'),
@@ -385,6 +534,8 @@ export const events = platformSchema.table(
   },
   (t) => ({
     wsOccurredIdx: index('idx_events_ws_occurred').on(t.workspace_id, t.occurred_at),
+    wsAppIdx: index('idx_events_ws_app').on(t.workspace_id, t.app, t.occurred_at),
+    wsSubjectIdx: index('idx_events_ws_subject').on(t.workspace_id, t.subject_urn, t.occurred_at),
     wsEntityIdx: index('idx_events_ws_entity').on(
       t.workspace_id,
       t.entity_type,
@@ -565,6 +716,10 @@ export type WorkspaceInvitation = typeof workspaceInvitations.$inferSelect
 export type NewWorkspaceInvitation = typeof workspaceInvitations.$inferInsert
 export type Event = typeof events.$inferSelect
 export type NewEvent = typeof events.$inferInsert
+export type Entity = typeof entities.$inferSelect
+export type NewEntity = typeof entities.$inferInsert
+export type Link = typeof links.$inferSelect
+export type NewLink = typeof links.$inferInsert
 export type InboxMessage = typeof inboxMessages.$inferSelect
 export type NewInboxMessage = typeof inboxMessages.$inferInsert
 export type Comment = typeof comments.$inferSelect

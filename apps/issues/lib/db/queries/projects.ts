@@ -11,6 +11,7 @@ import { searchClause } from './search'
 import { db } from '../client'
 import { issues, projectUpdates, projects, type Project, users, workspaceMembers } from '../schema'
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
+import { projectEntity } from './entities'
 import { softDeleteProject, type DeleteMode } from './deletion'
 import { setProjectMembers } from './project-relations'
 import { allocateNextProjectSeq } from './workspaces'
@@ -185,6 +186,14 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       },
     })
 
+    // Same transaction as the insert above — see lib/db/queries/entities.ts.
+    await projectEntity(tx, {
+      workspaceId: input.workspaceId,
+      entityType: 'project',
+      number: row.seq,
+      title: row.name,
+    })
+
     return row
   })
 }
@@ -322,6 +331,16 @@ export async function updateProject(
         coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS,
       })
     }
+
+    // Unconditional and idempotent — see the note in issues.ts updateIssue.
+    await projectEntity(tx, {
+      workspaceId,
+      entityType: 'project',
+      number: after.seq,
+      title: after.name,
+      deletedAt: after.deleted_at,
+    })
+
     return after
   })
 }

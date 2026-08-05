@@ -40,6 +40,8 @@ func NewCommands() []*cobra.Command {
 		newInboxCmd(),
 		newTokenCmd(),
 		newActivityCmd(),
+		newSearchCmd(),
+		newLinkCmd(),
 		newUploadCmd(),
 		newStorageCmd(),
 		newTrashCmd(),

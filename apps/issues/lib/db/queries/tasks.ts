@@ -11,6 +11,7 @@ import { searchClause } from './search'
 import { db } from '../client'
 import { issues, projects, tasks, type Task, users } from '../schema'
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
+import { projectEntity } from './entities'
 import { softDeleteTask, type DeleteMode } from './deletion'
 import { allocateNextTaskSeq } from './workspaces'
 import { toRichTextHtml } from '@/lib/rich-text'
@@ -136,6 +137,15 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         after: { name: row.name, project_id: row.project_id, due_date: row.due_date },
       },
     })
+
+    // Same transaction as the insert above — see lib/db/queries/entities.ts.
+    await projectEntity(tx, {
+      workspaceId: input.workspaceId,
+      entityType: 'task',
+      number: row.seq,
+      title: row.name,
+    })
+
     return row
   })
 }
@@ -245,6 +255,16 @@ export async function updateTask(
         coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS,
       })
     }
+
+    // Unconditional and idempotent — see the note in issues.ts updateIssue.
+    await projectEntity(tx, {
+      workspaceId,
+      entityType: 'task',
+      number: after.seq,
+      title: after.name,
+      deletedAt: after.deleted_at,
+    })
+
     return after
   })
 }

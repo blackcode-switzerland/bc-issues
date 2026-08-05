@@ -14,6 +14,7 @@ const nextConfig = {
     '@blackcode/platform-db',
     '@blackcode/platform-api',
     '@blackcode/platform-auth',
+    '@blackcode/platform-agent',
     '@blackcode/platform-ui',
   ],
 

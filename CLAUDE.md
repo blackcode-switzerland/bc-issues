@@ -9,12 +9,14 @@ PostgreSQL, next-auth, TanStack Query, Framer Motion.
 
 The target architecture is `PLATFORM-ARCHITECTURE.md`; the ordered migration to
 it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
-`docs/migration/baseline.md`. **Phases 0–5 have landed; 6–8 have not.** So:
+`docs/migration/baseline.md`. **Phases 0–6 have landed; 7–8 have not.** So:
 
-- `packages/platform-db`, `platform-api`, `platform-ui` and `platform-auth` exist.
-  `platform-storage` and `platform-agent` do **not** — they are Phases 7 and 6.
-  `platform-auth` currently holds only per-app access; `lib/auth.ts` moves there in
-  Phase 6.
+- `packages/platform-db`, `platform-api`, `platform-ui`, `platform-auth` and
+  `platform-agent` exist. `platform-storage` does **not** — that is Phase 7.
+  `platform-auth` holds per-app access, `bk_live_` tokens, the platform whitelist
+  and password hashing; `platform-agent` holds the merged changelog feed and the
+  advertised CLI versions. **`lib/auth.ts` (next-auth `authOptions`) deliberately
+  did NOT move** — see the reason in `packages/platform-auth/src/index.ts`.
 - The database is **`platform.*` + `issues.*`**, not `public` (Phase 3). Production
   runs as the bounded role `issues_app`; migrations run as `MIGRATE_DATABASE_URL`.
 - Apps are real data (Phase 4): `platform.apps`, `workspace_apps`, `app_access`.
@@ -24,8 +26,17 @@ it is `PLATFORM-MIGRATION-PLAN.md`, with the pre-migration baseline in
   pre-1.10.0 spelling still runs as a deprecated alias that prints one stderr
   line, and is removed in 1.12.0. Guide topics, the changelog and the docs are
   split the same way. `CLI_MIN_VERSION` has **not** moved — that is Phase 8.
-- Still not done (Phases 6–8): `platform.entities`/`links`, a federated
-  `bk activity`/`bk search`, app-aware blob attribution, `apps/_template/`.
+- **Everything is addressable by URN (Phase 6):**
+  `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the #number. Every
+  issue/task/project is projected into `platform.entities` **in the same
+  transaction as its source write**; `platform.links` relates any two URNs;
+  `platform.events` carries `app` + `subject_urn`. That powers `bk search`,
+  `bk link` and a cross-app `bk activity`. The projection is derived data — read
+  `apps/issues/lib/db/queries/entities.ts`'s header before touching a write path,
+  and `bk super-admin entity-drift` is the reconciler that proves it has not
+  drifted.
+- Still not done (Phases 7–8): app-aware blob attribution, `apps/_template/`,
+  raising `CLI_MIN_VERSION`, tightening `events.app` to NOT NULL.
 
 ## Repo layout
 
@@ -36,6 +47,8 @@ cli/                  the `bk` Go binary (repo root — shared by every app)
   internal/commands/issues/     that app's nouns, behind `bk issues …`
   internal/cmdutil/             what both need; the app packages never import each other
   internal/guide/topics/{platform,issues}/
+packages/             shared libraries — see the list above; apps import these,
+                      never each other
 docs/                 PLATFORM docs only (see the Docs sync rule)
 docs/changelog/       one file per app + platform.md — merged by `bk changelog`
 devops/               release scripts
@@ -271,7 +284,7 @@ See `AGENTS.md` for the short version.
 `./devops/release.sh cli minor` (GitHub + npm; needs `npm login` + an OTP) and
 `./devops/release.sh web` (Vercel production). Both are interactive.
 
-`CLI_MIN_VERSION` in `apps/issues/lib/cli-version.ts` hard-blocks every older binary with
+`CLI_MIN_VERSION` in `packages/platform-agent/src/cli-version.ts` hard-blocks every older binary with
 exit 8. **Publish to npm before raising it** — raise it first and every user is
 locked out with nothing to upgrade to. Both versions are overridable by env
 (`BK_CLI_LATEST` / `BK_CLI_MIN`), so the floor moves and rolls back without a
@@ -282,7 +295,7 @@ redeploy.
 We publish a changelog so AI agents can keep their integrations and skills up to
 date. It is an **agent** surface — served two aligned ways from one source:
 **`bk changelog`** and **`GET /api/changelog`** (JSON, or `?format=markdown`).
-Both read from `apps/issues/lib/changelog.ts`, which merges **one authored
+Both read from `packages/platform-agent/src/changelog.ts`, which merges **one authored
 Markdown file per section**, newest first, tagging each entry with where it came
 from:
 

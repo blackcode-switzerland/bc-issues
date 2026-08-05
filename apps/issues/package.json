@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.4.1",
+    "@blackcode/platform-agent": "*",
     "@blackcode/platform-api": "*",
     "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",

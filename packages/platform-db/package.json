@@ -9,7 +9,10 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./client": "./src/client.ts",
-    "./app-access": "./src/app-access.ts"
+    "./app-access": "./src/app-access.ts",
+    "./urn": "./src/urn.ts",
+    "./entities": "./src/entities.ts",
+    "./links": "./src/links.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

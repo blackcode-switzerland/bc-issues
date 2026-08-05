@@ -20,7 +20,7 @@
 //                   enforce them (lib/limits.ts, lib/upload.ts)
 //   - media       : how an uploaded url renders in a rich-text body, and which
 //                   MIME types upload refuses
-//   - cli         : the advertised bk versions (lib/cli-version.ts)
+//   - cli         : the advertised bk versions (@blackcode/platform-agent)
 //
 // The last three exist so the embedded `bk guide` never has to restate a value
 // that can change without a CLI release. Guide = static behaviour, meta =
@@ -45,6 +45,8 @@ import {
   PROJECT_UPDATE_STATUSES,
 } from '@/lib/work-items'
 import { META_LIMITS, META_MEDIA, META_CLI } from '@/lib/agent-meta'
+import { LINK_RELATIONS } from '@blackcode/platform-db'
+import { ENTITY_TYPES } from '@/lib/entity-address'
 import { APP_SLUG } from '@/lib/app'
 import { db } from '@/lib/db/client'
 import { appsReachableByUser } from '@blackcode/platform-db'
@@ -162,7 +164,17 @@ export const GET = apiHandler(async (request: NextRequest) => {
             .filter((w) => a.workspace_ids.includes(w.id))
             .map((w) => w.slug),
           ...(a.slug === APP_SLUG
-            ? { vocabulary: APP_VOCABULARY, limits: META_LIMITS, media: META_MEDIA }
+            ? {
+                vocabulary: APP_VOCABULARY,
+                limits: META_LIMITS,
+                media: META_MEDIA,
+                // The entity types THIS app projects into platform.entities, so
+                // an agent knows what `bk search --type` and the `<entity-type>`
+                // segment of a URN accept here. Per-app for the same reason the
+                // vocabulary is: another app's types are none of this app's
+                // business (§7.4).
+                entity_types: ENTITY_TYPES,
+              }
             : {}),
         },
       ])
@@ -179,6 +191,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     vocabulary: APP_VOCABULARY,
     limits: META_LIMITS,
     media: META_MEDIA,
+    // Cross-app links (Phase 6). PLATFORM-level, not per-app: a link connects two
+    // apps, so its relation vocabulary cannot belong to either of them. Served
+    // here rather than written into a guide topic because it is a value — adding
+    // a relation must not require a CLI release, and `guide_test.go` fails the
+    // build if a topic hardcodes one.
+    links: {
+      relations: LINK_RELATIONS,
+      urn_format: 'bc:<app>:<workspace-slug>/<entity-type>/<number>',
+      urn_example: `bc:${APP_SLUG}:${workspace?.slug ?? '<workspace>'}/issue/1`,
+    },
     // The bk versions this server advertises (also sent as X-BK-CLI-* headers).
     cli: META_CLI,
     // Pointers only — the behaviour itself lives in `bk guide`, which ships

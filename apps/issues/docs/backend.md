@@ -167,6 +167,41 @@ freely; nothing in `platform.*` may depend on them.
 | `search.ts` | case-insensitive substring search over title/name/description, plus `#id` match when the query is numeric |
 | `analytics.ts` | `computeAnalytics` — snapshot counts, throughput, cycle time, distributions, burndown |
 | `move.ts` | cross-workspace move/copy in one transaction |
+| `entities.ts` | this app's half of the cross-app projection: project/mark-deleted/purge into `platform.entities`, plus `reconcileEntities` |
+
+### The entity projection (Phase 6)
+
+Every issue, task and project is mirrored into `platform.entities` so it is
+addressable by URN — `bc:issues:<workspace-slug>/<type>/<number>`, using the
+`#number` like everything else here. That is what makes `bk search`, `bk link`
+and the merged `bk activity` possible without any app reading another app's
+schema.
+
+Two rules, and both are the difference between an index and a liability:
+
+1. **Same transaction as the source write.** `projectEntity` and its siblings
+   take the caller's `tx` and never open one. A projection that commits when the
+   source write rolled back describes something that does not exist, and nothing
+   notices until somebody clicks through to a 404.
+2. **The projection may never fail the write.** Write paths format URNs through
+   the fail-soft variants (`entityUrnOrNull`); an unaddressable row loses its
+   projection and is reported as `missing` by the reconciler rather than turning
+   a delete into a 500.
+
+Two of the paths are re-derived from the source rather than driven by a list of
+affected rows, because a cascade (binning a project with its issues, purging a
+batch) has no such list and the next person to add a cascade branch will not
+remember to extend one: `syncEntityDeletedState` and `purgeMissingEntities` both
+ask "what does the source say now?" for the whole workspace, and only write the
+rows that disagree.
+
+The address scheme itself — entity types, dashboard paths, URN construction — is
+in `lib/entity-address.ts`, deliberately free of any database import so it can be
+unit-tested without one (`lib/db/queries/urn.test.ts`).
+
+Every write path is listed in `lib/db/queries/entities.ts`'s header; the
+same-transaction guarantee and the count-match property are asserted in
+`lib/db/queries/entities.integration.test.ts` (needs `TEST_DATABASE_URL`).
 
 ## CLI surface
 

@@ -11,6 +11,8 @@ import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { events, users, issues, tasks, projects, type Event, type NewEvent } from '../schema'
 import { fanOutEvent } from './fanout'
+import { resolveSubjectUrn } from './entities'
+import { APP_SLUG } from '@/lib/app'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
 export type EntityType =
@@ -83,6 +85,12 @@ export interface RecordEventInput {
   // inserting a new one. Used to collapse autosave-driven `updated` storms in
   // the activity feed. Only safe for actions that do NOT fan out to the inbox.
   coalesceWindowMs?: number
+  // Override the cross-app subject address. Leave unset and recordEvent derives
+  // it from (entityType, entityId) — which is what every call site should do.
+  // Pass it explicitly only when the subject row is already gone by the time the
+  // event is recorded (a purge), because then there is nothing left to derive it
+  // from. Pass `null` to state that this event has no addressable subject.
+  subjectUrn?: string | null
 }
 
 type Tx = Pick<typeof db, 'insert' | 'select' | 'update' | 'delete' | 'execute'>
@@ -149,8 +157,20 @@ export async function recordEvent(tx: Tx, input: RecordEventInput): Promise<Even
       return merged
     }
   }
+  // The cross-app half of the event (Phase 6), resolved here rather than at the
+  // ~40 call sites. `app` is the PRODUCING app — a workspace or member event
+  // recorded by this deployment is an issues-app event, because that is what
+  // wrote it. `subject_urn` is null for subjects that are not projected
+  // entities, which is an answer, not a gap.
+  const subjectUrn =
+    input.subjectUrn !== undefined
+      ? input.subjectUrn
+      : await resolveSubjectUrn(tx, input.workspaceId, input.entityType, input.entityId)
+
   const values: NewEvent = {
     workspace_id: input.workspaceId,
+    app: APP_SLUG,
+    subject_urn: subjectUrn,
     actor_user_id: input.actorUserId ?? null,
     actor_token_id: input.actorTokenId ?? null,
     entity_type: input.entityType,
@@ -174,6 +194,10 @@ export interface ListEventsFilter {
   actorUserIds?: number[]
   entityTypes?: EntityType[]
   actions?: EventAction[]
+  /** Restrict to events produced by these apps (Phase 6). */
+  apps?: string[]
+  /** Restrict to events about one cross-app subject. */
+  subjectUrn?: string
   fromOccurredAt?: Date
   toOccurredAt?: Date
   cursor?: number | null // event id
@@ -205,6 +229,12 @@ export async function listEvents(filter: ListEventsFilter): Promise<EventsPage> 
   }
   if (filter.actions && filter.actions.length > 0) {
     wheres.push(inArray(events.action, filter.actions))
+  }
+  if (filter.apps && filter.apps.length > 0) {
+    wheres.push(inArray(events.app, filter.apps))
+  }
+  if (filter.subjectUrn) {
+    wheres.push(eq(events.subject_urn, filter.subjectUrn))
   }
   if (filter.fromOccurredAt) {
     wheres.push(gte(events.occurred_at, filter.fromOccurredAt))

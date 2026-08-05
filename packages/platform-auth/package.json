@@ -1,13 +1,16 @@
 {
   "name": "@blackcode/platform-auth",
   "version": "0.0.0",
-  "description": "Platform authorisation: who may use which app in which workspace.",
+  "description": "Platform authentication and authorisation: API tokens, the platform whitelist, passwords, and who may use which app in which workspace.",
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./app-access": "./src/require-app-access.ts"
+    "./app-access": "./src/require-app-access.ts",
+    "./tokens": "./src/tokens.ts",
+    "./whitelist": "./src/whitelist.ts",
+    "./password": "./src/password.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -15,7 +18,8 @@
   },
   "dependencies": {
     "@blackcode/platform-api": "*",
-    "@blackcode/platform-db": "*"
+    "@blackcode/platform-db": "*",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "typescript": "^5.6.2",

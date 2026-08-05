@@ -38,8 +38,18 @@ export const Errors = {
     code = 'forbidden'
   ) => new ApiError(403, code, message, suggestion),
 
-  notFound: (entity: string) =>
-    new ApiError(404, `${entity}_not_found`, `${entity} not found`),
+  // One-arg form unchanged: `notFound('issue')` → 404 issue_not_found.
+  //
+  // The three-arg form exists because a 404 is often the most recoverable failure
+  // an agent hits and was the only class that could not carry a `suggestion` —
+  // "run `bk search <query>` to find the current URN" turns a dead end into a
+  // next step. Same reasoning that added one to `forbidden` in Phase 4. When
+  // `message` is given, `entity` is used verbatim as the code rather than having
+  // `_not_found` appended, so a caller can name the exact condition.
+  notFound: (entity: string, message?: string, suggestion?: string) =>
+    message === undefined
+      ? new ApiError(404, `${entity}_not_found`, `${entity} not found`)
+      : new ApiError(404, entity, message, suggestion),
 
   badRequest: (code: string, message: string, details?: unknown) =>
     new ApiError(400, code, message, details),

@@ -50,7 +50,10 @@ Full CLI release pipeline:
 1. Preflight — checks gh auth, npm auth, git branch, clean tree, no duplicate tag/version
 2. Resolves the next version from the latest git tag + bump type
 3. Bumps version in `cli/npm/package.json` and `cli/npm/install.js`
-4. Bumps `CLI_LATEST_VERSION` in `apps/issues/lib/cli-version.ts` — and
+4. Bumps `CLI_LATEST_VERSION` in `packages/platform-agent/src/cli-version.ts` — located by
+   SEARCH, not a hardcoded path (the gate has moved twice: root → `apps/issues/lib`
+   in Phase 1, → `packages/platform-agent/src` in Phase 6, and the first move broke
+   the release halfway through) — and
    `CLI_MIN_VERSION` too, **only** if you answer `forced` at the upgrade-policy
    prompt. Answer `normal` unless you have deliberately decided to hard-block
    every older client; publishing must always precede a floor raise.

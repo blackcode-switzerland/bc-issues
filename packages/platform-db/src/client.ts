@@ -51,7 +51,16 @@ export function createDb<TSchema extends Record<string, unknown>>(
   // plain local Postgres (e.g. the Docker container from devops/migrate-local.sh)
   // doesn't understand. Local dev URLs point at localhost, so fall back to the
   // regular node-postgres driver there; anything else is assumed to be Neon.
-  const isLocal = /^(localhost|127\.0\.0\.1)$/.test(new URL(url).hostname)
+  //
+  // PLATFORM_DB_DRIVER=pg forces node-postgres regardless of host. That exists
+  // for plain Node processes — vitest, a maintenance script — which is where the
+  // serverless driver falls over: it needs a global `WebSocket`, and Node only
+  // grew one in 22. Neon's pooled endpoint speaks ordinary Postgres over TCP, so
+  // `pg` talks to it perfectly well; the serverless driver is for the edge and
+  // serverless runtimes, not a requirement of the database. Never set this in the
+  // app's own environment — Vercel functions want the serverless driver.
+  const forcePg = process.env.PLATFORM_DB_DRIVER === 'pg'
+  const isLocal = forcePg || /^(localhost|127\.0\.0\.1)$/.test(new URL(url).hostname)
 
   const pool =
     global.__pgPool ??

@@ -13,7 +13,7 @@
 import type { Metadata } from 'next'
 import { MarketingLayout } from '@/components/marketing/layout'
 import { AGENT_MANIFEST as m } from '@/lib/agent-manifest'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@/lib/cli-version'
+import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 
 export const metadata: Metadata = {
   title: 'The HTTP API is now CLI-only · Blackcode Issues',

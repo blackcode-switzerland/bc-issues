@@ -33,6 +33,16 @@ export const UNDO_MAX_COUNT = 10
 export const PAGE_SIZE_DEFAULT = 50
 export const PAGE_SIZE_MAX = 200
 
+/**
+ * Federated search (`bk search`) — `app/api/workspaces/[ws]/search/route.ts`.
+ *
+ * Platform, not app: search reads `platform.entities`, which every app writes to.
+ * A one-character minimum is a real guard rather than politeness — an empty query
+ * against the projection is a full workspace scan.
+ */
+export const SEARCH_QUERY_MIN = 1
+export const SEARCH_RESULTS_MAX = 200
+
 /** The platform half of what GET /api/meta serves under `limits`. */
 export const PLATFORM_LENGTH_LIMITS = {
   workspace_name_max: WORKSPACE_NAME_MAX,
@@ -43,4 +53,6 @@ export const PLATFORM_LENGTH_LIMITS = {
   undo_max_count: UNDO_MAX_COUNT,
   page_size_default: PAGE_SIZE_DEFAULT,
   page_size_max: PAGE_SIZE_MAX,
+  search_query_min: SEARCH_QUERY_MIN,
+  search_results_max: SEARCH_RESULTS_MAX,
 } as const

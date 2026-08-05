@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getChangelog, getChangelogFor, getChangelogMarkdown, PLATFORM_APP } from './changelog'
+import { getChangelog, getChangelogFor, getChangelogMarkdown, PLATFORM_APP } from '@blackcode/platform-agent'
 
 describe('changelog', () => {
   const cl = getChangelog()

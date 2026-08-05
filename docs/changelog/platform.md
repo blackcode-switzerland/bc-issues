@@ -30,6 +30,128 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-05 — Cross-app entities: URNs, `bk search`, `bk link`, and a merged `bk activity`
+
+**What changed.** Everything in every app is now addressable by one string, and
+three new capabilities fall out of that. This is additive — nothing that worked
+before behaves differently.
+
+### URNs
+
+```
+bc:<app>:<workspace-slug>/<entity-type>/<number>
+bc:issues:kali-sa/issue/482
+```
+
+`<number>` is the **workspace #number** — the `#N` shown in the app — never the
+internal database id, consistent with every other surface. `<workspace-slug>` is
+the slug, so a URN is readable and its tenant is visible without a lookup.
+
+Do not assemble a URN from guessed parts. Get one from `bk search`, or from the
+new `subject_urn` field on an activity entry.
+
+### `bk search <query>` — federated search
+
+```bash
+bk search auth                       # titles matching "auth", any app
+bk search "#482"                     # by workspace #number
+bk search acme --type issue,project --json
+bk search draft --include-deleted    # include the recycle bin
+```
+
+Searches **titles and #numbers**, across every app, in the active workspace
+(`--ws` targets another). It reads the shared entity index, not each app's own
+tables — which is what makes it a single query rather than a fan-out. To search
+descriptions or filter by status/assignee/label, keep using the app's own listing
+(`bk issues issue list --search`).
+
+Route: `GET /api/workspaces/{ws}/search`.
+
+### `bk link` — typed relations between two URNs
+
+```bash
+bk link create bc:issues:acme/issue/12 bc:issues:acme/project/3 --rel part_of
+bk link list bc:issues:acme/issue/12
+bk link rm bc:issues:acme/issue/12 bc:issues:acme/project/3 --rel part_of
+```
+
+Links are **directed and stored once**: `A blocks B` shows as an outgoing link on
+A and an incoming one on B, with no inverse row to keep in step. Run `bk meta`
+for the accepted relation names — they are served under `links.relations` and can
+change without a CLI release, so they are not baked into the binary or the guide.
+
+Behaviour worth knowing before you script against it:
+
+- Both ends must exist and must be in the **same workspace**. A cross-workspace
+  link is refused (400 `cross_workspace_link`); an unknown end is 404
+  `entity_not_found` and names which end was missing.
+- Creating the same link twice **succeeds** and reports `created: false`.
+  Retrying after a timeout is safe.
+- `bk link rm` needs from, to *and* `--rel`: direction is part of the identity.
+- **Binned** items keep their links (flagged as in the trash) and restore with
+  them. **Purged** items take their links with them. A **workspace rename**
+  rewrites every URN and the links follow — but a URN you cached before the
+  rename stops resolving, so re-fetch rather than storing them long-term.
+
+Routes: `POST`, `GET`, `DELETE /api/workspaces/{ws}/links`.
+
+### `bk activity` is now a cross-app feed
+
+Every event carries the **app that produced it** and, where its subject is an
+addressable entity, that entity's **`subject_urn`**. Three new flags:
+
+```bash
+bk activity --since 24h                              # 30m | 24h | 7d
+bk activity --app issues
+bk activity --subject bc:issues:kali-sa/issue/482    # one thing's full history
+```
+
+`--since` and `from=` are mutually exclusive (400 `since_and_from`). Entries about
+members, invitations, labels and comments carry no `subject_urn` — those are real
+events about things with no cross-app address.
+
+Also fixed here: `?entity_type=workspace_app` and the five `app_*` actions added
+in Phase 4 were never added to the activity filter's allow-list, and an
+unrecognised value **dropped the filter silently** rather than rejecting it — so
+`?action=app_access_granted` returned the whole feed. Both lists are now complete.
+
+### `bk meta` additions
+
+- `links.relations` — the relation names the server accepts, plus `urn_format`
+  and a worked `urn_example`.
+- `apps.issues.entity_types` — the entity types this app publishes, i.e. what
+  `bk search --type` and the `<entity-type>` URN segment accept here.
+
+Nothing was removed or renamed.
+
+### `bk super-admin entity-drift` — the reconciliation job
+
+The entity index is a **projection**: each app's own tables are the truth, and
+every write updates both in one transaction. This command re-derives the whole
+projection and reports the difference — `missing` (a source row with no entry),
+`stale` (title, url or trashed state disagree), `orphaned` (an entry with no
+source row). `--repair` fixes all three; `--workspace <slug>` narrows the scope.
+
+Read a repair that changes something as a **bug report**, not as maintenance.
+
+Routes: `GET` / `POST /api/super-admin/entity-drift` (super admin only).
+
+### Schema
+
+Migration `0035` — purely additive. New `platform.entities` and `platform.links`;
+`platform.events` gains nullable `app` and `subject_urn`, both backfilled.
+`events.app` is nullable rather than `NOT NULL DEFAULT 'issues'` on purpose: the
+migration lands before the deploy that writes it, so old code is still inserting
+rows during that window, and defaulting a platform table to one app's name is the
+coupling this work exists to remove. It tightens to `NOT NULL` in a later release
+once no deployed code can write a NULL.
+
+**How to adapt.** Nothing is required. If you have been pasting dashboard URLs
+into descriptions to express "this relates to that", `bk link` is the replacement
+that survives renames and is queryable.
+
+---
+
 ## 2026-08-04 — **BREAKING (CLI):** app commands moved behind their app name
 
 **What changed.** Every command that belongs to an *app* now sits behind that

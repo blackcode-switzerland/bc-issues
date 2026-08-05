@@ -1,14 +1,21 @@
 package platform
 
 // `bk activity` reads platform.events, so it stays a bare platform verb — and
-// Phase 6 is where it becomes a genuinely cross-app feed (`+ app`,
-// `+ subject_urn`). The analytics half of this file moved to
+// Phase 6 is what made it a genuinely cross-app feed. Every event now carries the
+// app that produced it and, when its subject is an addressable entity, that
+// entity's URN. The analytics half of this file moved to
 // commands/issues/analytics.go in Phase 5: it slices by issue status, priority,
 // label and assignee, which is one app's vocabulary.
+//
+// `--app` filters to one app and `--subject` to one URN. With a single app
+// installed the first is a no-op filter — shipped now anyway, because the flag is
+// the part agents learn, and a flag that changes meaning the day a second app
+// appears is worse than one that starts out uninteresting.
 
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
@@ -16,11 +23,26 @@ import (
 )
 
 func newActivityCmd() *cobra.Command {
-	var limit, cursor int
+	var (
+		limit, cursor int
+		since         string
+		apps          []string
+		subject       string
+	)
 	cmd := &cobra.Command{
 		Use:         "activity",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/activity"},
-		Short:       "Show the workspace activity feed",
+		Short:       "Show the workspace activity feed (all apps)",
+		Long: `Show the workspace activity feed.
+
+One merged timeline across every app in the workspace, newest first.
+
+  bk activity --since 24h
+  bk activity --ws kali-sa --since 7d --json
+  bk activity --subject bc:issues:kali-sa/issue/482
+
+--since takes a relative window: 30m, 24h, 7d. Use --ws to read another
+workspace without switching the active one.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -34,7 +56,7 @@ func newActivityCmd() *cobra.Command {
 			if cmd.Flags().Changed("cursor") {
 				cur = &cursor
 			}
-			items, nextCursor, err := c.Activity(limit, cur)
+			items, nextCursor, err := c.Activity(limit, cur, since, strings.Join(apps, ","), subject)
 			if err != nil {
 				return err
 			}
@@ -50,7 +72,7 @@ func newActivityCmd() *cobra.Command {
 					return nil
 				}
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "WHEN\tWHO\tACTION\tENTITY\tID")
+				fmt.Fprintln(tw, "WHEN\tWHO\tAPP\tACTION\tENTITY\tID")
 				for _, a := range items {
 					entID := "—"
 					if a.EntityID != nil {
@@ -62,9 +84,9 @@ func newActivityCmd() *cobra.Command {
 							entID = fmt.Sprintf("%d", *a.EntityID)
 						}
 					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
 						cmdutil.DerefOr(a.OccurredAt, ""), cmdutil.DerefOr(a.ActorName, "—"),
-						a.Action, a.EntityType, entID)
+						cmdutil.DerefOr(a.App, "—"), a.Action, a.EntityType, entID)
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -78,5 +100,8 @@ func newActivityCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVar(&limit, "limit", 50, "Max items to return")
 	cmd.Flags().IntVar(&cursor, "cursor", 0, "Cursor (last event id seen) for pagination")
+	cmd.Flags().StringVar(&since, "since", "", "Only events in the last window: 30m, 24h, 7d")
+	cmd.Flags().StringSliceVar(&apps, "app", nil, "Only events produced by these apps")
+	cmd.Flags().StringVar(&subject, "subject", "", "Only events about this URN")
 	return cmd
 }

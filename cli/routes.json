@@ -68,6 +68,11 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/links",
+      "command": "bk link rm"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/members/{userId}",
       "command": "bk member remove"
     },
@@ -125,6 +130,11 @@
       "method": "GET",
       "path": "/api/meta",
       "command": "bk meta"
+    },
+    {
+      "method": "GET",
+      "path": "/api/super-admin/entity-drift",
+      "command": "bk super-admin entity-drift"
     },
     {
       "method": "GET",
@@ -258,6 +268,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/links",
+      "command": "bk link list"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/members",
       "command": "bk member list"
     },
@@ -285,6 +300,11 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}/updates",
       "command": "bk issues project updates list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/search",
+      "command": "bk search"
     },
     {
       "method": "GET",
@@ -388,6 +408,11 @@
     },
     {
       "method": "POST",
+      "path": "/api/super-admin/entity-drift",
+      "command": "bk super-admin entity-drift"
+    },
+    {
+      "method": "POST",
       "path": "/api/super-admin/whitelist",
       "command": "bk super-admin whitelist add"
     },
@@ -460,6 +485,11 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/leave",
       "command": "bk member leave"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/links",
+      "command": "bk link create"
     },
     {
       "method": "POST",

@@ -16,12 +16,12 @@
 //   lib/limits.ts      — the length/count caps the routes check
 //   lib/upload.ts      — the upload size cap + block list
 //   lib/rich-text.ts   — how an uploaded url renders
-//   lib/cli-version.ts — the advertised CLI floor/ceiling
+//   @blackcode/platform-agent — the advertised CLI floor/ceiling
 
 import { LENGTH_LIMITS } from './limits'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, BLOCKED_UPLOAD_MIME_TYPES } from './upload'
 import { INLINE_MEDIA_PREFIXES } from './rich-text'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from './cli-version'
+import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 
 /** `meta.limits` — every cap an agent must respect before it sends a request. */
 export const META_LIMITS = {

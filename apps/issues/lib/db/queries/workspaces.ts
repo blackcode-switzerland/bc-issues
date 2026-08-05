@@ -25,6 +25,7 @@ import {
 import {
   accessibleWorkspaceIds,
   enableAllAppsForWorkspace,
+  renameWorkspaceEntities,
   syncAppAccessRole,
 } from '@blackcode/platform-db'
 import { isAppAccessEnforced } from '@blackcode/platform-auth'
@@ -100,6 +101,19 @@ export async function getWorkspaceForUser(
 
 export async function getWorkspaceById(id: number): Promise<Workspace | null> {
   const rows = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1)
+  return rows[0] ?? null
+}
+
+/**
+ * Look a workspace up by slug WITHOUT a membership check.
+ *
+ * Deliberately narrow in who may call it: only the super-admin surface, where
+ * the caller is by definition allowed to see every workspace. Every other route
+ * must use `getWorkspaceForUser`, which is what makes "not a member" and "does
+ * not exist" the same 404 and stops the API confirming which workspaces exist.
+ */
+export async function getWorkspaceBySlug(slug: string): Promise<Workspace | null> {
+  const rows = await db.select().from(workspaces).where(eq(workspaces.slug, slug)).limit(1)
   return rows[0] ?? null
 }
 
@@ -289,6 +303,17 @@ export async function updateWorkspace(
       .where(eq(workspaces.id, id))
       .returning()
     if (!row) return null
+
+    // A URN embeds the workspace slug, so renaming the workspace rewrites every
+    // URN in it. Links follow automatically — their foreign keys into
+    // `platform.entities` are ON UPDATE CASCADE — which is what makes "a link
+    // survives a rename" a property of the schema rather than of this call site
+    // being remembered. Same transaction as the slug update: a rename that
+    // committed without this would leave every URN in the workspace pointing at
+    // a slug that no longer exists.
+    if (row.slug !== before.slug) {
+      await renameWorkspaceEntities(tx, id, before.slug, row.slug)
+    }
 
     await recordEvent(tx, {
       workspaceId: id,

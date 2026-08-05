@@ -66,12 +66,18 @@ PLATFORM verbs — shared by every app, so they stay at the top level:
   storage     list, rm, attachments (workspace owner)
   trash       list, restore, purge, empty
   undo        roll back your last N writes
-  activity    workspace activity feed (paginated)
+  activity    merged activity feed across every app (--since, --app, --subject)
+  search      federated search across every app's entities (returns URNs)
+  link        relate two entities by URN, across apps (create, list, rm)
   changelog   the dated record of what changed
   super-admin users, whitelist, errors (super admins only; platform-wide)
 
 APPS — every app verb sits behind its app name:
   issues      issue, task, project, move, copy, analytics
+
+New in 1.11.0: every issue, task and project is addressable by a URN —
+bc:issues:<workspace>/<type>/<number> — so "bk search" spans apps and "bk link"
+relates two things that live in different ones. Run "bk guide platform/cross-app".
 
 Renamed in 1.10.0: app nouns moved behind the app name, so "bk issue list" is
 now "bk issues issue list". Every old spelling still works and prints one

@@ -22,6 +22,8 @@ export {
   UNDO_MAX_COUNT,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
+  SEARCH_QUERY_MIN,
+  SEARCH_RESULTS_MAX,
 } from '@blackcode/platform-api'
 
 /** Issue `title` — `app/api/workspaces/[ws]/issues/route.ts`. */

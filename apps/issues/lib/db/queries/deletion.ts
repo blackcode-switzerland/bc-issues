@@ -24,6 +24,7 @@ import { and, desc, eq, inArray, isNull, isNotNull, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { attachments, comments, deletionBatches, issues, projectUpdates, projects, tasks, users } from '../schema'
 import { recordEvent } from './events'
+import { purgeMissingEntities, syncEntityDeletedState } from './entities'
 import { extractUploadedUrls } from '@/lib/blob-refs'
 import { sweepOrphanedUrls } from '@/lib/blob-gc'
 
@@ -153,6 +154,11 @@ export async function softDeleteIssue(
       action: 'deleted',
       meta: { seq: before.seq, title: before.title, batch_id: batchId },
     })
+
+    // Mirror the bin into the projection, in this transaction. Re-derived from
+    // the source rather than from `id`, so a cascade that bins children cannot
+    // leave them looking active in `bk search` — see entities.ts.
+    await syncEntityDeletedState(tx, workspaceId)
     return true
   })
 }
@@ -237,6 +243,9 @@ export async function softDeleteProject(
       diff: { before: { name: before.name, status: before.status } },
       meta: { mode, batch_id: batchId },
     })
+
+    // Covers the cascaded issues and tasks as well as the project itself.
+    await syncEntityDeletedState(tx, workspaceId)
     return true
   })
 }
@@ -302,6 +311,9 @@ export async function softDeleteTask(
       diff: { before: { name: before.name } },
       meta: { mode, batch_id: batchId },
     })
+
+    // Covers the cascaded issues as well as the task itself.
+    await syncEntityDeletedState(tx, workspaceId)
     return true
   })
 }
@@ -608,6 +620,10 @@ export async function restoreItems(
     for (const ref of sorted) {
       await restoreEntity(tx, workspaceId, ref.type, ref.id, actorUserId, resolutions, selection, restored)
     }
+    // Clears deleted_at in the projection for everything that came back,
+    // including batch-mates restored alongside the explicit selection.
+    await syncEntityDeletedState(tx, workspaceId)
+
     const result: EntityRef[] = []
     for (const k of restored) {
       const [t, idStr] = k.split(':')
@@ -676,6 +692,11 @@ export async function purgeItems(
         candidateUrls.push(...res.urls)
       }
     }
+
+    // A purge is the one delete that removes the projection row outright — and
+    // its links with it, by cascade. Re-derived from the source, so a purge that
+    // cascades to children cannot leave a projection pointing at nothing.
+    await purgeMissingEntities(tx, workspaceId)
     return { purged }
   })
 

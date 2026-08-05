@@ -427,13 +427,24 @@ func (c *Client) GetTask(id int, includeIssues bool) (*Task, error) {
 // Activity returns the workspace-scoped activity feed. The scoped route is
 // keyset-paginated (cursor = last event id seen); pass cursor=nil for the first
 // page. It returns the page of items plus the next cursor (nil when exhausted).
-func (c *Client) Activity(limit int, cursor *int) ([]ActivityFeedItem, *int, error) {
+func (c *Client) Activity(limit int, cursor *int, since, apps, subject string) ([]ActivityFeedItem, *int, error) {
 	q := url.Values{}
 	if limit > 0 {
 		q.Set("limit", fmt.Sprint(limit))
 	}
 	if cursor != nil {
 		q.Set("cursor", fmt.Sprint(*cursor))
+	}
+	// Phase 6 filters. Sent only when set, so the request an old flag-free
+	// invocation produces is byte-for-byte what it was before.
+	if since != "" {
+		q.Set("since", since)
+	}
+	if apps != "" {
+		q.Set("app", apps)
+	}
+	if subject != "" {
+		q.Set("subject_urn", subject)
 	}
 	path, err := c.wsPath("activity")
 	if err != nil {

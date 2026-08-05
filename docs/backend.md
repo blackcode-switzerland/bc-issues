@@ -119,7 +119,7 @@ The `Errors` factory (`lib/api/errors.ts`):
 checking in order:
 
 1. **Bearer token** — `Authorization: Bearer bk_live_…`. Verified by
-   `verifyToken()` (`lib/auth/tokens.ts`).
+   `verifyToken()` (`@blackcode/platform-auth`, wrapped by `lib/auth/tokens.ts`).
 2. **Session cookie** — a NextAuth JWT, validated by `getValidatedSessionUser()`
    (`lib/auth/session.ts`).
 
@@ -143,7 +143,7 @@ re-checks that the user still exists, is not soft-deleted, and that the token's
 that column, so **every existing browser session is invalidated**. API tokens
 are a separate credential and are unaffected.
 
-### API tokens (`lib/auth/tokens.ts`)
+### API tokens (`@blackcode/platform-auth`)
 
 - Plaintext format: `bk_live_` + 32 random bytes (base64url). **Shown once.**
 - Stored as `token_hash` (SHA-256) plus a `token_prefix` for display; verified
@@ -159,7 +159,7 @@ loopback `callback` + `state`; the server mints a token and returns a
 
 ### Passwords & reset
 
-- `lib/auth/password.ts` — `hashPassword`/`verifyPassword` (bcryptjs, 12
+- `@blackcode/platform-auth` — `hashPassword`/`verifyPassword` (bcryptjs, 12
   rounds), plus length validation (8–200 chars).
 - `lib/db/queries/password-reset.ts` — OTP flow. A short code is emailed (via
   Resend), stored only as a hash in `password_reset_otps`, capped at 5 attempts,
@@ -227,6 +227,73 @@ one of them unchanged, which is the test that put them in `platform.*`.
 | `comments` | **polymorphic**: `parent_type` ∈ `issue`/`task`/`project` + `parent_id`; `content`, `mentions` (int[]), `edited_at`. The legacy `issue_id` column was dropped in migration `0032` — it was a platform→app FK that would have broken `pg_dump --schema=issues` |
 | `uploads` | **upload ledger** — one row per file stored through our pipeline, written at upload time: `workspace_id` (nullable), unique `url`, `pathname`, `filename`, `size` (bigint), `mime_type`, `uploaded_by`. Metadata only — never the authority for deletion (a live reference scan is); source for the Storage page |
 | `labels` | **workspace-level** (`workspace_id`), `name`, `color`, `created_by` |
+
+### Cross-app primitives (Phase 6)
+
+Two tables and one generalisation. These are what make a second app worth
+having: everything before them was rearrangement, this is the first capability
+that cannot exist with one app per database.
+
+| Table | Purpose / notable columns |
+|-------|---------------------------|
+| `entities` | the cross-app index of what exists. `urn` PK (`bc:<app>:<workspace-slug>/<entity-type>/<number>`), `app`, `workspace_id`, `entity_type`, `number` (the workspace #number, never the row id), `title`, `url`, `updated_at`, `deleted_at`. **A projection** — each app's own tables are the truth |
+| `links` | typed relations between two URNs, in any two apps. PK `(from_urn, to_urn, rel)`; both ends FK into `entities` **ON UPDATE CASCADE ON DELETE CASCADE**; `created_by`, `created_at`; CHECK forbids a self-link |
+| `events` | gains `app` (nullable, FK → `apps.slug`) and `subject_urn` (nullable, **no FK**). See below |
+
+**`entities` has two keys, and the distinction is load-bearing.** `urn` is the
+primary key because it is what links point at and what agents pass around. But a
+URN embeds the workspace slug and slugs are editable, so the *stable* identity is
+the unique `(workspace_id, app, entity_type, number)` — and that is what upserts
+conflict on. Renaming a workspace therefore **rewrites** the existing row's URN
+rather than creating a second one, and `links`' ON UPDATE CASCADE carries the
+relations along. "A link survives a rename" is a property of the schema, not of
+any code path remembering to do it.
+
+**`links` cascades on delete, `entities` does not.** A soft delete (the recycle
+bin) sets `entities.deleted_at` and keeps the row, so a link into the bin still
+resolves and comes back on restore. Only a **purge** removes the `entities` row,
+and its links go with it — a relation to something that exists nowhere is a
+dangling pointer, not a fact.
+
+**`events.app` is nullable on purpose.** Migration 0035 lands *before* the deploy
+that writes the column (the cutover pattern), so for the length of that window the
+old code is still inserting rows that do not know it exists. `NOT NULL` would fail
+every one of those inserts; `DEFAULT 'issues'` would hardcode one app's name into
+a platform table, which is the coupling this work removes. It is backfilled, all
+current code sets it, and it tightens to `NOT NULL` in a later release once no
+deployed code can write a NULL — expand → migrate → contract
+(PLATFORM-ARCHITECTURE.md §4.7). `subject_urn` has **no** foreign key because
+events are append-only history and must outlive a purge of their subject.
+
+The data-layer helpers are in `packages/platform-db/src/{urn,entities,links}.ts`.
+The app's half — its URL scheme, its source tables, and the reconciler — is
+`apps/issues/lib/db/queries/entities.ts` plus the pure
+`apps/issues/lib/entity-address.ts`. Platform must never learn where an issue
+lives in the dashboard, which is why `path` is supplied by the app and only the
+`base_url` glue is shared.
+
+**The rule for every write path:** `projectEntity` and friends take the caller's
+transaction handle and never open one. A projection written outside the source
+write's transaction commits even when that write rolls back, and the result is an
+index row for something that does not exist — invisible until somebody clicks
+through to a 404 weeks later. `entities.integration.test.ts` asserts the
+rolled-back case directly.
+
+**Formatting a URN on a write path uses the fail-soft variants**
+(`formatUrnOrNull` / `entityUrnOrNull`). The index must never be able to take
+down the thing it indexes: a strict formatter deep inside `recordEvent` turned an
+ordinary delete into a 500 during Phase 6 verification. An unaddressable row
+loses its projection and is reported as `missing` by the reconciler; it does not
+fail the write.
+
+**Reconciliation.** `reconcileEntities()` re-derives the projection from the
+source tables and reports `missing` / `stale` / `orphaned`, optionally repairing.
+Exposed at `GET`/`POST /api/super-admin/entity-drift` → `bk super-admin
+entity-drift [--repair] [--workspace <slug>]`. It shipped in the same phase as
+the projection because there is exactly one writer today — the only window in
+which a difference it reports is unambiguously a bug in that writer rather than a
+race with another one. **A repair that changes something is a bug report, not
+maintenance.**
 
 ### App-owned tables
 
@@ -336,11 +403,28 @@ the activity feed. Only safe for actions that **don't** fan out to the inbox
 (`updated` hits the `default` case in `fanOutEvent`); never enable it for
 discrete events like `status_changed` or `assigned`.
 
+**Cross-app tagging (Phase 6).** `recordEvent` sets `app` to this app's slug on
+every event, and derives `subject_urn` from `(entityType, entityId)` via
+`resolveSubjectUrn`. Both are resolved in `recordEvent` rather than at the ~40
+call sites: one of them forgetting would be a hole in the feed that nothing would
+ever report. `app` means the **producing** app — a workspace or member event
+recorded by this deployment is an issues-app event, because that is what wrote it.
+`subject_urn` is null for subjects that are not projected entities (a comment, a
+label, a member, an invitation), which is an answer rather than a gap. Pass
+`subjectUrn` explicitly only when the subject row is already gone by the time the
+event is recorded.
+
 This single spine is read by:
 
-- **Activity feed** (`activity.ts`, `/api/workspaces/{ws}/activity`),
+- **Activity feed** (`activity.ts`, `/api/workspaces/{ws}/activity`) — now
+  cross-app: `?since=24h` (relative window; mutually exclusive with `from`),
+  `?app=`, `?subject_urn=`,
 - **Inbox** (`inbox.ts`, `/api/me/inbox`),
-- **Analytics** (`analytics.ts`).
+- **Analytics** (`analytics.ts`),
+- **Federated search** (`/api/workspaces/{ws}/search`) — reads `entities`, not
+  events, and deliberately touches no app's own tables: another app's schema is
+  unreadable to this app's Postgres role, so a per-app fan-out is refused at the
+  database rather than merely being slower.
 
 ### Analytics contract (`analytics.ts`)
 
@@ -472,7 +556,7 @@ and three derived blocks assembled in **`lib/agent-meta.ts`**:
   file the enforcing routes also import) and `lib/upload.ts`.
 - **`media`** — which MIME prefixes render inline, which get View+Download, and
   `blocked_mime_types`; derived from `lib/rich-text.ts` and the upload route.
-- **`cli`** — the advertised versions from `lib/cli-version.ts`.
+- **`cli`** — the advertised versions from `@blackcode/platform-agent`.
 
 Nothing in those three may be hand-typed. The rule that makes the whole design
 work: **static behaviour ships in the binary (`bk guide`, `//go:embed`-ed under
@@ -491,7 +575,7 @@ on its own.
 returns `{ cli_latest_version, cli_min_version, entries: [{ date, title,
 markdown, html }], reference_moved_to }` (entries newest first). Pass
 `?format=markdown` (or `Accept: text/markdown`) for one raw Markdown document.
-Source of truth is **`lib/changelog.ts`**, which merges **`docs/changelog/*.md`**
+Source of truth is **`@blackcode/platform-agent`** (`packages/platform-agent/src/changelog.ts`), which merges **`docs/changelog/*.md`**
 and renders it with `marked` (gfm, `breaks:false`) + `sanitize-html`. Because that
 `.md` must exist at runtime, `next.config.js` sets `outputFileTracingIncludes` for
 `/changelog` and `/api/changelog`.
@@ -514,6 +598,11 @@ reason.
 
 ```
 GET    /api/workspaces                          workspaces I can use THIS app in
+
+GET    /api/workspaces/{ws}/search              federated search over platform.entities (?q=, ?app=, ?type=, ?limit=, ?include_deleted=1)
+GET    /api/workspaces/{ws}/links               every link touching ?urn=, both directions
+POST   /api/workspaces/{ws}/links               relate two URNs ({from,to,rel}); idempotent, 201 with created:false on a repeat
+DELETE /api/workspaces/{ws}/links               remove one directed link (?from=&to=&rel= — all three identify it)
                                                 (?all=1 → every membership + the
                                                  apps I can reach in each)
 POST   /api/workspaces                          create workspace
@@ -594,6 +683,8 @@ DELETE /api/super-admin/errors         bulk delete ({ ids: number[] }, max 500);
 GET  /api/super-admin/errors/{id}      full event detail incl. stack + context
 PATCH /api/super-admin/errors/{id}     toggle triage state ({ resolved: boolean })
 DELETE /api/super-admin/errors/{id}    permanently delete one event
+GET  /api/super-admin/entity-drift     reconciliation report: re-derive platform.entities from the source tables (?ws=<slug> to narrow)
+POST /api/super-admin/entity-drift     same, and repair the drift it finds
 ```
 
 All super-admin routes are guarded by `requireSuperAdminUser(req)` — 401 if
@@ -710,7 +801,7 @@ response, success or error:
 - `X-BK-Help` — the get-current guide (`/agent-updator`).
 - `X-BK-Changelog` — the changelog (`/api/changelog`). Points at the JSON route, not a page: the human `/changelog` page was removed on 2026-08-03 and these headers are read by agents.
 
-The version headers come from `lib/cli-version.ts` (override via `BK_CLI_LATEST` /
+The version headers come from `@blackcode/platform-agent` (override via `BK_CLI_LATEST` /
 `BK_CLI_MIN` env, no redeploy); the two breadcrumb headers come from
 `lib/agent-manifest.ts` `discovery`, so they can't drift from `/llms.txt`. The
 breadcrumbs are out-of-band (never in the body), so a client that ignores them
@@ -862,7 +953,7 @@ When `SUPER_ADMINS` is set, the whitelist feature activates:
 When `SUPER_ADMINS` is not set (or empty), all emails are allowed and the
 whitelist table is ignored entirely.
 
-Helper utilities: `lib/auth/whitelist.ts` (`isSuperAdmin`, `isEmailAllowed`,
+Helper utilities: `@blackcode/platform-auth` (`isSuperAdmin`, `isEmailAllowed`,
 `isWhitelistEnabled`) and `lib/api/super-admin-guard.ts` (`requireSuperAdminUser`).
 
 ### Bootstrapping

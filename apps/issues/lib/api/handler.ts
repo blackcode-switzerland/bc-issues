@@ -21,7 +21,7 @@ import { db } from '@/lib/db/client'
 import { errorEvents, type NewErrorEvent } from '@/lib/db/schema'
 import { ApiError } from '@blackcode/platform-api'
 import { sanitize, truncate } from '@blackcode/platform-api'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@/lib/cli-version'
+import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 import { AGENT_MANIFEST } from '@/lib/agent-manifest'
 
 // Standard headers on EVERY API response (success and error alike):

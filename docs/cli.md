@@ -144,7 +144,7 @@ final "Proceed?" confirm before doing anything irreversible:
 On confirm it: preflights (gh/npm/git auth, clean tree, version unused — plus
 Vercel auth if deploying web); edits `cli/npm/package.json` + `install.js`
 (install.js derives its version from package.json, so they can't drift) **and**
-`apps/issues/lib/cli-version.ts`, then makes **one** commit + push for all three; creates and
+`packages/platform-agent/src/cli-version.ts`, then makes **one** commit + push for all three; creates and
 pushes the `vX.Y.Z` tag; `make dist` cross-compiles (version stamped via
 `-ldflags`); publishes the GitHub Release + npm package; and finally deploys web
 if you said yes. (One commit, near the start — the tag and the published binary
@@ -153,7 +153,7 @@ are built from it, so it can't be deferred to after publish.)
 ### Upgrade policy: normal vs forced
 
 The "update available" notice and the hard min-version block (see
-[Updates](#updates)) are driven by **server** constants in `apps/issues/lib/cli-version.ts`,
+[Updates](#updates)) are driven by **server** constants in `packages/platform-agent/src/cli-version.ts`,
 which the script now edits for you:
 
 - **normal** → sets `CLI_LATEST_VERSION` to the new version (soft "a new bk version
@@ -593,11 +593,34 @@ trash-restore stay safe) — use these to review usage and delete unused files.
 | `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Irreversible. |
 | `bk storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. |
 
+### Cross-app: search & links (Phase 6)
+
+Both are **bare platform verbs**, and that placement is the design rather than a
+default. They read `platform.entities` / `platform.links`, which every app writes
+to; a link's two ends may live in different apps, so nesting either under one
+app's namespace would claim an ownership that does not exist.
+
+| Command | Backend call | Notes |
+|---|---|---|
+| `bk search <query> [--app A] [--type T] [--limit N] [--include-deleted]` | `GET /api/workspaces/:ws/search` | Federated search across every app in the workspace. Matches **titles and #numbers only** — for descriptions or status/assignee/label filters, use the app's own listing. Output carries the URN, which is what `bk link` takes. |
+| `bk link create <from> <to> --rel R` | `POST /api/workspaces/:ws/links` | Idempotent: a repeat succeeds with `created:false`, so retry-after-timeout is safe. Both ends must exist and be in the same workspace. |
+| `bk link list <urn>` | `GET /api/workspaces/:ws/links` | Both directions; the far end is resolved and flagged if it is in the trash. |
+| `bk link rm <from> <to> --rel R` | `DELETE /api/workspaces/:ws/links` | All three parts identify the link — direction is part of its identity. |
+
+The relation vocabulary is **not** in the binary: `bk meta` serves it under
+`links.relations`, so adding one is a server change, not a CLI release. Same
+reason the guide topic (`bk guide platform/cross-app`) names no relations —
+`guide_test.go` fails the build if a topic hardcodes a dynamic value.
+
+URN shape: `bc:<app>:<workspace-slug>/<entity-type>/<number>`, where `<number>`
+is the workspace #number and never the row id. Do not hand-assemble one; take it
+from `bk search` or from an activity entry's `subject_urn`.
+
 ### Activity / analytics / undo
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk activity [--limit N] [--cursor N]` | `GET /api/workspaces/:ws/activity` | Active-workspace change feed (keyset-paginated). `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. |
+| `bk activity [--limit N] [--cursor N] [--since 24h] [--app A] [--subject URN]` | `GET /api/workspaces/:ws/activity` | Cross-app change feed (keyset-paginated). `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. `--since` takes a relative window (`30m`/`24h`/`7d`) and is mutually exclusive with a raw `from=` (400 `since_and_from`). `--subject` gives one entity's whole history in one call. Each row carries the producing `app`. |
 | `bk issues analytics [flags]` | `GET /api/workspaces/:ws/analytics` | Workspace analytics with full web-dashboard parity (see below). `--ws <slug\|id>` targets another workspace via the path. Any member; not admin-only. |
 | `bk undo [--count N] [--yes]` | `POST /api/undo` | Rolls back your last N operations (clamped to 1–10). Prompts to confirm. |
 
@@ -644,6 +667,7 @@ workspace-scoped — the whitelist and error log are platform-wide.
 | `bk super-admin errors unresolve <id>` | `PATCH /api/super-admin/errors/{id}` | Sets `resolved: false`. |
 | `bk super-admin errors delete <id> [id ...] [--yes]` | `DELETE /api/super-admin/errors/{id}` (single) or `DELETE /api/super-admin/errors` `{ids}` (bulk) | Permanent. Prompts to confirm. |
 | `bk super-admin errors stats` | `GET /api/super-admin/errors?stats=1` | Total / open / resolved counts. |
+| `bk super-admin entity-drift [--repair] [--workspace S]` | `GET` / `POST /api/super-admin/entity-drift` | The Phase 6 reconciliation job: re-derives `platform.entities` from each app's source tables and reports `missing` / `stale` / `orphaned`. Exits 0 either way — branch on `drift_count`, not the exit code. `--repair` switches to `POST`. **A repair that changes something is a bug report, not maintenance:** there is one writer, so anything it fixes means that writer is wrong. |
 
 ```bash
 bk super-admin whitelist add --type domain --value blackcode.ch
