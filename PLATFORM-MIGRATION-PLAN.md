@@ -702,6 +702,36 @@ sweep — login, endpoints, semantics, a real write — can run against the new 
 *before* promoting. Use it every time; a promote should confirm what you already
 know, not be the first test.
 
+### Who owns the migration depends on the ORDER — decide it explicitly
+
+Learned the hard way in Phase 6, 2026-08-05. `RUN_MIGRATIONS=1` means
+**`vercel deploy --prod` applies pending migrations during `postbuild`.** Which
+ordering you use therefore decides who runs the migration, and getting this
+wrong runs it before you have gated it:
+
+| Ordering | Who migrates | `RUN_MIGRATIONS` |
+|---|---|---|
+| **migrate-first** (Phase 3: the migration breaks running code, so migrate and promote must be chained) | you, by hand | safe to **leave set** — `postbuild` finds nothing pending |
+| **deploy-first** (Phases 4, 6: the migration is additive, so you want a gate between migrating and promoting) | **`postbuild`, silently, during the build** | **MUST be removed before the deploy**, and restored after |
+
+In Phase 6 the plan said deploy-first *and* "leave `RUN_MIGRATIONS` set" — a
+sentence carried over from the migrate-first ordering without rechecking it. The
+deploy applied 0035 itself, before the count/drift gate ran. It was benign
+**only** because 0035 was additive, which is the property that had been verified
+up front. With a destructive migration it would have been an outage.
+
+So: **step 3 of the cutover pattern — remove `RUN_MIGRATIONS`, record the value —
+is not optional in deploy-first ordering.** It is the step that decides who owns
+the migration.
+
+Two corollaries:
+
+- The Drizzle ledger's `created_at` is the **journal** timestamp (when the file
+  was generated), not when it was applied — it cannot date an application. The
+  Vercel build log is the only witness for when a migration actually ran.
+- Verify *after* the deploy that the migration count is what you expect. If it
+  moved and you did not move it, `postbuild` did.
+
 **Two credentials, not one.** `RUN_MIGRATIONS=1` makes `postbuild` migrate using
 `DATABASE_URL`. Once that points at a bounded app role, every deploy fails —
 correctly, because the app role has no DDL and cannot read
