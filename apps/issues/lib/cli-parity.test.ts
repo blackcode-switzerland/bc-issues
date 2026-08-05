@@ -40,12 +40,9 @@
 // exists. It proves nothing about code no command reaches.
 
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync, existsSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
-import { join, relative, sep } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-const HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const
+import { collectAppRoutes } from '@blackcode/platform-testing'
 
 // This app lives at apps/issues; the CLI stays at the monorepo root. Resolve the
 // root from this file rather than from cwd, so the test gives the same answer
@@ -95,73 +92,16 @@ const EXCLUDED_OPERATIONS = new Map<string, string>([
   ],
 ])
 
-function walk(dir: string): string[] {
-  const out: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...walk(p))
-    else if (entry.name === 'route.ts') out.push(p)
-  }
-  return out
-}
-
-// `walk` yields absolute paths (it is anchored at APP_ROOT, not at cwd), so make
-// the path app-relative before turning it into a URL. Doing this with
-// path.relative rather than a `^app` regex means the result no longer depends on
-// where the process was started from.
-function routeUrl(file: string): string {
-  return relative(APP_ROOT, file)
-    .split(sep)
-    .join('/')
-    .replace(/^app/, '')
-    .replace(/\/route\.ts$/, '')
-    .replace(/\[\.\.\.(\w+)\]/g, '{$1}')
-    .replace(/\[(\w+)\]/g, '{$1}')
-}
-
-function methodsOf(src: string): string[] {
-  return HTTP_METHODS.filter((m) =>
-    new RegExp(`export\\s+(const|async\\s+function|function)\\s+${m}\\b`).test(src)
-  )
-}
-
-interface CliRoutes {
-  routes: Array<{ method: string; path: string; command: string }>
-  commands_unannotated: string[]
-}
-
-// `go run` in a cold module cache can take a few seconds; the cached artifact is
-// there for environments without a Go toolchain at all.
-function loadCliRoutes(): CliRoutes {
-  try {
-    const raw = execFileSync('go', ['run', './cmd/bk', '__routes'], {
-      cwd: CLI_DIR,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 120_000,
-    })
-    return JSON.parse(raw)
-  } catch {
-    const artifact = join(CLI_DIR, 'routes.json')
-    if (existsSync(artifact)) return JSON.parse(readFileSync(artifact, 'utf8'))
-    throw new Error(
-      'Cannot determine CLI route coverage: `go run ./cmd/bk __routes` failed and ' +
-        'cli/routes.json is absent. Install Go, or run `make -C cli routes` to emit the artifact.'
-    )
-  }
-}
-
 describe('CLI ↔ routes parity', () => {
-  const cli = loadCliRoutes()
-  const covered = new Set(cli.routes.map((r) => `${r.method} ${r.path}`))
-
-  // Every real route+method, minus the documented exclusions.
-  const real = new Map<string, Set<string>>()
-  for (const file of walk(join(APP_ROOT, 'app', 'api'))) {
-    const url = routeUrl(file)
-    if (EXCLUDED_PATHS.has(url)) continue
-    real.set(url, new Set(methodsOf(readFileSync(file, 'utf8'))))
-  }
+  // `hostsPlatformRoutes` because the shared routes (workspaces, labels, trash,
+  // uploads, tokens) physically live in THIS app's tree. Exactly one app may set
+  // it; without it, every platform command's route would go unchecked by every
+  // app. See the header of @blackcode/platform-testing's cli-parity.ts.
+  const { real, allPaths, claimed, ownClaims, cli } = collectAppRoutes(
+    { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: 'issues', hostsPlatformRoutes: true },
+    new Set(EXCLUDED_PATHS.keys())
+  )
+  const covered = claimed
 
   // Both sides of this guard are discovered by walking the filesystem, and both
   // paths are now computed from this file's location rather than from cwd. That
@@ -201,7 +141,7 @@ describe('CLI ↔ routes parity', () => {
 
   it('every route the CLI claims actually exists (no drift)', () => {
     const drift: string[] = []
-    for (const r of cli.routes) {
+    for (const r of ownClaims) {
       const methods = real.get(r.path)
       if (!methods) {
         // Could be an excluded path the CLI legitimately touches (e.g. the blob
@@ -221,6 +161,11 @@ describe('CLI ↔ routes parity', () => {
     ).toEqual([])
   })
 
+  // `allPaths` includes the excluded routes, so an exclusion pointing at a
+  // DELETED route is still detectable as stale — that is the whole point of
+  // keeping them separate from `real`.
+  const pathExists = (p: string) => allPaths.has(p)
+
   it('every exclusion names a route that still exists', () => {
     const stale: string[] = []
     for (const [path, reason] of EXCLUDED_PATHS) {
@@ -236,16 +181,3 @@ describe('CLI ↔ routes parity', () => {
     ).toEqual([])
   })
 })
-
-// All route paths on disk, including the ones excluded above.
-//
-// Anchored at APP_ROOT like every other path in this file. It used to walk the
-// relative 'app/api', which resolved only because vitest happens to run with
-// cwd set to the app directory — the exact cwd dependence the header comment
-// above claims to have removed. Run from the repo root it would have thrown
-// ENOENT at import time; run from anywhere else that happened to have an
-// app/api it would have compared against the wrong tree.
-const allPaths = new Set(walk(join(APP_ROOT, 'app', 'api')).map(routeUrl))
-function pathExists(p: string): boolean {
-  return allPaths.has(p)
-}

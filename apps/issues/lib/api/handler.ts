@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db/client'
 import { errorEvents, type NewErrorEvent } from '@/lib/db/schema'
-import { ApiError } from '@blackcode/platform-api'
+import { ApiError, errorBody } from '@blackcode/platform-api'
 import { sanitize, truncate } from '@blackcode/platform-api'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 import { AGENT_MANIFEST } from '@/lib/agent-manifest'
@@ -125,25 +125,11 @@ async function handleError(err: unknown, req: NextRequest): Promise<NextResponse
   )
 }
 
-// Response shape kept backward-compatible with the existing CLI APIError:
-//   { error: string, code?: string, suggestion?: string, details?: unknown }
-//
-// `error` is the human-readable message (what the CLI surfaces). `code` is the
-// machine-readable identifier the web client branches on. `suggestion` is the
-// optional "what to do about it" hint, used by the CLI today. `details` is
-// structured context for the web client; the CLI ignores it.
-function buildResponseBody(err: ApiError): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    error: err.message,
-    code: err.code,
-  }
-  if (typeof err.details === 'string') {
-    body.suggestion = err.details
-  } else if (err.details !== undefined) {
-    body.details = err.details
-  }
-  return body
-}
+// The envelope moved to @blackcode/platform-api in Phase 8 — it is the shape
+// every app serves and `bk` parses, so it belongs beside ApiError rather than
+// inside one app's handler. `buildResponseBody` is kept as a local alias so the
+// call sites below read unchanged.
+const buildResponseBody = errorBody
 
 async function safeLog(row: Omit<NewErrorEvent, 'id' | 'occurred_at'> & { stack?: string | null }): Promise<void> {
   try {

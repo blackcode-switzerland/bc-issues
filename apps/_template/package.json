@@ -1,0 +1,39 @@
+{
+  "name": "template",
+  "version": "0.0.0",
+  "description": "Scaffold app \u2014 the worked example docs/adding-an-app.md walks. Copy it, do not edit it in place.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@blackcode/platform-agent": "*",
+    "@blackcode/platform-api": "*",
+    "@blackcode/platform-auth": "*",
+    "@blackcode/platform-db": "*",
+    "@blackcode/platform-storage": "*",
+    "drizzle-orm": "^0.45.2",
+    "next": "^16.0.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.2",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.8",
+    "@blackcode/platform-testing": "*",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.0"
+  }
+}

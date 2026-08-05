@@ -6,7 +6,7 @@
 //
 // What stays app-local is what names an issue, task or project: the entity
 // serializers, seq→id resolution, and analytics parameter parsing.
-export { ApiError, Errors, jsonList, sanitize, truncate } from '@blackcode/platform-api'
+export { ApiError, Errors, errorBody, jsonList, sanitize, truncate } from '@blackcode/platform-api'
 export type { ListPage } from '@blackcode/platform-api'
 
 export { apiHandler } from './handler'

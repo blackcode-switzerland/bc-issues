@@ -66,3 +66,32 @@ export const Errors = {
   internal: (message = 'Internal server error', details?: unknown) =>
     new ApiError(500, 'internal_error', message, details),
 }
+
+/**
+ * The canonical error envelope, from an `ApiError`.
+ *
+ *   { error: string, code: string, suggestion?: string, details?: unknown }
+ *
+ * `error` is the human message the CLI surfaces. `code` is what a client
+ * branches on. `suggestion` is the "what to do about it" line the CLI prints as
+ * `hint:` — the difference between an agent stopping and an agent recovering.
+ * `details` is structured context for a web client; the CLI ignores it.
+ *
+ * It lives HERE, beside `ApiError`, because the shape is the contract every app
+ * serves and `bk` parses. It was inside `apps/issues/lib/api/handler.ts` until
+ * Phase 8, where building a second app made the duplication concrete: an app
+ * that reimplemented this slightly differently would produce errors the CLI
+ * silently fails to read a `suggestion` out of.
+ *
+ * The `string` special case is not a wart — `Errors.badRequest(code, msg, 'do X')`
+ * passes the suggestion through `details`, and dozens of call sites rely on it.
+ */
+export function errorBody(err: ApiError): Record<string, unknown> {
+  const body: Record<string, unknown> = { error: err.message, code: err.code }
+  if (typeof err.details === 'string') {
+    body.suggestion = err.details
+  } else if (err.details !== undefined) {
+    body.details = err.details
+  }
+  return body
+}

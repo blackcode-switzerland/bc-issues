@@ -4,542 +4,662 @@
     {
       "method": "DELETE",
       "path": "/api/super-admin/errors",
-      "command": "bk super-admin errors delete"
+      "command": "bk super-admin errors delete",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/super-admin/errors/{id}",
-      "command": "bk super-admin errors delete"
+      "command": "bk super-admin errors delete",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/super-admin/whitelist/{id}",
-      "command": "bk super-admin whitelist remove"
+      "command": "bk super-admin whitelist remove",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/tokens/{id}",
-      "command": "bk token delete"
+      "command": "bk token delete",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}",
-      "command": "bk workspace delete"
+      "command": "bk workspace delete",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/apps/{app}/access/{userId}",
-      "command": "bk app access revoke"
+      "command": "bk app access revoke",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/comments/{id}",
-      "command": "bk issues issue delete-comment"
+      "command": "bk issues issue delete-comment",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/invitations/{id}",
-      "command": "bk invite revoke"
+      "command": "bk invite revoke",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/issues/{id}",
-      "command": "bk issues issue delete"
+      "command": "bk issues issue delete",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/issues/{id}/attachments/{attachmentId}",
-      "command": "bk issues issue detach"
+      "command": "bk issues issue detach",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/issues/{id}/labels/{lid}",
-      "command": "bk label detach"
+      "command": "bk label detach",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/issues/{id}/watch",
-      "command": "bk issues issue unwatch"
+      "command": "bk issues issue unwatch",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/labels/{id}",
-      "command": "bk label delete"
+      "command": "bk label delete",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/links",
-      "command": "bk link rm"
+      "command": "bk link rm",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/members/{userId}",
-      "command": "bk member remove"
+      "command": "bk member remove",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/projects/{id}",
-      "command": "bk issues project delete"
+      "command": "bk issues project delete",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/projects/{id}/members",
-      "command": "bk issues project remove-member"
+      "command": "bk issues project remove-member",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/projects/{id}/updates/{updateId}",
-      "command": "bk issues project updates delete"
+      "command": "bk issues project updates delete",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/storage/{id}",
-      "command": "bk storage rm"
+      "command": "bk storage rm",
+      "app": "platform"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/tasks/{id}",
-      "command": "bk issues task delete"
+      "command": "bk issues task delete",
+      "app": "issues"
     },
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/trash/purge",
-      "command": "bk trash purge"
+      "command": "bk trash purge",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/changelog",
-      "command": "bk skill sync"
+      "command": "bk skill sync",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/me",
-      "command": "bk whoami"
+      "command": "bk whoami",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/me/inbox",
-      "command": "bk inbox list"
+      "command": "bk inbox list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/me/pending-invitations",
-      "command": "bk invite pending"
+      "command": "bk invite pending",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/meta",
-      "command": "bk meta"
+      "command": "bk meta",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/super-admin/blob-drift",
-      "command": "bk super-admin blob-drift"
+      "command": "bk super-admin blob-drift",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/super-admin/entity-drift",
-      "command": "bk super-admin entity-drift"
+      "command": "bk super-admin entity-drift",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/super-admin/errors",
-      "command": "bk super-admin errors stats"
+      "command": "bk super-admin errors stats",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/super-admin/errors/{id}",
-      "command": "bk super-admin errors view"
+      "command": "bk super-admin errors view",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/super-admin/users",
-      "command": "bk super-admin users"
+      "command": "bk super-admin users",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/super-admin/whitelist",
-      "command": "bk super-admin whitelist list"
+      "command": "bk super-admin whitelist list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/tokens",
-      "command": "bk token list"
+      "command": "bk token list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/upload",
-      "command": "bk upload"
+      "command": "bk upload",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/users",
-      "command": "bk user view"
+      "command": "bk user view",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces",
-      "command": "bk workspace use"
+      "command": "bk workspace use",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}",
-      "command": "bk workspace show"
+      "command": "bk workspace show",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/activity",
-      "command": "bk activity"
+      "command": "bk activity",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/analytics",
-      "command": "bk issues analytics"
+      "command": "bk issues analytics",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/apps",
-      "command": "bk app list"
+      "command": "bk app list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/apps/{app}/access",
-      "command": "bk app access list"
+      "command": "bk app access list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/attachments",
-      "command": "bk storage attachments"
+      "command": "bk storage attachments",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/invitations",
-      "command": "bk invite list"
+      "command": "bk invite list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/invite-candidates",
-      "command": "bk invite candidates"
+      "command": "bk invite candidates",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues",
-      "command": "bk issues project issues"
+      "command": "bk issues project issues",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}",
-      "command": "bk issues issue view"
+      "command": "bk issues issue view",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/activity",
-      "command": "bk issues issue activity"
+      "command": "bk issues issue activity",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/attachments",
-      "command": "bk issues issue attachments"
+      "command": "bk issues issue attachments",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/comments",
-      "command": "bk issues issue comments"
+      "command": "bk issues issue comments",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk label attach"
+      "command": "bk label attach",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/watch",
-      "command": "bk issues issue watch"
+      "command": "bk issues issue watch",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/labels",
-      "command": "bk label list"
+      "command": "bk label list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/labels/{id}",
-      "command": "bk label view"
+      "command": "bk label view",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/links",
-      "command": "bk link list"
+      "command": "bk link list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/members",
-      "command": "bk member list"
+      "command": "bk member list",
+      "app": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/notes",
+      "command": "bk template note list",
+      "app": "template"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects",
-      "command": "bk issues project list"
+      "command": "bk issues project list",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}",
-      "command": "bk issues project view"
+      "command": "bk issues project view",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}/comments",
-      "command": "bk issues project comments"
+      "command": "bk issues project comments",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}/members",
-      "command": "bk issues project members"
+      "command": "bk issues project members",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}/updates",
-      "command": "bk issues project updates list"
+      "command": "bk issues project updates list",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/search",
-      "command": "bk search"
+      "command": "bk search",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/storage",
-      "command": "bk storage list"
+      "command": "bk storage list",
+      "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/tasks",
-      "command": "bk issues task list"
+      "command": "bk issues task list",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/tasks/{id}",
-      "command": "bk issues task view"
+      "command": "bk issues task view",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/tasks/{id}/comments",
-      "command": "bk issues task comments"
+      "command": "bk issues task comments",
+      "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/trash",
-      "command": "bk trash list"
+      "command": "bk trash list",
+      "app": "platform"
     },
     {
       "method": "PATCH",
       "path": "/api/me",
-      "command": "bk profile edit"
+      "command": "bk profile edit",
+      "app": "platform"
     },
     {
       "method": "PATCH",
       "path": "/api/super-admin/errors/{id}",
-      "command": "bk super-admin errors unresolve"
+      "command": "bk super-admin errors unresolve",
+      "app": "platform"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}",
-      "command": "bk workspace edit"
+      "command": "bk workspace edit",
+      "app": "platform"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/apps/{app}",
-      "command": "bk app enable"
+      "command": "bk app enable",
+      "app": "platform"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/comments/{id}",
-      "command": "bk issues issue edit-comment"
+      "command": "bk issues issue edit-comment",
+      "app": "issues"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/issues/{id}",
-      "command": "bk issues issue unassign"
+      "command": "bk issues issue unassign",
+      "app": "issues"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/labels/{id}",
-      "command": "bk label edit"
+      "command": "bk label edit",
+      "app": "platform"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/projects/{id}",
-      "command": "bk issues project edit"
+      "command": "bk issues project edit",
+      "app": "issues"
     },
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/tasks/{id}",
-      "command": "bk issues task edit"
+      "command": "bk issues task edit",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/invitations/accept",
-      "command": "bk invite accept"
+      "command": "bk invite accept",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/invitations/decline",
-      "command": "bk invite decline"
+      "command": "bk invite decline",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/me/active-workspace",
-      "command": "bk workspace use"
+      "command": "bk workspace use",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/me/inbox/archive",
-      "command": "bk inbox archive"
+      "command": "bk inbox archive",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/me/inbox/mark-read",
-      "command": "bk inbox read"
+      "command": "bk inbox read",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/me/inbox/unarchive",
-      "command": "bk inbox unarchive"
+      "command": "bk inbox unarchive",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/super-admin/blob-drift",
-      "command": "bk super-admin blob-drift"
+      "command": "bk super-admin blob-drift",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/super-admin/entity-drift",
-      "command": "bk super-admin entity-drift"
+      "command": "bk super-admin entity-drift",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/super-admin/whitelist",
-      "command": "bk super-admin whitelist add"
+      "command": "bk super-admin whitelist add",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/tokens",
-      "command": "bk token create"
+      "command": "bk token create",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/upload",
-      "command": "bk upload"
+      "command": "bk upload",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/upload/blob",
-      "command": "bk upload"
+      "command": "bk upload",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces",
-      "command": "bk workspace create"
+      "command": "bk workspace create",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/apps/{app}/access",
-      "command": "bk app access grant"
+      "command": "bk app access grant",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
-      "command": "bk invite send"
+      "command": "bk invite send",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/issues",
-      "command": "bk issues issue create"
+      "command": "bk issues issue create",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/issues/{id}/attachments",
-      "command": "bk issues issue attach"
+      "command": "bk issues issue attach",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/issues/{id}/comments",
-      "command": "bk issues issue comment"
+      "command": "bk issues issue comment",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk label attach"
+      "command": "bk label attach",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/issues/{id}/watch",
-      "command": "bk issues issue watch"
+      "command": "bk issues issue watch",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/labels",
-      "command": "bk label create"
+      "command": "bk label create",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/leave",
-      "command": "bk member leave"
+      "command": "bk member leave",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/links",
-      "command": "bk link create"
+      "command": "bk link create",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/move",
-      "command": "bk issues move"
+      "command": "bk issues move",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/notes",
+      "command": "bk template note create",
+      "app": "template"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/projects",
-      "command": "bk issues project create"
+      "command": "bk issues project create",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/projects/{id}/comments",
-      "command": "bk issues project comment"
+      "command": "bk issues project comment",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/projects/{id}/members",
-      "command": "bk issues project add-member"
+      "command": "bk issues project add-member",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/projects/{id}/updates",
-      "command": "bk issues project updates add"
+      "command": "bk issues project updates add",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/tasks",
-      "command": "bk issues task create"
+      "command": "bk issues task create",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/tasks/{id}/comments",
-      "command": "bk issues task comment"
+      "command": "bk issues task comment",
+      "app": "issues"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/transfer",
-      "command": "bk workspace transfer"
+      "command": "bk workspace transfer",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/trash/empty",
-      "command": "bk trash empty"
+      "command": "bk trash empty",
+      "app": "platform"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/trash/restore",
-      "command": "bk trash restore"
+      "command": "bk trash restore",
+      "app": "platform"
     }
   ]
 }

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/guide"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +30,36 @@ type RouteEntry struct {
 	Method  string `json:"method"`
 	Path    string `json:"path"`
 	Command string `json:"command"`
+	// App is which app's surface this command belongs to: an app slug, or
+	// "platform" for the bare verbs every app shares.
+	//
+	// Added in Phase 8, when a second app made parity a PER-APP question. Before
+	// it, "the CLI claims a route that does not exist" could be answered against
+	// one app's app/api/** tree. With two, `bk _template note list` legitimately
+	// claims a route that exists only in apps/_template, and checking it against
+	// apps/issues would report drift that is not drift — or, worse, be silenced
+	// by an exclusion and stop checking anything.
+	App string `json:"app"`
+}
+
+// appForCommand decides which app a command path belongs to.
+//
+// The authority is the GUIDE's section list, not a hardcoded slice here: the
+// topics directory is already the list of apps (guide.AppSections()), and one
+// list that two things read cannot disagree with itself. A new app that adds its
+// guide topics gets correct route attribution for free; one that does not is
+// already failing the guide test.
+func appForCommand(path string) string {
+	fields := strings.Fields(path)
+	if len(fields) < 2 {
+		return guide.PlatformSection
+	}
+	for _, app := range guide.AppSections() {
+		if fields[1] == app {
+			return app
+		}
+	}
+	return guide.PlatformSection
 }
 
 // newRoutesCmd is the hidden `bk __routes`: it walks the command tree and prints
@@ -119,6 +150,7 @@ func CollectRoutes(root *cobra.Command) ([]RouteEntry, []string) {
 						Method:  strings.ToUpper(fields[0]),
 						Path:    fields[1],
 						Command: c.CommandPath(),
+						App:     appForCommand(c.CommandPath()),
 					}
 					seen[e.Method+" "+e.Path] = e
 				}

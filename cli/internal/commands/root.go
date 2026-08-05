@@ -8,6 +8,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/issues"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/template"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -113,6 +114,7 @@ func NewRoot() *cobra.Command {
 	// One entry per app. Adding an app is adding a line here plus its package —
 	// which is the whole point of the migration.
 	root.AddCommand(issues.NewGroup())
+	root.AddCommand(template.NewCmd())
 
 	// …and the pre-1.10.0 spellings, still working. Registered before
 	// rejectUnknownSubcommands so the groups get their RunE, and deprecated
