@@ -60,9 +60,15 @@ createdb extracted
 psql -d extracted -v ON_ERROR_STOP=1 -f extracted.sql     # must exit 0
 ```
 
-Include `drizzle` — that is the migration ledger. Without it the new deployment
-has no idea which migrations have run and `drizzle-kit migrate` will try to apply
-all forty from scratch.
+**Include `drizzle`, and here is why** — it is the detail nobody thinks of until
+it has already happened. `drizzle.__drizzle_migrations` is the ledger of which
+migrations have run. Omit it and the extracted database restores fine, then the
+new deployment's first `drizzle-kit migrate` finds an EMPTY ledger against a
+FULLY POPULATED database and attempts all forty migrations from scratch —
+`CREATE TABLE` on tables that exist, `ALTER TABLE … SET SCHEMA` on tables already
+moved, a `NOT NULL` tightening that has already been applied. Some fail, some
+succeed, and the order decides which. It is the single most destructive way to
+begin operating an extracted copy.
 
 Rehearsed result, into a plain `postgres:17` container with no Neon involved:
 
@@ -125,10 +131,16 @@ this dataset; the restore takes seconds.
 3. **Test-registry contamination.** The rehearsal branch had a throwaway `sales`
    row in `platform.apps` from the `docs/adding-an-app.md` walk, and it came
    along in the dump — failing one access test in the extracted copy until it was
-   removed. Real extractions inherit the same problem in reverse: **decide what
-   to do with the OTHER apps' rows in `platform.apps`, `workspace_apps` and
-   `app_access` before you hand the database over.** They are not the extracted
-   app's data, and some of them are other customers' names.
+   removed.
+
+   That is the trivial version of a question this document **deliberately does
+   not answer**: a full `platform` dump carries every app's rows in
+   `platform.apps`, `workspace_apps` and `app_access`, and `platform.users`
+   carries every user of every app. Some of those are other customers' names.
+   **That is a data-protection question, not a schema question**, and the right
+   answer depends on the counterparty, the contract and the jurisdiction —
+   none of which a rehearsal has. Whoever does a real extraction owns it. Raise
+   it before the dump, not after.
 
 ### What an extraction still owes
 

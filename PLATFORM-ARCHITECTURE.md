@@ -155,8 +155,18 @@ moment you open it, and in code it reads `issues.issues` vs `sales.deals`.
 
 Enforce it with **per-app Postgres roles and grants**, not code review. The
 `sales` role has no `SELECT` on `issues.*`. That makes the boundary a database
-guarantee and keeps `pg_dump --schema=sales` a working extraction path from day
-one — which is our answer to "what if we sell one of these later".
+guarantee, and it keeps an app extractable — which is our answer to "what if we
+sell one of these later".
+
+> **Corrected 2026-08-05, after rehearsing it.** An earlier version of this
+> paragraph said per-schema isolation "keeps `pg_dump --schema=sales` a working
+> extraction path from day one". **It does not, and the failure is silent.**
+> The dump emits the app's triggers and all 22 foreign keys into `platform`;
+> every one of them fails at restore, and `psql` exits **0** regardless. The
+> result boots, serves content, and has quietly lost referential integrity and
+> all blob-index maintenance. An extraction dumps `platform` + the app's schema
+> + `drizzle` (the migration ledger, or the new deployment re-runs every
+> migration). Procedure: [`docs/extracting-an-app.md`](docs/extracting-an-app.md).
 
 ### 4.4 One workspace record, shared by every app
 
@@ -510,8 +520,10 @@ everything.
 
 - **Sell the suite as one product:** the monorepo is strictly better.
 - **Extract one app:** per-schema isolation plus its own Vercel project makes
-  this "split the repo, `pg_dump --schema=sales`, vendor the `platform-*`
-  packages" — weeks, not a rewrite.
+  this "split the repo, dump `platform` + the app's schema + `drizzle`, vendor
+  the `platform-*` packages" — weeks, not a rewrite. **Not**
+  `pg_dump --schema=<app>`; see the callout above and
+  [`docs/extracting-an-app.md`](docs/extracting-an-app.md).
 
 Full separation would not make that extraction meaningfully cheaper. It would
 just charge a certain, daily, N× duplication tax to hedge an uncertain,
