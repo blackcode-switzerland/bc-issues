@@ -45,6 +45,12 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 				return err
 			}
 
+			// Re-learn the app address book (D-1). `bk meta` is the command every
+			// agent runs first and the one every routing failure's hint points
+			// at, so it is where the registry becomes current — and the reason a
+			// stale address is always one documented command from being fixed.
+			refreshRegistry(cmd, cfg, meta, c.BaseURL)
+
 			// Machine formats print the server's payload verbatim, so every
 			// dynamic block it carries (limits, media, cli, vocabulary, and
 			// anything added later) reaches the agent without a CLI release.
@@ -55,6 +61,18 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 				if err := json.Unmarshal(meta.Raw, &passthrough); err == nil {
 					payload = passthrough
 				}
+			}
+
+			// The `routing` block is LOCAL state merged into the server's
+			// payload: which server each verb tier will reach next. The server
+			// cannot see it, and an agent that cannot see it either has to
+			// discover a wrong-host answer by running into one.
+			//
+			// MERGED into the passthrough map, never replacing it, so the
+			// "machine formats print the server's payload verbatim" property
+			// above still holds for everything the server sent.
+			if m, ok := payload.(map[string]any); ok {
+				m["routing"] = buildRoutingBlock(cfg)
 			}
 
 			return output.Render(format, payload, func(w io.Writer) error {

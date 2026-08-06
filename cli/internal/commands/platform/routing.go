@@ -126,7 +126,7 @@ func buildRoutingBlock(cfg *config.Config) routingBlock {
 			"app_owned": "app_servers[<app>] — `bk <app> …` always resolves through the map, never falls back",
 		},
 		Note: "local to this machine (~/.config/bk/config.json); refreshed by `bk login` and `bk meta`, " +
-			"switched by `bk app use <slug>`, overridden for one command by `--app <slug>`",
+			"switched by `bk app use <slug>`, overridden for one command by `--app-server <slug>`",
 	}
 }
 
