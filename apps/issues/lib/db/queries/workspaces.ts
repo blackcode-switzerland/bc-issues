@@ -24,6 +24,7 @@ import {
 } from '../schema'
 import {
   accessibleWorkspaceIds,
+  getWorkspaceById as platformGetWorkspaceById,
   getWorkspaceForUser as platformGetWorkspaceForUser,
   listMyWorkspaces as platformListMyWorkspaces,
   listWorkspaceMembers as platformListWorkspaceMembers,
@@ -62,9 +63,10 @@ export function getWorkspaceForUser(
   return platformGetWorkspaceForUser(db, slugOrId, userId)
 }
 
-export async function getWorkspaceById(id: number): Promise<Workspace | null> {
-  const rows = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1)
-  return rows[0] ?? null
+// Moved to @blackcode/platform-db on 2026-08-06 with /api/upload, which resolves
+// the uploader's active workspace through it. One SELECT on platform.workspaces.
+export function getWorkspaceById(id: number): Promise<Workspace | null> {
+  return platformGetWorkspaceById(db, id)
 }
 
 /**

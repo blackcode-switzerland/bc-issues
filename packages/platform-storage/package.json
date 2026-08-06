@@ -12,7 +12,9 @@
     "./paths": "./src/paths.ts",
     "./references": "./src/references.ts",
     "./gc": "./src/gc.ts",
-    "./uploads": "./src/uploads.ts"
+    "./uploads": "./src/uploads.ts",
+    "./limits": "./src/limits.ts",
+    "./attribution": "./src/attribution.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

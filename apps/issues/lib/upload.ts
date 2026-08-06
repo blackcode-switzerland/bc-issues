@@ -1,4 +1,4 @@
-// Shared client helper for uploading a file.
+// Shared CLIENT helper for uploading a file.
 //
 // Two paths, chosen by what the server supports (memoized via GET /api/upload):
 //   - Blob configured (production): upload **client-direct** to Vercel Blob via
@@ -7,20 +7,29 @@
 //   - No Blob (local dev): POST multipart to /api/upload, which stores under
 //     public/uploads.
 //
-// Single source of truth for the size cap (also imported by the API routes) and
-// the only place a failed upload becomes a human-readable error.
+// The only place a failed upload becomes a human-readable error.
+//
+// THE CAPS ARE NO LONGER DECLARED HERE. They moved to
+// `@blackcode/platform-storage/limits` on 2026-08-06 with the upload routes
+// themselves: there is one Blob store, so a size cap and a blocked content type
+// are properties of the store rather than of the app that POSTed the bytes, and
+// a second app needs both unchanged. Re-exported so every `@/lib/upload` import
+// — including `lib/agent-meta.ts`, which serves them to `bk meta` — is
+// untouched.
+//
+// The import is the `/limits` SUBPATH, not the package root, and that matters
+// here specifically: this module runs in the BROWSER. The root barrel pulls in
+// the Drizzle ledger and @vercel/blob's server half.
 
 import { upload } from '@vercel/blob/client'
 import { blobPathname } from '@blackcode/platform-storage/paths'
+import {
+  BLOCKED_UPLOAD_MIME_TYPES,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_LABEL,
+} from '@blackcode/platform-storage/limits'
 
-export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-export const MAX_UPLOAD_LABEL = '100MB'
-
-// MIME types POST /api/upload refuses (400 file_type_not_allowed). SVG is
-// blocked because it can carry script. Everything else is accepted. Served live
-// as `media.blocked_mime_types` by GET /api/meta so the CLI guide never has to
-// hardcode the list — see lib/limits.ts.
-export const BLOCKED_UPLOAD_MIME_TYPES = ['image/svg+xml'] as const
+export { BLOCKED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL }
 
 // What the server told us about uploading: whether Blob is configured, and
 // where this caller's files belong in the store. Memoized for the session — the

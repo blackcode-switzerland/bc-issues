@@ -17,13 +17,16 @@
     "@blackcode/platform-agent": "*",
     "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",
+    "@blackcode/platform-storage": "*",
+    "@vercel/blob": "^0.23.4",
     "drizzle-orm": "^0.45.2",
     "next": "^16.1.4"
   },
   "devDependencies": {
-    "typescript": "^5.6.2",
-    "@typescript-eslint/parser": "^8.0.0",
+    "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "eslint": "^8.57.0"
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.6.2"
   }
 }

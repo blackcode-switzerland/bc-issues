@@ -54,6 +54,7 @@ export { activeWorkspaceRoute, meRoute, pendingInvitationsRoute } from './me'
 export { searchRoute } from './search'
 export { clientErrorsRoute, statusRoute } from './telemetry'
 export { tokensRoute, tokenRoute } from './tokens'
+export { uploadRoute, uploadBlobRoute } from './upload'
 export { usersRoute } from './users'
 export {
   inviteCandidatesRoute,

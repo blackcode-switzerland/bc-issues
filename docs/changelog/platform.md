@@ -30,6 +30,42 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — A file belongs to the app you uploaded it THROUGH
+
+**Nothing changed about how you upload.** `POST /api/upload` and the
+client-direct `/api/upload/blob` handshake take the same inputs, enforce the same
+100MB cap and the same blocked content types, and return the same bodies.
+
+**What is now guaranteed rather than incidental:** an upload is attributed to the
+app whose origin served the request — in *both* places that record it.
+
+| | what it is | set from |
+|---|---|---|
+| `platform.uploads.app` | who owns the file. The cross-app delete gate reads this to decide whose reference scan must answer for it | the serving app |
+| the blob pathname prefix | `<app>/<workspace>/<file>` — where the bytes physically are | the serving app |
+
+**If you are looking at a document filed under the wrong app, this is why.** A
+sales file uploaded through `issues.blackcode.ch` is an issues file, in the
+issues folder, permanently — nothing moves a blob afterwards, and `pathname` is a
+historical fact rather than something derived from `app`. Upload through the
+origin that owns the content: `bk upload --server https://sales.blackcode.ch`,
+or just the deployment you are working in.
+
+Both upload routes are now served from one shared implementation that takes its
+identity from the app mounting it, which is what lets a second deployment serve
+its own `/api/upload` instead of 404ing on it. Until a second app is deployed,
+the only origin serving these is the issues one, exactly as before.
+
+**One wording change, non-breaking:** the client-direct handshake rejected SVG
+with `SVG files are not allowed for security reasons`; it now names the type it
+refused (`image/svg+xml files are not allowed for security reasons`) and reads
+the blocked list from the same place `GET /api/meta` serves it as
+`media.blocked_mime_types`. The multipart route's `file_type_not_allowed` error
+code and status are unchanged, and the set of refused types is identical. It had
+been a second, hand-typed copy of that list; adding a type to the blocklist would
+previously have taken effect on one of the two upload paths and not the other.
+
+
 ## 2026-08-06 — **SECURITY:** a password reset now invalidates token creation too
 
 **What changed.** `GET/POST /api/tokens` and `DELETE /api/tokens/{id}` now reject

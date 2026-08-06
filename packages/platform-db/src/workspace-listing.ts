@@ -94,6 +94,22 @@ export async function getWorkspaceForUser(
   return { ...rows[0].ws, member_role: rows[0].role as 'owner' | 'member' }
 }
 
+/**
+ * One workspace by id, with NO membership check.
+ *
+ * Narrow in who may call it, for the same reason `getWorkspaceBySlug` is: an
+ * unchecked lookup that reached a route would let the API confirm which
+ * workspaces exist. The caller here is upload attribution, which is resolving a
+ * workspace id the user record already carries (`active_workspace_id`) — an id
+ * they were given by having been a member, not one they supplied.
+ *
+ * Moved out of `apps/issues` on 2026-08-06 with `/api/upload`.
+ */
+export async function getWorkspaceById(db: PlatformDb, id: number): Promise<Workspace | null> {
+  const rows = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1)
+  return rows[0] ?? null
+}
+
 /** Remember which workspace this user was last in. Null clears it. */
 export async function setActiveWorkspace(
   db: PlatformDb,
