@@ -46,6 +46,8 @@
 // matches nothing, so the route would work while silently dropping out of the
 // coverage check. A guard that stops seeing a route reports green.
 
+export { activityRoute, publicEventIds } from './activity'
+export type { ActivityContribution } from './activity'
 export { changelogRoute } from './changelog'
 export { linksRoute } from './links'
 export { activeWorkspaceRoute, meRoute, pendingInvitationsRoute } from './me'

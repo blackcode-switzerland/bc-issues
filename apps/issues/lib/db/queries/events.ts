@@ -11,6 +11,12 @@ import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { events, users, issues, tasks, projects, type Event, type NewEvent } from '../schema'
 import { fanOutEvent } from './fanout'
+import {
+  listEvents as platformListEvents,
+  type EventsPage,
+  type EventListItem,
+  type ListEventsFilter as PlatformListEventsFilter,
+} from '@blackcode/platform-db'
 import { resolveSubjectUrn } from './entities'
 import { APP_SLUG } from '@/lib/app'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
@@ -204,68 +210,20 @@ export interface ListEventsFilter {
   limit?: number // default 50, max 200
 }
 
-export interface EventListItem extends Event {
-  actor_name: string | null
-  actor_email: string | null
-}
-
-export interface EventsPage {
-  data: EventListItem[]
-  next_cursor: number | null
-}
+// Aliased, not redeclared: the shapes are the platform ones now, and two
+// identical declarations are two things to keep in step.
+export type { EventListItem, EventsPage }
 
 const DEFAULT_LIMIT = PAGE_SIZE_DEFAULT
 const MAX_LIMIT = PAGE_SIZE_MAX
 
-export async function listEvents(filter: ListEventsFilter): Promise<EventsPage> {
-  const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
-
-  const wheres = [eq(events.workspace_id, filter.workspaceId)]
-  if (filter.actorUserIds && filter.actorUserIds.length > 0) {
-    wheres.push(inArray(events.actor_user_id, filter.actorUserIds))
-  }
-  if (filter.entityTypes && filter.entityTypes.length > 0) {
-    wheres.push(inArray(events.entity_type, filter.entityTypes))
-  }
-  if (filter.actions && filter.actions.length > 0) {
-    wheres.push(inArray(events.action, filter.actions))
-  }
-  if (filter.apps && filter.apps.length > 0) {
-    wheres.push(inArray(events.app, filter.apps))
-  }
-  if (filter.subjectUrn) {
-    wheres.push(eq(events.subject_urn, filter.subjectUrn))
-  }
-  if (filter.fromOccurredAt) {
-    wheres.push(gte(events.occurred_at, filter.fromOccurredAt))
-  }
-  if (filter.toOccurredAt) {
-    wheres.push(lte(events.occurred_at, filter.toOccurredAt))
-  }
-  if (filter.cursor) {
-    wheres.push(lt(events.id, filter.cursor))
-  }
-
-  const rows = await db
-    .select({
-      e: events,
-      actor_name: users.name,
-      actor_email: users.email,
-    })
-    .from(events)
-    .leftJoin(users, eq(users.id, events.actor_user_id))
-    .where(and(...wheres))
-    .orderBy(desc(events.id))
-    .limit(limit + 1)
-
-  const hasMore = rows.length > limit
-  const data = rows.slice(0, limit).map((r) => ({
-    ...r.e,
-    actor_name: r.actor_name,
-    actor_email: r.actor_email,
-  }))
-  const next_cursor = hasMore ? data[data.length - 1].id : null
-  return { data, next_cursor }
+// Moved to @blackcode/platform-db on 2026-08-06 with
+// GET /api/workspaces/{ws}/activity, now a Class-B shared factory
+// (docs/sales-app-plan.md D-22). It reads platform.events + platform.users and
+// nothing else. WRITING an event — recordEvent below — did not move: it resolves
+// a subject URN from this app's tables and fans out through this app's rules.
+export function listEvents(filter: ListEventsFilter): Promise<EventsPage> {
+  return platformListEvents(db, filter as PlatformListEventsFilter)
 }
 
 // Resolve the workspace #number (seq) for the issue/task/project entities a page

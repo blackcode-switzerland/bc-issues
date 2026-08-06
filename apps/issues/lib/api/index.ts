@@ -26,7 +26,6 @@ export {
   publicComment,
   publicAttachment,
   publicProjectUpdate,
-  publicEvent,
 } from './serialize'
 export { parseAnalyticsParams } from './analytics-params'
 export type { ParsedAnalyticsParams } from './analytics-params'

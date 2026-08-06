@@ -1,0 +1,254 @@
+// GET /api/workspaces/{ws}/activity — the workspace activity feed.
+//
+// ---------------------------------------------------------------------------
+// THE FIRST CLASS-B FACTORY (D-22)
+// ---------------------------------------------------------------------------
+// This route is 90% platform and 10% not, and the 10% is the interesting part.
+// `platform.events` holds every app's events, so the query, the filters and the
+// envelope are shared — but an event's `entity_id` is an INTERNAL ROW ID, and
+// the API must never expose one. For an app's own entities it has to be swapped
+// for the workspace #number, which means reading that app's tables. This package
+// cannot do that and must not try.
+//
+// So the factory takes a SECOND ARGUMENT: a named, typed contribution from the
+// app. Not a field on `AppContext` — AppContext is what every app supplies for
+// every route, and a field two routes read is a tax every future app pays to
+// mount neither of them. A second argument is explicit, local, and costs nothing
+// to an app that does not mount this route.
+//
+//     export const GET = activityRoute(appContext, {
+//       entityTypes: [...],
+//       actions: [...],
+//       numberedEntityTypes: ['issue', 'task', 'project'],
+//       resolveEntitySeqs,
+//     })
+//
+// An app that contributes nothing still gets a working feed of the platform
+// events — workspace, membership, invitations, app access.
+
+import { NextRequest, NextResponse } from 'next/server'
+import { listEvents } from '@blackcode/platform-db'
+import type { AppContext } from '../app-context'
+import { Errors } from '../errors'
+import { createApiHandler, createResolveWorkspace } from '../handler'
+
+interface Params {
+  params: Promise<{ ws: string }>
+}
+
+/**
+ * The entity types and actions that exist for EVERY app, because the platform
+ * records them: workspaces, membership, invitations, and per-app access.
+ *
+ * An app's own nouns and verbs arrive in the contribution. Keeping the two lists
+ * separate is what stops one app's vocabulary leaking into another's filter
+ * validation.
+ */
+const PLATFORM_ENTITY_TYPES = [
+  'workspace',
+  'workspace_member',
+  'workspace_app',
+  'invitation',
+] as const
+
+const PLATFORM_ACTIONS = [
+  'created',
+  'updated',
+  'deleted',
+  'ownership_transferred',
+  'member_added',
+  'member_removed',
+  'member_left',
+  'app_enabled',
+  'app_disabled',
+  'app_default_access_changed',
+  'app_access_granted',
+  'app_access_revoked',
+  'invitation_created',
+  'invitation_revoked',
+  'invitation_accepted',
+  'invitation_declined',
+] as const
+
+export interface ActivityContribution {
+  /** This app's own entity types, beyond the platform ones above. */
+  entityTypes?: readonly string[]
+  /** This app's own actions, beyond the platform ones above. */
+  actions?: readonly string[]
+  /**
+   * Entity types whose `entity_id` is an internal row id that MUST be replaced
+   * by the workspace #number before it leaves the server.
+   *
+   * Separate from `entityTypes` on purpose. A type listed here but missing from
+   * `resolveEntitySeqs`' answer — a purged row — has its id replaced with
+   * `meta.seq` or null, never passed through. A type NOT listed here keeps its
+   * own-domain id, which is correct for comments and labels. Getting this list
+   * wrong is how an internal serial reaches an agent, and once it does it ends
+   * up in a script and becomes a contract.
+   */
+  numberedEntityTypes?: readonly string[]
+  /**
+   * `${entity_type}:${entity_id}` → workspace #number, for the rows on this page.
+   * Only the app can answer this: it means reading the app's own tables.
+   */
+  resolveEntitySeqs(
+    rows: Array<{ entity_type: string; entity_id: number }>
+  ): Promise<Map<string, number>>
+}
+
+type EventRow = Record<string, unknown>
+
+/**
+ * Expose `entity_id` as the #number for the app's numbered entities.
+ *
+ * Exported because it IS the wire contract — `apps/issues` pins it against a
+ * frozen copy of the pre-extraction implementation
+ * (`lib/api/activity-serialization.test.ts`), which is the only thing standing
+ * between a serializer move and a silently changed response field.
+ *
+ * The fallback chain is load-bearing and unchanged from the pre-extraction
+ * version: the seq map first, then the event's own `meta.seq` (recorded at write
+ * time, so it survives the row being purged), then null. Never the raw id.
+ */
+export function publicEventIds(
+  row: EventRow,
+  seqMap: Map<string, number>,
+  numbered: ReadonlySet<string>
+): EventRow {
+  const type = row.entity_type as string
+  const eid = row.entity_id as number | null
+  if (numbered.has(type) && eid != null) {
+    const meta = row.meta as { seq?: number } | null
+    return { ...row, entity_id: seqMap.get(`${type}:${eid}`) ?? meta?.seq ?? null }
+  }
+  return row
+}
+
+function parseList(raw: string | null, allowed: ReadonlySet<string>): string[] | undefined {
+  if (!raw) return undefined
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  // Undefined for an unrecognised value, which DROPS the filter. That is the
+  // pre-existing behaviour and it is not great — Phase 4's app_* actions were
+  // missing from the allow-list for months, so `?action=app_access_granted`
+  // silently returned the whole feed. Kept identical here because this is a
+  // move; the allow-lists themselves are now assembled from the platform set
+  // plus the app's, which is what stopped that particular hole recurring.
+  for (const p of parts) {
+    if (!allowed.has(p)) return undefined
+  }
+  return parts
+}
+
+function parseDate(raw: string | null): Date | undefined {
+  if (!raw) return undefined
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? undefined : d
+}
+
+function parseCsv(raw: string | null): string[] | undefined {
+  if (!raw) return undefined
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return parts.length > 0 ? parts : undefined
+}
+
+// A relative window: <number><m|h|d>. Deliberately not a general date parser —
+// `from` already takes an absolute timestamp, and a lenient parser here would
+// turn a typo into a silently wrong window rather than a 400.
+const DURATION_RE = /^(\d+)\s*(m|h|d)$/i
+const DURATION_MS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 }
+
+function parseDuration(raw: string): number | null {
+  const m = DURATION_RE.exec(raw.trim())
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n * DURATION_MS[m[2].toLowerCase()]
+}
+
+function parseInts(raw: string | null): number[] | undefined {
+  if (!raw) return undefined
+  const out: number[] = []
+  for (const p of raw.split(',').map((s) => s.trim())) {
+    const n = parseInt(p)
+    if (!Number.isNaN(n)) out.push(n)
+  }
+  return out.length > 0 ? out : undefined
+}
+
+export function activityRoute(app: AppContext, contribution: ActivityContribution) {
+  const apiHandler = createApiHandler(app)
+  const resolveWorkspace = createResolveWorkspace(app)
+
+  const entityTypes = new Set<string>([
+    ...PLATFORM_ENTITY_TYPES,
+    ...(contribution.entityTypes ?? []),
+  ])
+  const actions = new Set<string>([...PLATFORM_ACTIONS, ...(contribution.actions ?? [])])
+  const numbered = new Set<string>(contribution.numberedEntityTypes ?? [])
+
+  return apiHandler(async (req: NextRequest, { params }: Params) => {
+    const { ws } = await params
+    const ctx = await resolveWorkspace(req, ws)
+
+    const sp = req.nextUrl.searchParams
+    const cursor = sp.get('cursor') ? parseInt(sp.get('cursor')!) : null
+    if (cursor !== null && Number.isNaN(cursor)) {
+      throw Errors.badRequest('invalid_cursor', 'cursor must be an integer')
+    }
+    const limit = sp.get('limit') ? parseInt(sp.get('limit')!) : undefined
+    if (limit !== undefined && (Number.isNaN(limit) || limit < 1)) {
+      throw Errors.badRequest('invalid_limit', 'limit must be a positive integer')
+    }
+
+    // `since` is a relative window (24h, 7d, 90m) — the shape `bk activity --since`
+    // takes. It resolves to the same `from` filter; passing both is a caller error
+    // rather than a silent precedence rule nobody would guess.
+    const sinceRaw = sp.get('since')
+    if (sinceRaw && sp.get('from')) {
+      throw Errors.badRequest(
+        'since_and_from',
+        'pass either since or from, not both',
+        'since is a relative window (24h); from is an absolute timestamp'
+      )
+    }
+    let fromOccurredAt = parseDate(sp.get('from'))
+    if (sinceRaw) {
+      const ms = parseDuration(sinceRaw)
+      if (ms === null) {
+        throw Errors.badRequest(
+          'invalid_since',
+          `since must be a duration like 30m, 24h or 7d — got ${sinceRaw}`,
+          'use m (minutes), h (hours) or d (days)'
+        )
+      }
+      fromOccurredAt = new Date(Date.now() - ms)
+    }
+
+    const page = await listEvents(app.db, {
+      workspaceId: ctx.workspace.id,
+      actorUserIds: parseInts(sp.get('actor')),
+      entityTypes: parseList(sp.get('entity_type'), entityTypes),
+      actions: parseList(sp.get('action'), actions),
+      apps: parseCsv(sp.get('app')),
+      subjectUrn: sp.get('subject_urn') ?? undefined,
+      fromOccurredAt,
+      toOccurredAt: parseDate(sp.get('to')),
+      cursor,
+      limit,
+    })
+
+    const seqMap = await contribution.resolveEntitySeqs(
+      page.data as unknown as Array<{ entity_type: string; entity_id: number }>
+    )
+    return NextResponse.json({
+      data: (page.data as unknown as EventRow[]).map((e) => publicEventIds(e, seqMap, numbered)),
+      next_cursor: page.next_cursor,
+    })
+  })
+}
