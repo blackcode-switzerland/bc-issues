@@ -154,13 +154,13 @@ empty link text is auto-filled from the filename. **Paths with spaces or
 parentheses must be angle-bracketed** — `[](</abs/my file (2).mp4>)` — because
 plain Markdown stops the link destination at the first `)`.
 
-Need just a url (e.g. for scripting)? `bk upload`:
+Need just a url (e.g. for scripting)? `bk <app> upload`:
 
 ```sh
-URL=$(./bk upload ./diagram.png --json | jq -r '.[0].url')
+URL=$(./bk issues upload ./diagram.png --json | jq -r '.[0].url')
 ```
 
-`bk upload` and the local-path method create **no** sidebar attachment record.
+`bk <app> upload` and the local-path method create **no** sidebar attachment record.
 `bk issue attach` is the opposite: it adds a file to the issue's **attachments
 list** (sidebar), not the body.
 
@@ -233,7 +233,7 @@ bk issue edit <id> [--title T] [--description D | --description-file F]
 
 bk issue assign <id> <user>        set assignee (id, email, name, or me)
 bk issue unassign <id>             clear assignee
-bk issue delete <id> [--yes]       move to Trash (restore with `bk trash`)
+bk issue delete <id> [--yes]       move to Trash (restore with `bk <app> trash`)
 
 bk issue comment <id> --body "..." | --body-file F | --body -
                       [--reply-to COMMENT_ID]   threaded reply
@@ -268,14 +268,16 @@ Deleting an issue, project, or task moves it to the Trash instead of
 removing it permanently. Restore items individually, in bulk, or as a delete
 group. Purging (permanent delete) is **owner-only**.
 
+**App-owned since 2.1.0** — each app has its own bin, so the app names itself.
+
 ```
-bk trash list [--type issue|project|task]
-bk trash restore <type:id>...        e.g. bk trash restore issue:42 project:3
-bk trash restore --batch <id>        restore a whole delete group
+bk <app> trash list [--type ...]
+bk <app> trash restore <type:#number>...   e.g. bk issues trash restore issue:42
+bk <app> trash restore --batch <id>        restore a whole delete group
       [--restore-parents | --standalone]   force how dangling parents resolve
-bk trash purge <type:id>... [--yes]  permanent delete (owner only)
-bk trash purge --batch <id> [--yes]
-bk trash empty [--yes]               permanently delete everything (owner only)
+bk <app> trash purge <type:#number>... [--yes]  permanent delete (owner only)
+bk <app> trash purge --batch <id> [--yes]
+bk <app> trash empty [--yes]               permanently delete everything (owner only)
 ```
 
 When a project/task is deleted with `--cascade`, its attached issues (and
@@ -286,13 +288,15 @@ item's parent is itself still in the Trash, the items it was deleted *with*
 restore as a group; items deleted alone restore standalone — override per item in
 the UI, or force it CLI-wide with `--restore-parents` / `--standalone`.
 
-### Labels (workspace-scoped)
+### Labels (workspace-scoped, app-owned since 2.1.0)
 ```
-bk label list
-bk label create --name N [--color #rrggbb] [--description D]
-bk label delete <id>
-bk label attach <issue-id> <label-id>
-bk label detach <issue-id> <label-id>
+bk <app> label list
+bk <app> label view <id>
+bk <app> label create --name N [--color #rrggbb] [--description D]
+bk <app> label edit <id> [--name N] [--color #rrggbb] [--description D]
+bk <app> label delete <id>
+bk issues label attach <issue-id> <label-id>     # attach/detach name an entity,
+bk issues label detach <issue-id> <label-id>     # so they are per-app
 ```
 
 ### Members (workspace-scoped)
@@ -325,10 +329,12 @@ bk user list                       list every user on the server
 bk user view <id|email>            show one user (filtered client-side)
 ```
 
-### Files
+### Files (app-owned since 2.1.0)
 ```
-bk upload <file> [<file> ...]   upload file(s), print url(s) (no sidebar record)
+bk <app> upload <file> [<file> ...]   upload file(s), print url(s) (no sidebar record)
 ```
+The app segment decides which app the file is filed under — there is no bare
+spelling and no default.
 
 ### Activity / Analytics / Undo
 ```
@@ -391,7 +397,7 @@ return every matching item in one response — no pagination. `bk issue list`
 includes a server-side `total` in `--json` / `--yaml` output.
 
 Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`,
-`bk trash list`, and `bk super-admin errors list`. Their envelope is
+`bk issues trash list`, and `bk super-admin errors list`. Their envelope is
 `{ "data": [...], "next_cursor": <id|null> }`, and in table output the next
 cursor is printed to stderr as `next page: --cursor=X` when more rows remain.
 

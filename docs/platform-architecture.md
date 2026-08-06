@@ -399,26 +399,51 @@ agent landing anywhere in this repo must be able to tell **which app they are in
 without tracing imports. Sharing is opt-in via `packages/platform-*`; everything
 else is app-local and visibly so.
 
-### 7.1 CLI — app name is always the first segment
+### 7.1 CLI — three verb tiers, and the tier is visible in the spelling
 
-`bk <app> <noun> <verb>` for app commands; bare verbs are platform-only. This is
-redundant-looking on purpose: `bk sales deal create` tells you the app, and
+Rewritten 2026-08-06 (D-11). The old rule was "app nouns are namespaced, platform
+verbs are bare". That was correct with one app and wrong with two, because it
+sorted verbs by *who implements them* rather than by *whether two deployments
+would answer differently*.
+
+| Tier | Verbs | Spelling | Rule |
+|---|---|---|---|
+| **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare | Identity and org data. No app owns a person or a membership, so no app can be the wrong one to ask |
+| **Cross-app** | `search` `activity` `link` | bare | Spans every app *by design*; results are tagged with the app they came from. Scoping them would remove the reason they exist |
+| **App-owned** | every app noun, **plus** `upload` `storage` `trash` `label` | `bk <app> <verb>` | The data is app-attributed. An implicit default here is how a sales contract gets filed under issues |
+
+`bk sales deal create` is redundant-looking on purpose: it tells you the app, and
 `bk deal create` does not. It also removes noun collisions before they happen
-(every app will eventually want `report`, `note`, `status`).
+(every app will eventually want `report`, `note`, `status`). **Why a namespace
+and not a `--app` flag:** a flag can be forgotten and has a default; a namespace
+cannot be forgotten, because there is no bare form to type.
 
-- `bk --help` lists platform verbs, then one line per app.
-- `bk issues --help` lists only that app's nouns.
+- `bk --help` lists the three tiers, then one line per app.
+- `bk issues --help` lists that app's nouns and its four app-owned verbs.
 - `bk guide`, `bk meta`, `bk changelog` all take `--app <name>` to scope.
+- `bk guide platform/apps` is the agent-facing statement of all of this.
 
 Code follows the same shape: `cli/internal/commands/<app>/`, one Go package per
 app, and **no cross-imports between them** (`boundaries_test.go`). Anything two
-need goes in `cmdutil`.
+need goes in `cmdutil` or, for whole command trees two apps mount,
+`cli/internal/appverbs` — both outside `internal/commands/` for the same reason.
 
-The pre-1.10.0 un-namespaced spellings (`bk issue …`) were **removed in 1.12.0**.
-They now exit non-zero and name their replacement, via
-`cli/internal/commands/deprecations.go`. That table is the recovery path for a
-stale script, and its entries outlive the thing they replace by one release on
-purpose.
+**The split inside an app-owned verb matters.** `appverbs` holds only the
+app-agnostic half (label CRUD, the bin, the file cabinet). Anything naming an
+app's entities — `bk issues label attach <issue>`, `bk issues storage
+attachments` — is built in that app's package and added to the group. That is
+what keeps parity honest: `bk __routes` tags the claim with the app that serves
+the route, and a shared implementation of `label attach` would make every app
+claim an issues route.
+
+Pre-namespace spellings exit non-zero and name their replacement, via
+`cli/internal/commands/deprecations.go`: `bk issue …` (removed 1.12.0) and
+`bk upload|storage|trash|label` (moved 2.1.0, no alias — an alias would have to
+pick an app silently). That table is the recovery path for a stale script, and
+its entries outlive the thing they replace by one release on purpose. The
+end-to-end half of that guarantee is `cli/cmd/bk/main_test.go`, which runs the
+real command tree: the table alone is reachable only through `hintFor()`, and a
+test of the table cannot see `hintFor()` dropping it.
 
 ### 7.2 Guide — one folder per app
 

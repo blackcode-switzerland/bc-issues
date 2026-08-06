@@ -33,8 +33,16 @@ What the migration bought:
 - Apps are real data: `platform.apps`, `workspace_apps`, `app_access`. Workspace
   listings are app-scoped and `resolveWorkspace` enforces access behind
   `PLATFORM_ENFORCE_APP_ACCESS`.
-- **The CLI is namespaced per app: `bk issues issue create`.** Platform verbs
-  (`workspace`, `label`, `upload`, `trash`, `search`, `link`, …) stay bare.
+- **The CLI has three verb tiers, and the tier is visible in the spelling**
+  (D-11, `bk guide platform/apps`). **Neutral** verbs stay bare because no app
+  can be the wrong one to ask (`workspace`, `member`, `invite`, `token`,
+  `profile`, `inbox`, `meta`, `login`, …). **Cross-app** verbs stay bare because
+  crossing is the point, and tag each result with its app (`search`, `activity`,
+  `link`). **App-owned** verbs sit behind the app name — that is every app noun
+  *and* `upload`, `storage`, `trash`, `label`, which moved there in 2.1.0
+  because a file, a bin and a label each belong to ONE app. The shared
+  implementation is `cli/internal/appverbs`; each app group mounts it in one
+  line and adds its own entity-specific subcommands.
 - **Everything is addressable by URN:**
   `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the #number. Every
   issue/task/project is projected into `platform.entities` **in the same

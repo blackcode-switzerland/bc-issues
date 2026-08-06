@@ -28,9 +28,13 @@ Adding an app is **`docs/adding-an-app.md`** (walked end to end). Extracting one
 is **`docs/extracting-an-app.md`** (rehearsed). The database boundary is
 **`docs/platform-db.md`**.
 
-Commands are `bk issues issue create`, not `bk issue create`. Platform verbs
-(`workspace`, `label`, `upload`, `trash`, `invite`, `search`, `link`, …) stay
-bare — they mean the same thing in every app.
+Commands come in three tiers and the spelling says which (D-11 —
+`bk guide platform/apps`). **Neutral** stays bare (`workspace`, `member`,
+`invite`, `token`, `profile`, `inbox`, `meta`, …): the same answer from any app.
+**Cross-app** stays bare and tags its results (`search`, `activity`, `link`).
+**App-owned** sits behind the app name — every app noun, plus `upload`,
+`storage`, `trash` and `label` since 2.1.0, because a file, a recycle bin and a
+label each belong to one app. Shared code: `cli/internal/appverbs`.
 
 **URNs.** `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the workspace
 #number like everything else. Every issue, task and project is mirrored into

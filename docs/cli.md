@@ -1,21 +1,38 @@
 # CLI (`bk`) — maintainer doc
 
-> **2026-08-04 — the command tree is namespaced per app** (Phase 5). Package
-> layout, and the boundary two tests enforce:
+> **2026-08-06 — the command tree has three verb tiers** (D-11; supersedes the
+> 2026-08-04 note that "platform verbs stay bare"). Package layout, and the
+> boundary the tests enforce:
 >
 > ```
 > cli/internal/commands/            root.go, aliases.go, deprecations.go, routes.go
->   commands/platform/              bare verbs — workspace, label, upload, trash, invite, …
+>   commands/platform/              tiers 1+2 — workspace, member, invite, token, search, activity, link, …
 >   commands/issues/                that app's nouns — bk issues issue|task|project|move|copy|analytics
+>                                   …plus what it adds to tier 3 (appverbs.go)
+> cli/internal/appverbs/            tier 3 — upload, storage, trash, label, built PER APP
 > cli/internal/cmdutil/             what both need: client construction, --ws/-v, flags, formatting
-> cli/internal/guide/topics/{platform,issues}/
+> cli/internal/guide/topics/{platform,issues,template}/
 > ```
+>
+> | Tier | Verbs | Spelling | Server |
+> |---|---|---|---|
+> | **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare | home |
+> | **Cross-app** | `search` `activity` `link` | bare | home (reads shared tables) |
+> | **App-owned** | app nouns, **plus** `upload` `storage` `trash` `label` | `bk <app> <verb>` | that app's |
+>
+> The tier is "would two deployments answer differently?", not "is it shared
+> code?". `upload`, `storage`, `trash` and `label` are shared code AND app-owned:
+> the implementation lives once in `internal/appverbs` and each app group mounts
+> its own copy in one line. Anything naming an app's entities (`bk issues label
+> attach <issue>`, `bk issues storage attachments`) is built in that app's
+> package and added to the group — otherwise every app would claim an issues
+> route in the parity test.
 >
 > **Command packages must not import each other**, and the platform must not
 > import any app (`commands/boundaries_test.go`). Anything two of them need goes
-> in `cmdutil`. Every pre-1.10.0 spelling is registered as a hidden alias that
-> works and warns — see `aliases.go`, and `aliases_test.go` for the table that
-> proves each one resolves to the same command.
+> in `cmdutil` or `appverbs`, both outside `internal/commands/`. Pre-namespace
+> spellings are gone; `deprecations.go` names the replacement for each, and
+> `cmd/bk/main_test.go` proves the binary actually prints it.
 
 > **Scope.** This is the **maintainer** doc: how `bk` is built, released,
 > versioned and structured internally.
@@ -181,6 +198,7 @@ cli/
 ├── internal/
 │   ├── browser/              # Cross-platform "open URL in browser"
 │   ├── client/               # HTTP client + DTO types (client.go, types.go, workspace.go)
+│   ├── appverbs/             # upload/storage/trash/label — built once per app
 │   ├── commands/             # Cobra commands (root + subcommands)
 │   ├── config/               # ~/.config/bk/config.json loader
 │   └── output/               # table / json / yaml renderer
@@ -418,7 +436,7 @@ bk issues copy --to growth --project 42 --cascade-issues=false
 | `bk issues issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
 | `bk issues issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
 | `bk issues issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
-| `bk issues issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk trash restore issue:<#number>`. |
+| `bk issues issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk issues trash restore issue:<#number>`. |
 | `bk issues issue comment <id> --body "..." \| --body - \| --body-file F [--reply-to C] [--file F ...]` | `POST /api/workspaces/:ws/issues/:id/comments` | Body or `--file` required. `--reply-to` threads under comment id C. `--file` uploads + embeds inline. |
 | `bk issues issue comments <id>` | `GET /api/workspaces/:ws/issues/:id/comments` | |
 | `bk issues issue activity <id>` | `GET /api/workspaces/:ws/issues/:id/activity` | Merged comments + change log. |
@@ -475,8 +493,8 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
    > file (2).mp4>)`. Plain Markdown stops the destination at the first `)`, so
    > `[](/a/foo(1).mp3)` would silently truncate.
 
-3. **`bk upload FILE...`** — uploads and prints just the url(s) (no sidebar
-   record), for scripting: `URL=$(bk upload ./x.png --json | jq -r '.[0].url')`,
+3. **`bk <app> upload FILE...`** — uploads and prints just the url(s) (no sidebar
+   record), for scripting: `URL=$(bk issues upload ./x.png --json | jq -r '.[0].url')`,
    then drop `![](URL)` into the body yourself.
 
 > Bodies are Markdown (or HTML), stored as sanitized HTML. **GFM tables**
@@ -503,37 +521,40 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
 
 ### Trash (recycle bin, workspace-scoped)
 
-All deletes (issues, projects, tasks) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk trash` to inspect and manage the bin.
+All deletes (issues, projects, tasks) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk <app> trash` to inspect and manage the bin. **App-owned since 2.1.0**: each app has its own bin, so the app names itself; there is no bare `bk trash`.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk trash list [--type issue\|project\|task]` | `GET /api/workspaces/:ws/trash` | Shows binned items grouped by deletion batch. |
-| `bk trash restore <type:#number> [<type:#number> …]` | `POST /api/workspaces/:ws/trash/restore` | e.g. `bk trash restore issue:42 project:3`. Refs are **#numbers** since 1.12.0 (they were row ids before — do not reuse an old one). Detects and reports conflicts. |
-| `bk trash restore --batch <id> [--restore-parents\|--standalone]` | same | Restore a whole cascade-delete group at once. |
-| `bk trash purge <type:#number> [--yes]` | `DELETE /api/workspaces/:ws/trash/purge` | Permanent hard-delete. **Owner only.** Refs are **#numbers** since 1.12.0. The wire format keeps both spellings distinct (`{type,number}` vs the legacy `{type,id}`) so a pre-1.12.0 binary is never misread — see `app/api/workspaces/[ws]/trash/parse.ts`. |
-| `bk trash purge --batch <id> [--yes]` | same | Purge a whole batch. |
-| `bk trash empty [--yes]` | `POST /api/workspaces/:ws/trash/empty` | Hard-delete everything in the bin. **Owner only.** |
+| `bk issues trash list [--type issue\|project\|task]` | `GET /api/workspaces/:ws/trash` | Shows binned items grouped by deletion batch. |
+| `bk issues trash restore <type:#number> [<type:#number> …]` | `POST /api/workspaces/:ws/trash/restore` | e.g. `bk issues trash restore issue:42 project:3`. Refs are **#numbers** since 1.12.0 (they were row ids before — do not reuse an old one). Detects and reports conflicts. |
+| `bk issues trash restore --batch <id> [--restore-parents\|--standalone]` | same | Restore a whole cascade-delete group at once. |
+| `bk issues trash purge <type:#number> [--yes]` | `DELETE /api/workspaces/:ws/trash/purge` | Permanent hard-delete. **Owner only.** Refs are **#numbers** since 1.12.0. The wire format keeps both spellings distinct (`{type,number}` vs the legacy `{type,id}`) so a pre-1.12.0 binary is never misread — see `app/api/workspaces/[ws]/trash/parse.ts`. |
+| `bk issues trash purge --batch <id> [--yes]` | same | Purge a whole batch. |
+| `bk issues trash empty [--yes]` | `POST /api/workspaces/:ws/trash/empty` | Hard-delete everything in the bin. **Owner only.** |
 
-**Automatic file cleanup.** When you permanently delete a trashed item (`bk trash
-purge` / `bk trash empty`), any files embedded in that content are automatically
+**Automatic file cleanup.** When you permanently delete a trashed item (`bk issues
+trash purge` / `bk issues trash empty`), any files embedded in that content are automatically
 removed from storage once nothing else in the workspace references them — so
 storage is freed without owner action. (Same for `bk issues issue delete-comment`.) See
 [Storage](#storage-workspace-scoped-owner-only).
 
 Restore conflict flags: `--restore-parents` (also restore the parent when a child's parent is still binned) and `--standalone` (restore the child with the parent link cleared). If neither is passed and conflicts exist, the command reports them and exits non-zero.
 
-### Labels (workspace-scoped)
+### Labels (workspace-scoped, app-owned)
 
-Operate on the active workspace; paths are `…/workspaces/{ws}/…`.
+Operate on the active workspace; paths are `…/workspaces/{ws}/…`. **App-owned
+since 2.1.0** — `bk <app> label …`. CRUD is app-agnostic and lives in
+`internal/appverbs`; `attach`/`detach` name an entity in one app and are built in
+that app's package.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk label list` | `GET /api/workspaces/:ws/labels` | |
-| `bk label view <id>` | `GET /api/workspaces/:ws/labels/:id` | |
-| `bk label create --name N [--color #rrggbb] [--description D]` | `POST /api/workspaces/:ws/labels` | `--color` defaults to `#6b7280`. |
-| `bk label delete <id>` | `DELETE /api/workspaces/:ws/labels/:id` | Removes it from all issues. |
-| `bk label attach <issue-id> <label-id>` | `POST /api/workspaces/:ws/issues/:issue/labels` | |
-| `bk label detach <issue-id> <label-id>` | `DELETE /api/workspaces/:ws/issues/:issue/labels/:label` | |
+| `bk issues label list` | `GET /api/workspaces/:ws/labels` | |
+| `bk issues label view <id>` | `GET /api/workspaces/:ws/labels/:id` | |
+| `bk issues label create --name N [--color #rrggbb] [--description D]` | `POST /api/workspaces/:ws/labels` | `--color` defaults to `#6b7280`. |
+| `bk issues label delete <id>` | `DELETE /api/workspaces/:ws/labels/:id` | Removes it from all issues. |
+| `bk issues label attach <issue-id> <label-id>` | `POST /api/workspaces/:ws/issues/:issue/labels` | |
+| `bk issues label detach <issue-id> <label-id>` | `DELETE /api/workspaces/:ws/issues/:issue/labels/:label` | |
 
 ### Members (workspace-scoped)
 
@@ -574,13 +595,22 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 | `bk user list` | `GET /api/users` | |
 | `bk user view <id\|email>` | `GET /api/users` + client-side filter | No single-user endpoint; the CLI filters the list. |
 
-### Files
+### Files (app-owned)
+
+**App-owned since 2.1.0** — `bk <app> upload …`. The receiving deployment is what
+`platform.uploads.app` records and what decides the storage prefix, so there is no
+bare spelling and no default.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk upload <file> [<file> ...]` | `POST /api/upload` | Uploads file(s) (max 100MB), prints the url(s). Table mode prints bare urls (pipeable); `--json` returns `[{url,filename,size,contentType}]`. Does **not** create a sidebar attachment. See [Embedding files](#embedding-files-in-descriptions--comments). |
+| `bk issues upload <file> [<file> ...]` | `POST /api/upload` | Uploads file(s) (size cap from `bk meta`), prints the url(s). Table mode prints bare urls (pipeable); `--json` returns `[{url,filename,size,contentType}]`. Does **not** create a sidebar attachment. See [Embedding files](#embedding-files-in-descriptions--comments). |
 
-### Storage (workspace-scoped, owner only)
+### Storage (workspace-scoped, owner only, app-owned spelling)
+
+**App-owned since 2.1.0** — `bk <app> storage …`. The listing itself is
+workspace-wide and spans every app whichever app group you reach it through; the
+app segment says which deployment answers. `attachments` is this app's own
+subcommand, not part of the shared group.
 
 Every file uploaded into the workspace is tracked. Removing a file from a
 description/comment does **not** delete the stored bytes (so undo and
@@ -588,9 +618,9 @@ trash-restore stay safe) — use these to review usage and delete unused files.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
-| `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
-| `bk storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. |
+| `bk issues storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
+| `bk issues storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
+| `bk issues storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. |
 
 ### Cross-app: search & links (Phase 6)
 
@@ -823,7 +853,7 @@ Same shape, YAML-formatted (2-space indent).
 
 ### Pagination
 
-The main list commands (`bk issues issue list`, `bk issues project list`, `bk issues task list`) are **not paginated** — they return every matching item in one response (`bk issues issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`, `bk trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
+The main list commands (`bk issues issue list`, `bk issues project list`, `bk issues task list`) are **not paginated** — they return every matching item in one response (`bk issues issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`, `bk issues trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
 
 ---
 
@@ -890,8 +920,8 @@ bk issues issue list --project 1 --status todo --json \
 ### Recover from a misstep
 
 ```bash
-bk trash list                    # REF column gives <type>:<#number>
-bk trash restore issue:42
+bk issues trash list             # REF column gives <type>:<#number>
+bk issues trash restore issue:42
 ```
 
 `bk undo` was removed in 1.12.0 — it never recorded anything. Deletes are soft,

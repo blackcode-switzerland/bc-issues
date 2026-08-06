@@ -117,8 +117,23 @@ Plus a conditional fourth: a guide topic, *only* if agent-visible behaviour
 changed. If only a value changed, edit its source — `bk meta` serves it live.
 
 **Commands are namespaced per app**: `bk sales deal create`, never `bk deal
-create`. Platform verbs (`workspace`, `label`, `upload`, `trash`, `search`,
-`link`, …) stay bare, because they mean the same thing in every app.
+create`. Three tiers decide the spelling (D-11, `bk guide platform/apps`):
+
+| Tier | Verbs | Spelling |
+|---|---|---|
+| Neutral — same answer from any app | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare |
+| Cross-app — spans every app by design, results tagged | `search` `activity` `link` | bare |
+| App-owned — the answer depends on the app | your nouns, **plus** `upload` `storage` `trash` `label` | `bk <app> <verb>` |
+
+The four app-owned platform verbs are shared code in `cli/internal/appverbs`.
+Your group mounts them in one line:
+
+```go
+cmd.AddCommand(appverbs.New(appverbs.Config{App: Slug, TrashTypes: […]}).All()...)
+```
+
+Forget it and your own `lib/cli-parity.test.ts` fails: `POST /api/upload` is
+real in your tree and no `bk` command claims it.
 
 ---
 
