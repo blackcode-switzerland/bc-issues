@@ -30,6 +30,31 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — **SECURITY:** a password reset now invalidates token creation too
+
+**What changed.** `GET/POST /api/tokens` and `DELETE /api/tokens/{id}` now reject
+a browser session that was issued **before** the account's last password reset,
+and one belonging to a deleted account. They previously accepted both.
+
+**Why it matters.** Token management has always been session-only — minting a
+`bk_live_…` token with a `bk_live_…` token would be privilege escalation. But the
+session check it used was weaker than the one every other session-authenticated
+route in the product uses: it confirmed a session existed and resolved the email,
+and stopped there. So **a session captured before a password reset could still
+mint a long-lived API token afterwards, and revoking that session did not revoke
+what it minted.** A password reset is what somebody does when they believe their
+account is compromised; one that leaves the attacker able to create a permanent
+credential has not done its job.
+
+**How to adapt.** Almost certainly nothing. If you are signed in on a browser and
+your password was changed since that sign-in, `/api/tokens` will answer `401`
+where it used to work — sign in again. Tokens already minted are unaffected;
+this changes who may create and revoke them, not what existing ones can do.
+
+**`bk` users are unaffected.** The CLI authenticates with a token and has never
+been able to reach these routes.
+
+
 ## 2026-08-06 — The shared request layer and the first platform route factories
 
 **Nothing about how you call the API changed.** Every route below returns the
