@@ -1,55 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { apiHandler, Errors } from '@/lib/api'
-import { authOptions } from '@/lib/auth'
-import { getUserByEmail } from '@/lib/db/queries/users'
-import { listTokens, mintToken } from '@/lib/auth/tokens'
-import { TOKEN_NAME_MAX } from '@/lib/limits'
+// GET/POST /api/tokens — mounted from the shared factory.
+//
+// Session-only, and the factory enforces it: it throws at import time if this
+// app's AppContext has no `resolveSessionUser`. It does not fall back to
+// `resolveUser` — a bearer token minting another bearer token is privilege
+// escalation. See packages/platform-api/src/routes/tokens.ts.
+//
+// The handlers are assigned to named `export const`s one at a time rather than
+// destructured (`export const { GET, POST } = …`). That is not style: the parity
+// guard finds a route's methods with /export\s+(const|function)\s+GET\b/, and a
+// destructuring export matches nothing — the route would serve fine while
+// silently vanishing from the coverage check.
 
-// Token management is session-only on purpose: minting or listing API tokens
-// with an API token would be privilege escalation, so these require a browser
-// session (not a bk_live_… bearer).
-async function sessionUser() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) return null
-  return getUserByEmail(session.user.email)
-}
+import { tokensRoute } from '@blackcode/platform-api/routes'
+import { appContext } from '@/lib/api'
 
-export const GET = apiHandler(async () => {
-  const user = await sessionUser()
-  if (!user) throw Errors.unauthorized()
-  const tokens = await listTokens(user.id)
-  return NextResponse.json(tokens)
-})
+const handlers = tokensRoute(appContext)
 
-export const POST = apiHandler(async (request: NextRequest) => {
-  const user = await sessionUser()
-  if (!user) throw Errors.unauthorized()
-
-  let body: { name?: string; expires_at?: string | null } = {}
-  try {
-    body = await request.json()
-  } catch {
-    /* empty body is fine */
-  }
-
-  const name = (body.name ?? '').trim()
-  if (!name) throw Errors.badRequest('invalid_name', 'name is required')
-  if (name.length > TOKEN_NAME_MAX)
-    throw Errors.badRequest('name_too_long', `name max ${TOKEN_NAME_MAX} chars (got ${name.length})`)
-
-  let expires_at: Date | null = null
-  if (body.expires_at) {
-    const parsed = new Date(body.expires_at)
-    if (Number.isNaN(parsed.getTime())) {
-      throw Errors.badRequest('invalid_expires_at', 'expires_at must be an ISO 8601 datetime, e.g. 2027-01-01T00:00:00Z')
-    }
-    if (parsed.getTime() <= Date.now()) {
-      throw Errors.badRequest('expires_at_in_past', 'expires_at must be in the future')
-    }
-    expires_at = parsed
-  }
-
-  const minted = await mintToken({ user_id: user.id, name, expires_at })
-  return NextResponse.json(minted, { status: 201 })
-})
+export const GET = handlers.GET
+export const POST = handlers.POST

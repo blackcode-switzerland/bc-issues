@@ -15,16 +15,44 @@
 // See `packages/platform-api/src/app-context.ts` for the bar a new field has to
 // clear before it is added here.
 
+import { getServerSession } from 'next-auth'
 import type { AppContext } from '@blackcode/platform-api'
 import { db } from '@/lib/db/client'
 import { resolveUser } from '@/lib/auth/resolve'
+import { authOptions } from '@/lib/auth'
+import { getUserByEmail } from '@/lib/db/queries/users'
 import { APP_SLUG } from '@/lib/app'
 import { AGENT_MANIFEST } from '@/lib/agent-manifest'
+
+/**
+ * The browser-session caller, with NO bearer-token path. Feeds `/api/tokens`,
+ * where accepting a token would be privilege escalation — see
+ * `AppContext.resolveSessionUser`.
+ *
+ * ── WHY THIS IS NOT `getValidatedSessionUser` ────────────────────────────────
+ * `@/lib/auth/session` has a stricter resolver that ALSO rejects soft-deleted
+ * users and sessions issued before a password reset, and every other
+ * session-authenticated path in this app goes through it. The token routes never
+ * did — they inlined exactly the two lines below — so using the stricter one
+ * here would quietly change who can manage tokens as a side effect of a
+ * refactor. This is a move, so this is what moved.
+ *
+ * It is very likely the token routes SHOULD use the stricter resolver: a session
+ * invalidated by a password reset can still mint a long-lived API token today,
+ * and revoking the session does not revoke what it minted. That is a one-word
+ * change here and a decision for whoever owns it, not a thing to smuggle in.
+ */
+async function resolveSessionUser() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email) return null
+  return getUserByEmail(session.user.email)
+}
 
 export const appContext: AppContext = {
   appSlug: APP_SLUG,
   db,
   resolveUser,
+  resolveSessionUser,
   manifest: {
     help: AGENT_MANIFEST.help,
     changelog: AGENT_MANIFEST.changelog,

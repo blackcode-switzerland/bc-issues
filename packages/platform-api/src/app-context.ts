@@ -79,6 +79,33 @@ export interface AppContext {
    */
   resolveUser(req: NextRequest): Promise<User | null>
 
+  /**
+   * Who is calling, **from a browser session only** — never from a bearer token.
+   *
+   * ── WHY THIS IS A SECOND FIELD AND NOT A FLAG ON THE FIRST ─────────────────
+   * Do not "simplify" these into one. They answer different questions and one of
+   * them is a security boundary.
+   *
+   * `resolveUser` accepts a `bk_live_…` token OR a session. That is right for
+   * almost everything: it is how an agent works.
+   *
+   * `resolveSessionUser` accepts ONLY a session, and `/api/tokens` uses it
+   * because **a bearer token minting another bearer token is privilege
+   * escalation**. A token that leaks is bad; a token that can mint fresh,
+   * longer-lived tokens is unrecoverable — revoking the original does not revoke
+   * what it created. The route has said so since it was written.
+   *
+   * If the two were one resolver with a `sessionOnly` option, the safe value
+   * would be the one you have to remember to pass, and the failure would be
+   * silent: token auth would simply start working on a route where it must not.
+   * Two fields make omission visible instead.
+   *
+   * OPTIONAL, and the routes that need it FAIL LOUDLY AT MOUNT TIME when it is
+   * absent rather than falling back to `resolveUser`. A token-only app (the
+   * scaffold) has no sessions and simply does not mount them.
+   */
+  resolveSessionUser?(req: NextRequest): Promise<User | null>
+
   /** Breadcrumb headers. Omit if the app has no agent landing page. */
   manifest?: AppManifest
 

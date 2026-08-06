@@ -32,4 +32,19 @@
 // the platform routes (`hostsPlatformRoutes`). Set that flag when you mount
 // them, or your app's missing routes are nobody's failure.
 
+// ---------------------------------------------------------------------------
+// A FACTORY SERVING SEVERAL METHODS RETURNS AN OBJECT. UNPACK IT ONE LINE AT A
+// TIME.
+// ---------------------------------------------------------------------------
+//   const handlers = tokensRoute(appContext)
+//   export const GET = handlers.GET
+//   export const POST = handlers.POST
+//
+// NOT `export const { GET, POST } = tokensRoute(appContext)`. Both serve
+// identically, but `lib/cli-parity.test.ts` reads a route's methods with
+// /export\s+(const|async\s+function|function)\s+GET\b/ — a destructuring export
+// matches nothing, so the route would work while silently dropping out of the
+// coverage check. A guard that stops seeing a route reports green.
+
 export { searchRoute } from './search'
+export { tokensRoute, tokenRoute } from './tokens'
