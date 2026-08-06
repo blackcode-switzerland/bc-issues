@@ -57,12 +57,6 @@
     },
     {
       "method": "DELETE",
-      "path": "/api/workspaces/{ws}/storage/{id}",
-      "command": "bk issues storage rm",
-      "app": "issues"
-    },
-    {
-      "method": "DELETE",
       "path": "/api/workspaces/{ws}/tasks/{id}",
       "command": "bk issues task delete",
       "app": "issues"
@@ -94,7 +88,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/attachments",
-      "command": "bk issues storage attachments",
+      "command": "bk issues attachment list",
       "app": "issues"
     },
     {
@@ -179,12 +173,6 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}/updates",
       "command": "bk issues project updates list",
-      "app": "issues"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/storage",
-      "command": "bk issues storage list",
       "app": "issues"
     },
     {
@@ -398,6 +386,12 @@
       "app": "platform"
     },
     {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/storage/{id}",
+      "command": "bk storage rm",
+      "app": "platform"
+    },
+    {
       "method": "GET",
       "path": "/api/changelog",
       "command": "bk skill sync",
@@ -533,6 +527,12 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/search",
       "command": "bk search",
+      "app": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/storage",
+      "command": "bk storage list",
       "app": "platform"
     },
     {

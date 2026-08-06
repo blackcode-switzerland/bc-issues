@@ -36,11 +36,15 @@ func runBK(t *testing.T, argv ...string) error {
 }
 
 // The removed bare spellings (D-11), and the app-qualified form each must name.
+//
+// `storage` is deliberately ABSENT: D-28 kept it bare, in the cross-app tier. Its
+// one moved subcommand is covered by TestRemovedStorageAttachmentsIsRedirected
+// below, which is a different shape — a group that still exists, missing a
+// subcommand that does not.
 var removedBareVerbs = map[string]string{
-	"upload":  "bk issues upload",
-	"storage": "bk issues storage",
-	"trash":   "bk issues trash",
-	"label":   "bk issues label",
+	"upload": "bk issues upload",
+	"trash":  "bk issues trash",
+	"label":  "bk issues label",
 }
 
 func TestRemovedBareVerbsFailWithARecoverableHint(t *testing.T) {
@@ -85,10 +89,9 @@ func TestRemovedBareVerbsFailWithARecoverableHint(t *testing.T) {
 // test ever reaches a real deployment with real credentials.
 func TestAppQualifiedVerbsReachTheAuthCheck(t *testing.T) {
 	leaf := map[string][]string{
-		"upload":  {"issues", "upload", "some-file.pdf"},
-		"storage": {"issues", "storage", "list"},
-		"trash":   {"issues", "trash", "list"},
-		"label":   {"issues", "label", "list"},
+		"upload": {"issues", "upload", "some-file.pdf"},
+		"trash":  {"issues", "trash", "list"},
+		"label":  {"issues", "label", "list"},
 	}
 	for verb, argv := range leaf {
 		t.Run(verb, func(t *testing.T) {
@@ -130,5 +133,37 @@ func TestUnrelatedUnknownCommandGetsNoNamedHint(t *testing.T) {
 func TestHintForPrefersNothingOverNoise(t *testing.T) {
 	if got := hintFor(errors.New("some runtime failure")); got != "" {
 		t.Errorf("a plain runtime error should carry no hint, got %q", got)
+	}
+}
+
+// `bk storage attachments` is the one spelling D-28 removed, and it fails
+// differently from the four verbs above: `bk storage` still EXISTS, so the error
+// comes from rejectUnknownSubcommands' RunE and names the group
+// (`… for "bk storage"`), not the root. DeprecationHint has to match on
+// `<parent> <sub>` for this one, and that lookup had no test until now.
+func TestRemovedStorageAttachmentsIsRedirected(t *testing.T) {
+	err := runBK(t, "storage", "attachments")
+	if err == nil {
+		t.Fatal("`bk storage attachments` succeeded — it was removed in D-28")
+	}
+	if got := classify(err); got != exitUsage {
+		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
+	}
+	hint := hintFor(err)
+	if !strings.Contains(hint, "bk issues attachment list") {
+		t.Errorf("`bk storage attachments` failed with %q and hint %q — it must name "+
+			"`bk issues attachment list`", err, hint)
+	}
+}
+
+// …and the verb it hangs off must still work bare. Without this, the test above
+// would pass just as well if `bk storage` had been deleted entirely, which is
+// the opposite of what D-28 decided.
+func TestStorageStaysBare(t *testing.T) {
+	t.Setenv("BK_CONFIG_DIR", t.TempDir())
+	err := runBK(t, "storage", "list")
+	if !errors.Is(err, config.ErrNotConfigured) {
+		t.Fatalf("`bk storage list` failed with %v; want %v — storage is cross-app and "+
+			"stays bare (D-28)", err, config.ErrNotConfigured)
 	}
 }

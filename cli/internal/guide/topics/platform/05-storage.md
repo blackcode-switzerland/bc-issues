@@ -19,18 +19,18 @@ So an edit leaves an orphan. Clearing orphans is an explicit owner action.
 
 ## Owner review & cleanup
 
-`storage` is an app-owned verb — `bk <app> storage …`, never bare. The app
-segment says which deployment answers; the LISTING itself is workspace-wide and
-spans every app either way (see below). Run `bk guide platform/apps`.
+`storage` is **cross-app and bare**, like `bk search`: one cabinet, one
+workspace quota, the same rows whichever app you ask. Uploading is the half that
+belongs to an app — you upload INTO one app and list ACROSS all of them. Run
+`bk guide platform/apps` for the tiers.
 
 ```bash
-bk issues storage list --json         # every file + what references it + usage
-bk issues storage list --app issues   # only the files one app uploaded
-bk issues storage rm <id>             # permanently delete an orphan
-bk issues storage attachments         # this app's attachment rows
+bk storage list --json         # every app's files + what references them + usage
+bk storage list --app issues   # only the files one app uploaded
+bk storage rm <id>             # permanently delete an orphan
 ```
 
-`storage rm` is refused with a **409 `file_in_use`** conflict if anything
+`bk storage rm` is refused with a **409 `file_in_use`** conflict if anything
 still references the file — **including a trashed item**. Empty or purge the
 Trash first if you mean to reclaim the space.
 
@@ -39,7 +39,12 @@ Trash first if you mean to reclaim the space.
 One store, one workspace quota, files kept under a per-app prefix. Each file
 carries the app that uploaded it (the **APP** column, `--app` to filter), but the
 usage total is always the whole workspace's — filtering the list never changes
-it.
+it. That is exactly why this verb is bare while `bk <app> upload` is not: the
+app decides where a NEW file is filed, not which files you can see.
+
+The per-app views of files live with their app — `bk issues attachment list` is
+the workspace's issue attachments, and `bk issues issue attachments <n>` is one
+issue's.
 
 Reference counting spans **every** app, and a delete needs a proven negative: a
 file is removable only when no app references it. An app the deployment can read
@@ -51,4 +56,4 @@ later is the right response, and no amount of `--yes` overrides it.
 
 These commands require workspace **owner** role; anything else gets exit **4**.
 
-Related commands: `bk issues storage list|rm|attachments`, `bk issues trash purge|empty`, `bk guide platform/apps`
+Related commands: `bk storage list|rm`, `bk issues upload`, `bk issues attachment list`, `bk issues trash purge|empty`, `bk guide platform/apps`

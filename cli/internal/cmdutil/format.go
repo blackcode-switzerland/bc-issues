@@ -17,6 +17,17 @@ func Truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
+// HumanSize is HumanBytes for an OPTIONAL byte count, rendering a missing one
+// as an em dash. Two command packages format the same column — `bk storage list`
+// (platform) and `bk issues attachment list` — so it lives here rather than in
+// either of them.
+func HumanSize(n *int) string {
+	if n == nil {
+		return "—"
+	}
+	return HumanBytes(*n)
+}
+
 // HumanBytes renders a byte count as B/KB/MB/… with one decimal place.
 func HumanBytes(n int) string {
 	const u = 1024

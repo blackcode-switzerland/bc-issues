@@ -409,8 +409,21 @@ would answer differently*.
 | Tier | Verbs | Spelling | Rule |
 |---|---|---|---|
 | **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare | Identity and org data. No app owns a person or a membership, so no app can be the wrong one to ask |
-| **Cross-app** | `search` `activity` `link` | bare | Spans every app *by design*; results are tagged with the app they came from. Scoping them would remove the reason they exist |
-| **App-owned** | every app noun, **plus** `upload` `storage` `trash` `label` | `bk <app> <verb>` | The data is app-attributed. An implicit default here is how a sales contract gets filed under issues |
+| **Cross-app** | `search` `activity` `link` `storage` | bare | Spans every app *by design*; results are tagged with the app they came from. Scoping them would remove the reason they exist |
+| **App-owned** | every app noun, **plus** `upload` `trash` `label` | `bk <app> <verb>` | The data is app-attributed. An implicit default here is how a sales contract gets filed under issues |
+
+**The test is "would two deployments answer differently?", never "is it shared
+code?"** (D-28). `storage` is shared code and cross-app: uploads are one ledger
+against one workspace quota, so every app returns the same rows, and an
+app-scoped `bk sales storage list` would have implied a narrowing it does not do.
+`upload` is the opposite — the receiving app is recorded on the row and becomes
+the storage prefix. Hence the pairing the guide states in as many words: **you
+upload into one app; you list across all of them.**
+
+A corollary that cost a subcommand: **one noun must not straddle two tiers.**
+`bk storage attachments` listed only ISSUE attachments while `bk storage list`
+spanned every app, so it became `bk issues attachment list` — a noun of that app,
+not a subcommand of a bare verb.
 
 `bk sales deal create` is redundant-looking on purpose: it tells you the app, and
 `bk deal create` does not. It also removes noun collisions before they happen
@@ -427,6 +440,7 @@ Code follows the same shape: `cli/internal/commands/<app>/`, one Go package per
 app, and **no cross-imports between them** (`boundaries_test.go`). Anything two
 need goes in `cmdutil` or, for whole command trees two apps mount,
 `cli/internal/appverbs` — both outside `internal/commands/` for the same reason.
+A bare verb stays in `commands/platform/`, whichever tier it is in.
 
 **The split inside an app-owned verb matters.** `appverbs` holds only the
 app-agnostic half (label CRUD, the bin, the file cabinet). Anything naming an
@@ -437,9 +451,9 @@ the route, and a shared implementation of `label attach` would make every app
 claim an issues route.
 
 Pre-namespace spellings exit non-zero and name their replacement, via
-`cli/internal/commands/deprecations.go`: `bk issue …` (removed 1.12.0) and
-`bk upload|storage|trash|label` (moved 2.1.0, no alias — an alias would have to
-pick an app silently). That table is the recovery path for a stale script, and
+`cli/internal/commands/deprecations.go`: `bk issue …` (removed 1.12.0),
+`bk upload|trash|label` (moved 2.1.0, no alias — an alias would have to pick an
+app silently) and `bk storage attachments`. That table is the recovery path for a stale script, and
 its entries outlive the thing they replace by one release on purpose. The
 end-to-end half of that guarantee is `cli/cmd/bk/main_test.go`, which runs the
 real command tree: the table alone is reachable only through `hintFor()`, and a

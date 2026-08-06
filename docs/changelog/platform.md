@@ -30,7 +30,7 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
-## 2026-08-06 — **BREAKING (CLI 2.1.0):** every verb now belongs to one of three tiers, and four of them moved
+## 2026-08-06 — **BREAKING (CLI 2.1.0):** every verb now belongs to one of three tiers, and three of them moved
 
 **The idea first, because it is what the rest of this file will assume.** A `bk`
 verb sits in exactly one of three tiers, and **the tier is visible in the
@@ -39,8 +39,18 @@ spelling**, so you can tell which app a command talks to by reading it:
 | Tier | Verbs | Spelling | Why |
 |---|---|---|---|
 | **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | **bare** | Identity and org data. No app owns a person, a membership or an invitation, so no app can be the wrong one to ask |
-| **Cross-app** | `search` `activity` `link` | **bare** | They span every app *by design* and tag each result with the app it came from. Scoping them would remove the reason they exist |
-| **App-owned** | every app noun, **plus `upload` `storage` `trash` `label`** | **`bk <app> <verb>`** | The data is app-attributed. An implicit default here is how a contract raised in one app gets filed under another |
+| **Cross-app** | `search` `activity` `link` `storage` | **bare** | They span every app *by design* and tag each result with the app it came from. Scoping them would remove the reason they exist |
+| **App-owned** | every app noun, **plus `upload` `trash` `label`** | **`bk <app> <verb>`** | The data is app-attributed. An implicit default here is how a contract raised in one app gets filed under another |
+
+The test is **"would two deployments answer differently?"** — never "is it shared
+code?". Which is why files split across two tiers: **you upload INTO one app, and
+you list ACROSS all of them.**
+
+```bash
+bk issues upload contract.pdf   # app-owned: the file is filed under issues
+bk storage list                 # cross-app: every app's files, each tagged
+bk storage list --app issues    # …filtered, when you want one app's
+```
 
 The full statement, with worked examples, is **`bk guide platform/apps`** — a new
 topic, and the first thing to read before writing anything from now on.
@@ -52,9 +62,14 @@ Four spellings stop working. Each names its replacement on failure:
 | Was | Now |
 |---|---|
 | `bk upload <file>` | `bk issues upload <file>` |
-| `bk storage list\|rm\|attachments` | `bk issues storage list\|rm\|attachments` |
 | `bk trash list\|restore\|purge\|empty` | `bk issues trash list\|restore\|purge\|empty` |
 | `bk label list\|view\|create\|edit\|delete\|attach\|detach` | `bk issues label …` |
+| `bk storage attachments` | `bk issues attachment list` |
+
+**`bk storage list` and `bk storage rm` are UNCHANGED** — storage is cross-app and
+stays bare. Only its issues-only subcommand moved, and it moved to a noun of that
+app rather than to `bk issues storage attachments`, because one noun must not
+straddle two tiers.
 
 Nothing else changed: same flags, same output, same routes, same behaviour. Only
 the first segment is new.
@@ -84,28 +99,33 @@ releases** (through 2.3.0). A stale script gets a recovery path, not a dead end.
 
 ### What to change in your scripts and agents
 
-1. Prefix the four verbs with the app: `bk issues trash list`, not `bk trash list`.
+1. Prefix the three moved verbs with the app: `bk issues trash list`, not
+   `bk trash list`. Leave `bk storage list` alone.
 2. Re-read `bk guide platform/apps`, or run `bk skill sync` to refresh an installed
    agent skill.
 3. If you hardcoded `bk upload` in a wrapper, note that the app segment is now the
    thing that decides where the file is filed — it is a real argument, not
    punctuation.
 
-### Notes for the app-owned four
+### Notes on each
 
-- **`storage list` is still workspace-wide.** Uploads are one shared cabinet with
-  one quota. `bk issues storage list` and `bk sales storage list` return the same
-  files, each tagged with the app that uploaded it (`--app <slug>` filters). What
-  the app segment decides is *which deployment answers*, and which app a new file
-  is filed under.
+- **`storage` stayed bare, and that was a late call.** It shipped app-owned for
+  one commit. Uploads are one shared cabinet with one workspace quota, so
+  `bk issues storage list` and `bk sales storage list` would have returned the
+  SAME rows — an app segment that implies a narrowing it does not do teaches the
+  wrong rule in the one place an agent goes to check it. It is cross-app, beside
+  `bk search`, which is also the shape it already had: every row tagged with its
+  app, `--app` to filter.
 - **`trash` is genuinely per-app.** Each app bins its own entities. `--type` is
   validated against the app's own vocabulary, and the error names the app so a ref
   aimed at the wrong bin is distinguishable from a typo.
 - **`label attach`/`detach` name an entity**, so they are that app's own
   subcommands: `bk issues label attach <issue-id> <label-id>`. Label CRUD is
   shared and identical everywhere.
-- **`storage attachments`** is the issues app's own view of its attachment rows;
-  it moved with the rest.
+- **`bk issues attachment list`** is the issues app's own view of its attachment
+  rows, workspace-wide. It was `bk storage attachments`, which only ever listed
+  issue attachments while sitting on a verb that spans every app. The per-issue
+  commands are unchanged: `bk issues issue attach|attachments|detach`.
 
 ---
 

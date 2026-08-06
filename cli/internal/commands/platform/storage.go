@@ -1,4 +1,4 @@
-package appverbs
+package platform
 
 import (
 	"fmt"
@@ -10,46 +10,68 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `bk <app> storage` — the file cabinet behind `bk <app> upload`.
+// `bk storage` — CROSS-APP, and therefore bare (D-28).
 //
-// READ THE `--app` NOTE IN THE LIST HELP BELOW. Uploads are one shared table, so
-// the LISTING is workspace-wide whichever app you ask; the app segment says
-// which deployment answers and which app a new file would be filed under. That
-// is a genuinely awkward corner of the app-owned tier and it is written down
-// rather than smoothed over.
-func newStorageCmd(cfg Config) *cobra.Command {
+// It spent one commit in the app-owned tier, which was wrong, and the reason is
+// worth keeping because it is the test D-11 actually applies: *does the answer
+// depend on the app?*
+//
+//	upload   YES — the file is permanently attributed to the receiving app and
+//	               path-prefixed with it
+//	trash    YES — each app has its own bin, holding its own entities
+//	label    YES — labels are app-scoped
+//	storage  NO  — one ledger, one workspace quota, the same rows either way
+//
+// `bk sales storage list` would have returned the issues app's files too, which
+// teaches an agent that the app segment scopes the answer and is then wrong in
+// the one place it went to check. A dishonest consistency is worse than an honest
+// asymmetry. Structurally this verb is already shaped like `search`: it tags
+// every row with the app that owns it and takes `--app` to filter.
+//
+// THE PAIRING, which the guide states in as many words: **you upload into one
+// app; you list across all of them.**
+//
+// What did move: `bk storage attachments` was issues-only from the day it was
+// written ("every file attached to an ISSUE"), and it is now
+// `bk issues attachment list` — a noun in that app's group rather than a
+// subcommand of a bare verb. One noun must not straddle two tiers.
+func newStorageCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "storage",
-		Short: "Manage uploaded files in the active workspace (owner only)",
-		Long: fmt.Sprintf(`Review and clean up files uploaded into the workspace, as the %s app.
+		Short: "Uploaded files across every app in the workspace (owner only)",
+		Long: `Review and clean up files uploaded into the workspace.
+
+Storage is ONE shared cabinet with one workspace quota: this listing spans every
+app, and each row carries the app that uploaded it. That is why the verb is bare
+while "bk <app> upload" is not — you upload INTO one app, and you list ACROSS all
+of them.
 
 Every file ever uploaded (via the web, the API, or the CLI) is tracked. Removing
 a file from a description or comment does NOT delete the stored bytes — that is
 deliberate, so trash-restore stays safe. Use these commands to see what is taking
 up space and to permanently delete files that nothing references.
 
-Owner only.`, cfg.App),
+Owner only.`,
 	}
-	cmd.AddCommand(newStorageListCmd(cfg), newStorageRmCmd(cfg))
+	cmd.AddCommand(newStorageListCmd(), newStorageRmCmd())
 	return cmd
 }
 
-func newStorageListCmd(cfg Config) *cobra.Command {
+func newStorageListCmd() *cobra.Command {
 	var app string
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/storage"},
 		Short:       "List uploaded files with reference counts and total usage",
-		Long: `List every uploaded file in the workspace.
+		Long: `List every uploaded file in the workspace, across every app.
 
-Storage is ONE shared cabinet: this list is workspace-wide and spans every app,
-whichever app group you reach it through. APP is the app that uploaded each file;
---app <slug> narrows the list to one. The usage total stays workspace-wide even
-when the list is filtered, because the quota belongs to the workspace.
+APP is the app that uploaded each file; --app <slug> narrows the list to one. The
+usage total stays workspace-wide even when the list is filtered, because the
+quota belongs to the workspace.
 
 REFS is how many things reference the file (descriptions, comments, attachments —
 including items in the recycle bin), counted across every app. A file with
-REFS = 0 is an orphan and can be removed with "storage rm <id>".`,
+REFS = 0 is an orphan and can be removed with "bk storage rm <id>".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -76,7 +98,7 @@ REFS = 0 is an orphan and can be removed with "storage rm <id>".`,
 						appName = *f.App
 					}
 					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%s\t%s\n",
-						f.ID, appName, f.Filename, HumanSize(f.Size), f.ReferenceCount, uploader, f.URL)
+						f.ID, appName, f.Filename, cmdutil.HumanSize(f.Size), f.ReferenceCount, uploader, f.URL)
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -90,21 +112,22 @@ REFS = 0 is an orphan and can be removed with "storage rm <id>".`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&app, "app", "", "Only files uploaded by this app (e.g. "+cfg.App+")")
+	cmd.Flags().StringVar(&app, "app", "", "Only files uploaded by this app (run `bk meta` for the apps you can reach)")
 	return cmd
 }
 
-func newStorageRmCmd(cfg Config) *cobra.Command {
+func newStorageRmCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
 		Use:         "rm <id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/storage/{id}"},
 		Short:       "Permanently delete an orphaned file",
-		Long: `Permanently delete a stored file by its id (from "storage list").
+		Long: `Permanently delete a stored file by its id (from "bk storage list").
 
 The server refuses (exit non-zero) if anything still references the file,
 including items in the recycle bin — remove those references or empty the trash
-first. Deletion is irreversible.`,
+first. The check spans every app, not just the one that uploaded the file.
+Deletion is irreversible.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
@@ -127,14 +150,4 @@ first. Deletion is irreversible.`,
 	}
 	cmdutil.AddYesFlag(cmd, &yes)
 	return cmd
-}
-
-// HumanSize formats an optional byte count (*int) for table output. Exported
-// because an app's own additions to these groups format the same columns —
-// `bk issues storage attachments` prints a SIZE.
-func HumanSize(n *int) string {
-	if n == nil {
-		return "—"
-	}
-	return cmdutil.HumanBytes(*n)
 }

@@ -204,18 +204,23 @@ func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 // confidently wrong, and the agent has no reason to doubt it.
 //
 // EXTENDED in 2.1.0 for the app-owned tier (docs/sales-app-plan.md D-11).
-// `upload`, `storage`, `trash` and `label` moved behind the app name for the
-// same reason the nouns did, and the same failure mode applies with more force:
-// a topic that still says the bare form is teaching an agent to file a sales
-// contract under issues. Adding these caught seven stale topics in the commit
-// that moved the commands — which is the point. They are listed separately from
-// the nouns because the two migrations prune on different schedules.
+// `upload`, `trash` and `label` moved behind the app name for the same reason
+// the nouns did, and the same failure mode applies with more force: a topic that
+// still says the bare form is teaching an agent to file a sales contract under
+// issues. Adding these caught nine stale topics in the commit that moved the
+// commands — which is the point. They are listed separately from the nouns
+// because the two migrations prune on different schedules.
+//
+// `storage` IS NOT IN THE LIST and must not be added: D-28 kept it bare, in the
+// cross-app tier, because one ledger and one quota mean every app returns the
+// same rows. Banning `bk storage ` here would fail the topics that correctly
+// teach it.
 func TestTopicsUseNamespacedAppCommands(t *testing.T) {
 	moved := []string{
 		// 1.10.0 — the app nouns.
 		"issue", "task", "project", "analytics", "move", "copy",
-		// 1.13.0 — the app-owned platform verbs.
-		"upload", "storage", "trash", "label",
+		// 2.1.0 — the app-owned platform verbs.
+		"upload", "trash", "label",
 	}
 	for _, top := range Topics() {
 		for _, n := range moved {

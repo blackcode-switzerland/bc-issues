@@ -6,10 +6,10 @@
 >
 > ```
 > cli/internal/commands/            root.go, aliases.go, deprecations.go, routes.go
->   commands/platform/              tiers 1+2 — workspace, member, invite, token, search, activity, link, …
->   commands/issues/                that app's nouns — bk issues issue|task|project|move|copy|analytics
+>   commands/platform/              tiers 1+2 — workspace, member, invite, token, search, activity, link, storage, …
+>   commands/issues/                that app's nouns — bk issues issue|task|project|attachment|move|copy|analytics
 >                                   …plus what it adds to tier 3 (appverbs.go)
-> cli/internal/appverbs/            tier 3 — upload, storage, trash, label, built PER APP
+> cli/internal/appverbs/            tier 3 — upload, trash, label, built PER APP
 > cli/internal/cmdutil/             what both need: client construction, --ws/-v, flags, formatting
 > cli/internal/guide/topics/{platform,issues,template}/
 > ```
@@ -17,16 +17,21 @@
 > | Tier | Verbs | Spelling | Server |
 > |---|---|---|---|
 > | **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare | home |
-> | **Cross-app** | `search` `activity` `link` | bare | home (reads shared tables) |
-> | **App-owned** | app nouns, **plus** `upload` `storage` `trash` `label` | `bk <app> <verb>` | that app's |
+> | **Cross-app** | `search` `activity` `link` `storage` | bare | home (reads shared tables) |
+> | **App-owned** | app nouns, **plus** `upload` `trash` `label` | `bk <app> <verb>` | that app's |
 >
-> The tier is "would two deployments answer differently?", not "is it shared
-> code?". `upload`, `storage`, `trash` and `label` are shared code AND app-owned:
-> the implementation lives once in `internal/appverbs` and each app group mounts
-> its own copy in one line. Anything naming an app's entities (`bk issues label
-> attach <issue>`, `bk issues storage attachments`) is built in that app's
-> package and added to the group — otherwise every app would claim an issues
-> route in the parity test.
+> The tier is **"would two deployments answer differently?"**, not "is it shared
+> code?" (D-28). `upload`, `trash` and `label` are shared code AND app-owned: the
+> implementation lives once in `internal/appverbs` and each app group mounts its
+> own copy in one line. `storage` is shared code and NOT app-owned — one ledger,
+> one workspace quota, the same rows from every app — so it stays bare in
+> `commands/platform/`. **You upload into one app; you list across all of them.**
+>
+> Anything naming an app's entities (`bk issues label attach <issue>`) is built in
+> that app's package and added to the group — otherwise every app would claim an
+> issues route in the parity test. The same rule retired `bk storage attachments`:
+> it listed only issue attachments, so it became the noun
+> `bk issues attachment list`. One noun must not straddle two tiers.
 >
 > **Command packages must not import each other**, and the platform must not
 > import any app (`commands/boundaries_test.go`). Anything two of them need goes
@@ -198,7 +203,7 @@ cli/
 ├── internal/
 │   ├── browser/              # Cross-platform "open URL in browser"
 │   ├── client/               # HTTP client + DTO types (client.go, types.go, workspace.go)
-│   ├── appverbs/             # upload/storage/trash/label — built once per app
+│   ├── appverbs/             # upload/trash/label — built once per app
 │   ├── commands/             # Cobra commands (root + subcommands)
 │   ├── config/               # ~/.config/bk/config.json loader
 │   └── output/               # table / json / yaml renderer
@@ -605,12 +610,15 @@ bare spelling and no default.
 |---|---|---|
 | `bk issues upload <file> [<file> ...]` | `POST /api/upload` | Uploads file(s) (size cap from `bk meta`), prints the url(s). Table mode prints bare urls (pipeable); `--json` returns `[{url,filename,size,contentType}]`. Does **not** create a sidebar attachment. See [Embedding files](#embedding-files-in-descriptions--comments). |
 
-### Storage (workspace-scoped, owner only, app-owned spelling)
+### Storage (workspace-scoped, owner only, CROSS-APP)
 
-**App-owned since 2.1.0** — `bk <app> storage …`. The listing itself is
-workspace-wide and spans every app whichever app group you reach it through; the
-app segment says which deployment answers. `attachments` is this app's own
-subcommand, not part of the shared group.
+**Bare, and deliberately so (D-28).** One cabinet, one workspace quota, the same
+rows whichever app asks — so an app segment would imply a narrowing it does not
+do. You upload INTO one app (`bk <app> upload`) and list ACROSS all of them.
+
+`bk storage attachments` was retired in the same change: it listed only ISSUE
+attachments while `storage list` spans every app, so it is now the issues noun
+`bk issues attachment list`.
 
 Every file uploaded into the workspace is tracked. Removing a file from a
 description/comment does **not** delete the stored bytes (so undo and
@@ -618,9 +626,9 @@ trash-restore stay safe) — use these to review usage and delete unused files.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issues storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
-| `bk issues storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
-| `bk issues storage attachments` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. |
+| `bk storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
+| `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
+| `bk issues attachment list` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. An issues noun, not a `storage` subcommand — D-28. |
 
 ### Cross-app: search & links (Phase 6)
 

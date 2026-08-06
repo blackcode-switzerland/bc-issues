@@ -1,6 +1,6 @@
 // Package appverbs holds the platform verbs whose ANSWER DEPENDS ON THE APP —
-// `upload`, `storage`, `trash` and `label` — and builds one copy of them per app
-// group, so they are spelled `bk issues upload`, `bk sales trash list`.
+// `upload`, `trash` and `label` — and builds one copy of them per app group, so
+// they are spelled `bk issues upload`, `bk sales trash list`.
 //
 // ---------------------------------------------------------------------------
 // WHY THEY ARE NOT BARE (D-11)
@@ -12,12 +12,20 @@
 //	CROSS-APP  spans every app by design, results tagged  bare   search, activity, link
 //	APP-OWNED  the answer depends on the app              bk <app> <verb>
 //
-// These four are the third tier. A file, a recycle bin and a label each belong to
-// ONE app: `platform.uploads.app` records who uploaded a file, the bin lists that
-// app's deleted entities, and a label is filtered by app. With two deployments a
-// bare `bk upload` has no correct answer — it has a DEFAULT, and a default is how
-// a sales contract gets filed under issues. A flag can be forgotten; a namespace
-// cannot.
+// These three are the third tier. A file, a recycle bin and a label each belong
+// to ONE app: `platform.uploads.app` records who uploaded a file, the bin lists
+// that app's deleted entities, and a label is filtered by app. With two
+// deployments a bare `bk upload` has no correct answer — it has a DEFAULT, and a
+// default is how a sales contract gets filed under issues. A flag can be
+// forgotten; a namespace cannot.
+//
+// `bk storage` IS NOT HERE, and the near-miss is the useful part (D-28). It looks
+// like it belongs: it is the cabinet behind `upload`, and it moved here for one
+// commit. But uploads are one ledger with one workspace quota, so every app
+// returns the SAME rows — the answer does not depend on the app, and an
+// app-scoped spelling would have taught an agent that it does. The pairing to
+// remember: **you upload into one app; you list across all of them.** The test is
+// never "is it shared code?"; it is "would two deployments answer differently?".
 //
 // ---------------------------------------------------------------------------
 // WHY THE IMPLEMENTATION LIVES HERE AND NOT IN A COMMAND PACKAGE
@@ -76,16 +84,15 @@ type Config struct {
 // takes an issue and posts to an issues route, so it is built in the issues
 // package and hung off Label here.
 type Set struct {
-	Config  Config
-	Upload  *cobra.Command
-	Storage *cobra.Command
-	Trash   *cobra.Command
-	Label   *cobra.Command
+	Config Config
+	Upload *cobra.Command
+	Trash  *cobra.Command
+	Label  *cobra.Command
 }
 
-// All returns the four groups in the order `bk <app> --help` should list them.
+// All returns the groups in the order `bk <app> --help` should list them.
 func (s Set) All() []*cobra.Command {
-	return []*cobra.Command{s.Upload, s.Storage, s.Trash, s.Label}
+	return []*cobra.Command{s.Upload, s.Trash, s.Label}
 }
 
 // New builds one app's copy of the app-owned verbs.
@@ -102,10 +109,9 @@ func New(cfg Config) Set {
 		panic("appverbs.New: Config.App is required — these verbs are app-owned by definition")
 	}
 	return Set{
-		Config:  cfg,
-		Upload:  newUploadCmd(cfg),
-		Storage: newStorageCmd(cfg),
-		Trash:   newTrashCmd(cfg),
-		Label:   newLabelCmd(cfg),
+		Config: cfg,
+		Upload: newUploadCmd(cfg),
+		Trash:  newTrashCmd(cfg),
+		Label:  newLabelCmd(cfg),
 	}
 }

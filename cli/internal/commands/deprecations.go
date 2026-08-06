@@ -44,9 +44,9 @@ var deprecations = map[string]string{
 
 	// --- 2.1.0 (2026-08-06): the four app-owned verbs moved under the app ---
 	//
-	// D-11. `upload`, `storage`, `trash` and `label` are the verbs whose ANSWER
-	// DEPENDS ON THE APP: a file is attributed to the app that received it, a bin
-	// holds one app's entities, a label is filtered by app. With one deployment a
+	// D-11. `upload`, `trash` and `label` are the verbs whose ANSWER DEPENDS ON
+	// THE APP: a file is attributed to the app that received it, a bin holds one
+	// app's entities, a label is filtered by app. With one deployment a
 	// bare spelling was correct; with two it has no correct answer, only a
 	// default — and a default is how a sales contract gets filed under issues.
 	//
@@ -54,10 +54,16 @@ var deprecations = map[string]string{
 	// alias, because an alias would have to pick an app silently, which is the
 	// exact accident being removed. The failure is loud and names its replacement.
 	// Keep for two minor releases (through 2.3.0), then prune.
-	"upload":  "`bk upload …` is now `bk <app> upload …` — a file is stored against one app, so the app names itself: `bk issues upload contract.pdf`. Run `bk --help` for the apps this binary knows, or `bk guide platform/apps` for why.",
-	"storage": "`bk storage …` is now `bk <app> storage …` — e.g. `bk issues storage list`. The file listing is workspace-wide either way; the app segment says which deployment answers. Run `bk guide platform/apps`.",
-	"trash":   "`bk trash …` is now `bk <app> trash …` — each app has its own recycle bin, e.g. `bk issues trash list`. Run `bk guide platform/apps`.",
-	"label":   "`bk label …` is now `bk <app> label …` — labels are filtered by app, e.g. `bk issues label list`. Run `bk guide platform/apps`.",
+	"upload": "`bk upload …` is now `bk <app> upload …` — a file is stored against one app, so the app names itself: `bk issues upload contract.pdf`. Run `bk --help` for the apps this binary knows, or `bk guide platform/apps` for why.",
+	"trash":  "`bk trash …` is now `bk <app> trash …` — each app has its own recycle bin, e.g. `bk issues trash list`. Run `bk guide platform/apps`.",
+	"label":  "`bk label …` is now `bk <app> label …` — labels are filtered by app, e.g. `bk issues label list`. Run `bk guide platform/apps`.",
+
+	// `bk storage` itself STAYS BARE (D-28): one ledger, one quota, the same rows
+	// from every app. Only its issues-only subcommand moved, and it moved to a
+	// noun of that app rather than to `bk issues storage attachments` — one noun
+	// must not straddle two tiers. Keyed `<parent> <sub>` because `bk storage`
+	// still exists, so cobra reports this one against the GROUP.
+	"storage attachments": "`bk storage attachments` is now `bk issues attachment list` — it lists issue attachments and only ever did, so it is a noun of that app. `bk storage list` is unchanged and still spans every app.",
 
 	// --- 1.12.0 (2026-08-05): `bk undo` removed ---
 	//

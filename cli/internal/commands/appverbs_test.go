@@ -9,8 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// D-11: `upload`, `storage`, `trash` and `label` are APP-OWNED — they are
-// spelled `bk <app> <verb>` and there is no bare form.
+// D-11: `upload`, `trash` and `label` are APP-OWNED — they are spelled
+// `bk <app> <verb>` and there is no bare form. (`storage` was here for one
+// commit; D-28 moved it back to the cross-app tier, where the same rows come
+// back whichever app you ask.)
 //
 // The properties below are what "the tier is visible in the command itself"
 // actually means, asserted rather than described. The end-to-end half — that the
@@ -19,16 +21,20 @@ import (
 // alone would pass with hintFor() never calling it. That is the shape of
 // CLAUDE.md finding #8, and it was found in this repo once already.
 
-// appOwnedVerbs is the tier, in the order an app group lists them. Read from the
-// shared constructor rather than typed out, so a fifth verb added there cannot
-// be missed here.
+// appOwnedVerbNames is the tier, in the order an app group lists them. Read from
+// the shared constructor rather than typed out, so a verb added or removed there
+// cannot be missed here.
 func appOwnedVerbNames(t *testing.T) []string {
 	t.Helper()
 	var out []string
 	for _, c := range appverbs.New(appverbs.Config{App: "probe"}).All() {
 		out = append(out, c.Name())
 	}
-	if len(out) < 4 {
+	// The tier is three verbs (upload, trash, label) since D-28 moved `storage`
+	// back to the cross-app tier. The floor is an input assertion, not a
+	// specification: it exists so a Set that returned nothing would fail here
+	// instead of making every assertion below pass vacuously.
+	if len(out) < 3 {
 		t.Fatalf("only %d app-owned verbs discovered — an empty list would make every "+
 			"assertion below vacuous", len(out))
 	}

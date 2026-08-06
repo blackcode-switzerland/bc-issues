@@ -16,12 +16,16 @@ in exactly one tier, and **you can see which from the command itself**:
   `bk meta`. Identity and org data: the answer is the same whichever app you ask,
   so no app can be the wrong one.
 - **Cross-app — bare, and that is the point.** `bk search`, `bk activity`,
-  `bk link`. They span every app by design and tag each result with the app it
-  came from.
+  `bk link`, `bk storage list`. They span every app by design and tag each
+  result with the app it came from.
 - **App-owned — behind the app's name.** `bk issues issue create`, and also
-  `bk issues upload`, `bk issues storage list`, `bk issues trash list`,
-  `bk issues label list`. A file, a recycle bin and a label each belong to ONE
-  app, so the app says so.
+  `bk issues upload`, `bk issues trash list`, `bk issues label list`. A file's
+  ownership, a recycle bin and a label each belong to ONE app, so the app says
+  so.
+
+You **upload into** one app and **list across** all of them: `bk issues upload`
+files a document under issues, `bk storage list` shows every app's files against
+the one workspace quota.
 
 Read `bk guide platform/apps` before doing anything that writes. It is the full
 rule, with the reasoning, and it is what stops a file landing in the wrong app.

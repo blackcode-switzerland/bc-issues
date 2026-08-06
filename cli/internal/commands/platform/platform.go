@@ -12,14 +12,16 @@
 //	           three workspace lists for one company.
 //
 //	CROSS-APP  spans every app BY DESIGN, and tags each result with the app it
-//	           came from. search, activity, link. Making these app-scoped would
-//	           destroy the thing they exist for.
+//	           came from. search, activity, link — and `storage`, which lists
+//	           every app's files against one workspace quota (D-28). Making these
+//	           app-scoped would destroy the thing they exist for.
 //
-// The third tier — `upload`, `storage`, `trash`, `label`, whose answer depends
-// on the app — moved to `bk <app> <verb>` in 2.1.0 and lives in
-// internal/appverbs. Read that package's header before adding a command here:
-// the question is not "is it shared code?" but "would two deployments give the
-// same answer?". A label, a file and a recycle bin would not.
+// The third tier — `upload`, `trash`, `label`, whose answer depends on the app —
+// moved to `bk <app> <verb>` in 2.1.0 and lives in internal/appverbs. Read that
+// package's header before adding a command here: the question is not "is it
+// shared code?" but "would two deployments give the same answer?". A label, a
+// file's ownership and a recycle bin would not; a file LISTING does — which is
+// why `storage` is here and `upload` is not.
 //
 // This package must not import any app package, and no app package may import
 // it. Anything both need is in internal/cmdutil or internal/appverbs.
@@ -48,6 +50,7 @@ func NewCommands() []*cobra.Command {
 		newActivityCmd(),
 		newSearchCmd(),
 		newLinkCmd(),
+		newStorageCmd(),
 		newChangelogCmd(),
 		newSuperAdminCmd(),
 		newVersionCmd(),

@@ -329,12 +329,17 @@ bk user list                       list every user on the server
 bk user view <id|email>            show one user (filtered client-side)
 ```
 
-### Files (app-owned since 2.1.0)
+### Files
 ```
 bk <app> upload <file> [<file> ...]   upload file(s), print url(s) (no sidebar record)
+bk storage list [--app <slug>]        every app's files + refs + usage (owner)
+bk storage rm <id> [--yes]            permanently delete an orphan (owner)
+bk issues attachment list             this app's attachment rows, workspace-wide
 ```
-The app segment decides which app the file is filed under — there is no bare
-spelling and no default.
+`upload` is app-owned: it has no bare spelling and no default, because the
+receiving app is recorded on the file. `storage` is cross-app and bare, because
+every app returns the same rows. **You upload INTO one app and list ACROSS all
+of them.**
 
 ### Activity / Analytics / Undo
 ```

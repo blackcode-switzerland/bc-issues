@@ -85,22 +85,26 @@ run "bk guide platform/apps" for the rule and the reasoning.
        search      federated search across every app's entities (returns URNs)
        activity    merged activity feed across every app (--since, --app)
        link        relate two entities by URN, across apps (create, list, rm)
+       storage     every app's uploaded files, one workspace quota (owner only)
 
   3. APP-OWNED — behind the app's name, because the answer depends on the app.
-     Every app group carries the same four, plus its own nouns.
+     Every app group carries the same three, plus its own nouns.
        bk <app> upload    store a file against that app
-       bk <app> storage   list, rm, and that app's attachments (workspace owner)
        bk <app> trash     that app's recycle bin: list, restore, purge, empty
        bk <app> label     list, view, create, edit, delete, attach, detach
 
-APPS — every app verb sits behind its app name:
-  issues      issue, task, project, move, copy, analytics + the four above
+     Files are the pairing to remember: you upload INTO one app
+     ("bk issues upload"), and you list ACROSS all of them ("bk storage list").
 
-Renamed in 2.1.0: "upload", "storage", "trash" and "label" moved behind the app
-name — "bk issues upload", not "bk upload". There is no bare form and no alias:
-a bare spelling would have to pick an app silently, which is the mistake being
-removed. The old spellings exit non-zero and name their replacement.
-Run "bk changelog".
+APPS — every app verb sits behind its app name:
+  issues      issue, task, project, attachment, move, copy, analytics
+              + the three above
+
+Renamed in 2.1.0: "upload", "trash" and "label" moved behind the app name —
+"bk issues upload", not "bk upload". There is no bare form and no alias: a bare
+spelling would have to pick an app silently, which is the mistake being removed.
+"bk storage attachments" became "bk issues attachment list". The old spellings
+exit non-zero and name their replacement. Run "bk changelog".
 
 Every issue, task and project is addressable by a URN —
 bc:issues:<workspace>/<type>/<number> — so "bk search" spans apps and "bk link"
@@ -137,8 +141,8 @@ func NewRoot() *cobra.Command {
 	// One entry per app. Adding an app is adding a line here plus its package —
 	// which is the whole point of the migration.
 	//
-	// Tier 3 is NOT wired here: each app group mounts the four app-owned verbs
-	// itself, in one line, from internal/appverbs — see issues.NewGroup(). Doing
+	// Tier 3 is NOT wired here: each app group mounts the app-owned verbs itself,
+	// in one line, from internal/appverbs — see issues.NewGroup(). Doing
 	// it there rather than here is what lets an app add its own entity-specific
 	// subcommands to those groups (`bk issues label attach`) without this file
 	// knowing any app's nouns.

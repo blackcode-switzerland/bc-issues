@@ -30,6 +30,7 @@ three workspace lists for one company.
 bk search "acme"        # hits from EVERY app, each tagged with the app it is in
 bk activity             # one merged feed; --app narrows it
 bk link create …        # relate two things that live in different apps
+bk storage list         # every app's files, one workspace quota; --app filters
 ```
 
 Results are tagged with the app they came from, and addresses are URNs
@@ -41,21 +42,39 @@ exist. See `bk guide platform/cross-app`.
 
 ```bash
 bk issues issue create --title "…"     # this app's nouns
-bk issues upload contract.pdf          # …and these four, which used to be bare
-bk issues storage list
+bk issues upload contract.pdf          # …and these three, which used to be bare
 bk issues trash list
 bk issues label list
 ```
 
-`upload`, `storage`, `trash` and `label` moved behind the app name in 2.1.0.
-They look shared, and they are not:
+`upload`, `trash` and `label` moved behind the app name in 2.1.0. They look
+shared, and they are not:
 
 | Verb | Why it belongs to one app |
 |---|---|
 | `upload` | the file records which app received it, and lands under that app's prefix |
-| `storage` | the cabinet is shared, but `rm` destroys a file one app is responsible for |
 | `trash` | each app has its own recycle bin, holding its own entities |
 | `label` | labels are filtered by app, and attaching one names an entity in that app |
+
+### Files: you upload INTO one app, and you list ACROSS all of them
+
+This is the one pairing worth memorising, because the two halves sit in
+different tiers on purpose:
+
+```bash
+bk issues upload contract.pdf   # APP-OWNED: the file is filed under issues
+bk storage list                 # CROSS-APP: every app's files, tagged by app
+bk storage list --app issues    # …filtered, if you only want one app's
+```
+
+Uploading is a choice about ownership — the file is permanently attributed to
+the app that received it and stored under that app's prefix — so the app has to
+be in the command. Listing is not: uploads are ONE ledger against ONE workspace
+quota, so every app returns the same rows. An app-scoped `storage list` would
+have suggested the app narrows the answer, and then not narrowed it.
+
+The test to apply when you are unsure: **would two deployments answer
+differently?** If yes, the app is in the command.
 
 ## Why a namespace and not a `--app` flag
 
@@ -105,4 +124,4 @@ The rule of thumb, if you remember nothing else: **if the answer would differ
 between two deployments, the app is in the command.** If it would not, the verb
 is bare.
 
-Related commands: `bk --help`, `bk meta`, `bk app list`, `bk issues upload`, `bk issues trash list`, `bk search`, `bk link`
+Related commands: `bk --help`, `bk meta`, `bk app list`, `bk issues upload`, `bk issues trash list`, `bk storage list`, `bk search`, `bk link`

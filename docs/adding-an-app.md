@@ -122,11 +122,16 @@ create`. Three tiers decide the spelling (D-11, `bk guide platform/apps`):
 | Tier | Verbs | Spelling |
 |---|---|---|
 | Neutral — same answer from any app | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare |
-| Cross-app — spans every app by design, results tagged | `search` `activity` `link` | bare |
-| App-owned — the answer depends on the app | your nouns, **plus** `upload` `storage` `trash` `label` | `bk <app> <verb>` |
+| Cross-app — spans every app by design, results tagged | `search` `activity` `link` `storage` | bare |
+| App-owned — the answer depends on the app | your nouns, **plus** `upload` `trash` `label` | `bk <app> <verb>` |
 
-The four app-owned platform verbs are shared code in `cli/internal/appverbs`.
-Your group mounts them in one line:
+The test is *"would two deployments answer differently?"*, never *"is it shared
+code?"* — `storage` is shared code AND cross-app, because uploads are one ledger
+against one workspace quota (D-28). You upload INTO one app and list ACROSS all
+of them.
+
+The app-owned platform verbs are shared code in `cli/internal/appverbs`. Your
+group mounts them in one line:
 
 ```go
 cmd.AddCommand(appverbs.New(appverbs.Config{App: Slug, TrashTypes: […]}).All()...)
