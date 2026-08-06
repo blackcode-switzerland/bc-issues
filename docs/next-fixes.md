@@ -12,6 +12,51 @@
 Dated items still owed. Everything under the horizontal rule below this section
 is the closed 2026-06-18 record and is history — read it, do not act on it.
 
+### 2026-08-06 — CONTRACT: drop the bare legacy values from the two type CHECKs
+
+Migrations `0041`/`0042` app-qualified `platform.comments.parent_type` and
+`platform.deletion_batches.root_type` to `<app>:<noun>` and backfilled every
+existing row. That was **expand + migrate**. The **contract** step is still owed:
+
+1. Drop `IN ('issue','task','project')` from both CHECK constraints, leaving only
+   the shape pattern.
+2. Delete the legacy branch of `typeMatchForms` in
+   `packages/platform-db/src/qualified-type.ts`, and with it `ownTypeForms` /
+   `ownTypeIn` in `apps/issues/lib/db/queries/qualified-type.ts` — the reads then
+   match one value instead of two.
+
+**The precondition is a CODE fact, not a data fact.** `SELECT … WHERE
+parent_type IN ('issue','task','project')` returning zero rows proves nothing: it
+proves nothing has written the bare form *lately*, not that nothing *can*.
+Verify instead that no deployed build reaches an unqualified write — every write
+goes through `ownType()`, so the check is that `ownType` is the only value passed
+to `parent_type` / `root_type`, in every app, at the version each is running.
+
+Earliest safe release: the one after `0041`/`0042` reach production in every
+deployment. **Nothing fails if this is forgotten** — both columns keep working
+with a wider constraint than they need — which is exactly why it is written down.
+
+### 2026-08-06 — decide whether existing labels stay shared
+
+Migration `0043` added `platform.labels.app` and deliberately left every existing
+row `NULL`, meaning **shared with every app in the workspace**. That is the
+correct expand step: no deployed build's label list changed.
+
+It is also a product decision nobody has made yet. D-14's stated motivation is
+that *"issues' labels pollute sales' picker and vice versa"* — and with the rows
+left NULL, issues' existing labels **will** appear in the sales picker. New
+labels are scoped from now on, so this affects only the ones that existed on
+2026-08-06.
+
+The fix, if wanted, is one statement:
+
+    UPDATE platform.labels SET app = 'issues' WHERE app IS NULL;
+
+**The trigger is the sales app's launch, not this migration.** Decide before a
+second app's users see a label list; after that the answer becomes "whichever we
+already shipped". Note that running it leaves zero shared labels, i.e. a
+supported state with no instances — which is a reason to think, not a blocker.
+
 ### 2026-08-06 — drop the `bk 2.x` parenthetical from the trash suggestions
 
 CLI 3.0.0 moved the recycle bin behind the app name (`bk <app> trash list`,

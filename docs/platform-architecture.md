@@ -46,7 +46,9 @@ split explicit.
 
 Two properties made the split cheaper than expected and are worth preserving:
 `comments` is **polymorphic** (`parent_type` / `parent_id`), and `labels` /
-`uploads` are **workspace-scoped, not issue-scoped**.
+`uploads` are **workspace-scoped, not issue-scoped**. Both grew an app dimension
+in Phase 1e of the sales app — `<app>:<noun>` type columns and `labels.app` — for
+the reason §4.6 gives: polymorphic and shared is not the same as app-neutral.
 
 ## 3. Repo layout
 
@@ -255,13 +257,17 @@ to forbid.
 > the reflex; "move it to the app that owns it" is often the smaller change and
 > always the cleaner boundary.
 
-**Two reshapes are designed but NOT built.** Both are cheap now and painful
-later, and the first real second app needs them:
+**Both reshapes this section used to list as owed were built on 2026-08-06**, as
+the second app's Phase 1e (D-14). They are described here as they now are:
 
-| Owed | What | Why it matters |
+| Reshape | What it is | Migration |
 |---|---|---|
-| `comments.parent_type` app-qualification | `'issue'` → `'issues:issue'` | Values today are still `issue` and `task`. Without the prefix, `sales` storing `'deal'` risks a collision the moment two apps pick the same noun |
-| `labels.app` nullable column | `NULL` = shared across every app in the workspace; set = scoped to that app | The column does not exist yet. Default new labels to shared; it exists so one app's taxonomy cannot clutter another's picker |
+| App-qualified type columns | `comments.parent_type` and `deletion_batches.root_type` hold `<app>:<noun>` — `issues:issue`, `sales:prospect`. The CHECK validates the **shape**, never the vocabulary: platform does not enumerate an app's nouns here any more than it does in `entities.entity_type`, so no shared-table migration is needed when an app adds one. What it refuses is a new BARE noun, which is the collision the qualification exists to prevent | `0041`, `0042` |
+| `labels.app` nullable column | `NULL` = shared across every app in the workspace (every row that predates the column); set = scoped to that app. **Filtering is the load-bearing half** — every label read on an app's deployment carries `app IS NULL OR app = <that app>`, including the reads that are not lists (resolve-by-name, attach, rename, delete). A column nobody reads is worse than no column: the app-scoped `bk <app> label` spelling then promises something the data does not do | `0043` |
+
+Both are the **expand** half of expand → migrate → contract. The bare legacy
+values are still accepted and every read still matches them; dropping them is a
+later release, tracked in `docs/next-fixes.md`.
 
 ### 4.7 Migrations
 

@@ -105,6 +105,54 @@ index as authoritative, which is how a file still in use gets deleted.
 Until it does, blob deletion in **every** deployment refuses — correctly, because
 nobody can prove the file is unused. That is not a bug to work around.
 
+## The app dimension on shared tables
+
+Three `platform.*` columns exist so more than one app can write these tables
+without colliding. All three landed 2026-08-06 (migrations `0041`–`0043`, D-14)
+and all three are the **expand** half of expand → migrate → contract.
+
+| Column | Form | Rule |
+|---|---|---|
+| `comments.parent_type` | `<app>:<noun>` | `issues:issue`, `sales:prospect` |
+| `deletion_batches.root_type` | `<app>:<noun>` | same |
+| `labels.app` | slug, or NULL | NULL = **shared** with every app in the workspace |
+
+Three things about them are easy to get wrong:
+
+**The CHECK validates the shape, not the vocabulary.** `<app>` and `<noun>` are
+each `[a-z][a-z0-9_-]{0,39}`, and that is all. Platform does not enumerate an
+app's nouns here for the same reason it does not in `entities.entity_type` — an
+enumeration means a shared-table migration every time any app invents a noun, and
+a hand-maintained list of other people's words is this repo's recurring drift
+bug. **`'nonsense:thing'` is therefore accepted.** What is refused is a new BARE
+noun (`'prospect'`), which is the collision the qualification exists to prevent.
+Validating `<app>` against `platform.apps` would need a generated column plus an
+FK; `blob_references` records why that direction is refused, and it would make a
+new app's writes illegal until its registration migration ran.
+
+**The wire format stays bare.** Routes return `parent_type: "issue"`, not
+`"issues:issue"` — the path already names the app, and `batch_root_type` is
+compared client-side against a bare `type`. The qualification is a storage
+concern; `packages/platform-db/src/qualified-type.ts` is the only place that
+converts, and every read matches the qualified AND the legacy bare form until the
+contract step.
+
+**A scope column nobody reads is worse than no column.** `labels.app` is only
+worth having because every label read is filtered to
+`app IS NULL OR app = <serving app>` — and "read" means the resolve-by-name
+behind label creation, the attach, the rename and the delete, not only the list
+route. Before the filter, `bk issues label list` promised a scoping the data did
+not do; a column without it makes the promise louder and no truer.
+
+**The backfill in `0041`/`0042` is deploy-order-sensitive.** It is invisible to
+the build that ships with it (which matches both forms) and to every other app,
+but a build from *before* it still looks for the bare noun and renders empty
+comment threads. Chain the migration and the promote — the same remedy as a
+migrate-first cutover below — rather than applying it by hand ahead of time.
+
+Rollbacks: `docs/sql/phase1e-*.sql`, one per migration, each stating what
+promoting the previous build already achieves without them.
+
 ## Counters live in the app, not in platform
 
 An app's `#number` sequence is app data. Keep the counter table in your own
