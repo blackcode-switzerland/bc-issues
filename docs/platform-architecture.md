@@ -164,6 +164,24 @@ ledger. Prove it with `docs/sql/app-boundary-probe.sql`, run **as the app role**
 the properties are invisible from any other session, which is why it is a manual
 provisioning step and not a CI test.
 
+**Two code-level checks stand in front of the grant**, because a violation the
+grant catches is one that reached production:
+
+| Where the code is | What checks it | Added |
+|---|---|---|
+| `apps/<app>` | `lib/app-isolation.test.ts` — no import resolving into another app, no query naming another app's schema | 2026-08-06 (replacing a dead ESLint rule) |
+| `packages/platform-*` | `packages/platform-testing/test/package-isolation.test.ts` — no query naming ANY app's schema | 2026-08-06 |
+
+> **Why the second one is not redundant with the compiler.** Shared code cannot
+> *import* an app table — `platform-db`'s schema does not contain one, so it does
+> not compile. Raw SQL walks past that, and raw SQL is a shape shared code
+> already uses. The failure is the worst available: the issues role *can* read
+> `issues.*`, so it works in the deployment where it was written and 42501s in
+> every other one. It works for the author and breaks for everyone else.
+>
+> The app-name list is **derived from each app's `APP_SLUG`**, never typed out. A
+> hardcoded list is wrong the day app four lands, and its failure is silence.
+
 > **`pg_dump --schema=<app>` is NOT an extraction path, and it fails silently.**
 > The dump emits the app's triggers and every foreign key into `platform`; all of
 > them fail at restore, and `psql` exits **0** regardless. The result boots,

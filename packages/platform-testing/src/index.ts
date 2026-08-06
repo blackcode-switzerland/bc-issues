@@ -4,6 +4,8 @@ export {
   findCrossSchemaQueries,
   sourceFiles,
   importsOf,
+  isDir,
   type CrossAppImport,
   type CrossSchemaQuery,
 } from './app-isolation'
+export { appSlugs, platformPackageSources, type AppSlug } from './package-isolation'

@@ -111,8 +111,19 @@ export function findCrossAppImports(appRoot: string, appsRoot: string): CrossApp
 }
 
 export interface CrossSchemaQuery {
+  /** Basename, for a message about one app's own tree. */
   file: string
+  /**
+   * Absolute path.
+   *
+   * Added when this scanner was pointed at `packages/platform-*` as well as at
+   * an app (2026-08-06): seven packages contain a `client.ts`, and a failure
+   * naming only the basename tells you a rule was broken but not by whom.
+   */
+  path: string
   schema: string
+  /** 1-indexed, so the failure message is somewhere you can jump to. */
+  lineNumber: number
   line: string
 }
 
@@ -138,13 +149,15 @@ export function findCrossSchemaQueries(
     for (const schema of otherSchemas) {
       // Word boundary before, so `myissues.foo` does not match `issues.`.
       const re = new RegExp(`(^|[^\\w.])${schema}\\.[a-z_]+`, 'g')
-      for (const line of src.split('\n')) {
+      src.split('\n').forEach((line, i) => {
         // Comments are prose about other apps, which is normal and useful.
         const trimmed = line.trim()
-        if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue
-        if (re.test(line)) out.push({ file: basename(file), schema, line: trimmed })
+        if (trimmed.startsWith('//') || trimmed.startsWith('*')) return
+        if (re.test(line)) {
+          out.push({ file: basename(file), path: file, schema, lineNumber: i + 1, line: trimmed })
+        }
         re.lastIndex = 0
-      }
+      })
     }
   }
   return out

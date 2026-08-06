@@ -380,6 +380,39 @@ Your app's own tests must include, copied from the scaffold:
 - `lib/app-isolation.test.ts` — no import into another app, no query of another
   app's schema
 
+**You do not need a third one for the shared packages.**
+`packages/platform-testing/test/package-isolation.test.ts` scans every
+`packages/platform-*/src` for a reference to any app's Postgres schema, and it
+**derives the list of app names from each app's own `APP_SLUG`** — so your app is
+covered the moment `apps/<you>/lib/app.ts` exists, with nothing to register. If
+you ever see that test name your app's schema, the offending line is in shared
+code and the fix is a platform table, not an exception.
+
+> Why it exists: a raw-SQL `FROM issues.issues` inside a platform package
+> compiles, lints and passes every other test — and then **works in the issues
+> deployment and 42501s in yours**, because the boundary is a Postgres grant.
+> It works where it was written and fails where it was not.
+
+### Prove it fires — three steps, not two
+
+The standing rule in `CLAUDE.md` is step 1. Steps 2 and 3 were added on
+2026-08-06 because each was learned from a guard that had already passed step 1:
+
+1. **Watch the check fail.** Break the thing it guards; restore.
+2. **Ask what it would still pass on.** Wrong fixture, wrong wiring, empty input.
+3. **Inject that regression and watch it again.**
+
+Step 3 is not ceremony. The seam test in `apps/issues` was written by someone who
+performed step 2, wrote a paragraph explaining why the fixture was sound, and was
+wrong: every fan-out handler bails politely on an empty lookup, so the fake that
+answered every read with `[]` made five assertions incapable of failing. The
+suite passed 13/13 with the regression in place. Reasoning about step 2 is
+reasoning, and you can be wrong in writing while feeling right.
+
+The same shape appears in any check with an input: **assert that you found
+something to check.** A scan over zero files and a filter over zero values both
+report a confident green.
+
 ---
 
 ## What the walk actually cost
