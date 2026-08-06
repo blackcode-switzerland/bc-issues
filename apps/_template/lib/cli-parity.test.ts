@@ -29,11 +29,25 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
 const EXCLUDED_PATHS = new Map<string, string>()
 
 describe('CLI ↔ routes parity', () => {
-  // No `hostsPlatformRoutes`: the shared routes live in apps/issues, so the
-  // bare verbs (`bk workspace`, `bk label`, …) are checked there. Setting it
-  // here would make this app report every platform route as drift.
-  const { real, claimed, ownClaims, cli } = collectAppRoutes(
-    { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: APP_SLUG },
+  // `hostsPlatformRoutes` means "I mount the platform route factories from
+  // @blackcode/platform-api/routes" — since 2026-08-06 it is a property of what
+  // an app SERVES, not of where the files happen to sit, and several apps may
+  // set it (docs/sales-app-plan.md Phase 1b).
+  //
+  // This scaffold mounts none of them: it has one route of its own and exists to
+  // show the shape. So the flag is false, and the bare verbs (`bk workspace`,
+  // `bk label`, …) are checked by the apps that do mount them. WHEN YOU COPY
+  // THIS APP and mount a platform route — `/api/me` is the first one a UI needs
+  // — set this to true in the same change. The assertion below is what catches
+  // you if you don't.
+  const HOSTS_PLATFORM_ROUTES = false
+  const { real, claimed, ownClaims, mountedPlatformRoutes, cli } = collectAppRoutes(
+    {
+      appRoot: APP_ROOT,
+      cliDir: CLI_DIR,
+      appSlug: APP_SLUG,
+      hostsPlatformRoutes: HOSTS_PLATFORM_ROUTES,
+    },
     new Set(EXCLUDED_PATHS.keys())
   )
 
@@ -49,6 +63,23 @@ describe('CLI ↔ routes parity', () => {
         'and does cli/internal/guide/topics/ have a directory named for this app? ' +
         'Route attribution comes from the guide section list.'
     ).toBeGreaterThan(0)
+  })
+
+  // The flag above decides whether platform commands' routes are checked here at
+  // all, and a hand-set boolean that switches a check off is how a guard reads
+  // green while examining nothing (CLAUDE.md's table of nine). So it is checked
+  // against the filesystem rather than trusted: mount a platform route without
+  // setting the flag and this fails, naming the route you mounted.
+  it('sets hostsPlatformRoutes iff it actually mounts platform routes', () => {
+    expect(
+      HOSTS_PLATFORM_ROUTES,
+      mountedPlatformRoutes.length > 0
+        ? `this app mounts platform route(s):\n${mountedPlatformRoutes.join('\n')}\n` +
+          'so set hostsPlatformRoutes to true — otherwise every platform command\'s claimed ' +
+          'route goes unchecked here.'
+        : 'this app mounts no platform routes, so hostsPlatformRoutes must be false — ' +
+          'setting it would make this app report every platform route as drift.'
+    ).toBe(mountedPlatformRoutes.length > 0)
   })
 
   it('every leaf command declares its routes', () => {

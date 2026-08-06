@@ -94,12 +94,22 @@ const EXCLUDED_OPERATIONS = new Map<string, string>([
 ])
 
 describe('CLI ↔ routes parity', () => {
-  // `hostsPlatformRoutes` because the shared routes (workspaces, labels, trash,
-  // uploads, tokens) physically live in THIS app's tree. Exactly one app may set
-  // it; without it, every platform command's route would go unchecked by every
-  // app. See the header of @blackcode/platform-testing's cli-parity.ts.
-  const { real, allPaths, claimed, ownClaims, cli } = collectAppRoutes(
-    { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: 'issues', hostsPlatformRoutes: true },
+  // `hostsPlatformRoutes` because this app MOUNTS the platform routes
+  // (workspaces, labels, trash, uploads, tokens, search, …). Until 2026-08-06 it
+  // meant "they physically live in my tree" and exactly one app could say it;
+  // Phase 1b of docs/sales-app-plan.md turned them into factories in
+  // @blackcode/platform-api/routes that every app mounts, so several apps may
+  // now set it and each checks the platform claims against its own tree.
+  // Without it set anywhere, every platform command's route goes unchecked by
+  // everybody. See the header of @blackcode/platform-testing's cli-parity.ts.
+  const HOSTS_PLATFORM_ROUTES = true
+  const { real, allPaths, claimed, ownClaims, mountedPlatformRoutes, cli } = collectAppRoutes(
+    {
+      appRoot: APP_ROOT,
+      cliDir: CLI_DIR,
+      appSlug: 'issues',
+      hostsPlatformRoutes: HOSTS_PLATFORM_ROUTES,
+    },
     new Set(EXCLUDED_PATHS.keys())
   )
   const covered = claimed
@@ -115,6 +125,32 @@ describe('CLI ↔ routes parity', () => {
       cli.routes.length,
       `the CLI claims no routes at all — is ${CLI_DIR} the right directory?`
     ).toBeGreaterThan(0)
+  })
+
+  // `hostsPlatformRoutes` decides whether the platform commands' routes are
+  // checked AT ALL by this app. A flag like that, set by hand in a test file, is
+  // the exact shape of the nine green-but-inert guards in CLAUDE.md: turn it off
+  // and nothing complains, because "checked nothing" and "found nothing wrong"
+  // produce the same green.
+  //
+  // So the declaration is checked against the filesystem. If this app serves any
+  // route a platform command claims, it mounts platform routes, and the flag has
+  // to say so.
+  it('sets hostsPlatformRoutes iff it actually mounts platform routes', () => {
+    expect(
+      mountedPlatformRoutes.length,
+      'no route in this app matches any platform command claim — either the CLI has no ' +
+        'platform commands (check `bk __routes`), or the mounts were removed. Either way ' +
+        'this suite is no longer checking what it says it checks.'
+    ).toBeGreaterThan(0)
+
+    expect(
+      HOSTS_PLATFORM_ROUTES,
+      `this app mounts ${mountedPlatformRoutes.length} platform route(s), e.g. ` +
+        `${mountedPlatformRoutes.slice(0, 3).join(', ')} — but hostsPlatformRoutes is false, ` +
+        "so every platform command's claimed route is going unchecked here. " +
+        'Set it, or remove the mounts.'
+    ).toBe(true)
   })
 
   it('every leaf command declares its routes', () => {

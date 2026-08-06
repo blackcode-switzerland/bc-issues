@@ -22,16 +22,35 @@
 //             in an app's tree but is reached by a bare verb.
 //
 //   DRIFT     "every route bk claims exists" considers commands from app X only
-//             — plus `platform` for the ONE app that physically hosts the shared
-//             routes (`hostsPlatformRoutes`). Without that flag on exactly one
-//             app, every platform command's route would go unchecked by
-//             everybody, which is the failure mode this whole file exists to
-//             prevent: a guard that reads green because it checked nothing.
+//             — plus `platform` for each app that MOUNTS the shared platform
+//             routes (`hostsPlatformRoutes`). Without that flag set anywhere,
+//             every platform command's route would go unchecked by everybody,
+//             which is the failure mode this whole file exists to prevent: a
+//             guard that reads green because it checked nothing.
 //
-// When shared routes eventually move out of `apps/issues`, move the flag with
-// them. If it is ever set on two apps, each will report the other's platform
-// routes as drift — noisy, but loud, which is the right way for that mistake to
-// surface.
+// ── WHAT `hostsPlatformRoutes` MEANS, AND WHAT IT USED TO MEAN ───────────────
+// Until 2026-08-06 it meant "the shared routes physically live in MY app/api
+// tree", and exactly one app could set it — `apps/issues`, because that is where
+// they happened to sit. Phase 1b of docs/sales-app-plan.md moved them into
+// `@blackcode/platform-api/routes` as factories, and every app now mounts the
+// ones it serves. So the flag means **"I mount the platform route factories"**,
+// and SEVERAL APPS MAY SET IT. Each checks the platform claims against its own
+// tree, which is what makes an app that forgot a mount file go red on its own
+// test instead of on somebody else's.
+//
+// The flag is not free-floating: `mountedPlatformRoutes` below derives, from the
+// filesystem, whether an app actually serves any platform route. An app that
+// does and says it does not is a test that has quietly stopped checking, so it
+// is a failure — see the "sets hostsPlatformRoutes iff it mounts them" case in
+// each app's cli-parity.test.ts. That is the only thing standing between this
+// flag and the row in CLAUDE.md's table it would otherwise join.
+//
+// KNOWN GAP, and it belongs to whoever adds the second app rather than to this
+// file: an app that mounts only SOME platform routes (docs/sales-app-plan.md
+// splits them into Tier 1 before launch and Tier 2 after) will report the ones
+// it has not mounted yet as drift. Sound, but it will be loud on the day sales
+// lands, and the fix is a decision — mount the rest, or teach the flag about
+// tiers — not something to guess at here.
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -63,8 +82,12 @@ export interface ParityInputs {
   /** This app's slug, matching `bk __routes`' `app` field. */
   appSlug: string
   /**
-   * True for the app whose `app/api` tree physically holds the shared platform
-   * routes. Exactly one app may set it — see the header.
+   * True when this app MOUNTS the platform route factories from
+   * `@blackcode/platform-api/routes`. Several apps may set it — see the header.
+   *
+   * Setting it puts every `platform` command's claimed route into this app's
+   * drift check. Leaving it off when the app does serve platform routes is
+   * itself a failure; `mountedPlatformRoutes` is how a test proves that.
    */
   hostsPlatformRoutes?: boolean
 }
@@ -140,6 +163,17 @@ export interface AppRoutes {
   claimed: Set<string>
   /** Routes this app is responsible for proving exist. See the header. */
   ownClaims: CliRouteEntry[]
+  /** Every route claimed by a `platform` command, whoever serves it. */
+  platformClaims: CliRouteEntry[]
+  /**
+   * The platform-claimed paths this app actually has a route file for.
+   *
+   * Derived from the filesystem, never from a declaration, because it exists to
+   * check a declaration: an app with entries here that leaves
+   * `hostsPlatformRoutes` off has silently excused every platform command's
+   * route from its drift check, and nothing else would say so.
+   */
+  mountedPlatformRoutes: string[]
   cli: CliRoutes
 }
 
@@ -177,11 +211,18 @@ export function collectAppRoutes(
     real.set(url, new Set(methodsOf(readFileSync(file, 'utf8'))))
   }
 
+  const platformClaims = cli.routes.filter((r) => (r.app ?? inputs.appSlug) === PLATFORM)
+  const mountedPlatformRoutes = [
+    ...new Set(platformClaims.map((r) => r.path).filter((p) => allPaths.has(p))),
+  ].sort()
+
   return {
     real,
     allPaths,
     claimed: new Set(cli.routes.filter(mine).map((r) => `${r.method} ${r.path}`)),
     ownClaims: cli.routes.filter(ownDriftScope),
+    platformClaims,
+    mountedPlatformRoutes,
     cli,
   }
 }
