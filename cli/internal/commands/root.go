@@ -133,6 +133,17 @@ func NewRoot() *cobra.Command {
 	output.RegisterFlags(root)
 	root.PersistentFlags().StringVar(&cmdutil.WSOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
 	root.PersistentFlags().BoolVarP(&cmdutil.VerboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
+	// --app-server, NOT --app. `--app` is already a FILTER on six commands
+	// (`bk activity --app`, `bk search --app`, `bk storage list --app`,
+	// `bk changelog --app`, `bk guide --app`, `bk invite send --app`), and a
+	// persistent root flag of the same name does not collide loudly: cobra lets
+	// the local flag shadow it, so `bk --app sales storage list` would silently
+	// have FILTERED by sales instead of routing to it, and `bk storage list
+	// --app issues` would have routed instead of filtering. Both read as working.
+	// Found by the two-server routing test, which is the only thing that could
+	// have found it. This name says which of the two it is.
+	root.PersistentFlags().StringVar(&cmdutil.AppOverride, "app-server", "",
+		"Send this invocation's NEUTRAL and CROSS-APP verbs to <app>'s server (`bk <app> …` ignores it; `bk app use` changes it permanently)")
 	// Tiers 1 and 2 (D-11): the verbs that stay bare because no app can be the
 	// wrong one to ask, and the ones whose job is to cross the boundary.
 	root.AddCommand(platform.NewCommands()...)
@@ -146,8 +157,10 @@ func NewRoot() *cobra.Command {
 	// it there rather than here is what lets an app add its own entity-specific
 	// subcommands to those groups (`bk issues label attach`) without this file
 	// knowing any app's nouns.
-	root.AddCommand(issues.NewGroup())
-	root.AddCommand(template.NewCmd())
+	for _, group := range []*cobra.Command{issues.NewGroup(), template.NewCmd()} {
+		pinApp(group, group.Name())
+		root.AddCommand(group)
+	}
 
 	// The pre-1.10.0 spellings (`bk issue …`, `bk task …`, …) were registered
 	// here as working, warning aliases from 1.10.0. **Removed in 1.12.0**, on the
@@ -161,6 +174,41 @@ func NewRoot() *cobra.Command {
 
 	rejectUnknownSubcommands(root)
 	return root
+}
+
+// pinApp makes every command in an app group's subtree talk to THAT app's
+// server (D-1), whatever the home app is and whatever `--app` says.
+//
+// Applied to the subtree rather than passed to each command, and that is the
+// whole point. `bk issues …` has around sixty leaves; threading a slug through
+// every one of them means the first command someone adds without it silently
+// talks to the home server — and "silently talks to the wrong server" is the
+// exact failure D-1 exists to remove. There is no spelling under `bk issues`
+// that can miss this, because it is applied to the tree, not to a call site.
+//
+// It wraps Run/RunE rather than using a PersistentPreRun hook: cobra runs only
+// the CLOSEST PersistentPreRun up the chain, so a hook here would silently
+// disable the root's (which is what turns on --verbose) for every app command.
+// Enabling EnableTraverseRunHooks globally to fix that would change the order
+// of every hook in the tree to buy nothing this does not.
+//
+// Nothing is pinned outside an app group: the neutral and cross-app verbs are
+// meant to follow the home app, which is what an empty pin means.
+func pinApp(cmd *cobra.Command, app string) {
+	if run := cmd.RunE; run != nil {
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			cmdutil.PinApp(app)
+			return run(c, args)
+		}
+	} else if run := cmd.Run; run != nil {
+		cmd.Run = func(c *cobra.Command, args []string) {
+			cmdutil.PinApp(app)
+			run(c, args)
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		pinApp(sub, app)
+	}
 }
 
 // rejectUnknownSubcommands makes a mistyped subcommand a hard failure instead of

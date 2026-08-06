@@ -459,6 +459,36 @@ end-to-end half of that guarantee is `cli/cmd/bk/main_test.go`, which runs the
 real command tree: the table alone is reachable only through `hintFor()`, and a
 test of the table cannot see `hintFor()` dropping it.
 
+#### 7.1.1 Which server a command reaches (D-1)
+
+Each app is its own Vercel project on its own subdomain, so "which app" is also
+"which server". `bk` carries a per-app address book in `~/.config/bk/config.json`
+(`home_app`, `home_server`, `app_servers`), **learned** from `/api/meta` by
+`bk login` and `bk meta` — never typed, so it cannot drift from what the platform
+publishes for longer than one `bk meta`.
+
+| Tier | Server | Set by |
+|---|---|---|
+| Neutral | `home_server` | `bk app use <slug>`, or `--app-server <slug>` for one invocation |
+| Cross-app | `home_server` (shared tables; any app answers alike) | same |
+| App-owned | `app_servers[<app>]` | the command itself — `bk <app> …` pins it |
+
+Three properties are load-bearing, and each has a test:
+
+1. **No fallback.** An unknown app is `cmdutil.UnknownAppError`, naming the app
+   and the command that fixes it — never a request to the home server. A
+   wrong-server 404 is indistinguishable from a deleted record.
+2. **The pin cannot be forgotten.** `root.go`'s `pinApp` wraps every `RunE` in an
+   app group's subtree, so a command added later is routed without anyone
+   remembering. Enforced by `commands/routing_test.go`, which runs every leaf.
+3. **Nobody builds a client behind the resolver.** `cmdutil.ClientForApp` is the
+   only place a base URL is chosen; a direct `client.New` in a command package
+   fails the same test. Six such call sites existed before D-1 and would have
+   sent `bk issues …` to whatever the home server was.
+
+The override is `--app-server`, not `--app`, because `--app` is already a FILTER
+on six commands and cobra lets a local flag shadow a persistent one silently.
+
 ### 7.2 Guide — one folder per app
 
 `topics/platform/` holds what is true everywhere (auth, workspaces, output + exit

@@ -803,8 +803,14 @@ Non-numeric refs trigger a `GET /api/users` lookup the first time they're resolv
 
 ```json
 {
-  "server": "http://localhost:3000",
+  "server": "https://issues.blackcode.ch",
   "token":  "…",
+  "home_app": "issues",
+  "home_server": "https://issues.blackcode.ch",
+  "app_servers": {
+    "issues": "https://issues.blackcode.ch",
+    "sales":  "https://sales.blackcode.ch"
+  },
   "user_id": 7,
   "email":  "alice@example.com",
   "active_workspace_id": 3,
@@ -813,9 +819,23 @@ Non-numeric refs trigger a `GET /api/users` lookup the first time they're resolv
 }
 ```
 
+**`app_servers` is the address book (D-1), added in 3.0.0 and LEARNED, not
+typed.** `bk login` and `bk meta` read `apps.<slug>.base_url` out of `/api/meta`
+and write it here; nobody enters a URL twice, and the book cannot drift from what
+the platform serves for longer than one `bk meta`.
+
+- `home_app` / `home_server` — where the neutral and cross-app verbs go.
+  `bk app use <slug>` moves them; `--app-server <slug>` redirects one invocation.
+- `server` is the legacy 2.x field. It is still WRITTEN, mirroring `home_server`,
+  so a user who rolls back to a 2.x binary keeps working. It is only READ when
+  `home_server` is absent, which is how a 2.x config migrates forward.
+- A 2.x config has no `app_servers`, and the CLI does not guess one: `bk <app> …`
+  fails naming `bk meta`, which learns it. Guessing here means guessing which
+  host a file is uploaded to.
+
 `last_update_check` is a unix timestamp the CLI writes to throttle the soft update notice to once per 24h (see [Updates](#updates)).
 
-Override the directory with `BK_CONFIG_DIR` (the file is always `config.json` inside it). The token and server live here only — there are no `BK_SERVER` / `BK_TOKEN` environment variables.
+Override the directory with `BK_CONFIG_DIR` (the file is always `config.json` inside it). The token and servers live here only — there are no `BK_SERVER` / `BK_TOKEN` environment variables.
 
 ### Environment variables
 
@@ -824,9 +844,33 @@ Override the directory with `BK_CONFIG_DIR` (the file is always `config.json` in
 | `BK_CONFIG_DIR` | Override the config directory (default `~/.config/bk`). |
 | `BK_NO_PROMPT=1` | Skip all interactive confirmations (recommended for CI / agents). |
 
-### Server selection
+### Server selection — one binary, several deployments (D-1)
 
-`bk login --server https://issues.example.com` writes the URL into config and all subsequent commands use it. To switch servers later, log in again pointing at the new URL.
+`bk login --server https://issues.example.com` authenticates against that host,
+writes it as the home server, and **learns the app address book** from its
+`/api/meta`. `--server` may name any app: every deployment serves the browser
+authorize page (D-21), and the token works on all of them.
+
+Routing, from then on:
+
+| What runs | Which server |
+|---|---|
+| `bk workspace`, `bk member`, `bk token`, `bk meta`, … (neutral) | `home_server` |
+| `bk search`, `bk activity`, `bk link`, `bk storage` (cross-app) | `home_server` |
+| `bk <app> …` (app-owned, including its nouns) | `app_servers[<app>]`, always |
+
+- **`bk app use <slug>`** moves the home app permanently.
+- **`--app-server <slug>`** redirects one invocation's home half. It is not
+  called `--app` because six commands already use `--app` as a *filter*, and
+  cobra lets a local flag shadow a persistent one silently — so the two meanings
+  would have been indistinguishable at the call site.
+- **`bk <app> …` cannot be redirected.** The pin is applied to the whole subtree
+  in `root.go` (`pinApp`), not passed to each command, so a command added later
+  cannot forget it.
+
+**There is no fallback.** An app with no entry fails naming itself and the
+command that fixes it. A wrong-server 404 is indistinguishable from a deleted
+record, and that is the failure this whole design exists to remove.
 
 ---
 

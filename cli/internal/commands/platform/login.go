@@ -16,6 +16,7 @@ import (
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/browser"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -163,21 +164,47 @@ p{margin:0;color:#a1a1aa;font-size:14px}</style></head><body><div class="box">
 }
 
 func finishLogin(server, token string) error {
+	server = strings.TrimRight(server, "/")
 	c := client.New(server, token, "")
 	me, err := c.Whoami()
 	if err != nil {
 		return fmt.Errorf("token validation failed: %w", err)
 	}
 	cfg := &config.Config{
-		Server: server,
-		Token:  token,
-		UserID: me.ID,
-		Email:  me.Email,
+		Server:     server,
+		HomeServer: server,
+		Token:      token,
+		UserID:     me.ID,
+		Email:      me.Email,
 	}
+
+	// Learn the app address book (D-1) from the server we just authenticated
+	// against. --server may name ANY app (D-21), so this is also what decides
+	// which app is home: whichever one this deployment says it is.
+	//
+	// A failure here does NOT fail the login. The token is valid and saved; the
+	// registry is refreshable with one command, and losing a working login over
+	// a missing address book would be the worse trade. It is reported, never
+	// swallowed: an empty registry is what makes `bk <app> …` fail later, and
+	// nobody should have to guess why.
+	if meta, mErr := c.Meta(""); mErr == nil {
+		applyAppRegistry(cfg, meta, server)
+	} else {
+		fmt.Fprintf(os.Stderr,
+			"warning: logged in, but could not read the app registry from %s: %v\n"+
+				"         run `bk meta` once before using `bk <app> …`\n", server, mErr)
+	}
+
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Logged in as %s (id=%d, role=%s)\n", me.Email, me.ID, me.Role)
+	if cfg.HomeApp != "" {
+		fmt.Fprintf(os.Stderr, "Home app: %s (%s)\n", cfg.HomeApp, cfg.HomeServer)
+	}
+	for _, pair := range registryPairs(cfg) {
+		fmt.Fprintf(os.Stderr, "  %s\n", pair)
+	}
 	return nil
 }
 
@@ -214,7 +241,10 @@ func newWhoamiCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cfg.ActiveWorkspaceSlug)
+			c, err := cmdutil.ClientForApp(cfg, "")
+			if err != nil {
+				return err
+			}
 			me, err := c.Whoami()
 			if err != nil {
 				return err

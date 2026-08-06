@@ -73,11 +73,10 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load()
+	c, cfg, err := cmdutil.NewClientAndConfig()
 	if err != nil {
 		return err
 	}
-	c := client.New(cfg.Server, cfg.Token, cmdutil.ClientWorkspaceSlug(cfg))
 
 	// The issues endpoint returns every matching issue in one response (no
 	// pagination); total is the server-side count for the current filter (before
@@ -261,11 +260,10 @@ func newIssueCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg, err := config.Load()
+			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cmdutil.ClientWorkspaceSlug(cfg))
 
 			body, err = cmdutil.ResolveBodyMedia(c, body)
 			if err != nil {
@@ -378,11 +376,10 @@ func newIssueEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("priority") {
 				req.Priority = &priority
 			}
-			cfg, err := config.Load()
+			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cmdutil.ClientWorkspaceSlug(cfg))
 			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err
@@ -482,11 +479,10 @@ func newIssueAssignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg, err := config.Load()
+			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cmdutil.ClientWorkspaceSlug(cfg))
 			id, err := resolveIssueArg(c, args[0])
 			if err != nil {
 				return err

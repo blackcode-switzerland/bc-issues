@@ -111,8 +111,11 @@ Run ` + "`bk app list`" + ` to see which apps are enabled here and how each gran
 			if res.InviteeHasAccount {
 				fmt.Fprintln(cmd.OutOrStdout(), "They'll see it in their inbox immediately.")
 			} else {
+				// The link a human clicks. Built from the HOME server because an
+				// invitation is platform-level — accepting it joins a workspace,
+				// not an app — and any deployment renders it.
 				inviteURL := fmt.Sprintf("%s/invitations/%s",
-					strings.TrimRight(cfg.Server, "/"), res.Invitation.Token)
+					strings.TrimRight(cfg.HomeServer, "/"), res.Invitation.Token)
 				fmt.Fprintf(cmd.OutOrStdout(), "Share this link:\n  %s\n", inviteURL)
 			}
 			if app != "" {

@@ -146,14 +146,18 @@ func appTag(app string) string {
 }
 
 // changelogClient builds a client for the public changelog endpoint. It prefers
-// an explicit --server, then the logged-in server from config, then the default
-// host — so the command works with no config at all.
+// an explicit --server, then the HOME server from config, then the default host
+// — so the command works with no config at all.
+//
+// The home server, not an app's: the changelog is one merged feed covering every
+// app (`--app` filters it server-side), so any deployment answers it identically.
+// That is the definition of a neutral verb.
 func changelogClient(serverFlag string) *client.Client {
 	server := strings.TrimSpace(serverFlag)
 	token := ""
 	if server == "" {
 		if cfg, err := config.Load(); err == nil {
-			server = cfg.Server
+			server = cfg.HomeServer
 			token = cfg.Token
 		}
 	}

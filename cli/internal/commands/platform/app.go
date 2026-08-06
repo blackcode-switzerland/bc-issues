@@ -33,7 +33,8 @@ func newAppCmd() *cobra.Command {
 		Long: `Manage which Blackcode apps a workspace runs, and which of its members
 may use each one.
 
-  bk app list                              apps in the active workspace
+  bk app list                              apps here, their servers, reachability
+  bk app use <slug>                        switch the home app (bare verbs)
   bk app enable <app>                      turn an app on for the workspace
   bk app disable <app>                     turn it off (revokes every grant)
   bk app default-access <app> --mode …     all_members | invite_only
@@ -50,6 +51,7 @@ Use --ws <slug> to target a workspace other than the active one.`,
 	}
 	cmd.AddCommand(
 		newAppListCmd(),
+		newAppUseCmd(),
 		newAppEnableCmd(),
 		newAppDisableCmd(),
 		newAppDefaultAccessCmd(),
@@ -59,10 +61,22 @@ Use --ws <slug> to target a workspace other than the active one.`,
 }
 
 func newAppListCmd() *cobra.Command {
-	return &cobra.Command{
+	var noProbe bool
+	cmd := &cobra.Command{
 		Use:         "list",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/apps"},
-		Short:       "List the apps available to a workspace",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/apps,GET /api/me"},
+		Short:       "List apps here, the server each one answers on, and whether you can reach it",
+		Long: `List every app registered for the workspace, with the address this
+binary will send its commands to and whether that address answers for you.
+
+Three separate things have to be true before "bk <app> …" works, and they fail
+in ways that look alike from inside a command that just 404s:
+
+  ENABLED     the workspace runs the app
+  SERVER      this binary knows its address (learned by "bk login" / "bk meta")
+  REACHABLE   that address answers, and accepts this token
+
+--no-probe skips the reachability check (no network calls beyond the app list).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -80,10 +94,44 @@ func newAppListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return output.Render(format, apps, func(w io.Writer) error {
+
+			// The registry can hold an app this workspace does not run, and the
+			// workspace can run one the registry has no address for. Both are
+			// worth seeing here — this is the command someone runs when routing
+			// is what they are confused about.
+			type row struct {
+				client.WorkspaceApp
+				Server    string `json:"server" yaml:"server"`
+				Reachable string `json:"reachable,omitempty" yaml:"reachable,omitempty"`
+				IsHome    bool   `json:"is_home" yaml:"is_home"`
+			}
+			rows := make([]row, 0, len(apps))
+			slugs := make([]string, 0, len(apps))
+			for _, a := range apps {
+				server := cfg.AppServers[a.Slug]
+				rows = append(rows, row{WorkspaceApp: a, Server: server, IsHome: a.Slug == cfg.HomeApp})
+				if server != "" {
+					slugs = append(slugs, a.Slug)
+				}
+			}
+			probes := map[string]string{}
+			if !noProbe {
+				probes = probeAll(cfg, slugs)
+			}
+			for i := range rows {
+				if rows[i].Server == "" {
+					rows[i].Reachable = "no server"
+					continue
+				}
+				if r, ok := probes[rows[i].Slug]; ok {
+					rows[i].Reachable = r
+				}
+			}
+
+			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "APP\tNAME\tENABLED\tDEFAULT ACCESS\tMEMBERS WITH ACCESS")
-				for _, a := range apps {
+				fmt.Fprintln(tw, "\tAPP\tNAME\tENABLED\tDEFAULT ACCESS\tACCESS\tSERVER\tREACHABLE")
+				for _, a := range rows {
 					mode := "—"
 					if a.DefaultAccess != nil {
 						mode = *a.DefaultAccess
@@ -95,18 +143,37 @@ func newAppListCmd() *cobra.Command {
 					if !a.GloballyEnabled {
 						enabled = "no (disabled platform-wide)"
 					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n", a.Slug, a.Name, enabled, mode, a.AccessCount)
+					home := " "
+					if a.IsHome {
+						home = "*"
+					}
+					server := a.Server
+					if server == "" {
+						server = "—"
+					}
+					reach := a.Reachable
+					if reach == "" {
+						reach = "—"
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
+						home, a.Slug, a.Name, enabled, mode, a.AccessCount, server, reach)
 				}
 				if err := tw.Flush(); err != nil {
 					return err
 				}
-				if len(apps) == 0 {
+				if len(rows) == 0 {
 					fmt.Fprintln(cmd.ErrOrStderr(), "(no apps registered)")
+					return nil
 				}
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"\n* = home app: where the bare verbs go (`bk app use <slug>` to switch).\n"+
+						"An app with no SERVER cannot be reached by `bk <app> …` — run `bk meta` to refresh the registry.\n")
 				return nil
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&noProbe, "no-probe", false, "Skip the reachability check (no extra requests)")
+	return cmd
 }
 
 func newAppEnableCmd() *cobra.Command {

@@ -51,6 +51,31 @@ func (e *OutdatedError) Error() string {
 	return fmt.Sprintf("bk %s is below the minimum supported version %s", e.Current, e.Min)
 }
 
+// UnreachableError is a transport failure against a KNOWN address: the registry
+// gave us a URL and nothing answered there.
+//
+// It is a distinct type because the recovery is distinct. A 404 means the server
+// disagrees about the resource; this means we may be talking to the wrong host
+// entirely, and the fix is `bk meta` (refresh the registry) or `bk login
+// --server <url>` — which cmd/bk/main.go's hintFor() prints. Before D-1 there
+// was one configured server and "connection refused" was self-explanatory; with
+// a learned per-app registry it is not.
+type UnreachableError struct {
+	App     string
+	BaseURL string
+	Err     error
+}
+
+func (e *UnreachableError) Error() string {
+	who := "the server"
+	if e.App != "" {
+		who = "the " + e.App + " app"
+	}
+	return fmt.Sprintf("cannot reach %s at %s: %v", who, e.BaseURL, e.Err)
+}
+
+func (e *UnreachableError) Unwrap() error { return e.Err }
+
 type APIError struct {
 	Status     int
 	ErrorMsg   string `json:"error"`
@@ -84,7 +109,12 @@ func (e *APIError) Error() string {
 
 type Client struct {
 	BaseURL string
-	Token   string
+	// App is the app slug this client is talking to — "" for the home server
+	// with no app lens. It exists so a transport failure can name WHOSE address
+	// was wrong (see UnreachableError); nothing about the request itself
+	// depends on it.
+	App   string
+	Token string
 	// WorkspaceSlug is the active workspace slug from config, used to build
 	// canonical /api/workspaces/{slug}/... routes.
 	WorkspaceSlug string
@@ -128,7 +158,11 @@ func (c *Client) do(req *http.Request, out any) error {
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		// A dial/TLS/DNS failure, not an API answer. Since 3.0.0 the address
+		// came out of the app registry rather than a single configured server,
+		// so "connection refused" alone leaves the caller unable to tell a dead
+		// deployment from a stale registry entry. Name both.
+		return &UnreachableError{App: c.App, BaseURL: c.BaseURL, Err: err}
 	}
 	defer resp.Body.Close()
 

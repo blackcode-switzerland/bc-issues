@@ -52,8 +52,22 @@ For headless / CI / agent use, paste a token from stdin instead:
 echo "$MY_TOKEN" | ./bk login --server "$SERVER_URL" --token
 ```
 
-There are no `BK_SERVER` / `BK_TOKEN` env vars — the server and token live in the
+There are no `BK_SERVER` / `BK_TOKEN` env vars — the servers and token live in the
 config file, chosen at login time.
+
+Login also **learns the app address book** (3.0.0): each app's server, read from
+the platform's own `/api/meta`. `--server` may name any app — the token works on
+all of them, and whichever one you log into becomes the *home app*.
+
+```sh
+bk app list                   # every app: enabled here, its server, does it answer
+bk app use sales              # move the home app (where the bare verbs go)
+bk --app-server sales meta    # …or redirect one invocation
+```
+
+`bk <app> …` always talks to that app's server, whatever the home app is. An app
+with no known address fails naming `bk meta`; it is never silently sent
+somewhere else.
 
 ## Active workspace
 

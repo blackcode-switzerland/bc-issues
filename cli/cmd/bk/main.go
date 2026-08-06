@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
@@ -89,6 +90,31 @@ func hintFor(err error) string {
 	if errors.Is(err, config.ErrNotConfigured) {
 		return "run `bk login` to authenticate. New here? run `bk guide`"
 	}
+	// The registry has no address for the app this command must reach. The fix is
+	// one command, and naming it is the difference between an agent recovering
+	// inside this run and an agent stopping.
+	var uae *cmdutil.UnknownAppError
+	if errors.As(err, &uae) {
+		return "run `bk meta` to learn each app's server from the platform, `bk app list` to see " +
+			"what your config has now, or `bk login --server <url>` to point at a deployment directly"
+	}
+
+	// A known address that nothing answered at. The registry is learned, so the
+	// entry itself may be what is wrong — and that is not something the caller can
+	// guess from "connection refused". This has to come BEFORE the APIError branch
+	// for the same reason it is its own type: it is not an answer from a server.
+	var ue *client.UnreachableError
+	if errors.As(err, &ue) {
+		if ue.App != "" {
+			return fmt.Sprintf(
+				"that address came from your app registry — run `bk meta` to refresh it, "+
+					"`bk app list` to see every app's server, or `bk login --server <url>` if the %s app moved",
+				ue.App)
+		}
+		return "check the server is up and the address is right — `bk app list` shows what your config has, " +
+			"`bk meta` refreshes it, `bk login --server <url>` replaces it"
+	}
+
 	var ae *client.APIError
 	if errors.As(err, &ae) {
 		// The server can name the fix itself — lib/api's Errors carry an optional

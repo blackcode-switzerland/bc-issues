@@ -99,15 +99,57 @@ inside the same run.
 
 ```bash
 bk --help          # the app groups this BINARY has
-bk meta            # the apps this TOKEN can reach, live
+bk meta            # the apps this TOKEN can reach, live, plus a `routing` block
 bk <app> --help    # one app's commands
-bk app list        # which apps a workspace runs, and who may use them
+bk app list        # every app here: enabled, its server, and whether it answers
 ```
 
 `bk --help` and `bk meta` answer different questions, and the difference matters:
 a binary can know an app you have no access to, and a deployment can offer one
 your binary is too old to have. When they disagree, `bk meta` is the live truth
 and `bk skill sync` is how the binary catches up.
+
+## Where a command actually goes
+
+Each app is its own deployment, so "which app" is also "which server". The CLI
+keeps an **address book** — learned from the platform, never typed — and routes
+by tier:
+
+| Tier | Server |
+|---|---|
+| Neutral | the **home app**'s |
+| Cross-app | the home app's (it reads shared data, so any app answers alike) |
+| App-owned | **that app's**, always — `bk <app> …` pins it |
+
+```bash
+bk meta                      # refreshes the address book; prints where each tier goes
+bk app list                  # every app, its server, and whether it answers for you
+bk app use sales             # move the home app: the bare verbs now go to sales
+bk --app-server sales meta   # …or redirect ONE invocation, changing nothing
+```
+
+`bk <app> …` ignores all of that. Its app is written on the command, so no mode,
+default or previous command can move it — which is the property that makes a
+namespace safer than a flag.
+
+**The flag is `--app-server`, not `--app`.** `--app` already means "filter by
+app" on `bk search`, `bk activity`, `bk storage list`, `bk changelog` and
+`bk guide`. One name, two meanings, would be a coin flip.
+
+## When routing fails, it says so
+
+The CLI never guesses an address. An app it has no server for is an error naming
+the app, never a request sent to a different one — a wrong-host answer looks
+exactly like a missing record, and you would have no way to tell:
+
+```
+error: no server known for app "sales" (registry has: issues)
+hint: run `bk meta` to learn each app's server from the platform, `bk app list`
+      to see what your config has now, or `bk login --server <url>`
+```
+
+An address that is known but dead says that instead, naming the app and the URL,
+so a stale address book and a down deployment are distinguishable.
 
 ## Working across two apps
 
@@ -124,4 +166,4 @@ The rule of thumb, if you remember nothing else: **if the answer would differ
 between two deployments, the app is in the command.** If it would not, the verb
 is bare.
 
-Related commands: `bk --help`, `bk meta`, `bk app list`, `bk issues upload`, `bk issues trash list`, `bk storage list`, `bk search`, `bk link`
+Related commands: `bk --help`, `bk meta`, `bk app list`, `bk app use`, `bk issues upload`, `bk issues trash list`, `bk storage list`, `bk search`, `bk link`

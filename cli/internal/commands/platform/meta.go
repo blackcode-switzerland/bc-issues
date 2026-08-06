@@ -131,6 +131,8 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 					}
 				}
 
+				printRouting(w, cfg)
+
 				if len(meta.Workspaces) == 0 {
 					if len(meta.Apps) > 0 {
 						// Membership without access is the quiet failure of Phase 4:

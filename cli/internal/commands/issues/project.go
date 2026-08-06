@@ -7,7 +7,6 @@ import (
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
-	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -472,11 +471,10 @@ func newProjectRemoveMemberCmd() *cobra.Command {
 			if userRef == "" {
 				return fmt.Errorf("--user is required (id, email, or name)")
 			}
-			cfg, err := config.Load()
+			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cmdutil.ClientWorkspaceSlug(cfg))
 			uid, err := cmdutil.ResolveUserRef(c, cfg, userRef)
 			if err != nil {
 				return err

@@ -6,7 +6,6 @@ import (
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
-	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -55,11 +54,10 @@ are — you end up with the items in BOTH workspaces.`
 			if err != nil {
 				return err
 			}
-			cfg, err := config.Load()
+			c, err := cmdutil.NewClient()
 			if err != nil {
 				return err
 			}
-			c := client.New(cfg.Server, cfg.Token, cmdutil.ClientWorkspaceSlug(cfg))
 
 			req := client.MoveItemsRequest{
 				Target:   target,

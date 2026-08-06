@@ -30,6 +30,85 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — **CLI 3.0.0:** `bk` learned every app's address, and routes by tier
+
+The companion to the verb tiers below, and the reason they can exist: with more
+than one deployment, "which app" is also "which server".
+
+`bk` now carries an **app address book**, learned from the platform rather than
+configured. `bk login` and `bk meta` read each app's `base_url` out of
+`/api/meta` and store it locally, so nobody types a URL twice and the book cannot
+drift from what the platform serves for longer than one `bk meta`.
+
+### Where each command goes
+
+| Tier | Server |
+|---|---|
+| **Neutral** (`workspace`, `member`, `token`, `meta`, …) | the home app's |
+| **Cross-app** (`search`, `activity`, `link`, `storage`) | the home app's — they read shared data, so any app answers alike |
+| **App-owned** (`bk <app> …`, including that app's own nouns) | **that app's, always** |
+
+```bash
+bk meta                       # refresh the address book; print where each tier goes
+bk app list                   # every app: enabled here, its server, and whether it answers
+bk app use sales              # move the home app — the bare verbs follow
+bk --app-server sales meta    # …or redirect ONE invocation, changing nothing
+```
+
+`bk <app> …` ignores all of it. Its app is written on the command, so no mode,
+default, override or previous command can move it. That is the property a
+namespace has and a flag does not.
+
+### `bk meta` gained a `routing` block
+
+`bk meta --json` now carries a local `routing` object — home app, home server,
+the full `app_servers` map, and which server each tier reaches. **An agent can
+answer "where will this command go?" without running one and finding out.** It is
+client state, which is exactly why the server could never have told you.
+
+### New: `bk app use <slug>`, and `bk app list` grew two columns
+
+`bk app list` now shows **SERVER** and **REACHABLE** beside each app. Three
+different things have to be true before `bk <app> …` works — the workspace runs
+the app, this binary knows its address, and that address answers for your token —
+and from inside a failing command all three look like a 404.
+
+### New global flag: `--app-server <slug>`
+
+Redirects one invocation's neutral and cross-app verbs. **Not** spelled `--app`:
+that already means "filter by app" on `bk search`, `bk activity`,
+`bk storage list`, `bk changelog` and `bk guide`, and a persistent flag of the
+same name shadows a local one silently — `bk storage list --app issues` would
+have quietly stopped filtering and started routing.
+
+### There is no fallback, and that is the point
+
+An app with no address is an error that names the app and the command that fixes
+it. It is never a request sent to a different server:
+
+```
+error: no server known for app "sales" (registry has: issues)
+hint: run `bk meta` to learn each app's server from the platform, `bk app list`
+      to see what your config has now, or `bk login --server <url>`
+```
+
+A known-but-dead address says that instead, naming the app and the URL, so a
+stale book and a down deployment are distinguishable. A wrong-server 404 is
+indistinguishable from a deleted record, a mistyped number or a permissions
+problem — which is why the CLI refuses to produce one.
+
+### Upgrading from 2.x
+
+Your existing config keeps working and **you do not log in again**: `server`
+becomes `home_server`, and `bk` keeps writing `server` too, so rolling back to a
+2.x binary still works.
+
+**Run `bk meta` once.** A 2.x config has no address book, and `bk` will not
+invent one — `bk <app> …` fails with the hint above until it has been learned.
+Guessing there means guessing which host a file gets uploaded to.
+
+---
+
 ## 2026-08-06 — **BREAKING (CLI 3.0.0):** every verb now belongs to one of three tiers, and three of them moved
 
 **The idea first, because it is what the rest of this file will assume.** A `bk`
