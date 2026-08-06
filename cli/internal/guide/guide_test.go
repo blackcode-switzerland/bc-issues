@@ -163,7 +163,7 @@ func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
 	}
 }
 
-// PLATFORM-ARCHITECTURE.md §7.2: a topic under topics/<app>/ may not describe
+// docs/platform-architecture.md §7.2: a topic under topics/<app>/ may not describe
 // another app.
 //
 // With one app this cannot fail, and saying so is more useful than pretending

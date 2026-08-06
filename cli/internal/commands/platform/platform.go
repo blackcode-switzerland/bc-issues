@@ -4,7 +4,7 @@
 //
 // These are the verbs that stay BARE: `bk workspace list`, not
 // `bk issues workspace list`. A workspace is the company and an app is a
-// capability inside it (PLATFORM-ARCHITECTURE.md §4.4), so namespacing them per
+// capability inside it (docs/platform-architecture.md §4.4), so namespacing them per
 // app would claim a boundary that does not exist and would give a person three
 // workspace lists for one company.
 //

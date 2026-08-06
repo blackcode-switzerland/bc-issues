@@ -3,7 +3,7 @@
 -- This is step 2 of docs/adding-an-app.md and the thing that makes the app
 -- boundary a DATABASE guarantee rather than a code-review convention: the
 -- `sales` role simply has no SELECT on `issues.*`, so a mistake cannot reach
--- another app's data. See PLATFORM-ARCHITECTURE.md §4.3.
+-- another app's data. See platform-architecture.md §4.3.
 --
 -- Run it as the schema owner (on Neon that is `neondb_owner`).
 -- Substitute <app> and <password> — never commit a real password.

@@ -16,7 +16,7 @@ import (
 // The --ws override and the -v flag are bound to cmdutil.WSOverride /
 // cmdutil.VerboseFlag below. They live in cmdutil rather than here because both
 // command packages (platform and issues) read them, and those two must not
-// import each other — PLATFORM-ARCHITECTURE.md §7.1.
+// import each other — docs/platform-architecture.md §7.1.
 
 // rootLong is deliberately thin. It used to duplicate the web manifest's
 // "conventions for agents" block, which meant every convention lived in two

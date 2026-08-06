@@ -1,0 +1,264 @@
+# The platform migration — August 2026
+
+**This is history. It explains why the repo looks the way it does.** It is not a
+guide and not a spec: to *add* an app read [`adding-an-app.md`](adding-an-app.md),
+for the current design rules read
+[`platform-architecture.md`](platform-architecture.md).
+
+Nine phases (0–8), shipped between 2026-08-03 and 2026-08-05. Production was live
+throughout, on real data, with real users.
+
+**Do not rewrite this document.** If something here becomes misleading, append a
+dated note.
+
+---
+
+## Before
+
+One Next.js app in one repo called `bc-issues`.
+
+- Everything in the **`public`** Postgres schema — ~26 tables with no
+  platform/app distinction. `users` sat beside `issues`; nothing said which was
+  which.
+- One Postgres role, which owned everything and could do anything.
+- The CLI was `bk issue create`, `bk task list` — nouns at the top level, because
+  there was only one app for them to belong to.
+- Files went to one Blob store at the store root, attributed to nobody.
+- One changelog file. One set of docs. `lib/` mixed the issue tracker with the
+  generic plumbing underneath it.
+
+Nothing was *wrong* with it. It was a single-app codebase that had quietly become
+a platform: **of those 26 tables, only about a third were an issue tracker.**
+
+## After
+
+A monorepo where **adding an app is a checklist and removing one is a rehearsed
+procedure**.
+
+- **Two apps.** `apps/issues` (the product) and `apps/_template` (the scaffold —
+  real, minimal, and it builds, lints and passes every guardrail).
+- **Seven shared packages**, `packages/platform-{db,api,ui,auth,agent,storage,testing}`.
+  Apps import these; **apps never import each other.**
+- **`platform.*` + `issues.*`, never `public`.** One database, per-app schemas,
+  and a **bounded Postgres role per app**. Production runs as `issues_app`, which
+  owns zero objects. The app boundary is a **grant**, not a convention.
+- **Apps are real data.** `platform.apps`, `workspace_apps`, `app_access`.
+  Identity is global; access is per app, per workspace, per user. Visibility
+  follows access.
+- **Everything is addressable.** `bc:<app>:<workspace>/<type>/<number>`, projected
+  into `platform.entities` in the same transaction as its source row.
+  `platform.links` relates any two URNs; `platform.events` is one cross-app
+  activity stream.
+- **Storage is shared and app-attributed**, with **cross-deployment reference
+  counting that fails closed** — a trigger-maintained index, so no write path can
+  forget it.
+- **One CLI, namespaced per app.** `bk issues issue create`. Platform verbs stay
+  bare. Per-app parity guards prove every route is reachable from `bk`.
+
+## Why this shape
+
+The decision was **a monorepo of apps on a shared platform**, and the thing it
+was chosen *against* matters more than the thing it was chosen for.
+
+**Full separation was rejected** — separate repo, database and CLI per app. It
+rebuilds roughly 65% of the codebase N times, and it makes cross-app agent work
+impossible without distributed joins performed by an LLM. The daily cost is
+certain; the event it hedges against (selling one app) is not. Extraction is
+cheap enough under the shared design — rehearsed at ~20 minutes — that paying an
+N× duplication tax every day to protect it was the wrong trade.
+
+Three consequences worth naming, because each was a real fork:
+
+- **One workspace record, shared.** A workspace is the *company*; an app is a
+  capability inside it. Per-app workspaces would have made the same company exist
+  three times under three slugs that drift apart, and cross-app URNs would link
+  nothing meaningful.
+- **Schemas are the app axis; Neon branches are the environment axis.** Giving
+  each app a branch would give each app a private copy of the data no other app
+  can see — the exact opposite of the goal.
+- **The agent surface collapsed to one interface.** Seven hand-maintained
+  surfaces became three entry points (`bk guide`, `bk meta`, `bk changelog`), and
+  the OpenAPI spec and page manifest were deleted. With a *single* app they had
+  already drifted — the manifest claimed uploads accept any file type when SVG is
+  rejected. Multiplying hand-maintained copies by the number of apps would have
+  made drift certain rather than likely.
+
+## What it cost
+
+**Nine phases. One production outage. Eight guardrails found green-but-inert.
+Four corrections to the plan's own instructions.**
+
+### The outage
+
+Phase 7 shipped an upload-path change that **rejected every installed binary**.
+`/api/status` was green throughout — the server was healthy; the contract was
+broken. It was found by running the real published binary against the staged
+build, not by any monitor.
+
+### The eight inert guardrails
+
+Each of these reported success while checking nothing. **Not one was noticed by
+reading it. Every one was found by trying to break it.**
+
+| # | The check | How it was inert |
+|---|---|---|
+| 1 | ESLint on three packages | No config file at all. `npm run lint` had been failing unnoticed, and `platform-storage` — the one package that can reach `del()` — had **no boundary rule enforced** |
+| 2 | `blob_refs_purge`'s authorisation guard | Compared `current_user`, which inside a `SECURITY DEFINER` function is the **function's owner, not the caller**. True for everybody |
+| 3 | `blob-drift-check.sql`'s orphan detection | Structurally impossible — an orphan is byte-identical before and after a re-fire, so a diff can never surface one |
+| 4 | The `apps/<a>` → `apps/<b>` import rule | Three globs matching **none** of the imports that actually escape an app: the climb has no fixed depth and `apps` never appears in the specifier |
+| 5 | `bk __routes` | Deduped on `method+path`, so two apps sharing a path collapsed and the second appeared to have **no commands**. Had also been silently dropping one claim on `GET /api/users` for months |
+| 6 | `app-boundary-probe.sql` check (2) | **Commented out** — no second schema existed when it was written. Its first live version then picked `neon_auth.invitation`, a correct refusal of the wrong thing, which reads identically to a pass |
+| 7 | `pg_dump --schema=issues` as an extraction | Emits triggers and FKs that all fail at restore; `psql` prints 27 errors and **exits 0**. The database boots, serves, and has silently lost referential integrity and all blob-index maintenance |
+| 8 | `TestRemovedSpellingsStillCarryAHint` | Asserted a **hand-written** cobra error string. The real one contains the whole remaining argv, so the three most-used spellings fell through to the generic hint |
+
+**#8 was written by the same session that wrote the rule about inert checks, an
+hour after writing it.** That is the point. The rule is not "other people's checks
+rot" — it is that **you cannot tell by looking, including at your own.**
+
+### The four places the plan was wrong
+
+The plan was written before the work. Four instructions did not survive contact:
+
+1. **"`blob_references` is exactly the `platform.entities` pattern — same risk,
+   same mitigation."** The risk is *not* the same. Entities drift costs a stale
+   search result; blob-reference drift in the *missing* direction costs a file
+   still in use, deleted, with no undo. Symmetric-looking projections, wildly
+   asymmetric failure. Hence Postgres triggers rather than application writes.
+2. **Reshape `workspace_counters` so apps can share it.** Sharing a counter buys
+   nothing — no query spans two apps' counters — and costs a shared write point
+   and a shared migration per entity type. Migration 0040 **moved** it to
+   `issues.workspace_counters` instead.
+3. **Per-schema isolation "keeps `pg_dump --schema=sales` a working extraction
+   path from day one."** It does not — see #7 above.
+4. **The extraction bullet named the wrong command.** Corrected to `platform` +
+   the app's schema + `drizzle`.
+
+A fifth, from Phase 6: deploy-first ordering means `postbuild` owns the
+migration, so `RUN_MIGRATIONS` must be removed first.
+
+## The operational rules it bought
+
+These are the durable output. Each cost something to learn.
+
+### 1. A health check proves the server is up; only the client your users run proves the contract holds
+
+`/api/status` was green throughout the Phase 7 outage, and again when `/api/undo`
+was handing installed binaries 2KB of HTML. **Step 4b of the cutover — run the
+real published binary against the staged build, before promoting —** found both.
+It is not optional and it is not replaceable by a monitor.
+
+### 2. The cutover pattern
+
+Rehearse on a Neon branch, **including the rollback**. Every phase did, and it
+caught a real bug in most of them — including a query that would have failed at
+runtime the first time it ran.
+
+### 3. Who owns the migration depends on the ordering
+
+`postbuild` applies migrations, gated on `RUN_MIGRATIONS`, using
+`MIGRATE_DATABASE_URL` (the schema owner) — never `DATABASE_URL`, which is the
+app role and cannot migrate by design.
+
+So **deploy-first ordering means the deploy owns the migration**, and a migration
+that must land *before* the deploy has to be applied by hand first, with
+`RUN_MIGRATIONS` removed so the deploy does not re-run it. Getting this backwards
+is how a deploy half-applies a schema change.
+
+Migration 0037 was deliberately applied to production **before** the deploy that
+shipped the route reading it, to buy a soak period where the triggers were
+exercised by real writes while nothing yet depended on the index.
+
+### 4. The three-step CLI release: deploy web → publish npm → deploy web AGAIN
+
+The release script bumps `CLI_LATEST_VERSION` **in a commit it creates itself**,
+so that commit necessarily lands *after* whatever deploy preceded it. Without the
+second deploy, production keeps advertising the old version and **no installed
+client is ever told an update exists** — which stalls the adoption signal the
+next `CLI_MIN_VERSION` raise depends on.
+
+**Publish to npm before raising the floor.** Raise it first and every user is
+locked out with nothing to upgrade to.
+
+### 5. The new server must be backwards compatible with old clients still installed
+
+A client cannot be asked to know a convention that shipped after it did. This is
+why trash refs changed *field name* (`id` → `number`) rather than *meaning*:
+redefining `id` would have made every installed binary act on a different row —
+and on `purge`, destroy it.
+
+### 6. Removing a route is not finished when the route is gone
+
+It is finished when the old client that still calls it gets an actionable answer.
+**A 410 with a `suggestion` is recoverable inside the same run; a 404 is a dead
+end.** That is why `/api/undo`, `/api/openapi.json` and `/api/docs` still exist as
+410 stubs, and why they have no expiry.
+
+### 7. Two corollaries about checks, different mechanisms
+
+- **A skipped or commented-out check reports success.** If a check cannot run
+  yet, make it skip **loudly** — `RAISE NOTICE`, `t.Logf`, a failing assertion on
+  its own inputs.
+- **Assert your inputs.** Every "did we find anything to check?" assertion in this
+  repo exists because a guard that found nothing would otherwise pass. #5 was
+  caught by exactly such an assertion.
+
+## What is still owed
+
+Nothing is broken. These are known, written down, and deliberately not done.
+
+| Owed | Why it was left | Who should close it |
+|---|---|---|
+| **`adding-an-app.md` steps 7–10 are UNVERIFIED** (changelog file, Vercel project, subdomain, app docs) | They need a Vercel project, subdomain and DNS for an app that must never be deployed | **Whoever ships the first real app.** The document has a box with a line to sign |
+| **`CLI_MIN_VERSION` is still `1.9.1`** | Raising it strands every user with nothing to upgrade to. It must follow adoption, not lead it | Target `1.10.0`, a few days after `1.12.0`, **as its own change with nothing else in it** |
+| **The session cookie is still per-host** | Moving it to `.blackcode.ch` signs everyone out once. Deferred since Phase 4. **Harder than it looks:** production sets `__Host-`-prefixed cookies, and `__Host-` cannot carry a `Domain` attribute — so this is a cookie *rename*, not a widening | Schedule at a quiet hour with a changelog notice, *before* a second app needs shared sign-in |
+| **`comments.parent_type` is not app-qualified** | Values are still `issue` / `task`, not `issues:issue`. Costs nothing with one app | The second app, before it picks a noun that collides |
+| **`labels.app` does not exist** | Every label is shared across every app in the workspace, which is the right default and is currently the only behaviour | The second app, when one app's taxonomy starts cluttering another's picker |
+| **`platform.transaction_log` still exists, empty** | Dropping a table is destructive and was not needed. `bk undo` and its routes are gone | Drop it whenever convenient. Do **not** wire a new writer — build undo on `platform.events` if it is ever wanted |
+| **`/api/undo` and `/api/openapi.json` 410 stubs** | Installed binaries still call them | Delete when `CLI_MIN_VERSION` passes `1.12.0` |
+| **The npm package is still `@blackcode_sa/bc-issues`** | It ships one binary, `bk`, for the whole platform, and the name says "issues". But renaming touches the install path every agent depends on | **Deliberately deferred.** A confusing package name costs nothing operationally; a broken install path costs every agent at once. Sequence below |
+| **Extraction owes more than the database** | Blob storage (pre-Phase-7 files sit unprefixed at the store root), vendoring `packages/platform-*`, and `platform.users` containing every user of every app | Whoever does a real extraction. The data-protection question is theirs, and this repo deliberately does not answer it |
+| **`apiHandler` / `resolveWorkspace` are duplicated in the scaffold** | Both close over the app's `db`, schema and slug; genericising them for a scaffold is speculative | The second **real** app — at which point two production apps need them unchanged, which is the test |
+
+### If the npm package is ever renamed
+
+It has to land atomically across `cli/npm/package.json`, the guide topics,
+`/agent-updator`, the `bk skill` template, `README.md`, `CLAUDE.md`,
+`docs/cli.md`, `docs/devops.md` and `devops/release.sh`. The sequence:
+
+1. Publish under the new name.
+2. **Never unpublish the old one.**
+3. `npm deprecate` the old, pointing at the new.
+4. Update every install string in the same release.
+
+Good candidate to bundle with the `CLI_MIN_VERSION` raise, when a CLI release is
+happening anyway.
+
+---
+
+## The one thing to take from this
+
+> **A check is inert until you have watched it fail.**
+
+The migration's most valuable output was not the architecture. It was the eight
+moments where something that looked like protection turned out not to be. Assume
+the next one exists, and go looking for it the same way — by breaking the thing
+the check is supposed to catch.
+
+**It kept being true after the migration closed.** The wrap-up verification on
+2026-08-06 found two more: the dynamic-value guard in `guide_test.go` was a
+substring match over six hand-written strings and passed a topic containing two
+entire vocabularies and a stale size limit; and guardrail #4 above — the dead
+ESLint rule — was *still there*, still passing the real escape shape at exit 0,
+four days after being identified, sitting next to its working replacement. See
+[`migration/health-check.md`](migration/health-check.md).
+
+### Read these three files before touching anything near them
+
+Each exists because something went wrong once, and each header explains what:
+
+- `packages/platform-storage/src/references.ts` — the delete gate. The only thing
+  between a code change and unrecoverable data loss.
+- `packages/platform-db/src/schema.ts` at `blobReferences` — why the index is
+  trigger-maintained, and why that is not an implementation detail.
+- `apps/issues/lib/db/queries/entities.ts` — why the projection is written in the
+  source transaction.

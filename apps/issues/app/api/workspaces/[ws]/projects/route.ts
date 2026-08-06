@@ -15,7 +15,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const ctx = await resolveWorkspace(req, ws)
   const sp = req.nextUrl.searchParams
 
-  // Returns every matching project in one shot (no cursor) — see api-changelog.
+  // Returns every matching project in one shot (no cursor) — see docs/changelog/issues.md.
   const status = sp.get('status') ?? undefined
   const search = sp.get('search') ?? undefined
   const data = await listProjectsInWorkspace(ctx.workspace.id, { status, search })

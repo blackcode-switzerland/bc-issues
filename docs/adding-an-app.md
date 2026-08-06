@@ -1,9 +1,15 @@
 # Adding an app
 
-The ordered checklist. Steps 1–6 have been **walked end to end**, on 2026-08-05,
-by creating a throwaway `apps/sales` from the scaffold and following this
-document top to bottom. It found two real bugs. Timings, what broke, and what
-was NOT walked are at the bottom — read that section before trusting the rest.
+**The authoritative guide.** Self-contained: you should be able to follow this
+top to bottom without having seen this repo before. For *why* the platform is
+shaped this way, see [`2026-08-platform-migration.md`](2026-08-platform-migration.md);
+for the current design rules, [`platform-architecture.md`](platform-architecture.md).
+Neither is required reading to finish this document.
+
+Steps 1–6 have been **walked end to end**, on 2026-08-05, by creating a throwaway
+`apps/sales` from the scaffold and following this document top to bottom. It found
+two real bugs. Timings, what broke, and what was NOT walked are at the bottom —
+read that section before trusting the rest.
 
 > **Copy `apps/_template`.** It is a real app: one entity, one route, one CLI
 > command group, one guide topic, one page. It builds, lints and passes the
@@ -18,6 +24,94 @@ Two rules before you start:
   directory name is a slug that changes when someone moves a folder.
 - **Nothing here is optional except where it says so.** Every step exists
   because skipping it fails later and further away.
+
+---
+
+## 0. What you are building on
+
+### What the platform gives you
+
+Seven packages under `packages/platform-*`. **Apps import these; apps never
+import each other.**
+
+| Package | What it gives you |
+|---|---|
+| `platform-db` | The Drizzle schema and client factory for the `platform.*` tables — users, workspaces, members, app access, uploads, comments, labels, events, entities, links, the blob-reference index |
+| `platform-api` | The HTTP plumbing: `apiHandler`, the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits |
+| `platform-auth` | API tokens, password and whitelist handling, and **who may use which app in which workspace** (`app_access`, `workspace_apps`) |
+| `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions |
+| `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
+| `platform-agent` | The merged changelog feed and the advertised CLI version floor |
+| `platform-testing` | The two guards every app copies: the CLI-parity harness and the app-isolation checks (`findCrossAppImports`, `findCrossSchemaQueries`) |
+
+**When does something belong in a package rather than your app?** One question:
+
+> **Would another app need this *unchanged*?**
+
+Yes → `packages/platform-*`. No → keep it in your app. "Nearly unchanged" is a
+no. The scaffold deliberately keeps its own `apiHandler` and `resolveWorkspace`
+copies for exactly this reason: both close over the app's `db`, schema and slug,
+and genericising them for a scaffold would be speculative. The test is **two real
+apps needing it unchanged**, not one app and a guess.
+
+This cuts the other way too, and the migration learned it the expensive way:
+before reshaping a shared table so more apps can use it, ask whether they should
+be sharing it at all. `workspace_counters` was going to become
+`(workspace_id, app, entity_type, last_seq)`; it moved to
+`issues.workspace_counters` instead, because sharing a counter buys nothing and
+costs a shared write point and a shared migration per entity type.
+
+### The boundary rules
+
+Three, and the third is enforced by the database rather than by review.
+
+1. **`platform.*` is shared.** Your app may read, write and FK into it freely.
+2. **Your schema is yours.** `sales.*` is unconstrained — nobody else can see it,
+   so its migrations need no coordination. Platform-schema changes are the
+   opposite: expand → migrate → contract, because apps deploy independently and a
+   breaking `platform.*` change breaks every other app for the length of the
+   window.
+3. **You may not read another app's schema.** Not "should not" — *may not*. Each
+   app connects as its own Postgres role, and `sales_app` has no `SELECT` on
+   `issues.*`. Cross-app reads go through that app's HTTP API, or through
+   `platform.links` / `platform.events`.
+
+Two guards back this up inside the repo, and both are copied into your app:
+`lib/app-isolation.test.ts` (no import resolving into another app, no query
+naming another app's schema) and `lib/cli-parity.test.ts`. There is deliberately
+**no ESLint rule** for the import half — one existed, it was a glob over import
+strings, and it never matched the shape that actually escapes an app. Do not add
+one back.
+
+### The agent surface
+
+Humans use the web UI. **Agents use one interface: the `bk` CLI.** The HTTP API
+under `apps/<app>/app/api/**` is private plumbing with no public contract — do
+not document it for external consumers and never add an OpenAPI spec.
+
+Three entry points, and your app inherits all three:
+
+| Entry point | Answers | Lives in |
+|---|---|---|
+| `bk guide` | *How does this tool behave?* — flags, exit codes, workflows | `cli/internal/guide/topics/`, embedded in the binary |
+| `bk meta` | *What is the data right now?* — vocabularies, limits, workspaces | the server, `GET /api/meta` |
+| `bk changelog` | *What changed, and how do I adapt?* | `docs/changelog/*.md` |
+
+The rule that keeps them coherent: **a guide topic never restates a value that
+`bk meta` carries.** Static behaviour ships in the binary; dynamic data comes
+from the server. `guide_test.go` fails the build on a hardcoded vocabulary or
+size limit.
+
+**Every change lands in three places, in the same commit:**
+
+> **route → `bk` command (+ its `routes` annotation) → changelog entry.**
+
+Plus a conditional fourth: a guide topic, *only* if agent-visible behaviour
+changed. If only a value changed, edit its source — `bk meta` serves it live.
+
+**Commands are namespaced per app**: `bk sales deal create`, never `bk deal
+create`. Platform verbs (`workspace`, `label`, `upload`, `trash`, `search`,
+`link`, …) stay bare, because they mean the same thing in every app.
 
 ---
 
@@ -67,8 +161,22 @@ generated password. **Do not skip step 5b** (revoke write on
 psql "postgres://sales_app:<pw>@<host>/<db>" -f docs/sql/app-boundary-probe.sql
 ```
 
-Every deny must be `42501`. `SET ROLE` from the owner is **not** a substitute and
-reports the boundary as present when it is not — see `platform-db.md`.
+Every deny must be `42501`.
+
+> **This is a manual provisioning step, and it cannot become a CI test.** That is
+> not laziness about automation — the properties it checks are only observable
+> from a session **authenticated as** the app role, and CI has no app-role
+> credential. `SET ROLE` from the owner is not a substitute and quietly gives the
+> wrong answer: `session_user` ignores `SET ROLE` by design, and inside a
+> `SECURITY DEFINER` function `current_user` is the function's *owner*, never the
+> caller. That exact mistake is why the probe exists — `platform.blob_refs_purge`
+> guarded on `current_user` and was therefore true for everybody, so any app
+> could purge any other app's blob references. Nothing but running this as the
+> real role would have shown it.
+>
+> So: **run it by hand when you provision the role, and again whenever you change
+> a grant.** Check (2) reports `SKIPPED` loudly if yours is the only app schema —
+> that is correct, not a pass. See `platform-db.md`.
 
 ## 3. The row in `platform.apps`
 
@@ -201,7 +309,7 @@ still not done; check its status before assuming single sign-on works.
 
 `backend.md` and `frontend.md` for this app only. Root docs never describe an
 app's internals; an app's docs never describe another app
-(PLATFORM-ARCHITECTURE.md §7.5).
+(platform-architecture.md §7.5).
 
 ## 11. What the scaffold deliberately leaves out
 

@@ -25,7 +25,7 @@
 // deprecation window: a 1.9.x client still works against this server, it just
 // uses the old spellings. Raising the floor now would break the callers the
 // aliases exist to protect. **The floor moves in Phase 8** of
-// PLATFORM-MIGRATION-PLAN.md, once 1.10.0 adoption is visible — by setting
+// docs/2026-08-platform-migration.md, once 1.10.0 adoption is visible — by setting
 // BK_CLI_MIN, no redeploy needed.
 //
 // NOTE (2026-08-04): production is currently serving X-BK-CLI-Latest 1.9.3, not

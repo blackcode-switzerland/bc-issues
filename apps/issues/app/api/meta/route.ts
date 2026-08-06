@@ -85,7 +85,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // The apps this token can reach, anywhere. An agent working for a user with no
   // sales access must not be able to discover that a sales app exists
-  // (PLATFORM-ARCHITECTURE.md §4.5), so this is derived from grants, never from
+  // (docs/platform-architecture.md §4.5), so this is derived from grants, never from
   // the registry. The unfiltered membership list is only used to turn the
   // workspace ids those grants carry back into slugs.
   const [reachableApps, allMyWorkspaces] = await Promise.all([
@@ -136,7 +136,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     // anywhere does not appear at all.
     //
     // AN OBJECT, NOT AN ARRAY, on purpose: Phase 5 moves each app's vocabulary
-    // and limits INSIDE its entry here (PLATFORM-ARCHITECTURE.md §7.4). Keyed
+    // and limits INSIDE its entry here (docs/platform-architecture.md §7.4). Keyed
     // means that is an additive change; an array would have to be replaced, and
     // replacing a field agents already parse is exactly the breakage this
     // migration is sequenced to avoid.

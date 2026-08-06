@@ -11,9 +11,17 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
   route, one CLI command group, one guide topic, one page. It builds, lints and
   passes every guardrail. **Copy it to add an app; do not edit it in place.**
 
-**The platform migration is finished.** `PLATFORM-ARCHITECTURE.md` is the target
-design, `PLATFORM-MIGRATION-PLAN.md` the ordered route, and **all nine phases
-(0–8) have landed.** What that bought:
+**The platform migration is finished — all nine phases (0–8) landed 2026-08-05.**
+
+| Need | Read |
+|---|---|
+| **Add an app** | **`docs/adding-an-app.md`** — the authoritative, self-contained checklist. Copy `apps/_template`, follow it top to bottom |
+| Current design rules | `docs/platform-architecture.md` |
+| Why the repo looks like this | `docs/2026-08-platform-migration.md` — and what is **still owed** |
+| Remove an app | `docs/extracting-an-app.md` |
+| The database boundary | `docs/platform-db.md` |
+
+What the migration bought:
 
 - `packages/platform-{db,api,ui,auth,agent,storage,testing}` — seven shared
   libraries. Apps import these; apps never import each other.
@@ -99,18 +107,25 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Seven guardrails in this repo were found to be
-green-but-inert**, every one of which looked like working protection:
+This is not a style preference. **Nine guardrails in this repo have been found
+green-but-inert** — eight during the migration, and the count is still growing.
+Every one looked like working protection:
 
 | # | The check | How it was inert |
 |---|---|---|
 | 1 | ESLint on `platform-storage`, `-auth`, `-agent` | No config file at all. `eslint src` exited non-zero, `npm run lint` had been failing unnoticed, and three packages — including the one that can reach `del()` — had **no boundary rule enforced** |
 | 2 | `platform.blob_refs_purge`'s authorisation guard | Compared `current_user`, which **inside a `SECURITY DEFINER` function is the function's owner, not the caller**. True for everybody |
 | 3 | `docs/sql/blob-drift-check.sql`'s orphan detection | Structurally impossible: an orphan is byte-identical before and after a re-fire, so a diff can never surface one |
-| 4 | The `apps/<a>` → `apps/<b>` ESLint rule | Three glob patterns, matching **none** of the imports that actually escape an app (`../../issues/lib/app` — the climb has no fixed depth and `apps` never appears in the specifier) |
+| 4 | The `apps/<a>` → `apps/<b>` ESLint rule | Three glob patterns, matching **none** of the imports that actually escape an app (`../../issues/lib/app` — the climb has no fixed depth and `apps` never appears in the specifier). **Survived its own diagnosis**: still green on the real escape shape four days later, sitting beside its working replacement. Deleted 2026-08-06 — `lib/app-isolation.test.ts` is the boundary; do not re-add a lint rule |
 | 5 | `bk __routes` | Deduped on `method+path`, so two apps sharing a path collapsed into one and the second appeared to have **no commands**. Also silently dropped one claim on `GET /api/users` for months |
 | 6 | `docs/sql/app-boundary-probe.sql` check (2) | **Commented out** — there was no second schema to point at when it was written. *A commented-out probe reports success.* Its first live version then picked `neon_auth.invitation`, a correct refusal of the wrong thing, which reads identically to a pass |
 | 7 | `pg_dump --schema=issues` as an extraction | Emits the triggers and FKs, all of which fail at restore; `psql` prints 27 errors and **exits 0**. The database boots, serves, and has silently lost referential integrity and all blob-index maintenance |
+| 8 | `TestRemovedSpellingsStillCarryAHint` | Asserted a **hand-written** cobra error string. The real one contains the whole remaining argv, so the three most-used spellings fell through to the generic hint. **Written by the same session that wrote this rule, an hour after writing it** |
+| 9 | `guide_test.go`'s dynamic-value guard | A substring match over six hand-written strings. A topic containing the **entire** issue status vocabulary, the **entire** priority vocabulary and a **stale** `50 MB` limit passed every section. It banned `100MB` — the *correct* spelling — so the one case it could not catch was a topic that had gone out of date. Widened 2026-08-06 to match sizes by shape |
+
+#8 is the one to remember: **you cannot tell by looking, including at your own.**
+#4 and #9 were found by the wrap-up verification *after* the migration closed —
+assume the next one exists.
 
 Two corollaries worth stating separately, because they are different mechanisms:
 
@@ -123,7 +138,8 @@ Two corollaries worth stating separately, because they are different mechanisms:
 
 ## Design system
 
-See memory file `design-system.md`. Short version:
+Full detail in `docs/frontend.md` (platform-wide) and
+`apps/issues/docs/frontend.md` (this app). Short version:
 
 - **Theme**: monochrome Linear-style. `--primary: #007bd3`. Tokens in `apps/issues/app/globals.css`.
 - **Dark/light**: `next-themes`, class strategy, `defaultTheme="dark"`.
@@ -165,7 +181,7 @@ record immediately, then `router.push` to the detail page with `?new=1`, where
 
 ## Data fetching
 
-TanStack Query throughout. See memory file `sync-architecture.md`.
+TanStack Query throughout. See `docs/frontend.md` → data fetching.
 
 ## Super admin
 
@@ -367,11 +383,19 @@ never describe an app's internals, and an app's docs never describe another app.
 - `frontend.md` — theme + tokens, `components/ui/` primitives, app shell, data fetching
 - `cli.md` — CLI internals, build, release, version policy
 - `platform-db.md` — the database boundary, roles, grants, migrations
-- `adding-an-app.md` — the walked checklist
+- `adding-an-app.md` — **the authoritative, self-contained checklist**
+- `platform-architecture.md` — current design rules (was `PLATFORM-ARCHITECTURE.md`)
+- `2026-08-platform-migration.md` — why the repo looks like this; what is still owed
 - `extracting-an-app.md` — the rehearsed extraction
-- `marketing.md`, `devops.md`, `env.md`
+- `devops.md`, `env.md`
 - `changelog/` — the dated record
 - `sql/` — role creation, the boundary probe, rollback scripts
+- `architecture-rebuild.md`, `specs/`, `next-fixes.md`, `migration/` — **historical**,
+  each carrying a dated superseded note. Never follow as instructions
+
+`/apps/issues/docs` — that app only: `backend.md`, `frontend.md`, `marketing.md`
+(moved from root 2026-08-06 — it describes the app's landing page, which is an
+app internal).
 
 `/apps/<app>/docs` — that app only.
 
@@ -391,5 +415,5 @@ Rules:
   misleading, add a dated note at the top pointing at current practice.
 - **A doc that prescribes a rejected design is worse than no doc.** When a
   decision supersedes something written down, rewrite the original rather than
-  appending — PLATFORM-ARCHITECTURE.md §4.6 was rewritten this way, because
+  appending — docs/platform-architecture.md §4.6 was rewritten this way, because
   leaving the losing option in place is how the next person re-litigates it.

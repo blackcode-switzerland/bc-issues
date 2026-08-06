@@ -3,7 +3,7 @@
 // The split is decided by one question: "would a sales app need this?" Workspaces,
 // members, comments, files, labels, activity and the inbox are org concepts, not
 // issue-tracker concepts. Only tables that literally name an issue/task/project
-// belong to an app. See PLATFORM-ARCHITECTURE.md §4.3.
+// belong to an app. See docs/platform-architecture.md §4.3.
 //
 // THE BOUNDARY RULE: nothing in this file may reference an app table. An app may
 // FK into platform.* freely; platform may never FK into an app. If you find
@@ -38,7 +38,7 @@ import { sql } from 'drizzle-orm'
  *
  * Phase 3 moved these tables out of `public`. Every table is schema-qualified in
  * Drizzle rather than relying on search_path — search_path is a safety net, not
- * the mechanism. See PLATFORM-ARCHITECTURE.md §4.3.
+ * the mechanism. See docs/platform-architecture.md §4.3.
  */
 export const platformSchema = pgSchema('platform')
 
@@ -122,7 +122,7 @@ export const workspaceMembers = platformSchema.table(
 //   workspace_apps     this app is on here   per workspace, per app
 //   app_access         you may use it here   per workspace, per app, per user
 //
-// See PLATFORM-ARCHITECTURE.md §4.5. `apps` is the registry itself: one row per
+// See docs/platform-architecture.md §4.5. `apps` is the registry itself: one row per
 // app in the suite, which is what lets `bk meta` report the apps a token can
 // reach without any app hardcoding the list.
 
@@ -356,7 +356,7 @@ export const links = platformSchema.table(
 //
 // It never belonged here. Its columns are `last_issue_seq`, `last_project_seq`,
 // `last_task_seq` — one app's entity types, sitting in the schema that is
-// supposed to hold only what every app shares. PLATFORM-ARCHITECTURE.md §4.6
+// supposed to hold only what every app shares. docs/platform-architecture.md §4.6
 // used to prescribe reshaping it to `(workspace_id, app, entity_type, last_seq)`
 // so apps could share it; building `apps/_template` showed the better answer is
 // that they should not share it at all. A counter is app data. Each app keeps

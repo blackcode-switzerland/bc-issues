@@ -1,7 +1,7 @@
 // `bk_live_` API tokens — mint, verify, list, revoke.
 //
 // WHY THIS IS A PLATFORM PACKAGE. There is **one binary, one login, one token**
-// (PLATFORM-ARCHITECTURE.md §6): the same `bk_live_…` string authenticates
+// (docs/platform-architecture.md §6): the same `bk_live_…` string authenticates
 // `bk issues issue create` and `bk sales deal create`. If this stayed in
 // apps/issues, the second app would write its own verifier, and two
 // implementations of credential verification is not a duplication smell — it is

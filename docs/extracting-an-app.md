@@ -1,6 +1,6 @@
 # Extracting an app
 
-PLATFORM-ARCHITECTURE.md §11 claims one of these apps could be sold or spun out.
+platform-architecture.md §11 claims one of these apps could be sold or spun out.
 This is that claim, **rehearsed on 2026-08-05** against a full copy of production
 data, with the result and the one trap that would have ruined it.
 

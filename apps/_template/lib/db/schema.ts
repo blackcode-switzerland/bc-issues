@@ -3,7 +3,7 @@
 // THE BOUNDARY RULE: this app's tables live in ITS OWN Postgres schema, and it
 // may not read or write another app's. That is enforced by grants, not by
 // review — `template_app` simply has no SELECT on `issues.*`. See
-// PLATFORM-ARCHITECTURE.md §4.3 and docs/sql/app-role.sql.
+// docs/platform-architecture.md §4.3 and docs/sql/app-role.sql.
 //
 // Deciding where a new table goes is one question: "would a second app need this
 // unchanged?" Yes → `packages/platform-db` (workspaces, members, comments,

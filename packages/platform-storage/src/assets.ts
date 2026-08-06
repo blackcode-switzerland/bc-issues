@@ -11,7 +11,7 @@
 // impossible, which is why it is one function in one place with no dependencies.
 //
 // It is app-agnostic on purpose: every app uploads into the same Blob store
-// (PLATFORM-ARCHITECTURE.md §4.1), so the host test is a platform fact.
+// (docs/platform-architecture.md §4.1), so the host test is a platform fact.
 
 // True only for URLs that came out of OUR upload pipeline — Vercel Blob in
 // production or the /uploads static dir in local dev.

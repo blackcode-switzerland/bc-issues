@@ -5,7 +5,7 @@ package platform
 // A bare platform verb, and it has to be. It reads `platform.entities`, the
 // projection every app writes into, which is the only thing that CAN be searched
 // across apps: an app's own tables are unreadable to another app's Postgres role
-// by design (PLATFORM-ARCHITECTURE.md §4.3), so a per-app fan-out is not merely
+// by design (docs/platform-architecture.md §4.3), so a per-app fan-out is not merely
 // slower — it is refused at the database.
 //
 // It answers one question: "where is the thing called X". For filtering by

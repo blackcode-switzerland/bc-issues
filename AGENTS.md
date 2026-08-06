@@ -65,15 +65,22 @@ A guide topic must **never** restate a dynamic value. Point at `bk meta`.
 > **A check you have not watched fail is not a check.** Break the thing it
 > guards, watch it go red, restore.
 
-**Seven guardrails in this repo were found green-but-inert**, each of which
+**Nine guardrails in this repo have been found green-but-inert**, each of which
 looked like working protection: three packages with no ESLint config at all; a
 `SECURITY DEFINER` guard comparing `current_user` (the function's owner) instead
 of the caller; an orphan check that structurally could not detect an orphan; an
 import rule whose globs matched none of the imports that escape an app; a route
 collector that deduped two apps into one; a probe that was **commented out**
-(a commented-out probe reports success); and `pg_dump --schema=issues`, which
-prints 27 errors, exits 0, and leaves a database that boots with its triggers and
-foreign keys silently gone.
+(a commented-out probe reports success); `pg_dump --schema=issues`, which prints
+27 errors, exits 0, and leaves a database that boots with its triggers and
+foreign keys silently gone; a test asserting a hand-written error string the
+binary never emits; and a guide guard that banned six literal strings and passed
+two entire hardcoded vocabularies.
+
+**The count is still growing.** Two of the nine were found *after* the migration
+closed — including the import rule above, which was still green four days after
+being diagnosed, sitting next to its working replacement. Assume the next one
+exists. Full list with the mechanism of each: `CLAUDE.md`.
 
 Two corollaries: **a skipped check must skip LOUDLY**, and **assert your inputs**
 — a guard that found nothing to check otherwise passes.

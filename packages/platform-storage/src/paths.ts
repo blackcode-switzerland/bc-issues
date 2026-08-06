@@ -1,7 +1,7 @@
 // Where an app's files live inside the shared Blob store.
 //
 // One store, shared by every app, with a per-app path prefix
-// (PLATFORM-ARCHITECTURE.md §4.1):
+// (docs/platform-architecture.md §4.1):
 //
 //     <app>/<workspace-slug>/<filename>
 //

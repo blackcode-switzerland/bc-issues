@@ -7,7 +7,7 @@
 //
 // Adding a table here means it belongs to THIS app. If a future app would need
 // it too, it belongs in @blackcode/platform-db instead — see the boundary rule
-// in that file and PLATFORM-ARCHITECTURE.md §4.3.
+// in that file and docs/platform-architecture.md §4.3.
 //
 // `comments` moved to @blackcode/platform-db in Phase 3, once migration 0032
 // dropped its legacy issue_id FK to issues.
@@ -35,7 +35,7 @@ import { sql } from 'drizzle-orm'
  *
  * Phase 3 moved them out of `public`. The app role may read and write
  * `platform.*` freely, but no other app may touch this schema: that boundary is
- * a Postgres grant, not a convention. See PLATFORM-ARCHITECTURE.md §4.3.
+ * a Postgres grant, not a convention. See docs/platform-architecture.md §4.3.
  */
 export const issuesSchema = pgSchema('issues')
 import { users, workspaces, labels } from '@blackcode/platform-db'
@@ -54,7 +54,7 @@ export * from '@blackcode/platform-db/schema'
  * #number without ALTERing a platform table — exactly the app→platform coupling
  * Phase 3 spent its whole budget removing.
  *
- * PLATFORM-ARCHITECTURE.md §4.6 originally prescribed reshaping it to
+ * docs/platform-architecture.md §4.6 originally prescribed reshaping it to
  * `(workspace_id, app, entity_type, last_seq)` so every app could share one
  * table. Building `apps/_template` in Phase 8 showed a better answer: apps
  * should not share a counter at all. Sharing it buys nothing — no query ever

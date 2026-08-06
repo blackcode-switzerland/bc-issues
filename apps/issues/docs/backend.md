@@ -7,7 +7,7 @@
 > **`/docs/backend.md`** at the repo root. Read that one first; this one assumes
 > it.
 >
-> The rule (PLATFORM-ARCHITECTURE.md §7.5): root docs never describe an app's
+> The rule (docs/platform-architecture.md §7.5): root docs never describe an app's
 > internals, and an app's docs never describe another app.
 
 > **Internal.** The HTTP API is private plumbing — **the only public contract is
@@ -43,7 +43,7 @@ grant that would let it.
 | `tasks` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace — mirrors `issues.seq`), optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
 | `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
-| `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by`. Issues-only; written via API/CLI (`bk issue attach`) |
+| `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by`. Issues-only; written via API/CLI (`bk issues issue attach`) |
 | `issue_labels` / `project_labels` | join tables (composite PKs) linking workspace labels to issues / projects |
 | `project_members` | the project's "people working on it" list (not access control); `(project_id, user_id)` unique |
 | `issue_watchers` | `(issue_id, user_id)` PK; `reason` ∈ `manual`/`assigned`/`reporter`. Auto-watchers are pruned when their reason no longer applies (unless `manual`) |

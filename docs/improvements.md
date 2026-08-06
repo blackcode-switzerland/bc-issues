@@ -1,10 +1,19 @@
 # Improvements / backlog
 
+> **Reviewed 2026-08-06.** This is still a live backlog, but nothing in it has
+> been re-checked against the code since the August 2026 platform migration —
+> paths and module names below are pre-migration (`lib/blob-gc.ts` is now
+> `packages/platform-storage`, and the app lives in `apps/issues`). Re-verify an
+> item before picking it up. What the migration itself still owes is tracked
+> separately, in
+> [`2026-08-platform-migration.md`](2026-08-platform-migration.md) → *What is
+> still owed*.
+
 Forward-looking notes on known gaps and things worth doing later. Unlike
 [`next-fixes.md`](./next-fixes.md) (a *resolved* historical friction log), this
 file is the place to **add** items as we discover them and refer back when we
 pick them up. Newest first. When an item ships, move a one-line note to
-[`api-changelog.md`](./api-changelog.md) and delete it here.
+[`changelog/`](./changelog/) and delete it here.
 
 ---
 

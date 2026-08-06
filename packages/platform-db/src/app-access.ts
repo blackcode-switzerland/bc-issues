@@ -12,7 +12,7 @@
 //
 // WHY RAW SQL. Every statement interpolates the Drizzle table object
 // (`${appAccess}`), never a string literal, so it is schema-qualified and
-// type-checked — the standard set in Phase 3 (PLATFORM-MIGRATION-PLAN.md §Phase 3
+// type-checked — the standard set in Phase 3 (the platform migration, Phase 3
 // step 5). Raw SQL rather than the query builder because every function here has
 // to accept both a `db` and a transaction handle, and the two builders do not
 // share a type. `Executor` below is that common shape.
@@ -122,7 +122,7 @@ export async function explainAppAccessDenial(
  *
  * This is what makes visibility follow access: log into one app and you see only
  * the workspaces that run it and that you can use — not every workspace you
- * happen to belong to (PLATFORM-ARCHITECTURE.md §4.5).
+ * happen to belong to (docs/platform-architecture.md §4.5).
  */
 export async function accessibleWorkspaceIds(
   db: Executor,
@@ -296,7 +296,7 @@ export async function grantDefaultAppAccess(
 
 /**
  * Turn every globally-enabled app on for a brand-new workspace and grant its
- * creator access — the default-on policy of PLATFORM-ARCHITECTURE.md §4.5.
+ * creator access — the default-on policy of docs/platform-architecture.md §4.5.
  *
  * MUST run in the same transaction as the workspace + membership inserts. Note it
  * enables *every* enabled app rather than only the one being used: a workspace is
@@ -427,7 +427,7 @@ export async function syncAppAccessRole(
 
 /**
  * Members with no `app_access` row for `app` — the orphan check from
- * PLATFORM-MIGRATION-PLAN.md Phase 4 step 3, as code rather than a pasted query.
+ * the platform migration, Phase 4 step 3 (docs/2026-08-platform-migration.md), as code rather than a pasted query.
  *
  * READ THE WINDOW THIS IS VALID IN. Before enforcement it must return an empty
  * array: every existing member was granted by the backfill, so a row here is a

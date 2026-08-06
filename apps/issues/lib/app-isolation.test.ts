@@ -31,7 +31,7 @@ describe('app isolation', () => {
     expect(
       found.map((f) => `${f.file} → ${f.specifier} (apps/${f.otherApp})`),
       'an app may never import from another app. Only packages/platform-* is shared — ' +
-        'if two apps need this code, extract it there. See PLATFORM-ARCHITECTURE.md §7.6.'
+        'if two apps need this code, extract it there. See docs/platform-architecture.md §7.6.'
     ).toEqual([])
   })
 

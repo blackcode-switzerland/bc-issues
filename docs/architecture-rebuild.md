@@ -1,11 +1,32 @@
 # Architecture Rebuild Plan
 
-**Status:** draft v1
+> ## ⚠️ SUPERSEDED — historical, 2026-08-06
+>
+> **This document no longer wins over the code, and the line below saying it does
+> is the reason this box exists.** It was written on 2026-05-22, it shipped, and
+> the August 2026 platform migration then restructured everything underneath it:
+> the app moved into `apps/issues`, the database became `platform.*` + `issues.*`,
+> and the CLI was namespaced.
+>
+> It is kept because the *reasoning* behind the
+> `Workspace → (Projects, Tasks, Issues, …)` model is still the reasoning the
+> product runs on, and that argument is not written down anywhere else.
+>
+> **Do not follow it as instructions.** For current state:
+>
+> | For | Read |
+> |---|---|
+> | Current design | [`platform-architecture.md`](platform-architecture.md) |
+> | Why the repo looks like this | [`2026-08-platform-migration.md`](2026-08-platform-migration.md) |
+> | Platform internals | [`backend.md`](backend.md), [`frontend.md`](frontend.md) |
+> | The issues app itself | [`../apps/issues/docs/`](../apps/issues/docs/) |
+
+**Status:** SUPERSEDED (was: draft v1)
 **Owner:** balathanusan@blackcode.ch
 **Last updated:** 2026-05-22
 **Goal:** turn the current app into a stripped-down, professional issue-tracking system to replace Linear for internal use. Production-grade, multi-tenant via workspaces, with first-class activity, inbox, analytics, error tracking, and a Go CLI.
 
-This document is the **single source of truth** for the rebuild. Every phase below produces shippable, working software — no phase leaves the app broken. If a decision in this doc conflicts with code, this doc wins and the code gets updated; if a decision turns out wrong, update this doc *first*, then change the code.
+~~This document is the **single source of truth** for the rebuild. If a decision in this doc conflicts with code, this doc wins and the code gets updated.~~ **No longer true as of 2026-08-06 — the code wins, and where this document disagrees with it, this document is wrong.** It was the source of truth while the rebuild was in flight; the rebuild shipped and the platform migration then moved most of what it describes. The intent below is still worth reading; the instructions are not.
 
 ---
 

@@ -1,5 +1,12 @@
 # Blackcode Issues - Feature Implementation Plan
 
+> **⚠️ SUPERSEDED — historical, kept as written.** This is a completed
+> implementation plan from January 2026. The features it describes shipped, and
+> the August 2026 platform migration then moved the whole app into `apps/issues`
+> and restructured the database. Paths, table names and module locations here are
+> all pre-migration. Do not follow it as instructions — see
+> `docs/platform-architecture.md` for current design.
+
 **Generated:** 2026-01-29
 **Orchestrator:** @Orchestrator
 **Project:** Next.js 16 Issue Tracker with Neon Postgres

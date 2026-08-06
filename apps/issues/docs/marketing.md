@@ -1,6 +1,7 @@
 # Marketing content
 
-Source-of-truth content for the landing page and other marketing surfaces. Lists every feature, who it's for, what tone to write in, and which claims are real today vs. on the roadmap. The live page is `components/landing-page.tsx`; keep this brief and that page in agreement.
+Source-of-truth content for the **issues app's** landing page and other marketing surfaces.
+Paths below are relative to `apps/issues/`. Lists every feature, who it's for, what tone to write in, and which claims are real today vs. on the roadmap. The live page is `components/landing-page.tsx`; keep this brief and that page in agreement.
 
 > **Honesty rule.** Every feature listed below carries a status tag:
 > - **Live** — shipped, working in production today.
@@ -196,7 +197,7 @@ The landing page should make it obvious there are **two** ways in, matched to wh
 For humans. Kanban, Gantt/timeline, list, issue detail with rich text, comments, attachments, analytics.
 
 ### CLI (`bk`)
-A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` opens a browser to authenticate and drops the token in `~/.config/bk/config.json`. Commands for everything the web does, plus `bk undo`. Output as table / JSON / YAML, with stable exit codes for scripts and agents.
+A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` opens a browser to authenticate and drops the token in `~/.config/bk/config.json`. Commands for everything the web does. Output as table / JSON / YAML, with stable exit codes for scripts and agents.
 
 ```bash
 npm install -g @blackcode_sa/bc-issues
@@ -298,7 +299,7 @@ For a public "What's next" section. Groupings, not specific dates.
 
 ### Typography
 - **Family**: Google Sans (`--font-sans`), served via Google's CSS API.
-  - Note: Google Sans isn't in the public Google Fonts directory; for a commercial deployment that may attract licensing scrutiny, swap to Inter or DM Sans (open-licensed, visually similar) — see `docs/frontend.md` and `app/layout.tsx`.
+  - Note: Google Sans isn't in the public Google Fonts directory; for a commercial deployment that may attract licensing scrutiny, swap to Inter or DM Sans (open-licensed, visually similar) — see the root `docs/frontend.md` and `app/layout.tsx`.
 - **Mono**: `ui-monospace, "SF Mono", "JetBrains Mono", Menlo`.
 
 ### Logo
@@ -372,13 +373,13 @@ Yes. Add `--json` or `-o yaml` for machine-readable output, pipe through `jq`, a
 Most lists (issues, projects, tasks) come back in one response. The keyset feeds — activity, trash, super-admin errors — page with `--limit` / `--cursor`, and the CLI prints the next cursor on stderr so a script can follow it without parsing stdout.
 
 ### What happens when I delete something?
-Issues, projects and tasks soft-delete into a recoverable Trash. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with `bk undo` (`POST /api/undo`), up to 10 at a time.
+Issues, projects and tasks soft-delete into a recoverable Trash. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. 
 
 ### Can a team and its agents share a workspace?
 Yes. Everything is workspace-scoped with members and roles; every change lands on a shared activity feed and a per-user inbox of mentions and assignments, so humans and agents on the same board stay in sync.
 
 ### What languages and stacks does the project use?
-Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui, NextAuth, TanStack Query, and Framer Motion on the front; Postgres + Drizzle ORM on the server; Go for the CLI. See `docs/frontend.md`, `docs/backend.md`, `docs/cli.md`.
+Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui, NextAuth, TanStack Query, and Framer Motion on the front; Postgres + Drizzle ORM on the server; Go for the CLI. See the root `docs/frontend.md`, `docs/backend.md`, `docs/cli.md`, and this app's own `docs/frontend.md` / `docs/backend.md`.
 
 ---
 

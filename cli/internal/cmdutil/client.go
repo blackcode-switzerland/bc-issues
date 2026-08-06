@@ -13,7 +13,7 @@ import (
 //
 // This lives in cmdutil rather than in a command package because the command
 // tree is split by app (internal/commands/platform, internal/commands/issues)
-// and those packages must not import each other — PLATFORM-ARCHITECTURE.md §7.1.
+// and those packages must not import each other — docs/platform-architecture.md §7.1.
 // Anything two of them need is shared here, which is also what keeps "does app A
 // reach into app B?" answerable by reading the import block.
 

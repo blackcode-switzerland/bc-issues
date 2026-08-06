@@ -18,8 +18,13 @@ All release operations are handled by a single script:
 
 Runs preflight checks (Vercel auth, git branch, clean working tree), then deploys to Vercel production.
 
-- **Production URL**: https://bc-issues.vercel.app
+- **Production URL**: https://issues.blackcode.ch
+- **Vercel project**: `bc-issues`
 - **Dashboard**: https://vercel.com/balathanusans-projects-f76f8a7b/bc-issues
+
+> There is exactly **one** Vercel project for this app. A stray second project
+> named `issues` existed during the migration window and was deleted on
+> 2026-08-06 — it never built successfully and never served anything.
 
 ### Release CLI to GitHub + npm
 
@@ -38,9 +43,9 @@ The version is auto-resolved from the latest git tag — you never need to type 
 > production keeps advertising the previous version, and no installed client is
 > ever told an update exists. Since that nudge is the adoption signal a
 > `CLI_MIN_VERSION` raise depends on, skipping the second deploy quietly stalls
-> the next release. Full reasoning, and why `BK_CLI_LATEST` is the wrong fix, in
-> `PLATFORM-MIGRATION-PLAN.md` → *Releasing the CLI: web deploy, then npm, then
-> web deploy AGAIN*. Confirm the last step:
+> the next release. Full reasoning in
+> [`../docs/2026-08-platform-migration.md`](2026-08-platform-migration.md) →
+> *The operational rules it bought*. Confirm the last step:
 >
 > ```bash
 > curl -sI https://issues.blackcode.ch/api/meta | grep x-bk-cli
@@ -113,22 +118,32 @@ vercel env ls production
 
 After changing env vars, redeploy: `./devops/release.sh web`
 
-### Current production env vars
+### Production env vars
+
+**`vercel env ls production` is authoritative** — this table drifts, and did.
+[`env.md`](env.md) carries the full reference.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Neon Postgres connection string |
+| `DATABASE_URL` | Neon, **as the `issues_app` role**. Bounded: owns nothing, cannot migrate |
+| `MIGRATE_DATABASE_URL` | Neon, as the schema owner. Used by `postbuild` only |
+| `RUN_MIGRATIONS` | `1`, **Production only**. Without it `postbuild` skips and migrations silently stop |
 | `NEXTAUTH_SECRET` | NextAuth signing secret |
-| `NEXTAUTH_URL` | `https://bc-issues.vercel.app` |
-| `SUPER_ADMINS` | `balathanusan@blackcode.ch` |
-
-### Optional env vars (not yet set)
-
-| Variable | Purpose |
-|---|---|
-| `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Google OAuth sign-in |
+| `NEXTAUTH_URL` | `https://issues.blackcode.ch` |
+| `SUPER_ADMINS` | comma-separated emails |
+| `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Google OAuth sign-in — **configured and live** |
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Transactional email (invitations, password reset) |
-| `BLOB_READ_WRITE_TOKEN` | File/image uploads in production |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob — **configured and live** |
+| `PLATFORM_ENFORCE_APP_ACCESS` | Enforces per-app access in `resolveWorkspace` |
+
+> **Two credentials, deliberately.** `DATABASE_URL` is the app role and **cannot**
+> migrate — that is the point, not a limitation. `MIGRATE_DATABASE_URL` is the
+> owner and is used by nothing but `postbuild`. See [`platform-db.md`](platform-db.md).
+
+> The **preview** environment points at its own Neon branch (`preview`) **and its
+> own Blob store** (`blackcode-platform-preview-blob`). The separate store is not
+> redundancy: `sweepOrphanedUrls` runs on user action, so a preview deployment
+> pointed at the production store would delete real production bytes.
 
 ---
 
@@ -172,6 +187,72 @@ DATABASE_URL="<neon-url>" npm run db:migrate
 ```
 
 The Neon connection string is in Vercel → Storage → bc-issues → Connection Details.
+
+---
+
+## Operational rules
+
+Learned during the platform migration, each at a cost. The reasoning is in
+[`2026-08-platform-migration.md`](2026-08-platform-migration.md); this is the
+operating instruction.
+
+### Step 4b — verify with the PUBLISHED binary, not with curl
+
+> **A health check proves the server is up. Only the client your users run proves
+> the contract still holds.**
+
+Before promoting a deploy, run the **real published `bk`** against the staged
+build. Not `curl`, not a local build.
+
+```bash
+npm i -g @blackcode_sa/bc-issues@latest
+bk meta && bk issues issue list --ws <a real workspace>
+```
+
+This is not belt-and-braces. `/api/status` was green throughout a **total outage
+of agent uploads** in Phase 7, and green again while `/api/undo` was handing
+installed binaries 2KB of HTML instead of JSON. Step 4b found both; nothing else
+did.
+
+### The cutover pattern
+
+**Rehearse on a Neon branch first, including the rollback.** Every phase of the
+migration did, and it caught a real bug in most of them — including a query that
+would have failed at runtime the first time it ran.
+
+`docs/sql/` carries the rollback script for each phase. A migration without a
+rehearsed rollback is not ready.
+
+### Who owns the migration depends on the ordering
+
+`postbuild` applies migrations, gated on `RUN_MIGRATIONS`, as
+`MIGRATE_DATABASE_URL`. So:
+
+- **Deploy-first ordering → the deploy owns the migration.** Normal case; do
+  nothing special.
+- **A migration that must land BEFORE the deploy** has to be applied by hand
+  first, **with `RUN_MIGRATIONS` removed** so the deploy does not re-run it. Put
+  it back afterwards.
+
+Getting this backwards is how a deploy half-applies a schema change. It is also
+worth doing deliberately: migration 0037 was applied to production *before* the
+deploy that shipped the route reading it, to buy a soak period where the triggers
+were exercised by real writes while nothing yet depended on the index.
+
+### Backwards compatibility with installed binaries
+
+**The new server must work with the old clients that are still installed.** A
+client cannot be asked to know a convention that shipped after it did.
+
+This is why trash refs changed *field name* (`id` → `number`) rather than
+*meaning*: redefining `id` would have made every installed binary act on a
+different row — and on `purge`, destroy it.
+
+And why **removing a route is not finished when the route is gone.** It is
+finished when the old client that still calls it gets an actionable answer: a
+**410 with a `suggestion`** is recoverable inside the same run; a 404 is a dead
+end. That is why `/api/undo`, `/api/openapi.json` and `/api/docs` remain as 410
+stubs with no expiry.
 
 ---
 

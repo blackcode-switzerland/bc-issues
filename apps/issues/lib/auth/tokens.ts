@@ -1,6 +1,6 @@
 // Moved to @blackcode/platform-auth in Phase 6.
 //
-// One binary, one login, one token (PLATFORM-ARCHITECTURE.md §6): the same
+// One binary, one login, one token (docs/platform-architecture.md §6): the same
 // `bk_live_…` string authenticates every app, so a per-app verifier would be a
 // second chance to get constant-time comparison, expiry or the prefix check
 // wrong against one shared `platform.api_tokens`.

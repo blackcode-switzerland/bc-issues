@@ -12,7 +12,7 @@ import (
 
 // The app boundary, enforced rather than agreed.
 //
-// PLATFORM-ARCHITECTURE.md §7.1: one Go package per app, and no cross-imports
+// docs/platform-architecture.md §7.1: one Go package per app, and no cross-imports
 // between them. §7.6 asks for a lint that makes it real, on the grounds that a
 // seam only stays legible if something fails when it is crossed — a developer or
 // an agent landing anywhere in this repo has to be able to tell which app they

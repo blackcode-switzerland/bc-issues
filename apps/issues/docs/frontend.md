@@ -6,7 +6,7 @@
 > workspace-scoped URL model, TanStack Query conventions and toasts — is in
 > **`/docs/frontend.md`** at the repo root. Read that first; this assumes it.
 >
-> The rule (PLATFORM-ARCHITECTURE.md §7.5): root docs never describe an app's
+> The rule (docs/platform-architecture.md §7.5): root docs never describe an app's
 > internals, and an app's docs never describe another app.
 
 Paths are relative to **`apps/issues/`**. Backend counterpart:

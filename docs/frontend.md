@@ -1,14 +1,14 @@
 # Frontend — platform
 
 > **2026-08-04 — this file was split along the platform/app line** (Phase 5 of
-> `PLATFORM-MIGRATION-PLAN.md`). What stayed here is what every app inherits:
+> `2026-08-platform-migration.md`). What stayed here is what every app inherits:
 > the theme and token system, `components/ui/` primitives, the shared design
 > primitives, the app shell and providers, the workspace-scoped URL model, and
 > the data-fetching conventions.
 >
 > **The issue tracker's own dashboard routes, feature components and analytics
 > view moved to [`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md).**
-> Root docs never describe an app's internals (PLATFORM-ARCHITECTURE.md §7.5).
+> Root docs never describe an app's internals (platform-architecture.md §7.5).
 >
 > **Paths are relative to `apps/issues/`.** Much of the design system has already
 > moved to `packages/platform-ui` (Phase 2); what is named here as

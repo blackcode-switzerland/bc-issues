@@ -2,7 +2,7 @@
 // `bk issues …`.
 //
 // It is one Go package per app, and app packages do not import each other
-// (PLATFORM-ARCHITECTURE.md §7.1). Anything two apps need lives in
+// (docs/platform-architecture.md §7.1). Anything two apps need lives in
 // internal/cmdutil; anything only this app needs lives here. Reading the import
 // block of this package is meant to be enough to answer "does issues reach into
 // another app?".

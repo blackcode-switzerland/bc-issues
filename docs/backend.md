@@ -1,14 +1,14 @@
 # Backend — platform
 
 > **2026-08-04 — this file was split along the platform/app line** (Phase 5 of
-> `PLATFORM-MIGRATION-PLAN.md`). What stayed here is the **platform**: identity,
+> `2026-08-platform-migration.md`). What stayed here is the **platform**: identity,
 > workspaces, membership, per-app access, the shared content tables, the event
 > spine, the `apiHandler`/`Errors` contract, the query-layer conventions.
 >
 > **The issue tracker's own schema, routes and `#number` model moved to
 > [`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md).** Root docs
 > never describe an app's internals; an app's docs never describe another app
-> (PLATFORM-ARCHITECTURE.md §7.5).
+> (platform-architecture.md §7.5).
 >
 > **Paths in this file are relative to `apps/issues/`** where they name
 > `lib/…`, `app/…` or `components/…`. Some of what is described here still
@@ -263,7 +263,7 @@ every one of those inserts; `DEFAULT 'issues'` would hardcode one app's name int
 a platform table, which is the coupling this work removes. It is backfilled, all
 current code sets it, and it tightens to `NOT NULL` in a later release once no
 deployed code can write a NULL — expand → migrate → contract
-(PLATFORM-ARCHITECTURE.md §4.7). `subject_urn` has **no** foreign key because
+(platform-architecture.md §4.7). `subject_urn` has **no** foreign key because
 events are append-only history and must outlive a purge of their subject.
 
 The data-layer helpers are in `packages/platform-db/src/{urn,entities,links}.ts`.
@@ -364,7 +364,7 @@ The ten work-item tables (`issues`, `tasks`, `projects`, `project_updates`,
 `issue_assignees`, `issue_watchers`, `issue_labels`, `project_labels`,
 `project_members`, `attachments`) live in the **`issues` Postgres schema** and
 are documented in **`apps/issues/docs/backend.md`**, not here — root docs do not
-describe an app's internals (PLATFORM-ARCHITECTURE.md §7.5). The same goes for
+describe an app's internals (platform-architecture.md §7.5). The same goes for
 their status/priority vocabularies.
 
 An app may FK into and query `platform.*` freely; it may not read or write

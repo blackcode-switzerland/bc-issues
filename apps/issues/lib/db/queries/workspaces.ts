@@ -39,7 +39,7 @@ export type WorkspaceWithMembership = Workspace & {
  * The workspaces this user belongs to.
  *
  * Pass `{ app }` to get the ones they may actually USE that app in — visibility
- * follows access (PLATFORM-ARCHITECTURE.md §4.5). That is what every user-facing
+ * follows access (docs/platform-architecture.md §4.5). That is what every user-facing
  * listing wants: logged into issues, you should not see a workspace where issues
  * is off or where you were never granted it.
  *

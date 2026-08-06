@@ -64,7 +64,7 @@ vercel env add NEXTAUTH_SECRET production --value "<new-secret>" --yes
 | | |
 |---|---|
 | **Purpose** | The app's public URL — used by NextAuth for OAuth callbacks and redirects |
-| **Status** | Set ✓ — `https://bc-issues.vercel.app` |
+| **Status** | Set ✓ — `https://issues.blackcode.ch` |
 | **Source** | Your deployment URL |
 | **Impact if missing** | OAuth sign-in (Google) breaks; redirect loops |
 
@@ -248,7 +248,7 @@ variable to ADD rather than a deploy to fix.
 Phase 4's failure mode is quiet, so that is what a missed grant looks like. Set it,
 redeploy (or promote the previous deployment), then find the gap with the orphan
 report (`findOrphanedMembers` in `@blackcode/platform-db`, or the query in
-PLATFORM-MIGRATION-PLAN.md Phase 4). Every denial is already logged with the user,
+the platform migration, Phase 4 — see 2026-08-platform-migration.md). Every denial is already logged with the user,
 workspace and app, so the logs should name them.
 
 Recognised falsey values (enforcement off): empty, `0`, `false`, `no`, `off`.

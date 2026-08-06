@@ -2,7 +2,7 @@
 // whitelist that gates registration and OAuth first login.
 //
 // Platform, not app, for a structural reason rather than a tidiness one:
-// `platform.users` is ONE table shared by every app (PLATFORM-ARCHITECTURE.md
+// `platform.users` is ONE table shared by every app (docs/platform-architecture.md
 // §4.5 — identity is global, access is per app). An app deciding for itself who
 // may register would be an app deciding who exists in every other app. Access to
 // a particular app is a different question and a different table; that is

@@ -39,24 +39,31 @@ two are the only sources an agent needs.
 | Uploads | Vercel Blob (optional — local `public/uploads` fallback in dev) |
 
 There is **no separate MCP/companion server in this repo** — the `bk` CLI is the
-integration surface. See [`docs/architecture-rebuild.md`](docs/architecture-rebuild.md)
-for the historical design record.
+integration surface.
 
-> **Going multi-app.** The issue tracker is the first of several internal
-> Blackcode apps (sales/CRM, bookkeeping, …), so this repo is now a **monorepo**:
-> apps live in `apps/*`, the `bk` CLI and `docs/` stay at the root, and Turborepo
-> drives the tasks. The agreed target architecture — shared `platform` Postgres
-> schema, per-app schemas, one `bk` CLI, cross-app links — is in
-> [`PLATFORM-ARCHITECTURE.md`](PLATFORM-ARCHITECTURE.md), and the ordered
-> migration in [`PLATFORM-MIGRATION-PLAN.md`](PLATFORM-MIGRATION-PLAN.md), with
-> the pre-migration baseline in
-> [`docs/migration/baseline.md`](docs/migration/baseline.md).
+> **This is a monorepo of apps on a shared platform.** The issue tracker is the
+> first of several internal Blackcode apps (sales/CRM, bookkeeping, …). Apps live
+> in `apps/*`, shared libraries in `packages/platform-*`, the `bk` CLI and `docs/`
+> at the root, and Turborepo drives the tasks.
 >
-> **Only Phases 0–1 have landed.** There is no `packages/platform-*` yet, the CLI
-> is not namespaced per app, and the database is still one `public` schema. Read
-> those two documents before starting a second app or changing
-> `apps/issues/lib/db/schema.ts`, `apps/issues/lib/api/`, `apps/issues/lib/auth/`
-> or `cli/`.
+> **The platform migration is finished — all nine phases (0–8) landed on
+> 2026-08-05.** `packages/platform-{db,api,ui,auth,agent,storage,testing}` exist;
+> the database is `platform.*` + `issues.*` (never `public`) with a bounded
+> per-app Postgres role; the CLI is namespaced per app (`bk issues issue create`);
+> everything is addressable by URN; storage is shared, app-attributed and
+> reference-counted across deployments.
+>
+> | | |
+> |---|---|
+> | **Add an app** | [`docs/adding-an-app.md`](docs/adding-an-app.md) — the authoritative, walked checklist |
+> | **Current design** | [`docs/platform-architecture.md`](docs/platform-architecture.md) |
+> | **Why the repo looks like this** | [`docs/2026-08-platform-migration.md`](docs/2026-08-platform-migration.md) |
+> | **Remove an app** | [`docs/extracting-an-app.md`](docs/extracting-an-app.md) — rehearsed |
+> | **The database boundary** | [`docs/platform-db.md`](docs/platform-db.md) |
+>
+> Read those before starting a second app or changing
+> `apps/issues/lib/db/schema.ts`, `apps/issues/lib/api/`, `apps/issues/lib/auth/`,
+> `packages/platform-*` or `cli/`.
 
 ## Quick start
 
@@ -113,7 +120,7 @@ prompted to create your first workspace.
   member roles. Issue IDs are a per-workspace sequence. **Move or copy**
   projects/tasks/issues between two workspaces you belong to — one atomic
   transaction, fresh #numbers, labels/comments/attachments carried, no data
-  loss (`bk move`/`bk copy`, `POST /api/workspaces/{ws}/move`).
+  loss (`bk issues move` / `bk issues copy`, `POST /api/workspaces/{ws}/move`).
 - **Projects** — status, priority, lead, members, labels, start/target dates,
   icon, and a **status-update feed** (health: on-track / at-risk / off-track).
 - **Issues** — workspace sequence IDs, priority, status, assignee, labels,
@@ -126,7 +133,9 @@ prompted to create your first workspace.
   (`events`), which fans out into a per-user `inbox` and the activity feed.
 - **Analytics** — workspace / project / task / member views, with a
   print-to-PDF page.
-- **Undo** — a transaction log backs `bk undo` and the `/api/undo` endpoint.
+- **Trash** — issues, tasks and projects soft-delete into a recoverable Trash;
+  items deleted together restore as a group. (`bk undo` was removed in 1.12.0 —
+  it never recorded anything. Trash is the working undo and always was.)
 - **Reliability** — server-side error tracking with a public `/status` page.
 
 ## API at a glance
@@ -149,10 +158,18 @@ Workspace-scoped routes are canonical:
 ```
 
 Personal/auth routes live under `/api/me/*`, `/api/auth/*`, `/api/tokens/*`,
-`/api/cli/authorize`, `/api/upload`, `/api/undo`, and `/api/status`. A set of
-legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
-`/api/users`, `/api/activity`) remain for the CLI. Full detail in
-[`docs/backend.md`](docs/backend.md).
+`/api/cli/authorize`, `/api/upload`, `/api/meta`, `/api/changelog` and
+`/api/status`.
+
+**The legacy non-workspace shims are gone.** `/api/projects`, `/api/issues`,
+`/api/tasks` and `/api/activity` were removed with the platform migration —
+everything tenant-scoped lives under `/api/workspaces/{ws}/…`, and
+implicit-active-workspace routes are not to be reintroduced. `/api/users`
+remains. `/api/undo`, `/api/openapi.json` and `/api/docs` remain as **410 Gone**
+stubs carrying a `suggestion`, deliberately and indefinitely — a 410 an old
+client can act on beats a 404 that looks like a bug.
+
+Full detail in [`docs/backend.md`](docs/backend.md).
 
 `{ws}` accepts either a workspace **slug** or numeric **id** — prefer the slug
 (the numeric id is opaque; agents choose a workspace by name/slug from
@@ -171,15 +188,27 @@ legacy non-workspace shims (`/api/projects`, `/api/issues`, `/api/tasks`,
 
 ## Documentation
 
+**Root `docs/` is the platform and the monorepo. `apps/<app>/docs/` is that app.**
+Root docs never describe an app's internals; an app's docs never describe another
+app.
+
 | Doc | What it covers |
 |-----|----------------|
-| [`docs/backend.md`](docs/backend.md) | **Internal.** Schema, auth, private API routes, query layer, operations |
-| [`docs/frontend.md`](docs/frontend.md) | Routes, theme system, shared components, data fetching |
+| [`docs/adding-an-app.md`](docs/adding-an-app.md) | **Start here to add an app.** The authoritative, self-contained checklist |
+| [`docs/platform-architecture.md`](docs/platform-architecture.md) | Current design: the boundary rule, URNs, the access model, separation rules |
+| [`docs/2026-08-platform-migration.md`](docs/2026-08-platform-migration.md) | Why the repo looks like this, what it cost, and what is still owed |
+| [`docs/platform-db.md`](docs/platform-db.md) | The database boundary, the two credentials, roles and grants |
+| [`docs/extracting-an-app.md`](docs/extracting-an-app.md) | Removing an app — rehearsed, including the trap that fails silently |
+| [`docs/backend.md`](docs/backend.md) | **Platform.** Shared API conventions, auth, `platform.*` schema, the event spine, the blob index |
+| [`docs/frontend.md`](docs/frontend.md) | **Platform.** Theme + tokens, `components/ui/` primitives, app shell, data fetching |
 | [`docs/cli.md`](docs/cli.md) | **Maintainer doc** for the `bk` CLI — build, release, internals. Usage lives in `bk guide` |
+| [`docs/devops.md`](docs/devops.md) | Releases, deploys, migrations, env vars, the operational rules |
+| [`docs/env.md`](docs/env.md) | Environment variable reference |
 | [`cli/internal/guide/topics/`](cli/internal/guide/topics) | The agent-facing usage guide, embedded in the binary and served by `bk guide` |
 | [`docs/changelog/`](docs/changelog/) | The dated record of every change — one file per app plus `platform.md`, merged into one feed by `bk changelog` and `GET /api/changelog` |
-| [`docs/marketing.md`](docs/marketing.md) | Positioning, feature catalog, voice |
-| `docs/architecture-rebuild.md`, `HANDOVER.md`, `docs/specs/*` | Historical design/planning records (point-in-time) |
+| [`docs/sql/`](docs/sql/) | Role creation, the app-boundary probe, per-phase rollback scripts |
+| [`apps/issues/docs/`](apps/issues/docs/) | The issues app only — its domain model, routes, UI patterns, and marketing content |
+| `docs/architecture-rebuild.md`, `docs/specs/*`, `docs/next-fixes.md`, `docs/migration/*` | **Historical.** Point-in-time records, each carrying a dated superseded note. Do not follow as instructions |
 
 ## Deployment
 

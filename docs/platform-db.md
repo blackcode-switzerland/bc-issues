@@ -27,7 +27,7 @@ simply has no `SELECT` on `template.*`.
 An app may FK into `platform.*` freely. **`platform` may never FK into an app**:
 that direction would make `pg_dump --schema=issues` produce something that
 cannot be restored, which is the extraction path §11 of
-PLATFORM-ARCHITECTURE.md is built on. Migration 0032 dropped the last one.
+platform-architecture.md is built on. Migration 0032 dropped the last one.
 
 ## Two credentials, and why
 
@@ -110,7 +110,7 @@ nobody can prove the file is unused. That is not a bug to work around.
 An app's `#number` sequence is app data. Keep the counter table in your own
 schema; do not add a column to a shared one. `apps/_template` does it in three
 lines, and migration `0040` moved `workspace_counters` out of `platform` for
-exactly this reason — see PLATFORM-ARCHITECTURE.md §4.6.
+exactly this reason — see platform-architecture.md §4.6.
 
 Allocate with `UPDATE … RETURNING` inside the same transaction as the row
 insert, never read-then-write: two concurrent creates would otherwise read the

@@ -7,13 +7,13 @@
 // `apps/issues/lib/api/{handler,workspace-context}.ts` do the same job, better —
 // they also log to `platform.error_events` and carry an agent manifest. They are
 // NOT imported here, and could not be: an app may never import from another app
-// (PLATFORM-ARCHITECTURE.md §7.6, enforced by .eslintrc.json).
+// (docs/platform-architecture.md §7.6, enforced by .eslintrc.json).
 //
 // They have not been moved to `packages/platform-api` either, and that is a
 // deliberate, recorded decision rather than an oversight. Both close over this
 // app's `db`, its schema and its `APP_SLUG`, so sharing them means adding three
 // parameters — and the standing rule is "if you have to add a parameter to make
-// it generic, leave it in the app" (PLATFORM-MIGRATION-PLAN.md, Phase 2). That
+// it generic, leave it in the app" (the platform migration, Phase 2 — docs/2026-08-platform-migration.md). That
 // rule exists to stop speculative extraction; a scaffold is not the second app
 // that justifies paying the cost.
 //

@@ -39,7 +39,7 @@ export const LABEL_NAME_MAX = 50
  *
  * Still one flat object, because that is the shape `bk meta` reads today.
  * Phase 5 regroups it as `apps.issues.limits` alongside a platform block — see
- * PLATFORM-ARCHITECTURE.md §7.4. Keep the two halves visibly separate until then.
+ * docs/platform-architecture.md §7.4. Keep the two halves visibly separate until then.
  */
 export const LENGTH_LIMITS = {
   issue_title_max: ISSUE_TITLE_MAX,

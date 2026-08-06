@@ -1,7 +1,7 @@
 // The shared Drizzle client factory.
 //
 // Every app connects to the same Neon project but logs in as its own Postgres
-// role (PLATFORM-ARCHITECTURE.md §4.1), so the connection wiring is identical
+// role (docs/platform-architecture.md §4.1), so the connection wiring is identical
 // everywhere and only the credentials differ. That wiring is what lives here.
 //
 // The schema is a PARAMETER rather than an import, because each app's schema is

@@ -2,7 +2,7 @@
 //
 // This route reads `platform.entities` and NOTHING ELSE. That is the point, not
 // an implementation detail: a future sales app's tables are unreadable to this
-// app's Postgres role by design (PLATFORM-ARCHITECTURE.md §4.3), so a search that
+// app's Postgres role by design (docs/platform-architecture.md §4.3), so a search that
 // queried each app's own tables could not be written at all — not awkwardly,
 // literally not, as a database grant. Searching the shared projection is what
 // makes `bk search` one query instead of a fan-out an agent has to assemble.
