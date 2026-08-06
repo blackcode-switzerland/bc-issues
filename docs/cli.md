@@ -310,9 +310,20 @@ bk skill sync            # the one command an agent is told to run when anything
 bk skill uninstall
 ```
 
-**Ownership.** `bk` writes only between `<!-- BEGIN blackcode-issues … -->` and
-`<!-- END blackcode-issues -->`; everything outside those markers survives every
-install and sync. A `SKILL.md` with neither the markers nor a `bk` version stamp
+**The name.** The skill is `blackcode` — installed at
+`.claude/skills/blackcode/SKILL.md` — since 3.0.0 (D-17). It was
+`blackcode-issues`, and the rename is not cosmetic: an agent scanning the
+available skills, seeing one named after the issue tracker while it has been
+asked to do sales work, and concluding "not my job" is the one failure the skill
+exists to prevent. `bk skill sync` migrates an existing install (see below).
+
+**Ownership.** `bk` writes only between `<!-- BEGIN blackcode … -->` and
+`<!-- END blackcode -->`; everything outside those markers survives every
+install and sync. The pre-3.0.0 markers (`blackcode-issues`) are still
+recognised — if they were not, every file installed by an older `bk` would
+classify as hand-written, `sync` would refuse to touch it, and it would freeze at
+whatever version installed it. The write path always emits the current pair, so a
+file converts on its first sync. A `SKILL.md` with neither the markers nor a `bk` version stamp
 was written by a human, and `bk` will not touch it: `install` fails (exit 1)
 naming the options (`--dir`, `--format agents-md`, `--force`), and `sync` leaves
 it alone and exits 0. Files written by 1.9.0 carry a stamp but no markers; they are

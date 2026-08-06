@@ -30,6 +30,46 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — The agent skill is called `blackcode`, not `blackcode-issues`
+
+**Run `bk skill sync` once.** It moves the file, keeps anything you added, and
+deletes the old copy. Running it again does nothing.
+
+    ~/.claude/skills/blackcode-issues/SKILL.md   ->   ~/.claude/skills/blackcode/SKILL.md
+
+**Why it is not cosmetic.** The skill describes the `bk` CLI, and the CLI drives
+every app. An agent scanning the available skills, seeing one called
+"blackcode-issues" while it has been asked to do sales work, and concluding *"not
+my job"* is the single failure the skill exists to prevent. The template no
+longer names one app either: it points at `bk app list` and says plainly that
+there is more than one.
+
+### What `sync` does, exactly
+
+- Carries across everything you wrote **around** bk's block — an edited
+  description, your team's rules below it.
+- Rewrites `name: blackcode-issues` in the front matter to `name: blackcode`.
+  Nothing else in the front matter is touched, and a name **you** chose is left
+  alone — bk renames only the name bk picked.
+- Removes the old `SKILL.md`, and its directory only if that leaves it empty.
+  Anything else you keep in there stays, and so does the directory.
+- **A `SKILL.md` you wrote yourself is not moved and not deleted.** It is
+  reported, left under the old name, and no second skill is installed beside it:
+  two skills claiming the same tool is worse than one with a stale name.
+
+### If you never sync
+
+Nothing breaks. The old file keeps working and keeps updating — the pre-3.0.0
+block markers (`<!-- BEGIN blackcode-issues … -->`) are still recognised, so
+`bk` still owns and refreshes its own region. You keep the old name until you
+sync.
+
+`bk skill check` now says *"the skill is installed under its old name at …"*
+rather than *"no skill installed"*, which was true of the new path and
+misleading about the situation.
+
+---
+
 ## 2026-08-06 — Labels belong to an app, and two shared columns became `<app>:<noun>`
 
 Three changes to tables **every** app shares (`platform.labels`,

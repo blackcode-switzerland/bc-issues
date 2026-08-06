@@ -28,13 +28,26 @@ bk skill path       # where the skill file lives
 `bk` writes only between these two markers in the skill file:
 
 ```
-<!-- BEGIN blackcode-issues (managed by bk skill install) -->
+<!-- BEGIN blackcode (managed by bk skill install) -->
 ...bk's content...
-<!-- END blackcode-issues -->
+<!-- END blackcode -->
 ```
 
 Anything outside them — an edited description, your team's own rules below — is
 preserved by every `install` and every `sync`.
+
+## The skill was renamed
+
+It used to be called `blackcode-issues`. It is called `blackcode`, because it
+describes the CLI and the CLI drives every app — a skill named after one app is
+one an agent working in another app skips.
+
+`bk skill sync` does the move: it carries your additions across, deletes the old
+copy, and leaves anything else in that directory where it is. Running it twice
+changes nothing the second time. A skill file you wrote yourself is reported and
+left exactly where it is, under the old name — `bk` does not move what it does
+not own. Markers from before the rename are still recognised, so an older file
+keeps updating normally until you sync it.
 
 If a `SKILL.md` already exists that `bk` did not write, `bk` **refuses to touch
 it**. `install` stops and tells you the options; `sync` leaves it alone and

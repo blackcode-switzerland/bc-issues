@@ -51,7 +51,7 @@ func newSkillCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skill",
 		Short: "Install and keep the agent skill file current",
-		Long: `Manage the agent skill file for blackcode issues.
+		Long: `Manage the agent skill file for blackcode.
 
 The skill is a pointer, not a copy: it tells an agent to run ` + "`bk guide`" + ` for
 usage and ` + "`bk meta`" + ` for live data. That is why it never goes stale on its
@@ -86,16 +86,20 @@ func newSkillInstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Write the agent skill file (default: ./.claude/skills/blackcode-issues/SKILL.md)",
+		Short: "Write the agent skill file (default: ./.claude/skills/blackcode/SKILL.md)",
 		Long: `Write the agent skill file.
 
 Target, in order of preference:
   --dir PATH                              explicit
-  ./.claude/skills/blackcode-issues/      when a .claude/ exists in cwd or above
-  ~/.claude/skills/blackcode-issues/      otherwise
+  ./.claude/skills/blackcode/             when a .claude/ exists in cwd or above
+  ~/.claude/skills/blackcode/             otherwise
 
   --format agents-md    instead append (or update in place) a delimited
-                        "blackcode issues" section in ./AGENTS.md
+                        "blackcode" section in ./AGENTS.md
+
+The skill was called ` + "`blackcode-issues`" + ` before 3.0.0.
+` + "`bk skill sync`" + ` moves an existing one; this command does not, so
+that installing never deletes anything.
 
 Offline: the template ships inside this binary.`,
 		Args:        cobra.NoArgs,
@@ -140,7 +144,7 @@ Offline: the template ships inside this binary.`,
 			if skill.Classify(existing) == skill.Managed {
 				verb = "updated"
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "%s blackcode-issues skill (bk %s). Next: bk guide\n", verb, version.Version)
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s %s skill (bk %s). Next: bk guide\n", verb, skill.Name, version.Version)
 			return nil
 		},
 	}
@@ -200,7 +204,7 @@ func installAgentsMd(cmd *cobra.Command, dirFlag string) error {
 		return err
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), path)
-	fmt.Fprintf(cmd.ErrOrStderr(), "updated the blackcode issues section in AGENTS.md (bk %s)\n", version.Version)
+	fmt.Fprintf(cmd.ErrOrStderr(), "updated the %s section in AGENTS.md (bk %s)\n", skill.Name, version.Version)
 	return nil
 }
 
@@ -226,7 +230,12 @@ func newSkillPathCmd() *cobra.Command {
 
 // skillStatus is the shared state `check` and `sync` both compute.
 type skillStatus struct {
-	Path            string `json:"path"`
+	Path string `json:"path"`
+	// LegacyPath is a pre-3.0.0 install sitting beside the target, when one
+	// exists and the target does not. Surfaced rather than silently handled so
+	// `check --json` tells an agent WHY it is being sent to `sync` — "no skill
+	// installed" next to a skill that plainly is installed reads as a bug.
+	LegacyPath      string `json:"legacy_path,omitempty"`
 	Installed       bool   `json:"installed"`
 	InstalledFrom   string `json:"installed_from_cli_version"`
 	RunningVersion  string `json:"running_cli_version"`
@@ -256,6 +265,18 @@ func inspect(dirFlag string) (skillStatus, error) {
 		st.SkillIsCurrent = st.InstalledFrom == version.Version
 	} else if !os.IsNotExist(err) {
 		return st, err
+	}
+
+	// Only when the target is empty. Once the new file exists the old one is
+	// none of this command's business — which is what makes a repeat run of
+	// `sync` a no-op rather than a second migration.
+	if !st.Installed {
+		legacy := skill.FilePath(skill.LegacyDir(dir))
+		if _, err := os.Stat(legacy); err == nil {
+			st.LegacyPath = legacy
+		} else if !os.IsNotExist(err) {
+			return st, err
+		}
 	}
 
 	// One cheap call purely to harvest the version headers the API sets on every
@@ -325,6 +346,8 @@ Exit 0 = everything current. Exit 9 = something is behind; run ` + "`bk skill sy
 				switch {
 				case !st.BinaryIsCurrent:
 					fmt.Fprintf(w, "bk %s is behind %s — run: bk skill sync\n", st.RunningVersion, st.LatestVersion)
+				case !st.Installed && st.LegacyPath != "":
+					fmt.Fprintf(w, "the skill is installed under its old name at %s — run: bk skill sync\n", st.LegacyPath)
 				case !st.Installed:
 					fmt.Fprintf(w, "no skill installed at %s — run: bk skill install\n", st.Path)
 				case !st.SkillIsCurrent:
@@ -370,7 +393,10 @@ func newSkillSyncCmd() *cobra.Command {
      self-replacing binary is fragile and often permission-blocked. Printing
      the command and returning a distinct exit code is more reliable, and an
      agent handles it fine.
-  2. If the binary is current, rewrite the skill file from the embedded
+  2. If a pre-3.0.0 skill sits under the old name, move it — carrying over
+     anything you added around bk's block — and remove the old copy. A
+     hand-written file under the old name is reported and left alone.
+  3. If the binary is current, rewrite the skill file from the embedded
      template and exit 0.`,
 		Args:        cobra.NoArgs,
 		Annotations: map[string]string{"routes": "GET /api/changelog"},
@@ -386,6 +412,60 @@ func newSkillSyncCmd() *cobra.Command {
 			existing, err := readIfExists(st.Path)
 			if err != nil {
 				return err
+			}
+
+			// The 3.0.0 rename (D-17). Only fires when the target is empty and
+			// something is sitting under the old name; `inspect` has already
+			// established both, and once the new file exists it stops looking —
+			// which is what makes a repeat run a no-op rather than a second
+			// migration.
+			if st.LegacyPath != "" {
+				oldContent, err := readIfExists(st.LegacyPath)
+				if err != nil {
+					return err
+				}
+				plan, err := skill.PlanMigration(oldContent, existing, version.Version)
+				if errors.Is(err, skill.ErrForeign) {
+					// Not bk's file, so not bk's to move OR delete — and it must
+					// not gain a sibling either: two skills claiming the same
+					// tool is a worse outcome than one with a stale name.
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"%s is hand-managed — left where it is, under its old name.\n"+
+							"      To adopt the new name yourself: move that file to %s.\n"+
+							"      bk %s is current and `bk guide` always describes it, so you are not stale.\n",
+						st.LegacyPath, st.Path, version.Version)
+					return nil
+				} else if err != nil {
+					return err
+				}
+				if plan.RemoveOld {
+					if err := os.MkdirAll(filepath.Dir(st.Path), 0o755); err != nil {
+						return err
+					}
+					if err := os.WriteFile(st.Path, []byte(plan.Content), 0o644); err != nil {
+						return err
+					}
+					// Only now, and only the file bk wrote. `os.Remove` on the
+					// directory succeeds ONLY if it is empty, which is the point:
+					// anything else the user put in there keeps the directory and
+					// keeps itself.
+					if err := os.Remove(st.LegacyPath); err != nil {
+						return err
+					}
+					removedDir := os.Remove(filepath.Dir(st.LegacyPath)) == nil
+
+					fmt.Fprintln(cmd.OutOrStdout(), st.Path)
+					// Names WHAT moved and WHAT was deleted, not just a count:
+					// this is the destructive path, and a wrong move should be
+					// visible the moment it happens.
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"migrated the skill from %q to %q (bk %s).\n"+
+							"      moved: %s -> %s\n      removed: %s%s\n",
+						skill.LegacyName, skill.Name, version.Version,
+						st.LegacyPath, st.Path, st.LegacyPath,
+						map[bool]string{true: " and its now-empty directory", false: ""}[removedDir])
+					return nil
+				}
 			}
 
 			// Sync runs unattended, on an agent's own initiative. It must never
