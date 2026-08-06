@@ -89,8 +89,18 @@ describe('changelog', () => {
     // An unknown app is null, not an empty feed. "No entries" and "no such app"
     // must not look the same to an agent — one means nothing changed, the other
     // means it asked the wrong question.
-    expect(getChangelogFor('sales')).toBeNull()
-    expect(getChangelogMarkdown('sales')).toBeNull()
+    expect(getChangelogFor('nosuchapp')).toBeNull()
+    expect(getChangelogMarkdown('nosuchapp')).toBeNull()
+
+    // The other side of that distinction, which only became testable when
+    // `sales.md` was created ahead of the app (docs/sales-app-plan.md, Phase 0):
+    // a section that EXISTS but has no dated entries yet must answer with an
+    // empty feed, not null. Until 2026-08-06 this case had no example and
+    // `'sales'` was the string this test used for "unknown app".
+    const sales = getChangelogFor('sales')
+    expect(sales, 'docs/changelog/sales.md exists, so this must not be null').not.toBeNull()
+    expect(sales!.entries).toEqual([])
+    expect(getChangelogMarkdown('sales')).not.toBeNull()
     // Empty/omitted means the whole feed.
     expect(getChangelogFor('')!.entries.length).toBe(cl.entries.length)
   })
