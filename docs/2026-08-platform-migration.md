@@ -217,7 +217,7 @@ Nothing is broken. These are known, written down, and deliberately not done.
 | **`/api/undo` and `/api/openapi.json` 410 stubs** | Installed binaries still call them | Delete when `CLI_MIN_VERSION` passes `1.12.0` |
 | **The npm package is still `@blackcode_sa/bc-issues`** | It ships one binary, `bk`, for the whole platform, and the name says "issues". But renaming touches the install path every agent depends on | **Deliberately deferred.** A confusing package name costs nothing operationally; a broken install path costs every agent at once. Sequence below |
 | **Extraction owes more than the database** | Blob storage (pre-Phase-7 files sit unprefixed at the store root), vendoring `packages/platform-*`, and `platform.users` containing every user of every app | Whoever does a real extraction. The data-protection question is theirs, and this repo deliberately does not answer it |
-| **`apiHandler` / `resolveWorkspace` are duplicated in the scaffold** | Both close over the app's `db`, schema and slug; genericising them for a scaffold is speculative | The second **real** app — at which point two production apps need them unchanged, which is the test |
+| ~~**`apiHandler` / `resolveWorkspace` are duplicated in the scaffold**~~ | ~~Both close over the app's `db`, schema and slug; genericising them for a scaffold is speculative~~ | **PAID 2026-08-06.** The trigger fired: `apps/sales` is the second real app. Both now live in `packages/platform-api` behind an `AppContext`, with the platform route factories beside them. See `docs/sales-app-plan.md` Phase 1a/1b (D-2) |
 
 ### If the npm package is ever renamed
 

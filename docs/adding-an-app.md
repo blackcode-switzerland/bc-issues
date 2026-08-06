@@ -37,8 +37,8 @@ import each other.**
 | Package | What it gives you |
 |---|---|
 | `platform-db` | The Drizzle schema and client factory for the `platform.*` tables — users, workspaces, members, app access, uploads, comments, labels, events, entities, links, the blob-reference index |
-| `platform-api` | The HTTP plumbing: `apiHandler`, the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits |
-| `platform-auth` | API tokens, password and whitelist handling, and **who may use which app in which workspace** (`app_access`, `workspace_apps`) |
+| `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories** (`@blackcode/platform-api/routes`), per-app access enforcement (`requireAppAccess` — the 403 with a hint), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits |
+| `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist. No HTTP — `requireAppAccess` moved to `platform-api` on 2026-08-06, because its whole job is constructing a 403 |
 | `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions |
 | `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
 | `platform-agent` | The merged changelog feed and the advertised CLI version floor |
@@ -49,10 +49,17 @@ import each other.**
 > **Would another app need this *unchanged*?**
 
 Yes → `packages/platform-*`. No → keep it in your app. "Nearly unchanged" is a
-no. The scaffold deliberately keeps its own `apiHandler` and `resolveWorkspace`
-copies for exactly this reason: both close over the app's `db`, schema and slug,
-and genericising them for a scaffold would be speculative. The test is **two real
-apps needing it unchanged**, not one app and a guess.
+no. The test is **two real apps needing it unchanged**, not one app and a guess.
+
+`apiHandler` and `resolveWorkspace` are the worked example of that rule running
+its full course. They were deliberately duplicated in the scaffold for one whole
+app's lifetime, under a header saying so and naming the trigger — "when a REAL
+second app lands". On 2026-08-06 it landed, and they moved to `platform-api`
+behind an `AppContext` (`docs/sales-app-plan.md` Phase 1a, D-2). Waiting cost
+nothing; extracting early would have baked one app's shape into the interface.
+
+**So you inherit them, and you no longer write them.** Your `lib/api.ts` is the
+four lines of `appContext` and two binds — copy `apps/_template/lib/api.ts`.
 
 This cuts the other way too, and the migration learned it the expensive way:
 before reshaping a shared table so more apps can use it, ask whether they should
@@ -313,17 +320,31 @@ app's internals; an app's docs never describe another app
 
 ## 11. What the scaffold deliberately leaves out
 
-Three things a real app adds, each needing a decision only you can make:
+Two things a real app adds, each needing a decision only you can make:
 
 - **Entity projection.** Write into `platform.entities` in the same transaction
   as the source row, and your entities become `bc:sales:acme/quote/7` — findable
   by `bk search`, linkable by `bk link`. Copy
   `apps/issues/lib/db/queries/entities.ts`; read its header first.
 - **A browser session.** The scaffold authenticates bearer tokens only, which is
-  the path agents use. NextAuth config is genuinely app-specific.
-- **An error log.** `apps/issues/lib/api/handler.ts` records failures to
-  `platform.error_events`; the scaffold just logs. Copy it when you want
-  `bk super-admin errors` to see your app.
+  the path agents use. NextAuth config is genuinely app-specific — see the note
+  in `packages/platform-auth/src/index.ts`. Until you add one, do not mount
+  `/api/tokens`: it requires `AppContext.resolveSessionUser` and throws at import
+  time without it, on purpose.
+
+**An error log used to be a third item here.** It no longer is: the shared
+`apiHandler` writes to `platform.error_events` for every app that uses it, so
+`bk super-admin errors` covers you from your first commit. That is the point of
+the extraction — a thing on a checklist is a thing an app can forget, and an app
+that forgets its error log has no error log and nothing goes red.
+
+### Which platform routes to mount
+
+`@blackcode/platform-api/routes` exports one factory per shared route. Mount the
+ones your app serves, in your own tree, three lines each — Next routes by
+filesystem, so there is no central mount and nothing warns you about one you
+skipped. `lib/cli-parity.test.ts` is what catches it, and it will also make you
+set `hostsPlatformRoutes` once you mount any of them.
 
 ## 12. Before you call it done
 

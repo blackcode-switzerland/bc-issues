@@ -64,8 +64,9 @@ A typical authenticated request:
 ```
 request
   → middleware.ts            (guards /dashboard/* for the browser only)
-  → apiHandler(...)          (lib/api/handler.ts — wraps the handler)
-      → resolveWorkspace()   (lib/api/workspace-context.ts)
+  → apiHandler(...)          (lib/api/handler.ts — a thin bind of the SHARED
+                              wrapper in packages/platform-api/src/handler.ts)
+      → resolveWorkspace()   (lib/api/workspace-context.ts — same)
           → resolveAuth()    (lib/auth/resolve.ts — bearer token OR session)
           → getWorkspaceForUser()  → { user, workspace, role }
       → query layer          (lib/db/queries/* — the only place that touches the DB)
@@ -85,8 +86,58 @@ Key principles:
 
 ### `apiHandler` and error model
 
-`apiHandler(fn)` (`lib/api/handler.ts`) wraps a route handler and converts any
-thrown error into a canonical JSON body:
+#### Where it lives (changed 2026-08-06)
+
+`apiHandler` and `resolveWorkspace` are **shared**. The implementations are
+`packages/platform-api/src/handler.ts`; each app binds them once to its own
+`AppContext` and re-exports them from `lib/api`, so every route file is written
+exactly as before:
+
+```ts
+// apps/<app>/lib/api/handler.ts
+export const apiHandler = createApiHandler(appContext)
+```
+
+`AppContext` (`packages/platform-api/src/app-context.ts`) is the whole of what a
+shared handler needs from an app:
+
+| Field | Why it cannot be defaulted |
+|---|---|
+| `appSlug` | the identity `requireAppAccess` checks against |
+| `db` | a Drizzle client typed to the platform tables; every app's is a superset. **Supply it as a getter if the app's client is lazy** — `next build` imports every route module |
+| `resolveUser` | the browser half is app-specific (next-auth config) |
+| `resolveSessionUser?` | session-ONLY, for `/api/tokens`. A separate field because a bearer token minting a bearer token is privilege escalation; the routes that need it throw at mount time rather than falling back |
+| `manifest?` | `X-BK-Help` / `X-BK-Changelog`. Omitted by an app with no agent landing page — a breadcrumb pointing at a 404 is worse than none |
+| `redactBody?` | omit request-derived payload from `error_events.context` (D-19) |
+
+The bar for a new field is high: every one is a thing each future app must supply
+forever. `schema` was in the original sketch and was dropped — shared code cannot
+type against an app's schema, and every table these routes touch is `platform.*`.
+
+**Platform route factories** live beside it, in
+`packages/platform-api/src/routes/`. A shared route is mounted in three lines:
+
+```ts
+import { searchRoute } from '@blackcode/platform-api/routes'
+import { appContext } from '@/lib/api'
+export const GET = searchRoute(appContext)
+```
+
+A factory serving several methods returns an object; unpack it one line at a
+time (`export const GET = handlers.GET`), never `export const { GET } = …` — the
+parity guard matches `/export\s+(const|function)\s+GET\b/`, so a destructuring
+export serves fine while silently dropping out of coverage.
+
+Why factories at all: every platform verb's route used to live physically inside
+`apps/issues/app/api/**`. With one app that was invisible; with two it means an
+app 404s on its own `/api/me`, `bk upload` attributes files to whichever app
+served the request, and a user granted one app and not another gets 403 on
+`bk search`. See `docs/sales-app-plan.md` B-2 / D-2.
+
+#### The error model
+
+`apiHandler(fn)` wraps a route handler and converts any thrown error into a
+canonical JSON body:
 
 ```jsonc
 { "error": "human message", "code": "machine_code", "suggestion"?: "...", "details"?: {...} }
@@ -169,7 +220,8 @@ loopback `callback` + `state`; the server mints a token and returns a
 
 ### Workspace authorization
 
-`resolveWorkspace(req, wsSlugOrId)` (`lib/api/workspace-context.ts`) returns:
+`resolveWorkspace(req, wsSlugOrId)` (bound in `lib/api/workspace-context.ts`;
+implemented in `packages/platform-api/src/handler.ts`) returns:
 
 ```ts
 { user: User, workspace: Workspace, role: 'owner' | 'member' }

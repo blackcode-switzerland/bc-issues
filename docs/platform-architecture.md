@@ -460,10 +460,28 @@ another app.**
 ### 7.6 The guardrails that enforce it
 
 - **`lib/cli-parity.test.ts`, per app** — every route reachable from `bk`, every
-  claimed route real. `bk __routes` tags each route with its app, and exactly one
-  app sets `hostsPlatformRoutes` (today `issues`, because the shared routes
-  physically live in its tree). Without that flag every platform route would go
-  unchecked by everybody.
+  claimed route real. `bk __routes` tags each route with its app, and each app
+  that MOUNTS the platform route factories sets `hostsPlatformRoutes`. Without
+  that flag set anywhere, every platform route would go unchecked by everybody.
+
+  **The flag changed meaning on 2026-08-06.** It used to mean "the shared routes
+  physically live in my `app/api` tree", and exactly one app could set it. Phase
+  1b of `docs/sales-app-plan.md` moved them into
+  `@blackcode/platform-api/routes` as factories, so it now means "I mount them"
+  and several apps may say so — each checking the platform claims against its own
+  tree, which is what makes a missing mount fail on the app that is missing it.
+
+  The flag is **derived-checked, not trusted**: `mountedPlatformRoutes` works out
+  from the filesystem whether an app actually serves any platform route, and each
+  app asserts the boolean agrees. A hand-set boolean that switches a check off is
+  the shape of every entry in CLAUDE.md's table of inert guards — before that
+  assertion existed, deleting the flag went green while checking nothing.
+
+  Known gap, owned by whoever adds the next app: an app mounting only SOME of the
+  factories reports the rest as drift. The answer is documented EXCLUDED_PATHS
+  entries in that app's test, each naming the tier and the agent who closes it —
+  **not** a tier-aware harness. A mechanism whose only job is to make an
+  incomplete state look complete outlives the incompleteness.
 - **`lib/app-isolation.test.ts`, per app** — no import resolving into another
   app, no query naming another app's schema. **Resolution-based, not
   glob-based.** An ESLint rule tried to cover the first half and never matched

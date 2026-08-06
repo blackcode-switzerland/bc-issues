@@ -30,6 +30,52 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — The shared request layer and the first platform route factories
+
+**Nothing about how you call the API changed.** Every route below returns the
+same status codes, the same bodies and the same headers as it did yesterday. If
+you notice this entry at all, it should be for the one new capability at the end.
+
+**What moved.** The `apiHandler` wrapper and the `resolveWorkspace` gate — auth,
+workspace resolution and the per-app access check that every workspace-scoped
+route runs — moved out of the issues app into `@blackcode/platform-api`,
+parameterised by an `AppContext`. A first set of shared routes moved with them
+and are now mounted by each app from one implementation:
+
+`/api/changelog`, `/api/me` (+ `/active-workspace`, `/pending-invitations`),
+`/api/tokens` (+ `/{id}`), `/api/users`, `/api/errors/client`, `/api/status`,
+`GET /api/workspaces`, and under `/api/workspaces/{ws}`: `search`, `links`,
+`members`, `invite-candidates`, `apps`.
+
+**Why it matters to a client:** it is what lets a second app serve these on its
+own domain. Until now they existed only on the issues host, so an app deployed
+elsewhere would 404 on its own `/api/me`, a file uploaded through the wrong host
+would be recorded as belonging to the wrong app, and a user granted one app but
+not another would get 403 from `bk search`.
+
+**Still served only by the issues deployment**, unchanged: trash, storage,
+labels, comments, the inbox, super-admin, `POST /api/workspaces`, `/api/auth/*`,
+`/api/upload`, `/api/meta`, workspace activity, `/api/status/errors`. Nothing to
+adapt — they are where they were.
+
+**New: per-app redaction of error context.** An app can now declare that request
+payload must never be written to `platform.error_events.context`. The issues app
+does not set it and its behaviour is unchanged; the sales app will.
+
+Its ceiling is stated deliberately, because a privacy control that is believed to
+do more than it does is worse than none: **it covers the `context` column, not
+the error `message` or `stack`.** A database driver will happily put a rejected
+value inside an error message, and scrubbing messages would leave error rows
+nobody can act on. The guarantee that does cover everything is retention, which
+is a separate, dated commitment.
+
+**Also:** `requireAppAccess` — the 403-with-a-hint you get when you are a member
+of a workspace but have not been granted an app in it — is now exported from
+`@blackcode/platform-api` rather than `@blackcode/platform-auth`. The check, the
+status, the code and the suggestion text are identical. This is an internal
+import path; no HTTP client is affected.
+
+
 ## 2026-08-06 — **FIX:** `bk issues --help` said the removed 1.12.0 spellings still worked
 
 Three strings shipped inside the 1.12.0 binary described a world that 1.12.0
