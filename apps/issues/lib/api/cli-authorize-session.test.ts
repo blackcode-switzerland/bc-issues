@@ -52,10 +52,17 @@ vi.mock('@/lib/db/queries/users', () => ({
   getUserByEmail: async (email: string) => (email === USER.email ? USER : null),
 }))
 
-/** Minting is the thing this route does; the token itself is not under test. */
+/**
+ * Minting is the thing this route does; the token itself is not under test.
+ *
+ * Stubbed at `@blackcode/platform-auth`, which is where the shared factory
+ * imports it from — the rest of the package stays real, because
+ * `getValidatedSessionUser` is not what this file is allowed to fake.
+ */
 const minted = vi.hoisted(() => [] as Array<{ user_id: number; name: string }>)
-vi.mock('@/lib/auth/tokens', () => ({
-  mintToken: async (opts: { user_id: number; name: string }) => {
+vi.mock('@blackcode/platform-auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@blackcode/platform-auth')>()),
+  mintToken: async (_db: unknown, opts: { user_id: number; name: string }) => {
     minted.push(opts)
     return { id: 1, plaintext: 'bk_live_test', name: opts.name }
   },

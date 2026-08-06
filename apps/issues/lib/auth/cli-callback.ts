@@ -1,31 +1,15 @@
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
-
-export interface ParsedCallback {
-  url: URL
-}
-
-export function parseCallbackURL(raw: string): ParsedCallback | null {
-  let parsed: URL
-  try {
-    parsed = new URL(raw)
-  } catch {
-    return null
-  }
-  if (parsed.protocol !== 'http:') return null
-  if (!LOOPBACK_HOSTS.has(parsed.hostname)) return null
-  if (parsed.username || parsed.password) return null
-  return { url: parsed }
-}
-
-export function buildCallbackRedirect(
-  raw: string,
-  params: Record<string, string>
-): string | null {
-  const parsed = parseCallbackURL(raw)
-  if (!parsed) return null
-  const url = parsed.url
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v)
-  }
-  return url.toString()
-}
+// The loopback callback `bk login` redirects a freshly minted token to.
+//
+// Moved to `@blackcode/platform-auth` on 2026-08-06 with /api/cli/authorize:
+// D-21 makes that route Tier 1 for every deployed app, and an app
+// re-implementing this validation is an app that can get it slightly wrong —
+// which means posting a live credential somewhere it should not go.
+//
+// The `/cli-callback` SUBPATH, not the package root: the authorize page parses
+// the callback in the browser and must not pull bcryptjs and Drizzle into the
+// client bundle.
+export {
+  buildCallbackRedirect,
+  parseCallbackURL,
+  type ParsedCallback,
+} from '@blackcode/platform-auth/cli-callback'

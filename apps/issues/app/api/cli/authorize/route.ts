@@ -1,76 +1,15 @@
-// POST /api/cli/authorize — the browser half of `bk login`.
+// POST /api/cli/authorize — mounted from the shared factory.
 //
-// ── WHY THE VALIDATED SESSION RESOLVER, AS OF 2026-08-06 ────────────────────
-// **This route mints a `bk_live_…` token.** It is the second one that does, and
-// until today it authenticated with a bare `getServerSession` + `getUserByEmail`
-// — the exact check D-24 removed from `/api/tokens` five commits ago, for the
-// exact reason: that pair accepts a session belonging to a soft-deleted user,
-// and a session issued BEFORE the account's last password reset.
+// Class A. D-21 makes it Tier 1 for every deployed app: `bk login --server
+// https://sales.blackcode.ch` is a legitimate command, and a 404 there is the
+// invisible failure D-1 exists to remove.
 //
-// So a session captured before a reset could still walk through `bk login` and
-// come out holding a permanent CLI credential, and revoking the session did not
-// revoke the token. D-24's sentence applies here word for word: a password reset
-// is what somebody does when they believe their account is compromised, and one
-// that leaves the attacker able to create a permanent credential has not done
-// its job.
-//
-// `getValidatedSessionUser` is what every other session path in this app uses.
-// Fixed on its own, deliberately not folded into the extraction that found it.
-import { NextRequest, NextResponse } from 'next/server'
-import { getValidatedSessionUser } from '@/lib/auth/session'
-import { mintToken } from '@/lib/auth/tokens'
-import { buildCallbackRedirect } from '@/lib/auth/cli-callback'
+// It mints a token, so it resolves a BROWSER SESSION only and the factory throws
+// at mount time if this app supplies no session resolver. This app supplies
+// `getValidatedSessionUser`, which rejects a session issued before the account's
+// last password reset — see docs/changelog/platform.md, 2026-08-06.
 
-export async function POST(request: NextRequest) {
-  const user = await getValidatedSessionUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+import { cliAuthorizeRoute } from '@blackcode/platform-api/routes'
+import { appContext } from '@/lib/api'
 
-  let body: { callback?: string; state?: string; name?: string } = {}
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  }
-
-  const callback = (body.callback ?? '').trim()
-  const state = (body.state ?? '').trim()
-  if (!callback) {
-    return NextResponse.json(
-      { error: 'Missing callback', suggestion: 'Provide a localhost callback URL' },
-      { status: 400 }
-    )
-  }
-  if (!state) {
-    return NextResponse.json({ error: 'Missing state' }, { status: 400 })
-  }
-
-  const proposedName = (body.name ?? '').trim()
-  const tokenName =
-    proposedName.length > 0 && proposedName.length <= 100
-      ? proposedName
-      : `cli-${new Date().toISOString().slice(0, 10)}`
-
-  const minted = await mintToken({ user_id: user.id, name: tokenName })
-
-  const redirect = buildCallbackRedirect(callback, {
-    token: minted.plaintext,
-    state,
-  })
-  if (!redirect) {
-    return NextResponse.json(
-      {
-        error: 'Invalid callback',
-        suggestion: 'Callback must be an http://localhost or http://127.0.0.1 URL',
-      },
-      { status: 400 }
-    )
-  }
-
-  return NextResponse.json({
-    redirect_url: redirect,
-    token_id: minted.id,
-    token_name: tokenName,
-  })
-}
+export const POST = cliAuthorizeRoute(appContext)

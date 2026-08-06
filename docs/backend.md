@@ -147,8 +147,19 @@ until `resolveEventEntitySeqs` turned out to read `issues.*` two calls down.
 AppContext is what every app supplies for every route, so a field two routes read
 is a tax every future app pays to mount neither of them, and omitting it fails
 invisibly. A second argument is explicit, typed, local to the route, and free to
-an app that does not mount it. `activityRoute(ctx, { resolveEntitySeqs, … })` is
-the worked example.
+an app that does not mount it. Two worked examples, and they are worth reading as
+a pair because the contribution is a different KIND of thing in each:
+
+| Route | Contribution | Why only the app can supply it |
+|---|---|---|
+| `.../activity` | `resolveEntitySeqs` | turning an `entity_id` into a #number means reading `issues`/`tasks`/`projects` |
+| `/api/me/password/request-otp` | `sendPasswordResetEmail` | a message carries an app's name, from-address and branding. There is no platform-branded email |
+
+The OTP itself — its length, expiry, attempt cap and rate limit — is platform, in
+`platform-auth`. One login serves every app, so letting each app write its own
+would mean each choosing its own rules against one shared credential, with the
+weakest setting the real floor. **Contribute the part that is genuinely yours,
+not the operation around it.**
 
 **Class C is `/api/meta`.** Its vocabulary is not a contribution to a shared
 route; it is the reason the route exists, and §7.4 requires that two apps'

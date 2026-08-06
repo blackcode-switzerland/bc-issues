@@ -7,10 +7,11 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./app-access": "./src/require-app-access.ts",
     "./tokens": "./src/tokens.ts",
     "./whitelist": "./src/whitelist.ts",
-    "./password": "./src/password.ts"
+    "./password": "./src/password.ts",
+    "./password-reset": "./src/password-reset.ts",
+    "./cli-callback": "./src/cli-callback.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

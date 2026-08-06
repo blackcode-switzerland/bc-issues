@@ -148,3 +148,27 @@ export interface AppContext {
    */
   redactBody?: boolean
 }
+
+/**
+ * `app.resolveSessionUser`, or a mount-time throw naming the app and the route.
+ *
+ * Session-only routes must never fall back to `resolveUser` — see the field's
+ * comment above. A factory calls this at construction time, which is module
+ * IMPORT time, so an app that mounts one of these without a session resolver
+ * fails its build rather than silently accepting bearer tokens on a route where
+ * a bearer token must not be accepted.
+ */
+export function requireSessionResolver(
+  app: AppContext,
+  route: string
+): NonNullable<AppContext['resolveSessionUser']> {
+  if (!app.resolveSessionUser) {
+    throw new Error(
+      `${route} requires AppContext.resolveSessionUser, and "${app.appSlug}" does not supply one. ` +
+        'This route is session-only on purpose: a bearer token minting another bearer token is ' +
+        'privilege escalation. It will NOT fall back to resolveUser. Either give this app a ' +
+        'session resolver, or do not mount this route.'
+    )
+  }
+  return app.resolveSessionUser
+}

@@ -16,28 +16,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { listTokens, mintToken, revokeToken } from '@blackcode/platform-auth'
-import type { AppContext } from '../app-context'
+import { requireSessionResolver, type AppContext } from '../app-context'
 import { Errors } from '../errors'
 import { createApiHandler } from '../handler'
 import { TOKEN_NAME_MAX } from '../limits'
-
-/**
- * The session resolver, or a thrown error naming what is missing.
- *
- * Called at factory time (module scope of the mount file), so the failure lands
- * during the build / first import rather than on a request.
- */
-function requireSessionResolver(app: AppContext, route: string) {
-  if (!app.resolveSessionUser) {
-    throw new Error(
-      `${route} requires AppContext.resolveSessionUser, and "${app.appSlug}" does not supply one. ` +
-        'This route is session-only on purpose: a bearer token minting another bearer token is ' +
-        'privilege escalation. It will NOT fall back to resolveUser. Either give this app a ' +
-        'session resolver, or do not mount this route.'
-    )
-  }
-  return app.resolveSessionUser
-}
 
 export function tokensRoute(app: AppContext) {
   const resolveSessionUser = requireSessionResolver(app, 'GET/POST /api/tokens')

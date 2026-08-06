@@ -49,28 +49,35 @@
 // WHAT DELIBERATELY DID NOT MOVE, and why it is not an oversight.
 //
 // `apps/issues/lib/auth.ts` — the next-auth `authOptions` — was scheduled to land
-// here in Phase 6. It did not, because of what it drags with it. Its callbacks
-// call `getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`,
-// `ensureDefaultWorkspace` and `materializePendingInvitationsForUser`, which are
-// `apps/issues/lib/db/queries/{users,workspaces,invitations}.ts` — ~1,250 lines
-// that are not extracted. `workspaces.ts` in turn imports `recordEvent`, and
-// `events.ts` imports `fanout.ts`, whose rules are written in terms of issues,
-// tasks and project watchers: unambiguously one app's logic.
+// here in Phase 6 and did not. **The reason it did not has since been fixed, and
+// it still is not moving. Read this before proposing it again.**
 //
-// So moving `authOptions` today means one of two things. Either drag the whole
-// query layer along, which puts app-specific fan-out inside a platform package —
-// the exact thing the standing rule forbids — or inject five callbacks as
-// parameters, which is the "if you have to add a parameter to make it generic,
-// leave it" case, verbatim. Both are worse than the wait.
+// The Phase 6 reason was what it dragged along: five callbacks reaching into
+// ~1,250 unextracted lines of one app's query layer, one of which imported
+// `recordEvent`, which imported fan-out rules written in terms of issues, tasks
+// and project watchers. On 2026-08-06 (Phase 1b-C) that was untangled — four of
+// the five callbacks are in `platform-db`'s `sign-in.ts`, and the event spine was
+// split at the platform/app seam (D-23). So the old blocker is gone.
 //
-// The Phase 2 decision table blamed `events.ts` hardcoding entity types, and
-// Phase 6 did generalise the events TABLE (`app`, `subject_urn`). But that was
-// only ever half the blocker: the other half is the un-extracted query layer, and
-// it is unchanged. Extracting `users.ts` and `workspaces.ts` is its own piece of
-// work with its own risk, and it is not what this phase was scoped to do.
+// WHAT REMAINS IS NOT A BLOCKER, IT IS THE ANSWER. `authOptions` is a bundle of
+// things that are each genuinely one app's:
 //
-// `session.ts` and `resolve.ts` stay for the same reason — they are thin glue
-// over `authOptions` and follow it whenever it moves.
+//   - which PROVIDERS that app offers, and their client credentials
+//   - its `pages` — where an unauthenticated visitor is sent, and where an error
+//     lands. Those are that app's URLs
+//   - its cookie, which is per-host until the session-cookie change lands
+//   - `ensureDefaultWorkspace`, the one sign-in callback that stayed app-local,
+//     because each app has an app-specific post-create step (issues inserts
+//     `issues.workspace_counters`)
+//
+// Sharing it would mean passing all of that in as parameters, which is the "if
+// you have to add a parameter to make it generic, leave it in the app" rule
+// verbatim. What IS shared is what those callbacks do to the database — one
+// login, one `platform.users` row — and that is `platform-db`'s `sign-in.ts`.
+//
+// `session.ts` and `resolve.ts` stay for the same reason: they are thin glue over
+// `authOptions`. `AppContext.resolveUser` / `resolveSessionUser` are how a shared
+// route reaches them without this package knowing they exist.
 
 export { mintToken, verifyToken, listTokens, revokeToken } from './tokens'
 export type { MintedToken, TokenSummary } from './tokens'
@@ -84,3 +91,17 @@ export {
 } from './whitelist'
 
 export { hashPassword, verifyPassword, validatePassword, validateEmail } from './password'
+
+// Resetting a password: the OTP lifecycle, and the loopback URL `bk login`
+// redirects a freshly minted token to. Both are platform because one login
+// serves every app (2026-08-06, Phase 1b-C). Sending the email is NOT here —
+// the message carries an app's name and branding; see password-reset.ts.
+export {
+  OTP_EXPIRES_IN_MINUTES,
+  hashNewPassword,
+  requestPasswordOtp,
+  verifyOtpAndResetPassword,
+} from './password-reset'
+export type { RequestOtpResult, VerifyResetResult } from './password-reset'
+export { buildCallbackRedirect, parseCallbackURL } from './cli-callback'
+export type { ParsedCallback } from './cli-callback'
