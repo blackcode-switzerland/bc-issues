@@ -24,7 +24,7 @@ A **list** command prints `{ "data": [ … ], "next_cursor": <id|null> }`.
 `bk issues issue list` adds `"total"`. A **single-item** command prints the bare object.
 
 Most lists return everything in one response and `next_cursor` is `null`. Only
-three feeds paginate: `bk activity`, `bk trash list`, and
+three feeds paginate: `bk activity`, `bk issues trash list`, and
 `bk super-admin errors list`. They take `--limit` / `--cursor`; follow
 `next_cursor` until it is `null`. Page size defaults and caps are in `bk meta`
 under `limits.page_size_default` / `limits.page_size_max`.
@@ -77,4 +77,4 @@ bk issues issue list --project 1 --status todo --json \
   | xargs -n1 -I{} bk issues issue edit {} --status in_progress --assignee me
 ```
 
-Related commands: every command; see `bk activity`, `bk trash list`, `bk super-admin errors list` for pagination
+Related commands: every command; see `bk activity`, `bk issues trash list`, `bk super-admin errors list` for pagination

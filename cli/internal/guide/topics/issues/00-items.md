@@ -86,4 +86,4 @@ Title/name length caps live in `bk meta` under `limits` — e.g.
 `issue_title_max`, `project_name_max`, `task_name_max`, `label_name_max`.
 Exceeding one returns a validation error (exit **6**) naming the cap.
 
-Related commands: `bk issues project`, `bk issues task`, `bk issues issue`, `bk label`, `bk meta`
+Related commands: `bk issues project`, `bk issues task`, `bk issues issue`, `bk issues label`, `bk meta`

@@ -24,8 +24,15 @@ import (
 // (internal/guide/topics), which ships with the binary and is served by
 // `bk guide`. What stays here: what bk is, the first run, the global flags, the
 // exit codes, the command groups, and one loud pointer.
+//
+// ORGANISED BY TIER since 2.1.0 (docs/sales-app-plan.md D-11). This is the first
+// text an agent reads, and the question it has to answer on the first pass is
+// not "what verbs exist?" but "which app is this command talking to?". A flat
+// list of verbs cannot answer that; three named groups can, and the tiers are
+// then the same idea the guide, the error hints and `bk meta`'s routing block
+// all repeat.
 const rootLong = `bk is the CLI for the Blackcode platform — workspaces, members,
-labels, files, tokens and inbox, plus one command group per app.
+tokens and inbox, plus one command group per app.
 
 It is the ONLY supported interface. The HTTP API behind it is private plumbing
 with no public contract.
@@ -51,38 +58,53 @@ Exit codes (stable; for branching in scripts/agents):
   5 not-found(404)   6 validation(400/422)   7 user-aborted
   8 client too old   9 update available
 
-PLATFORM verbs — shared by every app, so they stay at the top level:
-  guide       the embedded usage guide (--list, <topic>, --json)
-  skill       install / check / sync the agent skill file
-  workspace   list (--all for every workspace + per-app badges), show, create,
-              edit, transfer, use
-  app         which apps a workspace runs, and who may use them (access grants)
-  label       list, view, create, delete, attach, detach
-  member      list, remove, leave
-  invite      send, list, accept, decline, revoke, pending, candidates
-  token       list, create, delete
-  profile     view, edit
-  inbox       list, read, archive, unarchive
-  upload      upload a file and print its url
-  storage     list, rm, attachments (workspace owner)
-  trash       list, restore, purge, empty
-  undo        roll back your last N writes
-  activity    merged activity feed across every app (--since, --app, --subject)
-  search      federated search across every app's entities (returns URNs)
-  link        relate two entities by URN, across apps (create, list, rm)
-  changelog   the dated record of what changed
-  super-admin users, whitelist, errors (super admins only; platform-wide)
+THREE TIERS OF VERB. The spelling tells you which app a command talks to —
+run "bk guide platform/apps" for the rule and the reasoning.
+
+  1. NEUTRAL — bare. Identity and org data: the same answer from any app, so no
+     app can be the wrong one to ask.
+       login       authenticate (--server names ANY app's url)
+       logout      remove stored credentials
+       meta        who am I + every workspace I can write to + live limits
+       guide       the embedded usage guide (--list, <topic>, --json)
+       skill       install / check / sync the agent skill file
+       workspace   list (--all for every workspace + per-app badges), show,
+                   create, edit, transfer, use
+       app         which apps a workspace runs, and who may use them
+       member      list, remove, leave
+       invite      send, list, accept, decline, revoke, pending, candidates
+       token       list, create, delete
+       profile     view, edit
+       inbox       list, read, archive, unarchive
+       changelog   the dated record of what changed
+       version     print the version of this binary
+       super-admin users, whitelist, errors (super admins only; platform-wide)
+
+  2. CROSS-APP — bare, and crossing the boundary is the point. Results are
+     tagged with the app they came from.
+       search      federated search across every app's entities (returns URNs)
+       activity    merged activity feed across every app (--since, --app)
+       link        relate two entities by URN, across apps (create, list, rm)
+
+  3. APP-OWNED — behind the app's name, because the answer depends on the app.
+     Every app group carries the same four, plus its own nouns.
+       bk <app> upload    store a file against that app
+       bk <app> storage   list, rm, and that app's attachments (workspace owner)
+       bk <app> trash     that app's recycle bin: list, restore, purge, empty
+       bk <app> label     list, view, create, edit, delete, attach, detach
 
 APPS — every app verb sits behind its app name:
-  issues      issue, task, project, move, copy, analytics
+  issues      issue, task, project, move, copy, analytics + the four above
 
-New in 1.11.0: every issue, task and project is addressable by a URN —
+Renamed in 2.1.0: "upload", "storage", "trash" and "label" moved behind the app
+name — "bk issues upload", not "bk upload". There is no bare form and no alias:
+a bare spelling would have to pick an app silently, which is the mistake being
+removed. The old spellings exit non-zero and name their replacement.
+Run "bk changelog".
+
+Every issue, task and project is addressable by a URN —
 bc:issues:<workspace>/<type>/<number> — so "bk search" spans apps and "bk link"
 relates two things that live in different ones. Run "bk guide platform/cross-app".
-
-Renamed in 1.10.0: app nouns moved behind the app name, so "bk issue list" is
-now "bk issues issue list". Every old spelling still works and prints one
-deprecation line; they go away two minor releases from now. Run "bk changelog".
 
 Discover flags before calling: bk <group> --help, then bk <group> <cmd> --help.`
 
@@ -107,12 +129,19 @@ func NewRoot() *cobra.Command {
 	output.RegisterFlags(root)
 	root.PersistentFlags().StringVar(&cmdutil.WSOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
 	root.PersistentFlags().BoolVarP(&cmdutil.VerboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
-	// Bare verbs: everything shared by every app.
+	// Tiers 1 and 2 (D-11): the verbs that stay bare because no app can be the
+	// wrong one to ask, and the ones whose job is to cross the boundary.
 	root.AddCommand(platform.NewCommands()...)
 	root.AddCommand(newRoutesCmd())
 
 	// One entry per app. Adding an app is adding a line here plus its package —
 	// which is the whole point of the migration.
+	//
+	// Tier 3 is NOT wired here: each app group mounts the four app-owned verbs
+	// itself, in one line, from internal/appverbs — see issues.NewGroup(). Doing
+	// it there rather than here is what lets an app add its own entity-specific
+	// subcommands to those groups (`bk issues label attach`) without this file
+	// knowing any app's nouns.
 	root.AddCommand(issues.NewGroup())
 	root.AddCommand(template.NewCmd())
 

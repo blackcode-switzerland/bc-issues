@@ -73,7 +73,7 @@ part of the identity. Check it with `bk link list` first rather than guessing.
 
 ## What happens to links when things are deleted
 
-- **Binned** (`bk trash`): the link survives, and `bk link list` shows the far
+- **Binned** (an app's recycle bin): the link survives, and `bk link list` shows the far
   end flagged as in the trash. Restoring brings it back intact.
 - **Purged** (permanently deleted): the link goes with it. A relation to
   something that no longer exists anywhere is a dangling pointer, not a fact.

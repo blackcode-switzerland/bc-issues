@@ -94,7 +94,7 @@ Name length cap: see `limits.workspace_name_max` in `bk meta`.
 
 ## Deleting a workspace
 
-Irreversible. Not the Trash — `bk trash` cannot bring it back. It
+Irreversible. Not the Trash — no app's recycle bin can bring it back. It
 takes the workspace's projects, tasks, issues, labels and comments with it.
 
 ```bash

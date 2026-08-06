@@ -1,21 +1,28 @@
-// Package platform holds the command tree that is true for every app —
-// identity, workspaces, membership, labels, files, tokens, trash, undo and the
-// agent surface itself (guide, meta, changelog, skill).
+// Package platform holds the BARE verbs — the ones that stay at the top level
+// because no app can be the wrong one to ask.
 //
-// These are the verbs that stay BARE: `bk workspace list`, not
-// `bk issues workspace list`. A workspace is the company and an app is a
-// capability inside it (docs/platform-architecture.md §4.4), so namespacing them per
-// app would claim a boundary that does not exist and would give a person three
-// workspace lists for one company.
+// Two of the three tiers in docs/sales-app-plan.md D-11 live here:
 //
-// The rule for deciding where a new command goes is the same one that decided
-// the database schema: would a sales app need this unchanged? Labels, uploads,
-// members and the inbox — yes, those are org concepts. Statuses, priorities and
-// throughput charts — no, those are one app's vocabulary, and they live in
-// internal/commands/<app>/.
+//	NEUTRAL    identical answer from any deployment. login, logout, meta, guide,
+//	           changelog, skill, version, app, workspace, member, invite, token,
+//	           profile, inbox, super-admin. These are identity and org data; a
+//	           workspace is the company and an app is a capability inside it
+//	           (docs/platform-architecture.md §4.4), so namespacing them per app
+//	           would claim a boundary that does not exist and would give a person
+//	           three workspace lists for one company.
+//
+//	CROSS-APP  spans every app BY DESIGN, and tags each result with the app it
+//	           came from. search, activity, link. Making these app-scoped would
+//	           destroy the thing they exist for.
+//
+// The third tier — `upload`, `storage`, `trash`, `label`, whose answer depends
+// on the app — moved to `bk <app> <verb>` in 2.1.0 and lives in
+// internal/appverbs. Read that package's header before adding a command here:
+// the question is not "is it shared code?" but "would two deployments give the
+// same answer?". A label, a file and a recycle bin would not.
 //
 // This package must not import any app package, and no app package may import
-// it. Anything both need is in internal/cmdutil.
+// it. Anything both need is in internal/cmdutil or internal/appverbs.
 package platform
 
 import "github.com/spf13/cobra"
@@ -34,7 +41,6 @@ func NewCommands() []*cobra.Command {
 		newWorkspaceCmd(),
 		newAppCmd(),
 		newUserCmd(),
-		newLabelCmd(),
 		newMemberCmd(),
 		newInviteCmd(),
 		newInboxCmd(),
@@ -42,9 +48,6 @@ func NewCommands() []*cobra.Command {
 		newActivityCmd(),
 		newSearchCmd(),
 		newLinkCmd(),
-		newUploadCmd(),
-		newStorageCmd(),
-		newTrashCmd(),
 		newChangelogCmd(),
 		newSuperAdminCmd(),
 		newVersionCmd(),

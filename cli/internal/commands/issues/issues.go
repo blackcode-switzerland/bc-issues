@@ -34,9 +34,16 @@ const long = `The issues app: projects, issues, tasks, their comments and their 
   bk issues copy      the same, leaving the source in place
   bk issues analytics summary, throughput and distributions for this app
 
-Workspaces, labels, files, members, invitations and trash are PLATFORM verbs
-and stay at the top level — they are shared by every app, so they are not
-repeated here. Run "bk --help" for those.
+APP-OWNED PLATFORM VERBS — same four under every app, each answering for ITS app:
+
+  bk issues upload    store a file against this app
+  bk issues storage   list / remove stored files, and this app's attachments
+  bk issues trash     this app's recycle bin: list, restore, purge, empty
+  bk issues label     labels, and attaching them to this app's issues
+
+Identity and org verbs — workspace, member, invite, token, profile, inbox — are
+NEUTRAL and stay bare, as do the cross-app ones (search, activity, link). Run
+"bk guide platform/apps" for the three tiers, or "bk --help" for the list.
 
 The old un-namespaced spellings were REMOVED in 1.12.0: "bk issue list" is now
 "bk issues issue list". The old form exits non-zero and names its replacement.
@@ -50,6 +57,9 @@ func NewGroup() *cobra.Command {
 		Long:  long,
 	}
 	cmd.AddCommand(nouns()...)
+	// The four app-owned platform verbs, pinned to this app (D-11). One line per
+	// app, and the app-specific subcommands are added inside — see appverbs.go.
+	cmd.AddCommand(appOwnedVerbs()...)
 	return cmd
 }
 

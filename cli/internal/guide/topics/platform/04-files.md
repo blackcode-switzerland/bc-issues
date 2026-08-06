@@ -45,9 +45,14 @@ bk issues issue edit 42 --description '![](./screenshot.png)'
 **3. Upload first, embed by url.**
 
 ```bash
-url=$(bk upload ./clip.mp4 --json | jq -r '.url')
+url=$(bk issues upload ./clip.mp4 --json | jq -r '.url')
 bk issues issue comment 42 --body "[clip.mp4]($url)"
 ```
+
+`upload` is **app-owned**: it is spelled `bk <app> upload`, there is no bare
+form, and the app segment decides which app the file is filed under. Uploading
+through the wrong app records the file as that app's — nothing downstream can
+tell it was a mistake. See `bk guide platform/apps`.
 
 Write `![name](url)` for an image and `[name](url)` for anything else. The server
 promotes a non-image written with image syntax to the right player anyway.
@@ -73,4 +78,4 @@ bk issues issue attachments 42
 bk issues issue detach 42 <attachment-id>
 ```
 
-Related commands: `bk upload`, `bk issues issue attach|detach|attachments`, `bk issues issue|task|project create --file`, `bk meta`
+Related commands: `bk issues upload`, `bk issues issue attach|detach|attachments`, `bk issues issue|task|project create --file`, `bk meta`, `bk guide platform/apps`

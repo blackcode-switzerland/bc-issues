@@ -16,7 +16,7 @@ Rich-text fields accept **Markdown or HTML**. The server stores sanitized HTML.
 
 Both paths are sanitized on write: `<script>`, `on*` handlers and `javascript:`
 URLs are removed. Raw `<iframe>` is stripped. **External media does not embed** —
-only files uploaded through `bk upload` render inline (see `bk guide platform/files`).
+only files uploaded through `bk <app> upload` render inline (see `bk guide platform/files`).
 `style` is limited to `width`, `min-width`, `height` and `text-align`.
 
 ## Markdown vs HTML detection

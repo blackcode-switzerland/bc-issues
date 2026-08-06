@@ -42,6 +42,23 @@ var deprecations = map[string]string{
 	"copy":      "`bk copy …` is now `bk issues copy …` — app verbs sit behind their app name. Same flags, same output.",
 	"analytics": "`bk analytics …` is now `bk issues analytics …` — it reports this app's statuses and priorities, so it moved with the app. Same flags, same output.",
 
+	// --- 2.1.0 (2026-08-06): the four app-owned verbs moved under the app ---
+	//
+	// D-11. `upload`, `storage`, `trash` and `label` are the verbs whose ANSWER
+	// DEPENDS ON THE APP: a file is attributed to the app that received it, a bin
+	// holds one app's entities, a label is filtered by app. With one deployment a
+	// bare spelling was correct; with two it has no correct answer, only a
+	// default — and a default is how a sales contract gets filed under issues.
+	//
+	// Unlike the 1.10.0 rename, these rows are LIVE from day one: there is no
+	// alias, because an alias would have to pick an app silently, which is the
+	// exact accident being removed. The failure is loud and names its replacement.
+	// Keep for two minor releases (through 2.3.0), then prune.
+	"upload":  "`bk upload …` is now `bk <app> upload …` — a file is stored against one app, so the app names itself: `bk issues upload contract.pdf`. Run `bk --help` for the apps this binary knows, or `bk guide platform/apps` for why.",
+	"storage": "`bk storage …` is now `bk <app> storage …` — e.g. `bk issues storage list`. The file listing is workspace-wide either way; the app segment says which deployment answers. Run `bk guide platform/apps`.",
+	"trash":   "`bk trash …` is now `bk <app> trash …` — each app has its own recycle bin, e.g. `bk issues trash list`. Run `bk guide platform/apps`.",
+	"label":   "`bk label …` is now `bk <app> label …` — labels are filtered by app, e.g. `bk issues label list`. Run `bk guide platform/apps`.",
+
 	// --- 1.12.0 (2026-08-05): `bk undo` removed ---
 	//
 	// It never worked. `platform.transaction_log` had no writer, so the table was
@@ -49,7 +66,7 @@ var deprecations = map[string]string{
 	// run. A documented agent-facing command that does nothing is worse than a
 	// missing one: an agent that believes it can undo takes risks it would not
 	// otherwise take. Trash is the working undo and always was.
-	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk trash list` then `bk trash restore <type>:<#number>`.",
+	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk issues trash list` then `bk issues trash restore <type>:<#number>` (the recycle bin is per-app since 2.1.0).",
 }
 
 // flagRe pulls the offending token out of a cobra usage error, e.g.
@@ -79,14 +96,23 @@ func DeprecationHint(errMsg string) string {
 		if note, ok := deprecations[sub]; ok {
 			return note
 		}
-		// `sub` is cobra's whole remaining argv, not one word. A removed
-		// TOP-LEVEL command is reported as `unknown command "issue list" for
-		// "bk"` — so the lookup above misses `issue`, and the three most-used
-		// spellings (`bk issue …`, `bk task …`, `bk project …`) fell through to
-		// the generic hint while the single-word ones (`bk move`, `bk copy`,
-		// `bk analytics`) matched. Found by running the built binary; the test
-		// that should have caught it was asserting a hand-written single-word
-		// error string instead of the one cobra actually emits.
+		// `sub` may be cobra's whole remaining argv rather than one word — e.g.
+		// `unknown command "issue list" for "bk"` — in which case the lookup
+		// above misses `issue` and the spelling falls through to the generic
+		// hint. That is how `bk issue …`, `bk task …` and `bk project …` came to
+		// get the useless hint while `bk move`, `bk copy` and `bk analytics`
+		// matched; found by running the built binary, against a test that was
+		// asserting a hand-written single-word string instead.
+		//
+		// MEASURED AGAIN 2026-08-06 on cobra v1.10.2, because the 1.13 verb move
+		// depends on this path: the root now reports the FIRST token only
+		// (`unknown command "upload" for "bk"`, from legacyArgs), and a group
+		// reports the first token too (`… for "bk issues"`, from
+		// rejectUnknownSubcommands' RunE). So today the branch below is
+		// belt-and-braces, not the live path. It stays: it costs one map lookup,
+		// the wording is cobra's to change, and cmd/bk/main_test.go now runs the
+		// real tree so the live shape is measured on every build rather than
+		// assumed here.
 		if first, _, found := strings.Cut(sub, " "); found {
 			if note, ok := deprecations[first]; ok {
 				return note

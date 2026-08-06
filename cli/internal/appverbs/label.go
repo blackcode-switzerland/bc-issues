@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -11,10 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newLabelCmd() *cobra.Command {
+// `bk <app> label` — label CRUD, workspace-scoped.
+//
+// What is HERE is app-agnostic: a label row belongs to the workspace, and the
+// routes are the shared `/api/workspaces/{ws}/labels…` ones.
+//
+// What is NOT here is attach/detach. Attaching a label names an ENTITY — an
+// issue, a prospect — and posts to that app's own route, so each app builds its
+// own attach/detach and adds them to this group (see
+// cli/internal/commands/issues/appverbs.go). Trying to share those would mean
+// this package knowing another app's nouns, which is the boundary the whole
+// package split exists to hold.
+func newLabelCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "label",
-		Short: "Manage labels (workspace-scoped)",
+		Short: scoped(cfg, "Manage labels (workspace-scoped)"),
 	}
 	cmd.AddCommand(
 		newLabelListCmd(),
@@ -22,8 +33,6 @@ func newLabelCmd() *cobra.Command {
 		newLabelCreateCmd(),
 		newLabelEditCmd(),
 		newLabelDeleteCmd(),
-		newLabelAttachCmd(),
-		newLabelDetachCmd(),
 	)
 	return cmd
 }
@@ -138,7 +147,7 @@ func newLabelCreateCmd() *cobra.Command {
 	return cmd
 }
 
-// bk label edit — renaming/recolouring a label was reachable only from the web
+// label edit — renaming/recolouring a label was reachable only from the web
 // UI. In a CLI-only product that is a hole, not a convenience gap, so the
 // parity test now requires it.
 func newLabelEditCmd() *cobra.Command {
@@ -152,9 +161,6 @@ func newLabelEditCmd() *cobra.Command {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid label id %q", args[0])
-			}
-			if err != nil {
-				return err
 			}
 			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
@@ -200,7 +206,7 @@ func newLabelDeleteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:         "delete <id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/labels/{id}"},
-		Short:       "Delete a label (removes it from all issues)",
+		Short:       "Delete a label (removes it from everything it is attached to)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
@@ -219,70 +225,6 @@ func newLabelDeleteCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "label %d deleted\n", id)
-			return nil
-		},
-	}
-}
-
-func newLabelAttachCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:         "attach <issue_id> <label_id>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/labels,GET /api/workspaces/{ws}/issues/{id}/labels"},
-		Short:       "Attach a label to an issue",
-		Args:        cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			issueID, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid issue_id %q", args[0])
-			}
-			labelID, err := strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid label_id %q", args[1])
-			}
-			c, cfg, err := cmdutil.NewClientAndConfig()
-			if err != nil {
-				return err
-			}
-			ws, err := cmdutil.RequireActiveWorkspace(cfg)
-			if err != nil {
-				return err
-			}
-			if err := c.AttachIssueLabel(ws, issueID, labelID); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "attached label %d to issue %d\n", labelID, issueID)
-			return nil
-		},
-	}
-}
-
-func newLabelDetachCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:         "detach <issue_id> <label_id>",
-		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid}"},
-		Short:       "Detach a label from an issue",
-		Args:        cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			issueID, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid issue_id %q", args[0])
-			}
-			labelID, err := strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid label_id %q", args[1])
-			}
-			c, cfg, err := cmdutil.NewClientAndConfig()
-			if err != nil {
-				return err
-			}
-			ws, err := cmdutil.RequireActiveWorkspace(cfg)
-			if err != nil {
-				return err
-			}
-			if err := c.DetachIssueLabel(ws, issueID, labelID); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "detached label %d from issue %d\n", labelID, issueID)
 			return nil
 		},
 	}

@@ -19,14 +19,18 @@ So an edit leaves an orphan. Clearing orphans is an explicit owner action.
 
 ## Owner review & cleanup
 
+`storage` is an app-owned verb — `bk <app> storage …`, never bare. The app
+segment says which deployment answers; the LISTING itself is workspace-wide and
+spans every app either way (see below). Run `bk guide platform/apps`.
+
 ```bash
-bk storage list --json         # every file + what references it + total usage
-bk storage list --app issues   # only the files one app uploaded
-bk storage rm <id>             # permanently delete an orphan
-bk storage attachments         # the workspace-wide attachments view
+bk issues storage list --json         # every file + what references it + usage
+bk issues storage list --app issues   # only the files one app uploaded
+bk issues storage rm <id>             # permanently delete an orphan
+bk issues storage attachments         # this app's attachment rows
 ```
 
-`bk storage rm` is refused with a **409 `file_in_use`** conflict if anything
+`storage rm` is refused with a **409 `file_in_use`** conflict if anything
 still references the file — **including a trashed item**. Empty or purge the
 Trash first if you mean to reclaim the space.
 
@@ -47,4 +51,4 @@ later is the right response, and no amount of `--yes` overrides it.
 
 These commands require workspace **owner** role; anything else gets exit **4**.
 
-Related commands: `bk storage list|rm|attachments`, `bk trash purge|empty`
+Related commands: `bk issues storage list|rm|attachments`, `bk issues trash purge|empty`, `bk guide platform/apps`

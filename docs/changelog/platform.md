@@ -30,6 +30,85 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — **BREAKING (CLI 2.1.0):** every verb now belongs to one of three tiers, and four of them moved
+
+**The idea first, because it is what the rest of this file will assume.** A `bk`
+verb sits in exactly one of three tiers, and **the tier is visible in the
+spelling**, so you can tell which app a command talks to by reading it:
+
+| Tier | Verbs | Spelling | Why |
+|---|---|---|---|
+| **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | **bare** | Identity and org data. No app owns a person, a membership or an invitation, so no app can be the wrong one to ask |
+| **Cross-app** | `search` `activity` `link` | **bare** | They span every app *by design* and tag each result with the app it came from. Scoping them would remove the reason they exist |
+| **App-owned** | every app noun, **plus `upload` `storage` `trash` `label`** | **`bk <app> <verb>`** | The data is app-attributed. An implicit default here is how a contract raised in one app gets filed under another |
+
+The full statement, with worked examples, is **`bk guide platform/apps`** — a new
+topic, and the first thing to read before writing anything from now on.
+
+### What breaks
+
+Four spellings stop working. Each names its replacement on failure:
+
+| Was | Now |
+|---|---|
+| `bk upload <file>` | `bk issues upload <file>` |
+| `bk storage list\|rm\|attachments` | `bk issues storage list\|rm\|attachments` |
+| `bk trash list\|restore\|purge\|empty` | `bk issues trash list\|restore\|purge\|empty` |
+| `bk label list\|view\|create\|edit\|delete\|attach\|detach` | `bk issues label …` |
+
+Nothing else changed: same flags, same output, same routes, same behaviour. Only
+the first segment is new.
+
+```
+$ bk upload contract.pdf
+error: unknown command "upload" for "bk"
+hint: the bare spelling is now `bk <app> upload …` — a file is stored against one
+      app, so the app names itself: `bk issues upload contract.pdf`.
+```
+
+Exit code **2** (usage), one line on stderr, stdout untouched. If you branch on
+exit codes, this is a usage error, not a runtime one.
+
+### Why there is no working alias this time
+
+The 1.10.0 rename (`bk issue` → `bk issues issue`) kept every old spelling alive
+for two releases, printing a deprecation line. That was the right call then and
+is the wrong one here: an alias for `bk upload` would have to **choose an app
+silently**, and choosing silently is precisely the accident being removed. A file
+uploaded through the wrong app is recorded as that app's file, and nothing
+downstream can tell it was a mistake.
+
+So the bare spellings fail loudly and immediately, and the
+`deprecations.go` rows that name their replacements stay for **two minor
+releases** (through 2.3.0). A stale script gets a recovery path, not a dead end.
+
+### What to change in your scripts and agents
+
+1. Prefix the four verbs with the app: `bk issues trash list`, not `bk trash list`.
+2. Re-read `bk guide platform/apps`, or run `bk skill sync` to refresh an installed
+   agent skill.
+3. If you hardcoded `bk upload` in a wrapper, note that the app segment is now the
+   thing that decides where the file is filed — it is a real argument, not
+   punctuation.
+
+### Notes for the app-owned four
+
+- **`storage list` is still workspace-wide.** Uploads are one shared cabinet with
+  one quota. `bk issues storage list` and `bk sales storage list` return the same
+  files, each tagged with the app that uploaded it (`--app <slug>` filters). What
+  the app segment decides is *which deployment answers*, and which app a new file
+  is filed under.
+- **`trash` is genuinely per-app.** Each app bins its own entities. `--type` is
+  validated against the app's own vocabulary, and the error names the app so a ref
+  aimed at the wrong bin is distinguishable from a typo.
+- **`label attach`/`detach` name an entity**, so they are that app's own
+  subcommands: `bk issues label attach <issue-id> <label-id>`. Label CRUD is
+  shared and identical everywhere.
+- **`storage attachments`** is the issues app's own view of its attachment rows;
+  it moved with the rest.
+
+---
+
 ## 2026-08-06 — Every route the web UI and `bk` need can now be served by any app
 
 **Nothing you can observe changed today.** Same routes, same origin, same

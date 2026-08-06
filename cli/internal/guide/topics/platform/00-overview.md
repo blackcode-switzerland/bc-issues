@@ -7,22 +7,31 @@ There is **one supported interface: this CLI.** The HTTP API behind it is privat
 plumbing with no public contract — do not call it directly, and do not build
 against an OpenAPI spec (there isn't one any more).
 
-## Platform verbs and app verbs
+## Three tiers of verb, and the spelling tells you which
 
-A workspace is the company; an app is a capability inside it. That split runs
-through everything here:
+A workspace is the company; an app is a capability inside it. Every command sits
+in exactly one tier, and **you can see which from the command itself**:
 
-- **Platform verbs are bare** — `bk workspace list`, `bk label create`,
-  `bk upload`, `bk trash list`. They mean the same thing whichever app you are
-  working in.
-- **App verbs sit behind the app's name** — `bk issues issue create`. Run
-  `bk --help` for the list of apps this binary knows, and `bk <app> --help` for
-  one app's nouns.
+- **Neutral — bare.** `bk workspace list`, `bk member list`, `bk token create`,
+  `bk meta`. Identity and org data: the answer is the same whichever app you ask,
+  so no app can be the wrong one.
+- **Cross-app — bare, and that is the point.** `bk search`, `bk activity`,
+  `bk link`. They span every app by design and tag each result with the app it
+  came from.
+- **App-owned — behind the app's name.** `bk issues issue create`, and also
+  `bk issues upload`, `bk issues storage list`, `bk issues trash list`,
+  `bk issues label list`. A file, a recycle bin and a label each belong to ONE
+  app, so the app says so.
 
-`bk meta` tells you which apps you can actually reach; you will not be shown one
-you have no access to. Before 1.10.0 app verbs were bare — the app name was
-simply absent. Those spellings still run and print `deprecated:` on stderr,
-naming the replacement, and go away two minor releases from now.
+Read `bk guide platform/apps` before doing anything that writes. It is the full
+rule, with the reasoning, and it is what stops a file landing in the wrong app.
+
+Run `bk --help` for the apps this binary knows, and `bk <app> --help` for one
+app's commands. `bk meta` tells you which apps you can actually reach; you will
+not be shown one you have no access to.
+
+A removed spelling never dead-ends: it exits non-zero and names its replacement
+on stderr, so a stale script tells you exactly what to type instead.
 
 ## The first four commands, in this order
 

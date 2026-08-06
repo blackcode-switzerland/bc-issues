@@ -21,9 +21,16 @@ import (
 // The rule is directional and deliberately asymmetric:
 //
 //	commands            may import platform and every app  (it assembles the tree)
-//	commands/<app>      may import cmdutil, client, config, output — nothing else
-//	                    under commands/
+//	commands/<app>      may import cmdutil, appverbs, client, config, output —
+//	                    nothing else under commands/
 //	commands/platform   may import the same — and NOT any app
+//
+// `internal/appverbs` (added 2.1.0 for D-11's app-owned tier) sits outside
+// `internal/commands/` for exactly the reason `cmdutil` does: it holds command
+// trees that SEVERAL app groups mount — `bk issues upload`, `bk sales upload` —
+// and neither `platform` nor any app package could host that without one of the
+// rules above being broken. The rule for putting something there is unchanged:
+// two command packages need it, and it names no app's entities.
 //
 // The last line is the one that matters most and the one most likely to be
 // broken by accident: it is what stops a "small helper" in the issues package

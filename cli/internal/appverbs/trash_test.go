@@ -1,10 +1,18 @@
-package platform
+package appverbs
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// The app whose vocabulary these cases use. Passed in exactly as an app's group
+// constructor passes it, so the test exercises the real path rather than a
+// hardcoded list this package no longer owns.
+var testCfg = Config{App: "issues", TrashTypes: []string{"issue", "project", "task"}}
 
 func TestParseRefs(t *testing.T) {
 	t.Run("valid mixed refs", func(t *testing.T) {
-		refs, err := parseRefs([]string{"issue:42", "project:3", "task:7"})
+		refs, err := parseRefs(testCfg, []string{"issue:42", "project:3", "task:7"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -30,7 +38,7 @@ func TestParseRefs(t *testing.T) {
 	})
 
 	t.Run("case-insensitive type and whitespace", func(t *testing.T) {
-		refs, err := parseRefs([]string{" ISSUE : 9 "})
+		refs, err := parseRefs(testCfg, []string{" ISSUE : 9 "})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -40,19 +48,27 @@ func TestParseRefs(t *testing.T) {
 	})
 
 	t.Run("rejects bad type", func(t *testing.T) {
-		if _, err := parseRefs([]string{"widget:1"}); err == nil {
-			t.Error("expected error for invalid type")
+		_, err := parseRefs(testCfg, []string{"widget:1"})
+		if err == nil {
+			t.Fatal("expected error for invalid type")
+		}
+		// The message has to name the APP as well as the vocabulary. With two
+		// deployments, "invalid type" alone leaves the caller unable to tell a
+		// typo from a ref aimed at the wrong recycle bin — which is the whole
+		// failure mode the app-owned tier exists to make visible.
+		if !strings.Contains(err.Error(), testCfg.App) {
+			t.Errorf("error does not name the app: %v", err)
 		}
 	})
 
 	t.Run("rejects missing id", func(t *testing.T) {
-		if _, err := parseRefs([]string{"issue"}); err == nil {
+		if _, err := parseRefs(testCfg, []string{"issue"}); err == nil {
 			t.Error("expected error for missing id")
 		}
 	})
 
 	t.Run("rejects non-numeric id", func(t *testing.T) {
-		if _, err := parseRefs([]string{"issue:abc"}); err == nil {
+		if _, err := parseRefs(testCfg, []string{"issue:abc"}); err == nil {
 			t.Error("expected error for non-numeric id")
 		}
 	})
@@ -61,9 +77,31 @@ func TestParseRefs(t *testing.T) {
 		// #numbers start at 1. Row ids do too, so this does not distinguish the
 		// eras — it just stops a nonsense ref reaching the purge path.
 		for _, bad := range []string{"issue:0", "issue:-1"} {
-			if _, err := parseRefs([]string{bad}); err == nil {
+			if _, err := parseRefs(testCfg, []string{bad}); err == nil {
 				t.Errorf("expected error for %q", bad)
 			}
+		}
+	})
+
+	// A vocabulary belongs to one app. The type another app bins must NOT be
+	// accepted here, or the local check is decoration.
+	t.Run("rejects another app's type", func(t *testing.T) {
+		if _, err := parseRefs(testCfg, []string{"prospect:1"}); err == nil {
+			t.Error("expected `prospect:1` to be rejected by the issues app's vocabulary")
+		}
+	})
+
+	// An app that declares no vocabulary gets no local check — stated as a test
+	// so the permissive branch is a decision on the record rather than a hole
+	// somebody finds later.
+	t.Run("no declared vocabulary means the server decides", func(t *testing.T) {
+		open := Config{App: "somewhere"}
+		refs, err := parseRefs(open, []string{"anything:1"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(refs) != 1 || refs[0].Type != "anything" {
+			t.Fatalf("got %+v", refs)
 		}
 	})
 }

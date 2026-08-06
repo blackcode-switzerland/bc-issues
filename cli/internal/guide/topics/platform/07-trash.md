@@ -12,22 +12,28 @@ destroying it, and Trash is what brings it back.
 
 ## The commands
 
+**The bin belongs to ONE app**, so the app names itself — `bk <app> trash …`.
+There is no bare spelling: two apps have two bins, and a command that picked
+one by default would eventually empty the wrong one. Run
+`bk guide platform/apps` for the tier rule, and `bk --help` for the apps this
+binary knows.
+
 ```bash
-bk trash list --json                 # paginated: --limit / --cursor
-bk trash restore issue:42            # <type>:<#number>, repeatable
-bk trash purge issue:42              # permanently destroy specific items
-bk trash empty                       # permanently destroy everything in Trash
+bk issues trash list --json           # paginated: --limit / --cursor
+bk issues trash restore issue:42      # <type>:<#number>, repeatable
+bk issues trash purge issue:42        # permanently destroy specific items
+bk issues trash empty                 # permanently destroy everything in the bin
 ```
 
 ## Refs are #numbers
 
-`bk trash list` prints a **REF** column, and a ref is `<type>:<#number>` — the
+`trash list` prints a **REF** column, and a ref is `<type>:<#number>` — the
 same `#number` you use everywhere else, so `issue:42` in Trash is the same issue
 as `bk issues issue view 42`.
 
 **This changed in 1.12.0.** Before that, the REF column printed an internal row
 id, which was the one place the platform exposed one. If you are holding a ref
-from an older run, **do not reuse it** — re-run `bk trash list` and take the
+from an older run, **do not reuse it** — re-run `trash list` and take the
 current REF. An old row id is usually a valid `#number` for a *different* item,
 and on `purge` that is not recoverable.
 
@@ -53,7 +59,7 @@ permanently deleted 2 item(s)
 
 Read those lines. They are the only chance to notice that a ref named something
 other than what you meant, and there is no undo behind them. `--json` carries the
-same list as `items`. `bk trash empty` caps the list and reports the remainder as
+same list as `items`. `trash empty` caps the list and reports the remainder as
 `items_truncated`; the count is always exact.
 
 ## Cascade vs detach
@@ -65,4 +71,4 @@ bk issues project delete 42 --cascade     # bin the attached tasks and issues to
 bk issues project delete 42 --detach      # keep them, unlinked (the default)
 ```
 
-Related commands: `bk trash list|restore|purge|empty`, `bk issues project delete`, `bk issues task delete`, `bk issues issue delete`
+Related commands: `bk issues trash list|restore|purge|empty`, `bk issues project delete`, `bk issues task delete`, `bk issues issue delete`

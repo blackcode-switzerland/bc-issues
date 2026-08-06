@@ -18,7 +18,7 @@ integration silently rots. → `bk guide platform/overview`
 on Windows without `chcp 65001`, most damaging during a bulk move.
 → `bk guide platform/encoding`
 
-**5. Expecting external media to embed.** Only files uploaded through `bk upload`
+**5. Expecting external media to embed.** Only files uploaded through `bk <app> upload`
 render inline. External urls stay plain links and raw `<iframe>` is stripped.
 → `bk guide platform/files`
 

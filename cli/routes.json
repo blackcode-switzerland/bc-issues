@@ -21,8 +21,20 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/issues/{id}/labels/{lid}",
+      "command": "bk issues label detach",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/issues/{id}/watch",
       "command": "bk issues issue unwatch",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk issues label delete",
       "app": "issues"
     },
     {
@@ -45,8 +57,26 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/storage/{id}",
+      "command": "bk issues storage rm",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/tasks/{id}",
       "command": "bk issues task delete",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/trash/purge",
+      "command": "bk issues trash purge",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/upload",
+      "command": "bk issues upload",
       "app": "issues"
     },
     {
@@ -59,6 +89,12 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/analytics",
       "command": "bk issues analytics",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/attachments",
+      "command": "bk issues storage attachments",
       "app": "issues"
     },
     {
@@ -93,8 +129,26 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/issues/{id}/labels",
+      "command": "bk issues label attach",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/watch",
       "command": "bk issues issue watch",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/labels",
+      "command": "bk issues label list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk issues label view",
       "app": "issues"
     },
     {
@@ -129,6 +183,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/storage",
+      "command": "bk issues storage list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/tasks",
       "command": "bk issues task list",
       "app": "issues"
@@ -146,6 +206,12 @@
       "app": "issues"
     },
     {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/trash",
+      "command": "bk issues trash list",
+      "app": "issues"
+    },
+    {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/comments/{id}",
       "command": "bk issues issue edit-comment",
@@ -159,6 +225,12 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk issues label edit",
+      "app": "issues"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/projects/{id}",
       "command": "bk issues project edit",
       "app": "issues"
@@ -167,6 +239,18 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/tasks/{id}",
       "command": "bk issues task edit",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "command": "bk issues upload",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/blob",
+      "command": "bk issues upload",
       "app": "issues"
     },
     {
@@ -189,8 +273,20 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/issues/{id}/labels",
+      "command": "bk issues label attach",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/issues/{id}/watch",
       "command": "bk issues issue watch",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/labels",
+      "command": "bk issues label create",
       "app": "issues"
     },
     {
@@ -233,6 +329,18 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/tasks/{id}/comments",
       "command": "bk issues task comment",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/trash/empty",
+      "command": "bk issues trash empty",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/trash/restore",
+      "command": "bk issues trash restore",
       "app": "issues"
     },
     {
@@ -279,18 +387,6 @@
     },
     {
       "method": "DELETE",
-      "path": "/api/workspaces/{ws}/issues/{id}/labels/{lid}",
-      "command": "bk label detach",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/labels/{id}",
-      "command": "bk label delete",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
       "path": "/api/workspaces/{ws}/links",
       "command": "bk link rm",
       "app": "platform"
@@ -299,18 +395,6 @@
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/members/{userId}",
       "command": "bk member remove",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/storage/{id}",
-      "command": "bk storage rm",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/trash/purge",
-      "command": "bk trash purge",
       "app": "platform"
     },
     {
@@ -387,12 +471,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/upload",
-      "command": "bk upload",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
       "path": "/api/users",
       "command": "bk user view",
       "app": "platform"
@@ -429,12 +507,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/workspaces/{ws}/attachments",
-      "command": "bk storage attachments",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk invite list",
       "app": "platform"
@@ -443,24 +515,6 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/invite-candidates",
       "command": "bk invite candidates",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk label attach",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/labels",
-      "command": "bk label list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/labels/{id}",
-      "command": "bk label view",
       "app": "platform"
     },
     {
@@ -479,18 +533,6 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/search",
       "command": "bk search",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/storage",
-      "command": "bk storage list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/trash",
-      "command": "bk trash list",
       "app": "platform"
     },
     {
@@ -515,12 +557,6 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/apps/{app}",
       "command": "bk app enable",
-      "app": "platform"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/workspaces/{ws}/labels/{id}",
-      "command": "bk label edit",
       "app": "platform"
     },
     {
@@ -585,18 +621,6 @@
     },
     {
       "method": "POST",
-      "path": "/api/upload",
-      "command": "bk upload",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/upload/blob",
-      "command": "bk upload",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
       "path": "/api/workspaces",
       "command": "bk workspace create",
       "app": "platform"
@@ -615,18 +639,6 @@
     },
     {
       "method": "POST",
-      "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk label attach",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/labels",
-      "command": "bk label create",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
       "path": "/api/workspaces/{ws}/leave",
       "command": "bk member leave",
       "app": "platform"
@@ -641,18 +653,6 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/transfer",
       "command": "bk workspace transfer",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/trash/empty",
-      "command": "bk trash empty",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/trash/restore",
-      "command": "bk trash restore",
       "app": "platform"
     },
     {

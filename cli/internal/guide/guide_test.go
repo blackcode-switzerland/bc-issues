@@ -202,14 +202,27 @@ func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 // where every `bk issue create` example became wrong the moment the commands
 // moved. A guide that teaches the deprecated form is worse than none: it is
 // confidently wrong, and the agent has no reason to doubt it.
+//
+// EXTENDED in 2.1.0 for the app-owned tier (docs/sales-app-plan.md D-11).
+// `upload`, `storage`, `trash` and `label` moved behind the app name for the
+// same reason the nouns did, and the same failure mode applies with more force:
+// a topic that still says the bare form is teaching an agent to file a sales
+// contract under issues. Adding these caught seven stale topics in the commit
+// that moved the commands — which is the point. They are listed separately from
+// the nouns because the two migrations prune on different schedules.
 func TestTopicsUseNamespacedAppCommands(t *testing.T) {
-	nouns := []string{"issue", "task", "project", "analytics", "move", "copy"}
+	moved := []string{
+		// 1.10.0 — the app nouns.
+		"issue", "task", "project", "analytics", "move", "copy",
+		// 1.13.0 — the app-owned platform verbs.
+		"upload", "storage", "trash", "label",
+	}
 	for _, top := range Topics() {
-		for _, n := range nouns {
+		for _, n := range moved {
 			for _, bad := range []string{"bk " + n + " ", "bk " + n + "|", "bk " + n + "\n", "bk " + n + "`"} {
 				if strings.Contains(top.Body, bad) {
-					t.Errorf("topic %q uses the pre-1.10.0 spelling %q — app verbs sit behind "+
-						"their app name (`bk issues %s …`)", top.Slug, strings.TrimSpace(bad), n)
+					t.Errorf("topic %q uses a pre-namespace spelling %q — it sits behind its "+
+						"app name (`bk <app> %s …`)", top.Slug, strings.TrimSpace(bad), n)
 				}
 			}
 		}

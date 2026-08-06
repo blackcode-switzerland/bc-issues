@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -13,40 +13,48 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 )
 
-// newTrashCmd is the recycle bin: list / restore / purge / empty the soft-
-// deleted issues, projects, and tasks in the active workspace.
-func newTrashCmd() *cobra.Command {
+// `bk <app> trash` — the recycle bin: list / restore / purge / empty the
+// soft-deleted entities in the active workspace.
+//
+// App-owned because the bin holds one app's entities. `bk issues trash empty`
+// and `bk sales trash empty` are two different destructive actions, and a bare
+// `bk trash empty` that picked one by default is exactly the shape of accident
+// the tier boundary exists to prevent.
+func newTrashCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "trash",
 		Aliases: []string{"recycle", "bin"},
-		Short:   "Manage the recycle bin (deleted issues, projects, tasks)",
+		Short:   scoped(cfg, "Manage the recycle bin"),
 	}
 	cmd.AddCommand(
-		newTrashListCmd(),
-		newTrashRestoreCmd(),
-		newTrashPurgeCmd(),
-		newTrashEmptyCmd(),
+		newTrashListCmd(cfg),
+		newTrashRestoreCmd(cfg),
+		newTrashPurgeCmd(cfg),
+		newTrashEmptyCmd(cfg),
 	)
 	return cmd
 }
 
 // parseRefs turns "issue:42 project:3" style args into entity refs.
 //
-// The number is the workspace #NUMBER, as printed in `bk trash list`'s REF
-// column and as used by every other command. Before 1.12.0 it was the row id;
-// see TrashEntityRef for why the wire field changed name rather than meaning.
-func parseRefs(args []string) ([]client.TrashEntityRef, error) {
+// The number is the workspace #NUMBER, as printed in `trash list`'s REF column
+// and as used by every other command.
+//
+// The type vocabulary comes from cfg, never from a list in this file: it is one
+// app's nouns, and a shared file that enumerated them would be a second copy of
+// a vocabulary the server owns — the recurring silent-drift bug in this codebase
+// (docs/sales-app-plan.md D-27 §2). An app that declares none gets no local
+// check and the server's answer instead.
+func parseRefs(cfg Config, args []string) ([]client.TrashEntityRef, error) {
 	refs := make([]client.TrashEntityRef, 0, len(args))
 	for _, a := range args {
 		parts := strings.SplitN(a, ":", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid ref %q — use <type>:<#number>, e.g. issue:42", a)
+			return nil, fmt.Errorf("invalid ref %q — use <type>:<#number>, e.g. %s:42", a, cfg.exampleType())
 		}
 		typ := strings.ToLower(strings.TrimSpace(parts[0]))
-		switch typ {
-		case "issue", "project", "task":
-		default:
-			return nil, fmt.Errorf("invalid type %q — must be issue, project, or task", parts[0])
+		if err := cfg.checkTrashType(typ); err != nil {
+			return nil, err
 		}
 		n, err := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil {
@@ -60,27 +68,51 @@ func parseRefs(args []string) ([]client.TrashEntityRef, error) {
 	return refs, nil
 }
 
-func newTrashListCmd() *cobra.Command {
+// checkTrashType validates a ref's type against the app's own vocabulary, and
+// says nothing when the app declared none.
+func (c Config) checkTrashType(typ string) error {
+	if len(c.TrashTypes) == 0 {
+		return nil
+	}
+	for _, t := range c.TrashTypes {
+		if typ == t {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid type %q for the %s app — must be %s",
+		typ, c.App, strings.Join(c.TrashTypes, ", "))
+}
+
+// exampleType is the noun used in "e.g. issue:42" style help. Falls back to a
+// placeholder for an app that declared no vocabulary.
+func (c Config) exampleType() string {
+	if len(c.TrashTypes) == 0 {
+		return "<type>"
+	}
+	return c.TrashTypes[0]
+}
+
+func newTrashListCmd(cfg Config) *cobra.Command {
 	var typ string
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/trash"},
 		Short:       "List items in the recycle bin",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			switch typ {
-			case "", "issue", "project", "task":
-			default:
-				return fmt.Errorf("--type must be issue, project, or task")
+			if typ != "" {
+				if err := cfg.checkTrashType(typ); err != nil {
+					return fmt.Errorf("--type: %w", err)
+				}
 			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			c, cfg, err := cmdutil.NewClientAndConfig()
+			c, cfgFile, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			ws, err := cmdutil.RequireActiveWorkspace(cfgFile)
 			if err != nil {
 				return err
 			}
@@ -132,11 +164,11 @@ func newTrashListCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&typ, "type", "", "Filter by type: issue | project | task")
+	cmd.Flags().StringVar(&typ, "type", "", "Filter by entity type (run `bk meta` for this app's types)")
 	return cmd
 }
 
-func newTrashRestoreCmd() *cobra.Command {
+func newTrashRestoreCmd(cfg Config) *cobra.Command {
 	var batch int
 	var restoreParents, standalone bool
 	cmd := &cobra.Command{
@@ -144,11 +176,11 @@ func newTrashRestoreCmd() *cobra.Command {
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/trash/restore"},
 		Short:       "Restore items (or a whole batch) from the recycle bin",
 		Long: "Restore deleted items back to the workspace.\n\n" +
-			"Pass refs like `issue:42 project:3` (the #number, as printed in the REF\n" +
+			"Pass refs like `" + cfg.exampleType() + ":42` (the #number, as printed in the REF\n" +
 			"column), or restore a whole delete group with\n" +
-			"--batch <id> (see the BATCH column in `bk trash list`).\n\n" +
-			"If a restored item's project/task is also in the Trash, by default it\n" +
-			"comes back as a group when they were deleted together, otherwise standalone.\n" +
+			"--batch <id> (see the BATCH column in `trash list`).\n\n" +
+			"If a restored item's parent is also in the Trash, by default it comes back\n" +
+			"as a group when they were deleted together, otherwise standalone.\n" +
 			"Force the choice with --restore-parents or --standalone.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if restoreParents && standalone {
@@ -158,11 +190,11 @@ func newTrashRestoreCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, cfg, err := cmdutil.NewClientAndConfig()
+			c, cfgFile, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			ws, err := cmdutil.RequireActiveWorkspace(cfgFile)
 			if err != nil {
 				return err
 			}
@@ -171,7 +203,7 @@ func newTrashRestoreCmd() *cobra.Command {
 			if cmd.Flags().Changed("batch") {
 				req.BatchID = &batch
 			} else {
-				refs, err := parseRefs(args)
+				refs, err := parseRefs(cfg, args)
 				if err != nil {
 					return err
 				}
@@ -202,12 +234,12 @@ func newTrashRestoreCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&batch, "batch", 0, "Restore an entire delete batch by id")
-	cmd.Flags().BoolVar(&restoreParents, "restore-parents", false, "Also restore deleted parent projects/tasks")
+	cmd.Flags().BoolVar(&restoreParents, "restore-parents", false, "Also restore deleted parent items")
 	cmd.Flags().BoolVar(&standalone, "standalone", false, "Restore items standalone, clearing dangling parent links")
 	return cmd
 }
 
-func newTrashPurgeCmd() *cobra.Command {
+func newTrashPurgeCmd(cfg Config) *cobra.Command {
 	var batch int
 	var yes bool
 	cmd := &cobra.Command{
@@ -215,17 +247,17 @@ func newTrashPurgeCmd() *cobra.Command {
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/trash/purge"},
 		Short:       "Permanently delete items from the recycle bin (owner only)",
 		Long: "Permanently delete binned items. This cannot be undone and requires the\n" +
-			"workspace owner role. Pass refs like `issue:42` (the #number, as printed\n" +
-			"in the REF column), or --batch <id>.\n\n" +
+			"workspace owner role. Pass refs like `" + cfg.exampleType() + ":42` (the #number, as\n" +
+			"printed in the REF column), or --batch <id>.\n\n" +
 			"Any files embedded in the deleted items are automatically removed from\n" +
 			"storage once nothing else in the workspace references them (same safety\n" +
 			"check the Storage page uses).",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := cmdutil.NewClientAndConfig()
+			c, cfgFile, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			ws, err := cmdutil.RequireActiveWorkspace(cfgFile)
 			if err != nil {
 				return err
 			}
@@ -236,7 +268,7 @@ func newTrashPurgeCmd() *cobra.Command {
 				req.BatchID = &batch
 				target = fmt.Sprintf("batch #%d", batch)
 			} else {
-				refs, err := parseRefs(args)
+				refs, err := parseRefs(cfg, args)
 				if err != nil {
 					return err
 				}
@@ -247,7 +279,7 @@ func newTrashPurgeCmd() *cobra.Command {
 				target = fmt.Sprintf("%d item(s)", len(refs))
 			}
 
-			if !cmdutil.Confirm(fmt.Sprintf("Permanently delete %s? This cannot be undone.", target), yes) {
+			if !cmdutil.Confirm(fmt.Sprintf("Permanently delete %s from the %s recycle bin? This cannot be undone.", target, cfg.App), yes) {
 				return fmt.Errorf("aborted")
 			}
 			res, err := c.PurgeTrash(ws, req)
@@ -263,7 +295,7 @@ func newTrashPurgeCmd() *cobra.Command {
 	return cmd
 }
 
-func newTrashEmptyCmd() *cobra.Command {
+func newTrashEmptyCmd(cfg Config) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
 		Use:         "empty",
@@ -274,15 +306,15 @@ func newTrashEmptyCmd() *cobra.Command {
 			"storage once nothing else in the workspace references them (same safety\n" +
 			"check the Storage page uses).",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := cmdutil.NewClientAndConfig()
+			c, cfgFile, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
-			ws, err := cmdutil.RequireActiveWorkspace(cfg)
+			ws, err := cmdutil.RequireActiveWorkspace(cfgFile)
 			if err != nil {
 				return err
 			}
-			if !cmdutil.Confirm("Permanently delete everything in the Trash? This cannot be undone.", yes) {
+			if !cmdutil.Confirm(fmt.Sprintf("Permanently delete everything in the %s Trash? This cannot be undone.", cfg.App), yes) {
 				return fmt.Errorf("aborted")
 			}
 			res, err := c.EmptyTrash(ws)
