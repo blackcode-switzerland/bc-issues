@@ -12,6 +12,44 @@
 Dated items still owed. Everything under the horizontal rule below this section
 is the closed 2026-06-18 record and is history — read it, do not act on it.
 
+### 2026-08-06 — purging an issue orphans its comments, and that leaks blobs
+
+Found while app-qualifying `comments.parent_type` (Phase 1e). Unrelated to that
+change, and **not fixed** — it needs a design decision on a destructive path.
+
+`purgeOne` in `apps/issues/lib/db/queries/deletion.ts` hard-deletes the
+issue/task/project row. Nothing deletes its `platform.comments` rows. The FK that
+used to cascade them was `comments.issue_id`, **dropped in migration 0032**
+because a platform→app foreign key would have broken `pg_dump --schema=issues`
+as an extraction path. The file's own header still described that cascade until
+today; the header is corrected, the behaviour is not.
+
+**The row count is not the problem.** `platform.blob_references` is
+trigger-maintained on `platform.comments`, so an orphaned comment keeps its
+reference rows alive, and the delete gate refuses to delete a file anything still
+references. A file embedded only in a comment on a purged issue is therefore
+**permanently undeletable** — an unbounded, silent leak in the subsystem
+`CLAUDE.md` names as the thing standing between a code change and unrecoverable
+data loss.
+
+It fails **closed**, which is the safe direction, and that is exactly why it will
+never surface on its own. `bk super-admin blob-drift` will not report it either:
+the reference is real, the comment row genuinely exists, and nothing is missing
+from the index. Only the *parent* is gone.
+
+Whoever takes it decides between:
+
+- **cascade on purge** — delete the comments in `purgeOne`'s transaction, which
+  fires the triggers and frees the references correctly. Simplest, and it makes
+  `collectPurgeUrls` (which already reads those comments for blob sweeping,
+  moments before they become unreachable) coherent again.
+- **a reconciler** — find comments whose `parent_type`/`parent_id` resolve to
+  nothing, and decide separately what to do with the blob references they free.
+  A file freed this way may still be referenced elsewhere; the gate must decide,
+  not the reconciler.
+
+Do **not** reach for a platform→app FK. 0032 removed the last one on purpose.
+
 ### 2026-08-06 — CONTRACT: drop the bare legacy values from the two type CHECKs
 
 Migrations `0041`/`0042` app-qualified `platform.comments.parent_type` and

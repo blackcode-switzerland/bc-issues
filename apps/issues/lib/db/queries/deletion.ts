@@ -15,10 +15,38 @@
 // The batch lets restore be smart: items binned together with their parent
 // restore as a group (links preserved); items binned alone restore standalone.
 //
-// Purge is the only destructive op — it hard-deletes the row (the existing FK
-// cascades wipe comments/attachments/labels/watchers for issues; SET NULL
-// detaches children for projects/tasks). Purge is gated to owners at the
-// route layer.
+// Purge is the only destructive op — it hard-deletes the row. FK cascades wipe
+// attachments, labels and watchers for issues; SET NULL detaches children for
+// projects/tasks. Purge is gated to owners at the route layer.
+//
+// COMMENTS DO NOT CASCADE, AND PURGING ORPHANS THEM.
+// -------------------------------------------------
+// This header used to say comments were cascaded with everything else. They
+// were, through `comments.issue_id` — **a hard FK that migration 0032 dropped**,
+// because a platform→app foreign key would have broken `pg_dump --schema=issues`
+// as an extraction path. `platform.comments` now reaches its parent through
+// `parent_type`/`parent_id`, which are plain columns with no referential action
+// behind them, and nothing in this file deletes them. Grep confirms it: the only
+// `.delete(comments)` in the repo is `comments.ts`, the explicit
+// delete-one-comment path.
+//
+// The consequence is not "rows accumulate". `platform.blob_references` is
+// TRIGGER-MAINTAINED on `platform.comments`, so an orphaned comment keeps its
+// reference rows alive, and the delete gate refuses to delete a file anything
+// still references. **A file embedded only in a comment on a purged issue
+// becomes permanently undeletable** — an unbounded, silent leak in the one
+// subsystem CLAUDE.md calls the thing standing between a code change and
+// unrecoverable data loss. It fails CLOSED, which is the safe direction, and is
+// exactly why nobody notices.
+//
+// NOT FIXED HERE, DELIBERATELY. The fix is a design call — cascade on purge, or
+// a reconciler, and if a reconciler then what it does about the blob references
+// it frees — and it lives on a destructive path. Owned by the next issues-app
+// maintenance pass; recorded in docs/next-fixes.md under OPEN FOLLOW-UPS.
+//
+// The comment is corrected now, ahead of the behaviour, because a header that
+// describes a cascade that has not existed since 0032 is worse than no header:
+// the next person to touch purge will read it and believe the comments are gone.
 
 import { and, desc, eq, inArray, isNull, isNotNull, sql } from 'drizzle-orm'
 import { db } from '../client'
