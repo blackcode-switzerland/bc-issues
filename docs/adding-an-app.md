@@ -39,7 +39,7 @@ import each other.**
 | `platform-db` | The Drizzle schema and client factory for the `platform.*` tables — users, workspaces, members, app access, uploads, comments, labels, events, entities, links, the blob-reference index. Plus the platform-owned WRITES you must not reimplement: `recordPlatformEvent` + the platform fan-out (D-23), `createInboxMessage`, and the four sign-in callbacks (`getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`, `materializePendingInvitationsForUser`) |
 | `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories** (`@blackcode/platform-api/routes`), per-app access enforcement (`requireAppAccess` — the 403 with a hint), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits |
 | `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist. No HTTP — `requireAppAccess` moved to `platform-api` on 2026-08-06, because its whole job is constructing a 403 |
-| `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions |
+| `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions. **Two lines, not one:** `transpilePackages` in `next.config.js` makes it compile, and `@source "…/packages/platform-ui/src"` in your Tailwind stylesheet makes its CSS exist. Neither implies the other and only the first fails loudly — see step 1 |
 | `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
 | `platform-agent` | The merged changelog feed and the advertised CLI version floor |
 | `platform-testing` | The two guards every app copies: the CLI-parity harness and the app-isolation checks (`findCrossAppImports`, `findCrossSchemaQueries`) |
@@ -165,10 +165,26 @@ Then rename, in this order:
 | `lib/cli-parity.test.ts` | nothing — it reads `APP_SLUG` |
 | `lib/app-isolation.test.ts` | `OTHER_SCHEMAS` — list every OTHER app's schema |
 | `next.config.js` | nothing, unless you add a platform package |
+| your Tailwind stylesheet | `@source "../../../packages/platform-ui/src";` — see below. The scaffold has no CSS yet, so this is the one line the copy cannot give you |
 
 Add the new app's schema to **every other app's** `OTHER_SCHEMAS` too. That is
 the one edit outside your own directory, and it is what makes the isolation
 guard symmetric.
+
+> **The `@source` line is not optional and its absence is silent.** Tailwind v4
+> auto-detects sources from the project root and skips `node_modules`;
+> `@blackcode/platform-ui` reaches your app through a workspace symlink in there,
+> so without this line every utility class used ONLY inside the package is never
+> generated. When it was found on 2026-08-06 that was **151 classes** in
+> `apps/issues` — the login page's tab switcher had no active state and the
+> landing page's accordion did not animate, in production, for months. There is
+> no error, no build failure and no type error; the page just renders slightly
+> wrong. `packages/platform-testing/test/ui-package-styling.test.ts` fails if an
+> app compiles the package without scanning it, which is why you will find out
+> at `npm test` rather than by looking.
+>
+> **`transpilePackages` makes the TypeScript compile; `@source` makes the CSS
+> exist.** Neither implies the other.
 
 ```bash
 npm install          # only needed if you also added a new packages/ workspace
