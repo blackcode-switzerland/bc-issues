@@ -12,7 +12,7 @@
 // the write half needs the event spine untangled first, which is a separate,
 // owned piece of work.
 
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { accessibleWorkspaceIds, isAppAccessEnforced } from './app-access'
 import type { PlatformDb } from './client'
 import { users, workspaceMembers, workspaces, type Workspace } from './schema'
@@ -59,6 +59,39 @@ export async function listMyWorkspaces(
 
   const reachable = await accessibleWorkspaceIds(db, opts.app, userId)
   return all.filter((w) => reachable.has(w.id))
+}
+
+/**
+ * Resolve a workspace by numeric id or slug, asserting the user is a member.
+ *
+ * Returns null if the workspace does not exist OR the user is not a member — the
+ * route layer decides whether that is a 404 or a 403, and for a workspace you
+ * are not in the answer must be 404, so its existence does not leak.
+ *
+ * NOTE: it does NOT filter `deleted_at IS NULL`. `apps/issues` never did and
+ * `apps/_template` did — the two disagreed, and nothing in either app has ever
+ * written that column, so they behaved identically. This keeps the production
+ * app's semantics rather than settling the question inside a refactor. Whoever
+ * gives that column a writer decides it here, once.
+ */
+export async function getWorkspaceForUser(
+  db: PlatformDb,
+  slugOrId: string,
+  userId: number
+): Promise<WorkspaceWithMembership | null> {
+  const isNumeric = /^\d+$/.test(slugOrId)
+  const rows = await db
+    .select({ ws: workspaces, role: workspaceMembers.role })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspace_id, workspaces.id), eq(workspaceMembers.user_id, userId))
+    )
+    .where(isNumeric ? eq(workspaces.id, parseInt(slugOrId)) : eq(workspaces.slug, slugOrId))
+    .limit(1)
+
+  if (!rows[0]) return null
+  return { ...rows[0].ws, member_role: rows[0].role as 'owner' | 'member' }
 }
 
 /** Remember which workspace this user was last in. Null clears it. */

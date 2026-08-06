@@ -19,6 +19,7 @@
 import { randomBytes } from 'crypto'
 import { and, desc, eq, gt, sql } from 'drizzle-orm'
 import { db } from '../client'
+import { listPendingInvitationsForEmail as platformListPendingInvitationsForEmail } from '@blackcode/platform-db'
 import { inboxMessages, type WorkspaceInvitation, users, workspaceInvitations, workspaceMembers, workspaces } from '../schema'
 import { grantDefaultAppAccess } from '@blackcode/platform-db'
 import { recordEvent } from './events'
@@ -253,37 +254,12 @@ export async function getInvitationByToken(
   }
 }
 
-export async function listPendingInvitationsForEmail(
-  email: string
-): Promise<InvitationListItem[]> {
-  const normalized = email.trim().toLowerCase()
-  const rows = await db
-    .select({
-      inv: workspaceInvitations,
-      invited_by_email: users.email,
-      invited_by_name: users.name,
-      workspace_name: workspaces.name,
-      workspace_slug: workspaces.slug,
-    })
-    .from(workspaceInvitations)
-    .leftJoin(users, eq(users.id, workspaceInvitations.invited_by))
-    .leftJoin(workspaces, eq(workspaces.id, workspaceInvitations.workspace_id))
-    .where(
-      and(
-        sql`lower(${workspaceInvitations.email}) = ${normalized}`,
-        eq(workspaceInvitations.status, 'pending'),
-        gt(workspaceInvitations.expires_at, new Date())
-      )
-    )
-    .orderBy(desc(workspaceInvitations.created_at))
-
-  return rows.map((r) => ({
-    ...r.inv,
-    invited_by_email: r.invited_by_email,
-    invited_by_name: r.invited_by_name,
-    workspace_name: r.workspace_name ?? '(deleted)',
-    workspace_slug: r.workspace_slug ?? '',
-  }))
+// Moved to @blackcode/platform-db on 2026-08-06 with
+// GET /api/me/pending-invitations. It matches on the EMAIL, not a user id — an
+// invitation can predate the account it is for, which is the point of inviting
+// by address.
+export function listPendingInvitationsForEmail(email: string) {
+  return platformListPendingInvitationsForEmail(db, email)
 }
 
 export type AcceptResult =

@@ -48,6 +48,7 @@
 
 export { changelogRoute } from './changelog'
 export { linksRoute } from './links'
+export { activeWorkspaceRoute, meRoute, pendingInvitationsRoute } from './me'
 export { searchRoute } from './search'
 export { clientErrorsRoute, statusRoute } from './telemetry'
 export { tokensRoute, tokenRoute } from './tokens'

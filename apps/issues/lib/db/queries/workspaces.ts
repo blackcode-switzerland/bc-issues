@@ -24,6 +24,7 @@ import {
 } from '../schema'
 import {
   accessibleWorkspaceIds,
+  getWorkspaceForUser as platformGetWorkspaceForUser,
   listMyWorkspaces as platformListMyWorkspaces,
   listWorkspaceMembers as platformListWorkspaceMembers,
   setActiveWorkspace as platformSetActiveWorkspace,
@@ -40,27 +41,9 @@ import { recordEvent } from './events'
 // lands somewhere neither of them mentions.
 export type WorkspaceWithMembership = PlatformWorkspaceWithMembership
 
-/**
- * The workspaces this user belongs to.
- *
- * Pass `{ app }` to get the ones they may actually USE that app in — visibility
- * follows access (docs/platform-architecture.md §4.5). That is what every user-facing
- * listing wants: logged into issues, you should not see a workspace where issues
- * is off or where you were never granted it.
- *
- * Pass nothing for the raw membership list. Two callers genuinely need that and
- * filtering them would be a bug, not a feature:
- *   - ensureDefaultWorkspace — "do they belong to anything at all?" A filtered
- *     empty answer there would mint a SECOND workspace for someone who already
- *     has one they simply can't reach.
- *   - `--all` listings, which exist precisely to show what the filter hides.
- *
- * The filter is a no-op when enforcement is off, so the kill switch restores the
- * pre-Phase-4 behaviour here too, not just at the 403.
- */
 // Moved to @blackcode/platform-db on 2026-08-06 with GET /api/workspaces, now a
-// shared route factory (docs/sales-app-plan.md Phase 1b). Its doc comment — in
-// particular WHY two callers must pass no `app` — went with it. Bound to this
+// shared route factory (docs/sales-app-plan.md Phase 1b). The doc comment went
+// with it — in particular WHY two callers must pass no `app`. Bound to this
 // app's `db` here so every existing call site is unchanged.
 export function listMyWorkspaces(
   userId: number,
@@ -69,29 +52,14 @@ export function listMyWorkspaces(
   return platformListMyWorkspaces(db, userId, opts)
 }
 
-// Resolve a workspace by numeric id or slug, asserting the user is a member.
-// Returns null if the workspace doesn't exist OR the user is not a member —
-// the route layer can decide whether to surface 404 vs 403.
-export async function getWorkspaceForUser(
+// Moved to @blackcode/platform-db on 2026-08-06 with the shared
+// `resolveWorkspace` (docs/sales-app-plan.md Phase 1a). Its note on the missing
+// `deleted_at` filter went with it.
+export function getWorkspaceForUser(
   slugOrId: string,
   userId: number
 ): Promise<WorkspaceWithMembership | null> {
-  const isNumeric = /^\d+$/.test(slugOrId)
-  const rows = await db
-    .select({ ws: workspaces, role: workspaceMembers.role })
-    .from(workspaces)
-    .innerJoin(
-      workspaceMembers,
-      and(
-        eq(workspaceMembers.workspace_id, workspaces.id),
-        eq(workspaceMembers.user_id, userId)
-      )
-    )
-    .where(isNumeric ? eq(workspaces.id, parseInt(slugOrId)) : eq(workspaces.slug, slugOrId))
-    .limit(1)
-
-  if (!rows[0]) return null
-  return { ...rows[0].ws, member_role: rows[0].role as 'owner' | 'member' }
+  return platformGetWorkspaceForUser(db, slugOrId, userId)
 }
 
 export async function getWorkspaceById(id: number): Promise<Workspace | null> {

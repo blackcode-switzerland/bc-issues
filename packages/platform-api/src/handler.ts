@@ -39,8 +39,7 @@ import { sql } from 'drizzle-orm'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 import {
   errorEvents,
-  workspaces,
-  workspaceMembers,
+  getWorkspaceForUser,
   type User,
   type Workspace,
 } from '@blackcode/platform-db'
@@ -314,18 +313,9 @@ export interface WorkspaceContext {
 /**
  * Bind the workspace resolver to one app.
  *
- * The lookup is raw SQL over the two `platform` tables rather than a call into
- * an app's query layer, for the reason `packages/platform-db/src/app-access.ts`
- * gives: a shared package must work against a `db` OR a transaction handle, and
- * the two Drizzle builders do not share a type. `Executor` is that common shape.
- *
- * It replicates `apps/issues`' `getWorkspaceForUser` exactly, including the
- * absence of a `deleted_at IS NULL` filter. That absence is not an endorsement:
- * `apps/_template` DID filter it, and the two disagreed. Nothing in either app
- * ever writes `workspaces.deleted_at`, so the column is dead today and the two
- * behaved identically — this move keeps the production app's semantics and
- * leaves the question where it was rather than settling it inside a refactor.
- * Whoever gives that column a writer must decide it here, once.
+ * The lookup itself is `getWorkspaceForUser` in platform-db — the same function
+ * `apps/issues` always used, moved beside the tables it reads. Read its note
+ * before changing what it matches.
  */
 export function createResolveWorkspace(app: AppContext) {
   return async function resolveWorkspace(
@@ -337,7 +327,7 @@ export function createResolveWorkspace(app: AppContext) {
 
     if (!slugOrId) throw Errors.notFound('workspace')
 
-    const ws = await getWorkspaceForUser(app, slugOrId, user.id)
+    const ws = await getWorkspaceForUser(app.db, slugOrId, user.id)
     if (!ws) throw Errors.notFound('workspace')
 
     // Membership gets you into the organisation; this gets you into THIS app.
@@ -356,45 +346,6 @@ export function createResolveWorkspace(app: AppContext) {
       role: ws.member_role,
     }
   }
-}
-
-type WorkspaceWithMembership = Workspace & { member_role: 'owner' | 'member' }
-
-async function getWorkspaceForUser(
-  app: AppContext,
-  slugOrId: string,
-  userId: number
-): Promise<WorkspaceWithMembership | null> {
-  const isNumeric = /^\d+$/.test(slugOrId)
-  const match = isNumeric
-    ? sql`w.id = ${parseInt(slugOrId)}`
-    : sql`w.slug = ${slugOrId}`
-
-  const res = await app.db.execute(sql`
-    SELECT w.*, m.role AS member_role
-    FROM ${workspaces} w
-    JOIN ${workspaceMembers} m
-      ON m.workspace_id = w.id AND m.user_id = ${userId}
-    WHERE ${match}
-    LIMIT 1
-  `)
-
-  const row = res.rows[0]
-  if (!row) return null
-
-  // `storage_limit_bytes` is a bigint, and the driver hands bigints back as
-  // STRINGS. Drizzle's `mode: 'number'` converted them, and one route serializes
-  // the value straight into its response body — so skipping this makes
-  // `limit_bytes` change from 1000 to "1000" for every client. Everything else
-  // in this table is an integer, text or timestamptz, which both paths return
-  // identically, so the row is spread rather than rebuilt column by column: a
-  // column added to `platform.workspaces` tomorrow flows through on its own
-  // instead of silently vanishing from every `ctx.workspace`.
-  const limit = row.storage_limit_bytes
-  return {
-    ...row,
-    storage_limit_bytes: limit === null || limit === undefined ? null : Number(limit),
-  } as unknown as WorkspaceWithMembership
 }
 
 export function requireOwner(ctx: WorkspaceContext): void {

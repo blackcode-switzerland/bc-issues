@@ -1,6 +1,14 @@
 import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { getVisibleUsers as platformGetVisibleUsers } from '@blackcode/platform-db'
+import {
+  deleteAccountReport as platformDeleteAccountReport,
+  getUserById as platformGetUserById,
+  getVisibleUsers as platformGetVisibleUsers,
+  softDeleteUser as platformSoftDeleteUser,
+  updateUserProfile as platformUpdateUserProfile,
+  type DeleteAccountReport,
+  type UpdateUserProfileInput,
+} from '@blackcode/platform-db'
 import { apiTokens, inboxMessages, users, workspaceMembers, workspaces } from '../schema'
 import type { User } from '../schema'
 
@@ -37,9 +45,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   return rows[0] ?? null
 }
 
-export async function getUserById(id: number): Promise<User | null> {
-  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1)
-  return rows[0] ?? null
+// Moved to @blackcode/platform-db on 2026-08-06 with /api/me, now a shared
+// route factory (docs/sales-app-plan.md Phase 1b). One login serves every app,
+// so an account read cannot belong to one of them.
+export function getUserById(id: number): Promise<User | null> {
+  return platformGetUserById(db, id)
 }
 
 export async function upsertUserFromOAuth(data: {
@@ -97,76 +107,27 @@ export async function touchLastLogin(id: number): Promise<void> {
   await db.update(users).set({ last_login: new Date() }).where(eq(users.id, id))
 }
 
-export interface UpdateUserProfileInput {
-  name?: string | null
-  tagline?: string | null
-  avatar_url?: string | null
-}
-
 // Soft-deletes the user: marks deleted_at, clears auth, revokes tokens.
 // Returns the workspaces that *would* be hard-deleted (sole-owner with no
 // other members) and the workspaces that block deletion (owner with members).
 // If `confirm` is false, this is a dry run.
-export interface DeleteAccountReport {
-  blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
-  will_hard_delete: Array<{ workspace_id: number; name: string }>
+// Account closure and profile edits moved to @blackcode/platform-db on
+// 2026-08-06 with /api/me. Both touch only platform.* (users, api_tokens,
+// inbox_messages, workspaces, workspace_members), and `softDeleteUser` keeps its
+// single-transaction guarantee there.
+export type { DeleteAccountReport, UpdateUserProfileInput }
+
+export function deleteAccountReport(userId: number): Promise<DeleteAccountReport> {
+  return platformDeleteAccountReport(db, userId)
 }
 
-export async function deleteAccountReport(userId: number): Promise<DeleteAccountReport> {
-  const rows = await db.execute<{
-    workspace_id: number
-    name: string
-    member_count: number
-  }>(sql`
-    SELECT w.id AS workspace_id, w.name, COUNT(wm.id)::int AS member_count
-    FROM ${workspaces} w
-    LEFT JOIN ${workspaceMembers} wm ON wm.workspace_id = w.id
-    WHERE w.owner_id = ${userId}
-    GROUP BY w.id, w.name
-  `)
-  const blocked: DeleteAccountReport['blocked_by'] = []
-  const willHardDelete: DeleteAccountReport['will_hard_delete'] = []
-  for (const r of rows.rows) {
-    if (r.member_count > 1) blocked.push(r)
-    else willHardDelete.push({ workspace_id: r.workspace_id, name: r.name })
-  }
-  return { blocked_by: blocked, will_hard_delete: willHardDelete }
+export function softDeleteUser(userId: number): Promise<void> {
+  return platformSoftDeleteUser(db, userId)
 }
 
-export async function softDeleteUser(userId: number): Promise<void> {
-  await db.transaction(async (tx) => {
-    // Hard-delete sole-owner workspaces (the cascade will sweep their content).
-    await tx.execute(sql`
-      DELETE FROM ${workspaces} w
-      WHERE w.owner_id = ${userId}
-        AND (SELECT COUNT(*) FROM ${workspaceMembers} wm WHERE wm.workspace_id = w.id) <= 1
-    `)
-    // Revoke tokens.
-    await tx.execute(sql`DELETE FROM ${apiTokens} WHERE user_id = ${userId}`)
-    // Wipe inbox.
-    await tx.execute(sql`DELETE FROM ${inboxMessages} WHERE user_id = ${userId}`)
-    // Soft delete the user row.
-    await tx.execute(sql`
-      UPDATE ${users} SET
-        deleted_at = now(),
-        password_hash = NULL,
-        google_id = NULL,
-        active_workspace_id = NULL
-      WHERE id = ${userId}
-    `)
-  })
-}
-
-export async function updateUserProfile(
+export function updateUserProfile(
   id: number,
   patch: UpdateUserProfileInput
 ): Promise<User | null> {
-  const updates: Record<string, unknown> = {}
-  if (patch.name !== undefined) updates.name = patch.name
-  if (patch.tagline !== undefined) updates.tagline = patch.tagline
-  if (patch.avatar_url !== undefined) updates.avatar_url = patch.avatar_url
-  if (Object.keys(updates).length === 0) return getUserById(id)
-  updates.updated_at = new Date()
-  const [row] = await db.update(users).set(updates).where(eq(users.id, id)).returning()
-  return row ?? null
+  return platformUpdateUserProfile(db, id, patch)
 }
