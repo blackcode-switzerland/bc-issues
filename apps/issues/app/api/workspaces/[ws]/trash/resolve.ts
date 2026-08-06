@@ -35,7 +35,7 @@ export async function resolveSelection(
       throw Errors.notFound(
         'unknown_ref',
         `no such item in this workspace: ${err.refs.map((r) => `${r.type}:${r.number}`).join(', ')}`,
-        'run `bk trash list` and pass a REF exactly as printed in its REF column'
+        'run `bk <app> trash list` (`bk trash list` on bk 2.x) and pass a REF exactly as printed in its REF column'
       )
     }
     throw err

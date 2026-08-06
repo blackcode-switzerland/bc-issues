@@ -92,7 +92,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       throw Errors.notFound(
         'not_in_trash',
         `not in this workspace's trash: ${err.refs.map((r) => `${r.type}:${r.id}`).join(', ')}`,
-        'run `bk trash list` and pass a REF exactly as printed in its REF column'
+        'run `bk <app> trash list` (`bk trash list` on bk 2.x) and pass a REF exactly as printed in its REF column'
       )
     }
     throw err

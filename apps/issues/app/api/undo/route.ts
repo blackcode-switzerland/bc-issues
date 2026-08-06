@@ -30,11 +30,23 @@ const GONE = {
   error:
     '`bk undo` was removed in 1.12.0. It never recorded anything and could not undo — the transaction log it read was never written.',
   code: 'surface_retired',
+  // BOTH SPELLINGS, NEW ONE FIRST, and the parenthetical is not clutter.
+  //
+  // This stub exists for a binary that is OLD — that is the whole point of a 410
+  // over a 404. A pre-3.0.0 client still HAS `bk undo`, and on that client
+  // `bk trash list` is the correct spelling; on 3.0.0+ the recycle bin is
+  // per-app and only `bk <app> trash list` exists. Naming one of them serves
+  // half the callers and dead-ends the other half, which is the failure this
+  // whole `suggestion` field exists to prevent.
+  //
+  // FOLLOW-UP: drop the parenthetical once CLI_MIN_VERSION passes 3.0.0 — no
+  // supported client can run the old spelling by then, and it would start
+  // teaching a dead one. Tracked in docs/next-fixes.md (2026-08-06).
   suggestion:
-    'deletes are restorable: `bk trash list`, then `bk trash restore <type>:<#number>`',
+    'deletes are restorable: `bk <app> trash list` (`bk trash list` on bk 2.x), then `bk <app> trash restore <type>:<#number>`',
   details: {
     replaces: {
-      'bk undo': 'bk trash list / bk trash restore',
+      'bk undo': 'bk <app> trash list / bk <app> trash restore (bk trash … on 2.x)',
       'GET /api/undo': 'GET /api/workspaces/{ws}/trash',
       'POST /api/undo': 'POST /api/workspaces/{ws}/trash/restore',
     },

@@ -95,7 +95,7 @@ export function parseSelection(body: unknown): TrashSelection {
         throw Errors.badRequest(
           'invalid_item',
           'each item needs `number` (the #number) or `id` (the row id)',
-          'run `bk trash list` and pass a REF exactly as printed'
+          'run `bk <app> trash list` (`bk trash list` on bk 2.x) and pass a REF exactly as printed'
         )
       }
     }

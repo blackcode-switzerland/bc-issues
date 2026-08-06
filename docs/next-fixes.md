@@ -5,6 +5,38 @@
 > 2026-08-03 and the contract is now three edits: route → `bk` command → changelog.
 > See `CLAUDE.md`. Nothing below should be copied as current practice.
 
+---
+
+## OPEN FOLLOW-UPS
+
+Dated items still owed. Everything under the horizontal rule below this section
+is the closed 2026-06-18 record and is history — read it, do not act on it.
+
+### 2026-08-06 — drop the `bk 2.x` parenthetical from the trash suggestions
+
+CLI 3.0.0 moved the recycle bin behind the app name (`bk <app> trash list`,
+D-11). Four server `suggestion` strings print to an agent as `hint:` lines and
+now name **both** spellings, new one first:
+
+    run `bk <app> trash list` (`bk trash list` on bk 2.x) …
+
+- `app/api/workspaces/[ws]/trash/parse.ts`
+- `app/api/workspaces/[ws]/trash/restore/route.ts`
+- `app/api/workspaces/[ws]/trash/resolve.ts`
+- `app/api/undo/route.ts` (both the `suggestion` and the `replaces` map)
+
+The parenthetical is there because a pre-3.0.0 binary cannot run the new
+spelling, and `/api/undo` in particular is a 410 stub whose entire audience is
+old clients.
+
+**When `CLI_MIN_VERSION` (`packages/platform-agent/src/cli-version.ts`) passes
+3.0.0, delete the parenthetical from all four.** No supported client can run the
+old spelling by then, and a hint that teaches a dead one is exactly the failure
+these strings exist to prevent. There is no other trigger for this — nothing
+fails if it is forgotten, which is why it is written down.
+
+---
+
 Notes captured live on **2026-06-18** while using the `bk` CLI against **production**
 to do something that should be trivial: *"fetch issue #234 in Andrea's workspace."*
 It took ~10 steps and a fallback to raw `curl` to answer, because of the gaps below.
