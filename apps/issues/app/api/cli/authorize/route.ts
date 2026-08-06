@@ -1,16 +1,28 @@
+// POST /api/cli/authorize — the browser half of `bk login`.
+//
+// ── WHY THE VALIDATED SESSION RESOLVER, AS OF 2026-08-06 ────────────────────
+// **This route mints a `bk_live_…` token.** It is the second one that does, and
+// until today it authenticated with a bare `getServerSession` + `getUserByEmail`
+// — the exact check D-24 removed from `/api/tokens` five commits ago, for the
+// exact reason: that pair accepts a session belonging to a soft-deleted user,
+// and a session issued BEFORE the account's last password reset.
+//
+// So a session captured before a reset could still walk through `bk login` and
+// come out holding a permanent CLI credential, and revoking the session did not
+// revoke the token. D-24's sentence applies here word for word: a password reset
+// is what somebody does when they believe their account is compromised, and one
+// that leaves the attacker able to create a permanent credential has not done
+// its job.
+//
+// `getValidatedSessionUser` is what every other session path in this app uses.
+// Fixed on its own, deliberately not folded into the extraction that found it.
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getUserByEmail } from '@/lib/db/queries/users'
+import { getValidatedSessionUser } from '@/lib/auth/session'
 import { mintToken } from '@/lib/auth/tokens'
 import { buildCallbackRedirect } from '@/lib/auth/cli-callback'
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  const user = await getUserByEmail(session.user.email)
+  const user = await getValidatedSessionUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

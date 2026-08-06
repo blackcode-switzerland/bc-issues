@@ -30,6 +30,31 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — **SECURITY:** `bk login` no longer completes from an invalidated session
+
+**The same gap as the `/api/tokens` entry below, in the other route that mints a
+token.** `POST /api/cli/authorize` — the browser step of `bk login` — now rejects
+a session issued **before** the account's last password reset, and one belonging
+to a deleted account. It previously accepted both.
+
+**Why it matters.** That route hands back a `bk_live_…` CLI credential. Until
+today it checked only that a session existed and resolved to a real user, so **a
+session captured before a password reset could still be walked through
+`bk login` and come out holding a permanent token — and revoking the session did
+not revoke the token.** A password reset is what somebody does when they believe
+their account is compromised.
+
+**How to adapt.** Nothing, unless your browser session predates a password change
+on the same account: `bk login` will then fail at the authorize step and you sign
+in again. **Tokens already issued are unaffected** — this changes who may create
+one, not what an existing one can do. Revoke any you no longer recognise with
+`bk token list` and `bk token revoke`.
+
+Both token-minting routes now use the same session check. Nothing else about the
+`bk login` handshake changed: same callback validation (loopback only), same
+response fields, same token naming.
+
+
 ## 2026-08-06 — A file belongs to the app you uploaded it THROUGH
 
 **Nothing changed about how you upload.** `POST /api/upload` and the
