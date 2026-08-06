@@ -1,14 +1,6 @@
-import { NextRequest } from 'next/server'
-import { apiHandler, resolveWorkspace, jsonList } from '@/lib/api'
-import { listWorkspaceMembers } from '@/lib/db/queries/workspaces'
+// GET /api/workspaces/{ws}/members — mounted from the shared factory.
 
-interface Params {
-  params: Promise<{ ws: string }>
-}
+import { workspaceMembersRoute } from '@blackcode/platform-api/routes'
+import { appContext } from '@/lib/api'
 
-export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
-  const { ws } = await params
-  const ctx = await resolveWorkspace(req, ws)
-  const data = await listWorkspaceMembers(ctx.workspace.id)
-  return jsonList(data)
-})
+export const GET = workspaceMembersRoute(appContext)

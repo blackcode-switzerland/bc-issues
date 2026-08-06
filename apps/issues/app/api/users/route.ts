@@ -1,15 +1,8 @@
-// The user directory. Privacy guard: a caller only sees users they already
-// share a workspace with (plus themselves). Discovering brand-new people is
-// not possible here — invitations are sent blind, by email.
+// GET /api/users — mounted from the shared factory.
+// The privacy guard (you only see people you share a workspace with) lives in
+// the query's join. See packages/platform-api/src/routes/users.ts.
 
-import { NextRequest, NextResponse } from 'next/server'
-import { resolveUser } from '@/lib/auth/resolve'
-import { apiHandler, Errors } from '@/lib/api'
-import { getVisibleUsers } from '@/lib/db/queries/users'
+import { usersRoute } from '@blackcode/platform-api/routes'
+import { appContext } from '@/lib/api'
 
-export const GET = apiHandler(async (request: NextRequest) => {
-  const user = await resolveUser(request)
-  if (!user) throw Errors.unauthorized()
-  const users = await getVisibleUsers(user.id)
-  return NextResponse.json(users)
-})
+export const GET = usersRoute(appContext)

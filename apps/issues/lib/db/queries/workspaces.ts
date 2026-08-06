@@ -24,6 +24,10 @@ import {
 } from '../schema'
 import {
   accessibleWorkspaceIds,
+  listMyWorkspaces as platformListMyWorkspaces,
+  listWorkspaceMembers as platformListWorkspaceMembers,
+  setActiveWorkspace as platformSetActiveWorkspace,
+  type WorkspaceWithMembership as PlatformWorkspaceWithMembership,
   enableAllAppsForWorkspace,
   renameWorkspaceEntities,
   syncAppAccessRole,
@@ -31,9 +35,10 @@ import {
 import { isAppAccessEnforced } from '@blackcode/platform-api'
 import { recordEvent } from './events'
 
-export type WorkspaceWithMembership = Workspace & {
-  member_role: 'owner' | 'member'
-}
+// Aliased, not redeclared. Two structurally identical definitions in two
+// packages is two things to keep in step, and the day they disagree the error
+// lands somewhere neither of them mentions.
+export type WorkspaceWithMembership = PlatformWorkspaceWithMembership
 
 /**
  * The workspaces this user belongs to.
@@ -53,25 +58,15 @@ export type WorkspaceWithMembership = Workspace & {
  * The filter is a no-op when enforcement is off, so the kill switch restores the
  * pre-Phase-4 behaviour here too, not just at the 403.
  */
-export async function listMyWorkspaces(
+// Moved to @blackcode/platform-db on 2026-08-06 with GET /api/workspaces, now a
+// shared route factory (docs/sales-app-plan.md Phase 1b). Its doc comment — in
+// particular WHY two callers must pass no `app` — went with it. Bound to this
+// app's `db` here so every existing call site is unchanged.
+export function listMyWorkspaces(
   userId: number,
   opts: { app?: string } = {}
 ): Promise<WorkspaceWithMembership[]> {
-  const rows = await db
-    .select({
-      ws: workspaces,
-      role: workspaceMembers.role,
-    })
-    .from(workspaceMembers)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspace_id))
-    .where(eq(workspaceMembers.user_id, userId))
-    .orderBy(workspaces.updated_at)
-
-  const all = rows.map((r) => ({ ...r.ws, member_role: r.role as 'owner' | 'member' }))
-  if (!opts.app || !isAppAccessEnforced()) return all
-
-  const reachable = await accessibleWorkspaceIds(db, opts.app, userId)
-  return all.filter((w) => reachable.has(w.id))
+  return platformListMyWorkspaces(db, userId, opts)
 }
 
 // Resolve a workspace by numeric id or slug, asserting the user is a member.
@@ -412,23 +407,9 @@ export async function transferOwnership(
   })
 }
 
-export async function listWorkspaceMembers(workspaceId: number) {
-  return await db
-    .select({
-      id: workspaceMembers.id,
-      workspace_id: workspaceMembers.workspace_id,
-      user_id: workspaceMembers.user_id,
-      role: workspaceMembers.role,
-      joined_at: workspaceMembers.joined_at,
-      email: users.email,
-      name: users.name,
-      avatar_url: users.avatar_url,
-      deleted_at: users.deleted_at,
-    })
-    .from(workspaceMembers)
-    .innerJoin(users, eq(users.id, workspaceMembers.user_id))
-    .where(eq(workspaceMembers.workspace_id, workspaceId))
-    .orderBy(workspaceMembers.joined_at)
+// Moved to @blackcode/platform-db on 2026-08-06 with GET /api/workspaces/{ws}/members.
+export function listWorkspaceMembers(workspaceId: number) {
+  return platformListWorkspaceMembers(db, workspaceId)
 }
 
 export async function getMembership(
@@ -502,11 +483,9 @@ export async function isWorkspaceOwnerSomewhere(userId: number): Promise<boolean
   return rows.length > 0
 }
 
-export async function setActiveWorkspace(userId: number, workspaceId: number | null): Promise<void> {
-  await db
-    .update(users)
-    .set({ active_workspace_id: workspaceId, updated_at: new Date() })
-    .where(eq(users.id, userId))
+// Moved to @blackcode/platform-db on 2026-08-06 with POST /api/me/active-workspace.
+export function setActiveWorkspace(userId: number, workspaceId: number | null): Promise<void> {
+  return platformSetActiveWorkspace(db, userId, workspaceId)
 }
 
 // ----- slug/key generation -----

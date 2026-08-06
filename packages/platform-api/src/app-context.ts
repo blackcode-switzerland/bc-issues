@@ -26,7 +26,32 @@
 // general.
 
 import type { NextRequest } from 'next/server'
-import type { Executor, User } from '@blackcode/platform-db'
+import type { PlatformDatabase, User } from '@blackcode/platform-db'
+import type * as platformSchema from '@blackcode/platform-db/schema'
+
+/**
+ * A Drizzle client that knows the `platform.*` tables — and only those.
+ *
+ * Every app's real client is `createDb(appSchema)` where `appSchema` is the
+ * platform tables PLUS its own, so it is a SUPERSET and assigns to this
+ * happily. Typing the narrow half is what lets shared code use the ordinary
+ * query builder against platform tables without ever naming a table an app
+ * defines.
+ *
+ * The earlier version of this field was `Executor` — platform-db's narrow
+ * `execute(sql)` shape. That is the right type THERE, because those helpers must
+ * also accept a transaction handle and the two Drizzle builders do not share a
+ * type. It is the wrong type here: a route factory is the top of a request, never
+ * inside a caller's transaction, and forcing raw SQL on shared routes means
+ * hand-rewriting queries that already exist. That is not free —
+ * `workspaces.storage_limit_bytes` is a bigint the driver returns as a STRING,
+ * and only Drizzle's `mode: 'number'` was turning it back into a number before a
+ * route serialized it. One rewrite, one silently changed response.
+ *
+ * A Drizzle client still satisfies `Executor`, so anything in platform-db that
+ * wants the narrow shape keeps working.
+ */
+export type AppDatabase = PlatformDatabase<typeof platformSchema>
 
 /**
  * Where a stuck agent goes, advertised on every response as `X-BK-Help` /
@@ -54,10 +79,8 @@ export interface AppContext {
   /**
    * The app's Drizzle client.
    *
-   * Typed as `Executor` — the same narrow `execute(sql)` shape
-   * `packages/platform-db` uses — so a `db` and a transaction handle both
-   * satisfy it, for either driver, without this package having to name the app's
-   * schema in a generic.
+   * Typed as `AppDatabase` (above): the platform tables only, which every app's
+   * wider client assigns to.
    *
    * **Supply it as a getter if the app's client is lazy.** `createDb()` throws
    * when `DATABASE_URL` is unset, and `next build` imports every route module to
@@ -65,7 +88,7 @@ export interface AppContext {
    * unbuildable without a database. `apps/_template/lib/api.ts` shows the shape;
    * `apps/_template/lib/db/client.ts` records where that was found.
    */
-  db: Executor
+  db: AppDatabase
 
   /**
    * Who is calling, or null.

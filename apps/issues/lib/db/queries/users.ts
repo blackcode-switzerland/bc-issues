@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
+import { getVisibleUsers as platformGetVisibleUsers } from '@blackcode/platform-db'
 import { apiTokens, inboxMessages, users, workspaceMembers, workspaces } from '../schema'
 import type { User } from '../schema'
 
@@ -23,18 +24,12 @@ export async function getUsers() {
 // includes the caller themselves). This is the professional model — you can
 // only discover people you already collaborate with. Inviting brand-new people
 // is done blind, by email.
-export async function getVisibleUsers(callerId: number) {
-  const result = await db.execute(sql`
-    SELECT DISTINCT u.id, u.name, u.email, u.avatar_url
-    FROM ${users} u
-    INNER JOIN ${workspaceMembers} wm_target ON wm_target.user_id = u.id
-    INNER JOIN ${workspaceMembers} wm_self
-      ON wm_self.workspace_id = wm_target.workspace_id
-    WHERE wm_self.user_id = ${callerId}
-      AND u.deleted_at IS NULL
-    ORDER BY u.name NULLS LAST
-  `)
-  return result.rows
+// Moved to @blackcode/platform-db on 2026-08-06 with GET /api/users, which is
+// now a shared route factory (docs/sales-app-plan.md Phase 1b). It reads only
+// platform.users and platform.workspace_members. Bound to this app's `db` here
+// so every existing call site is unchanged.
+export function getVisibleUsers(callerId: number) {
+  return platformGetVisibleUsers(db, callerId)
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {

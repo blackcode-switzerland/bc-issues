@@ -38,11 +38,17 @@ import {
 const PROSPECT_EMAIL = 'julien.vasey@example-prospect.test'
 
 /**
- * An `Executor` that records what it was asked to run instead of running it.
+ * A database that records what it was asked to run instead of running it.
  *
- * `execute()` is the whole of the interface the shared handler uses, so this is
- * a complete stand-in rather than a partial mock — there is no second code path
- * a real database would take.
+ * `execute()` is the whole of the interface the handler's error path uses — it
+ * writes error_events with an interpolated `sql` statement, not the query
+ * builder — so this is a complete stand-in for THAT path rather than a partial
+ * mock. There is no second branch a real database would take.
+ *
+ * The cast is the price of `AppContext.db` being a full Drizzle client so that
+ * shared routes can use the query builder. Implementing that interface for a
+ * test would be implementing Drizzle. The cast weakens the test's typing, never
+ * its assertion: what is asserted is the statement this code actually produced.
  */
 function capturingDb() {
   const statements: unknown[] = []
@@ -76,7 +82,7 @@ async function runFailingRequest(redactBody: boolean): Promise<string[]> {
   const db = capturingDb()
   const ctx: AppContext = {
     appSlug: 'test-app',
-    db,
+    db: db as unknown as AppContext['db'],
     async resolveUser() {
       return null
     },

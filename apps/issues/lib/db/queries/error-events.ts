@@ -4,6 +4,7 @@
 import { and, count, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { errorEvents, type ErrorEvent, type NewErrorEvent } from '../schema'
+import { insertErrorEvent as platformInsertErrorEvent } from '@blackcode/platform-db'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
 export interface PublicErrorRow {
@@ -68,8 +69,12 @@ export async function getErrorEvent(id: number): Promise<ErrorEvent | null> {
   return rows[0] ?? null
 }
 
-export async function insertErrorEvent(row: Omit<NewErrorEvent, 'id' | 'occurred_at'>) {
-  await db.insert(errorEvents).values(row)
+// Moved to @blackcode/platform-db on 2026-08-06 with POST /api/errors/client,
+// now a shared route factory. Only the INSERT moved — the listings and triage
+// mutations below serve Tier-2 routes that have not been factory-ised, and
+// moving a query nothing shared calls yet is speculative extraction.
+export function insertErrorEvent(row: Omit<NewErrorEvent, 'id' | 'occurred_at'>): Promise<void> {
+  return platformInsertErrorEvent(db, row)
 }
 
 // ---------------------------------------------------------------------------

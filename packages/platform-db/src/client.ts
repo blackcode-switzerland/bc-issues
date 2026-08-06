@@ -78,3 +78,19 @@ export function createDb<TSchema extends Record<string, unknown>>(
 
   return db
 }
+
+/**
+ * A client that knows the `platform.*` tables and nothing else.
+ *
+ * Every app's real client is `createDb(appSchema)` where `appSchema` is these
+ * tables PLUS its own, so it is a superset and assigns to this. That is what
+ * lets shared code — a platform route factory, a helper in this package — use
+ * the ordinary Drizzle query builder against platform tables without ever
+ * naming a table that only one app defines.
+ *
+ * Use `Executor` instead for anything that must ALSO accept a transaction
+ * handle; the two Drizzle builders do not share a type, and `execute(sql)` is
+ * the shape they do share. A `PlatformDb` satisfies `Executor`, so a helper
+ * typed against the narrow one takes either.
+ */
+export type PlatformDb = PlatformDatabase<typeof import('./schema')>

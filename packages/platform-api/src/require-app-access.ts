@@ -53,25 +53,19 @@ import { Errors } from './errors'
 import {
   explainAppAccessDenial,
   hasAppAccess,
+  isAppAccessEnforced,
   type AppAccessDenial,
   type AppAccessTarget,
   type Executor,
 } from '@blackcode/platform-db'
 
-const OFF_VALUES = new Set(['', '0', 'false', 'no', 'off'])
-
-/**
- * Is per-app access enforced in this process?
- *
- * Read at call time, not at module load, so a test can flip it without a module
- * cache reset — and so a serverless instance picks up a changed variable on its
- * next cold start rather than needing a redeploy to notice.
- */
-export function isAppAccessEnforced(): boolean {
-  const raw = process.env.PLATFORM_ENFORCE_APP_ACCESS
-  if (raw === undefined) return true
-  return !OFF_VALUES.has(raw.trim().toLowerCase())
-}
+// `isAppAccessEnforced` used to be defined in this file. It moved to platform-db
+// on 2026-08-06, beside the app-access queries it gates, because it is not an
+// HTTP decision: `listMyWorkspaces` reads it to decide whether to FILTER a
+// listing, and that helper lives in platform-db, which cannot import this
+// package. Nothing about the switch changed. Re-exported so
+// `@blackcode/platform-api`'s surface is unchanged for its existing callers.
+export { isAppAccessEnforced }
 
 /** What to tell the caller for each way access can be missing. */
 function denialMessage(app: string, d: AppAccessDenial): { message: string; suggestion: string } {

@@ -34,6 +34,38 @@ export interface Executor {
   execute(query: SQL): Promise<{ rows: Record<string, unknown>[] }>
 }
 
+const OFF_VALUES = new Set(['', '0', 'false', 'no', 'off'])
+
+/**
+ * Is per-app access enforced in this process?
+ *
+ * Read at call time, not at module load, so a test can flip it without a module
+ * cache reset — and so a serverless instance picks up a changed variable on its
+ * next cold start rather than needing a redeploy to notice.
+ *
+ * ── WHY THE KILL SWITCH IS AN OPT-OUT, NOT AN OPT-IN ────────────────────────
+ * Enforcement is on unless `PLATFORM_ENFORCE_APP_ACCESS` is explicitly falsey.
+ * Opt-in would mean the intended behaviour depended on remembering to set a
+ * variable in every environment — and the environment where you forget is the
+ * one that silently ignores access rules. Opt-out means the safe direction needs
+ * no configuration, and recovery is one variable to ADD:
+ *
+ *     PLATFORM_ENFORCE_APP_ACCESS=0
+ *
+ * That restores exactly the pre-Phase-4 behaviour (workspace membership alone
+ * decides), which is the documented rollback for that phase.
+ *
+ * It lives HERE rather than with the 403 it gates, because it is not only about
+ * the 403: `listMyWorkspaces` reads it to decide whether to filter a listing, so
+ * the switch has to be reachable from a package that knows nothing about HTTP.
+ * `@blackcode/platform-api` re-exports it, so both spellings work.
+ */
+export function isAppAccessEnforced(): boolean {
+  const raw = process.env.PLATFORM_ENFORCE_APP_ACCESS
+  if (raw === undefined) return true
+  return !OFF_VALUES.has(raw.trim().toLowerCase())
+}
+
 export interface AppAccessTarget {
   app: string
   workspaceId: number

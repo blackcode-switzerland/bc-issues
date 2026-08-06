@@ -1,20 +1,8 @@
-// GET /api/workspaces/{ws}/apps — which apps this workspace runs, and how each
-// hands out access.
-//
-// Readable by any member (you should be able to see why a colleague can reach
-// something you cannot); changing anything is owner-only, see [app]/route.ts.
+// GET /api/workspaces/{ws}/apps — mounted from the shared factory.
+// Readable by any member; every mutation under [app]/ is owner-only and stays
+// in this app's tree until the event spine is shared.
 
-import { NextRequest } from 'next/server'
-import { apiHandler, resolveWorkspace, jsonList } from '@/lib/api'
-import { db } from '@/lib/db/client'
-import { listWorkspaceApps } from '@blackcode/platform-db'
+import { workspaceAppsRoute } from '@blackcode/platform-api/routes'
+import { appContext } from '@/lib/api'
 
-interface Params {
-  params: Promise<{ ws: string }>
-}
-
-export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
-  const { ws } = await params
-  const ctx = await resolveWorkspace(req, ws)
-  return jsonList(await listWorkspaceApps(db, ctx.workspace.id))
-})
+export const GET = workspaceAppsRoute(appContext)

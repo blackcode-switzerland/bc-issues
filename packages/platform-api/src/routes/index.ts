@@ -46,5 +46,15 @@
 // matches nothing, so the route would work while silently dropping out of the
 // coverage check. A guard that stops seeing a route reports green.
 
+export { changelogRoute } from './changelog'
+export { linksRoute } from './links'
 export { searchRoute } from './search'
+export { clientErrorsRoute, statusRoute } from './telemetry'
 export { tokensRoute, tokenRoute } from './tokens'
+export { usersRoute } from './users'
+export {
+  inviteCandidatesRoute,
+  workspaceAppsRoute,
+  workspaceMembersRoute,
+  workspacesRoute,
+} from './workspace-reads'
