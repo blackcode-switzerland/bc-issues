@@ -34,13 +34,13 @@ const long = `The issues app: projects, issues, tasks, their comments and their 
   bk issues copy      the same, leaving the source in place
   bk issues analytics summary, throughput and distributions for this app
 
-Workspaces, labels, files, members, invitations, trash and undo are PLATFORM
-verbs and stay at the top level — they are shared by every app, so they are not
+Workspaces, labels, files, members, invitations and trash are PLATFORM verbs
+and stay at the top level — they are shared by every app, so they are not
 repeated here. Run "bk --help" for those.
 
-Every command below also answers to its old un-namespaced spelling
-("bk issue list"), which still works and prints one deprecation line. See
-"bk changelog".`
+The old un-namespaced spellings were REMOVED in 1.12.0: "bk issue list" is now
+"bk issues issue list". The old form exits non-zero and names its replacement.
+See "bk changelog".`
 
 // NewGroup returns the `bk issues` command group — the canonical spelling.
 func NewGroup() *cobra.Command {

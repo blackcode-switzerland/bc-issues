@@ -110,12 +110,21 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 					// Where the vocabulary lives now. The table cannot usefully
 					// print an enum list, and an agent reading only this view
 					// would otherwise still reach for the deprecated top-level
-					// `vocabulary` key — the one that goes away in two minors.
+					// `vocabulary` key.
+					//
+					// Do NOT name a version here. This line used to promise the
+					// top-level keys "go away in 1.12.0"; 1.12.0 shipped, the
+					// keys are still served — correctly, because CLI_MIN_VERSION
+					// is 1.9.1 and every binary from 1.9.1 up reads them. A
+					// removal date in a string that ships inside the binary
+					// cannot be corrected once it is wrong on the installed
+					// copies. The server decides when they go; this only says
+					// where to read instead.
 					for _, slug := range sortedAppSlugs(meta.Apps) {
 						if a := meta.Apps[slug]; a.IsCurrent && len(a.Vocabulary) > 0 {
 							fmt.Fprintf(cmd.ErrOrStderr(),
 								"\nThis app's statuses, priorities and limits: `bk meta --json` → apps.%s\n"+
-									"(the top-level vocabulary/limits/media keys are deprecated and go away in 1.12.0)\n",
+									"(the top-level vocabulary/limits/media keys are deprecated — still served for older binaries)\n",
 								slug)
 							break
 						}

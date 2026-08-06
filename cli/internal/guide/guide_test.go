@@ -1,6 +1,7 @@
 package guide
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -51,10 +52,61 @@ func TestTopicsParse(t *testing.T) {
 // Run per section, so the failure names which half of the guide rotted. An app
 // section is the likelier offender: its topics are the ones sitting next to the
 // vocabularies.
+// Values that live in lib/work-items.ts, lib/limits.ts or lib/upload.ts and can
+// change without a CLI release.
+//
+// WIDENED 2026-08-06, after watching the previous version NOT fire. It was a
+// substring match over six hand-written strings, and a topic containing the
+// ENTIRE issue status vocabulary, the ENTIRE priority vocabulary and a stale
+// "50 MB" limit passed every section. Three separate holes, each worth naming
+// because each needs a different kind of rule:
+//
+//  1. The two most-restated vocabularies — issue statuses and priorities — were
+//     simply absent from the list.
+//  2. The list banned "100MB", the CORRECT spelling of the limit. A topic that
+//     had gone stale and said "50 MB" was the one case it could not catch, which
+//     is backwards: a wrong number is worse than a right one. Sizes are matched
+//     by SHAPE now, not by value.
+//  3. Bare status words ("done", "todo") cannot be banned outright — they are
+//     ordinary English and appear all over the guide as prose. So membership is
+//     counted instead: three or more of one vocabulary in a single topic is a
+//     restatement, not a sentence.
+//
+// CALIBRATED in the same change, after the first version failed the REAL topics
+// and both hits were legitimate. The distinction that matters is ENUMERATING a
+// vocabulary versus ILLUSTRATING a command:
+//
+//   - `bk issues issue edit 42 --status in_progress` is a worked example. An
+//     example has to name some value to be worth reading, and this one teaches
+//     flag shape, not the status set. Banning it buys nothing and costs every
+//     runnable example in the guide.
+//   - "the CLI also accepts the friendly words `urgent|high|medium|low|none`"
+//     is STATIC behaviour of this binary's flag parser — precisely what the
+//     guide is for — and that passage already ends "Do not hardcode either —
+//     `bk meta` is authoritative."
+//
+// So a vocabulary enumeration is only a finding when the topic does NOT send the
+// reader to `bk meta`. A guard that fails on correct writing gets weakened or
+// deleted, and then it protects nothing at all.
+var (
+	// Distinctive machine values. Safe as substrings — none is ordinary prose,
+	// and none is a plausible value to show in a worked example.
+	bannedLiterals = []string{
+		"on_track", "at_risk", "off_track", // project_update_health
+		"image/svg+xml", // media.blocked_mime_types
+	}
+
+	// Any size limit, right or wrong: `100MB`, `50 MB`, `100 mb`.
+	bannedSizeShape = regexp.MustCompile(`(?i)\b\d+\s?[MG]B\b`)
+
+	// Counted, not banned. Three of one set in a topic = a restated vocabulary.
+	countedVocabularies = map[string][]string{
+		"issue statuses":   {"backlog", "todo", "in_progress", "done", "cancelled"},
+		"issue priorities": {"urgent", "high", "medium", "low", "no priority"},
+	}
+)
+
 func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
-	// Values that live in lib/work-items.ts, lib/limits.ts or lib/upload.ts and
-	// can change without a CLI release.
-	banned := []string{"100MB", "100 MB", "on_track", "at_risk", "off_track", "image/svg+xml"}
 	for _, section := range Sections() {
 		t.Run(section, func(t *testing.T) {
 			topics := TopicsIn(section)
@@ -62,9 +114,48 @@ func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
 				t.Fatalf("section %q has no topics", section)
 			}
 			for _, top := range topics {
-				for _, b := range banned {
-					if strings.Contains(top.Body, b) {
+				body := strings.ToLower(top.Body)
+
+				for _, b := range bannedLiterals {
+					if strings.Contains(body, strings.ToLower(b)) {
 						t.Errorf("topic %q hardcodes %q — point at `bk meta` instead", top.Slug, b)
+					}
+				}
+
+				if m := bannedSizeShape.FindString(top.Body); m != "" {
+					t.Errorf("topic %q hardcodes the size limit %q — it is served by `bk meta` "+
+						"(limits.upload_max_label) and changes without a CLI release", top.Slug, m)
+				}
+
+				// An enumeration is a finding unless `bk meta` is RIGHT THERE.
+				//
+				// The escape was topic-wide for one draft, and that made this
+				// branch inert: every topic worth writing mentions `bk meta`
+				// somewhere, so a bare enumeration anywhere else in the file got
+				// a permanent free pass. Caught by injecting the enumeration and
+				// watching it stay green. The window is the line plus its
+				// neighbours, which is what the real `issues/items` passage
+				// looks like — the values on one line, "`bk meta` is
+				// authoritative" on the next.
+				lines := strings.Split(body, "\n")
+				for name, vocab := range countedVocabularies {
+					for i, line := range lines {
+						var hits []string
+						for _, v := range vocab {
+							if strings.Contains(line, v) {
+								hits = append(hits, v)
+							}
+						}
+						if len(hits) < 3 {
+							continue
+						}
+						near := strings.Join(lines[max(0, i-1):min(len(lines), i+2)], "\n")
+						if strings.Contains(near, "bk meta") {
+							continue
+						}
+						t.Errorf("topic %q line %d restates the %s vocabulary (%s) with no "+
+							"`bk meta` pointer beside it — say \"run `bk meta` for the current "+
+							"values\" instead", top.Slug, i+1, name, strings.Join(hits, ", "))
 					}
 				}
 			}

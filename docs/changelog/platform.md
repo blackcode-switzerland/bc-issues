@@ -30,6 +30,53 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — **FIX:** `bk issues --help` said the removed 1.12.0 spellings still worked
+
+Three strings shipped inside the 1.12.0 binary described a world that 1.12.0
+itself had changed. No behaviour was wrong — only what the binary said about
+itself, which for an agent is the same thing.
+
+**If you read `bk issues --help` on 1.12.0, one line was actively misleading:**
+
+> ~~"Every command below also answers to its old un-namespaced spelling
+> (`bk issue list`), which still works and prints one deprecation line."~~
+
+That was true in 1.10.x and 1.11.x. It is **false in 1.12.0** — the aliases were
+pruned on schedule, and `bk issue list` exits **2**. Nothing to adapt if you
+already use the namespaced form; if you were relying on that sentence, the old
+spellings are gone and the error names its replacement.
+
+Also corrected:
+
+- The same help text listed **`undo`** as a platform verb. `bk undo` was removed
+  in 1.12.0.
+- `bk meta` printed "(the top-level vocabulary/limits/media keys are deprecated
+  and **go away in 1.12.0**)". 1.12.0 shipped and the keys are **still served** —
+  correctly, since `CLI_MIN_VERSION` is 1.9.1 and every binary from 1.9.1 up
+  reads them. The notice no longer names a version: a removal date baked into a
+  string cannot be corrected once it is wrong on the copies already installed.
+  **The top-level keys remain deprecated. Read `apps.<slug>` instead.**
+
+**Two guardrails were repaired in the same change**, both found by the wrap-up
+verification and both of the kind this repo keeps finding — green while checking
+less than they claimed:
+
+- `guide_test.go`'s dynamic-value guard was a substring match over six
+  hand-written strings. A topic containing the entire issue status vocabulary,
+  the entire priority vocabulary and a **stale** `50 MB` limit passed. It now
+  matches size limits by *shape* (so a wrong number is caught, not just the right
+  one) and counts vocabulary enumerations, while still allowing a worked example
+  to name a value.
+- The `apps/<a>` → `apps/<b>` **ESLint rule was deleted**. It had been identified
+  as inert during the migration and was still passing the real escape shape at
+  exit 0. The boundary is enforced by `lib/app-isolation.test.ts`, which resolves
+  imports instead of globbing strings — verified by watching it fail. Do not
+  re-add the lint rule; a glob cannot express "resolves into a sibling app".
+
+No route changed. No CLI flag, command or exit code changed.
+
+---
+
 ## 2026-08-05 — CLI 1.12.0: three breaking changes
 
 **All three are in the CLI. Read all three before upgrading — the trash one can
