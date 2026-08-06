@@ -79,6 +79,38 @@ Also update Google OAuth (see `GOOGLE_CLIENT_ID` section below).
 
 ---
 
+## AUTH_COOKIE_DOMAIN
+
+| | |
+|---|---|
+| **Purpose** | Makes one sign-in cover every app on the platform (D-16). Sets the session cookie's `Domain`, so `issues.blackcode.ch` and `sales.blackcode.ch` share it |
+| **Status** | **Production only** — `.blackcode.ch` |
+| **Impact if missing** | Nothing breaks. The cookie is host-only, exactly as before; each app needs its own sign-in |
+| **Impact if WRONG** | **Nobody can sign in anywhere**, see below |
+
+**Leave it UNSET for local development and for every preview deployment.** A
+preview runs on `*.vercel.app`, which is not under `.blackcode.ch`, so a browser
+would refuse the cookie outright.
+
+Refusal has no error attached to it: the `Set-Cookie` is dropped, no session is
+established, and every sign-in appears to succeed and then bounces back to
+`/login` — on every browser, for every user, with a green deploy and nothing in
+the logs. That is why `packages/platform-auth/src/session-cookie.ts` validates
+the value against `NEXTAUTH_URL` at startup and **throws** if it could not be
+set. A boot failure is loud and obviously about this; a rejected cookie is
+neither.
+
+```bash
+vercel env add AUTH_COOKIE_DOMAIN production --value ".blackcode.ch" --yes
+```
+
+**Setting it signs everyone out once.** The cookie is renamed, not widened —
+`packages/platform-auth/src/session-cookie.ts` explains why the rename is
+unavoidable. Schedule it as its own release, at a quiet hour, with the changelog
+entry published first.
+
+---
+
 ## SUPER_ADMINS
 
 | | |

@@ -6,6 +6,7 @@ import { verifyPassword } from './auth/password'
 import { materializePendingInvitationsForUser } from './db/queries/invitations'
 import { ensureDefaultWorkspace } from './db/queries/workspaces'
 import { isSuperAdmin, isEmailAllowed } from './auth/whitelist'
+import { sessionCookieConfig } from '@blackcode/platform-auth'
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -112,4 +113,19 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
+  // ONE SIGN-IN ACROSS EVERY APP (D-16, Phase 1h).
+  //
+  // Shared, not this app's: it is one credential, and two apps disagreeing about
+  // its name or domain produce a session that works in one place and silently
+  // does not in the other. Everything about the decision — why it is a rename
+  // rather than a widening, why the CSRF cookie is deliberately untouched, and
+  // what happens when the domain is wrong — is in
+  // `packages/platform-auth/src/session-cookie.ts`. Do not configure the session
+  // cookie here.
+  //
+  // Set `AUTH_COOKIE_DOMAIN=.blackcode.ch` in production. Leave it UNSET
+  // everywhere else: localhost and `*.vercel.app` previews must stay host-only,
+  // or the browser drops the cookie and every sign-in bounces back to /login
+  // with nothing in the logs.
+  cookies: sessionCookieConfig(),
 }

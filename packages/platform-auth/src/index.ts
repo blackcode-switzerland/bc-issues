@@ -1,10 +1,11 @@
 // @blackcode/platform-auth — platform identity.
 //
-// Three things, all of which a second app needs UNCHANGED:
+// Four things, all of which a second app needs UNCHANGED:
 //
 //   tokens            `bk_live_` API tokens: one token, every app  (Phase 6)
 //   whitelist         who may exist on the platform at all         (Phase 6)
 //   password          hashing + the validators that go with it     (Phase 6)
+//   session-cookie    one sign-in across every app        (Phase 1h, D-16)
 //
 // ---------------------------------------------------------------------------
 // LOOKING FOR `requireAppAccess`? IT IS IN @blackcode/platform-api NOW.
@@ -65,7 +66,12 @@
 //   - which PROVIDERS that app offers, and their client credentials
 //   - its `pages` — where an unauthenticated visitor is sent, and where an error
 //     lands. Those are that app's URLs
-//   - its cookie, which is per-host until the session-cookie change lands
+//   - its `pages` again — see above; nothing else about the cookie is app-local
+//     any more. **The session cookie itself moved HERE on 2026-08-06** (D-16,
+//     Phase 1h): it is one credential shared across every deployment, so two
+//     apps disagreeing about its name or domain would produce a session that
+//     works in one place and silently does not in the other. See
+//     `./session-cookie.ts`.
 //   - `ensureDefaultWorkspace`, the one sign-in callback that stayed app-local,
 //     because each app has an app-specific post-create step (issues inserts
 //     `issues.workspace_counters`)
@@ -78,6 +84,16 @@
 // `session.ts` and `resolve.ts` stay for the same reason: they are thin glue over
 // `authOptions`. `AppContext.resolveUser` / `resolveSessionUser` are how a shared
 // route reaches them without this package knowing they exist.
+
+// The shared session cookie (D-16). An app spreads this into
+// `authOptions.cookies` and configures nothing else about it.
+export {
+  sessionCookieConfig,
+  sessionCookieName,
+  domainCoversHost,
+  SessionCookieDomainError,
+} from './session-cookie'
+export type { SessionCookieConfig, SessionCookieInput } from './session-cookie'
 
 export { mintToken, verifyToken, listTokens, revokeToken } from './tokens'
 export type { MintedToken, TokenSummary } from './tokens'

@@ -11,7 +11,8 @@
     "./whitelist": "./src/whitelist.ts",
     "./password": "./src/password.ts",
     "./password-reset": "./src/password-reset.ts",
-    "./cli-callback": "./src/cli-callback.ts"
+    "./cli-callback": "./src/cli-callback.ts",
+    "./session-cookie": "./src/session-cookie.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

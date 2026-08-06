@@ -30,6 +30,50 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — **You will be signed out once.** One sign-in now covers every app
+
+> **PUBLISHED BEFORE THE DEPLOY.** Read this before it happens, not after.
+
+The session cookie moves to `.blackcode.ch`, so signing in to one app signs you
+in to all of them. **The next deploy of this change signs everyone out exactly
+once.** Sign in again and it will not happen a second time.
+
+**API tokens are unaffected.** `bk_live_` tokens are not cookies; nothing an
+agent does needs re-authenticating, and `bk` needs no action at all. If you drive
+this product through `bk`, this entry does not concern you.
+
+### Why you are signed out rather than carried across
+
+A cookie's identity in your browser is its **name plus its domain**. Re-issuing
+the existing name with a wider domain does not replace the cookie you have — it
+creates a second one beside it. Both would then be sent on every request, in an
+order nothing guarantees, and the app would read one while refreshing the other:
+an intermittently stale session that no one could reason about.
+
+So the cookie is **renamed**, which makes the old one inert — no deployment reads
+that name any more. It stays in your browser until it expires and does nothing.
+The cost is one sign-in. It was taken now, deliberately, while there is one app:
+the same change after two apps ship costs twice as many people, and after four,
+four times.
+
+### What did not change
+
+- **The CSRF cookie stays per-host** (`__Host-` prefixed, no domain). It is
+  supposed to be per-host; widening it would be a security regression.
+- Sessions still expire on the same schedule.
+- Nothing about how you sign in — same providers, same password, same page.
+
+### For anyone running a deployment
+
+`AUTH_COOKIE_DOMAIN` is new and is **production only**. Unset, the cookie is
+host-only and behaves exactly as it did. Set to a domain the deployment's own
+host is not under, the browser silently refuses the cookie and every sign-in
+bounces back to the login page — so the value is validated against `NEXTAUTH_URL`
+at startup and refuses to boot rather than fail invisibly. Previews and local
+development leave it unset. See `docs/env.md`.
+
+---
+
 ## 2026-08-06 — The agent skill is called `blackcode`, not `blackcode-issues`
 
 **Run `bk skill sync` once.** It moves the file, keeps anything you added, and

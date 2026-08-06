@@ -53,6 +53,11 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 NEXTAUTH_URL=https://issues.blackcode.ch
 NEXTAUTH_SECRET=your-production-secret
 
+# One sign-in across every app (D-16). PRODUCTION ONLY — leave it unset locally
+# and on previews, which run on *.vercel.app and would have the cookie refused
+# by the browser with no error anywhere. See docs/env.md.
+AUTH_COOKIE_DOMAIN=.blackcode.ch
+
 # TWO database credentials, and the split is deliberate.
 # DATABASE_URL is the bounded per-app role (issues_app): it owns nothing and
 # CANNOT migrate. That is the app boundary, not a limitation.

@@ -595,18 +595,31 @@ another app.**
 - Vercel Blob and the upload pipeline are shared through `platform.uploads`, with
   cross-app reference counting (§5.1).
 
-> **One login across all apps is DESIGNED BUT NOT LIVE.** The intent is a
-> next-auth session cookie scoped to `.blackcode.ch`, so signing in to issues
-> signs you in to sales too — access still gated per app by §4.5, i.e. shared
-> session, separate authorisation. Without it, moving between apps means logging
-> in N times, which is the fastest way to make a suite feel like N products.
+> **One login across all apps: THE CODE IS IN, THE DEPLOY IS NOT.** The session
+> cookie is scoped to `.blackcode.ch` — signing in to issues signs you in to
+> sales too, with access still gated per app by §4.5: shared session, separate
+> authorisation. Without it, moving between apps means logging in N times, which
+> is the fastest way to make a suite feel like N products.
 >
-> Deferred since Phase 4 because it **signs everyone out once**, and there is a
-> second cost that is easy to miss: production sets `__Host-`-prefixed cookies,
-> and the `__Host-` prefix **cannot carry a `Domain` attribute**. Moving to
-> `.blackcode.ch` therefore means *renaming* the cookie, not just widening it.
-> Schedule it at a quiet hour with a changelog notice, before a second app needs
-> shared sign-in.
+> `packages/platform-auth/src/session-cookie.ts` since 2026-08-06 (D-16). It is
+> shared code, not each app's, for the reason D-27 item 3 gives: it is ONE
+> credential, and two apps disagreeing about its name or domain produce a session
+> that works in one place and silently does not in the other.
+>
+> **It signs everyone out once**, which is why it ships as its own release, at a
+> quiet hour, with the changelog entry published first.
+>
+> **A correction worth keeping, because it was wrong here for months.** This
+> paragraph used to say the rename was forced by the `__Host-` prefix. It is not:
+> in next-auth 4.x, `__Host-` is on the CSRF cookie — which must stay per-host —
+> while the session cookie is `__Secure-`, and `__Secure-` permits a `Domain`.
+> The rename is forced by something else and stronger: a browser keys a cookie on
+> **(name, domain, path)**, so re-issuing the same name with a domain creates a
+> SECOND cookie beside the host-only one rather than replacing it. Both get sent,
+> the order is unspecified, and the app reads one while refreshing the other. The
+> conclusion was right and the reason was not, which is the more dangerous half —
+> a right conclusion held for a wrong reason stops being right when the reason
+> changes.
 
 A monorepo does not imply a shared deployment. Operationally these stay separate
 products.
