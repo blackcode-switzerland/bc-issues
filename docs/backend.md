@@ -128,6 +128,34 @@ time (`export const GET = handlers.GET`), never `export const { GET } = …` —
 parity guard matches `/export\s+(const|function)\s+GET\b/`, so a destructuring
 export serves fine while silently dropping out of coverage.
 
+#### Three classes of shared route (D-22)
+
+Not every route is equally shareable, and the classification is by what a route
+reaches **transitively**, not by what its own import block names. That is the
+mistake worth naming: `/api/workspaces/{ws}/activity` looked like a pure factory
+until `resolveEventEntitySeqs` turned out to read `issues.*` two calls down.
+
+| Class | Shape | When |
+|---|---|---|
+| **A** | `factory(ctx)` | nothing app-specific. Most routes |
+| **B** | `factory(ctx, contribution)` | a named, typed thing only the app can supply |
+| **C** | the app writes the route | the app-specific part *is* the route |
+
+**Class B takes a second argument — AppContext does not grow callbacks.**
+AppContext is what every app supplies for every route, so a field two routes read
+is a tax every future app pays to mount neither of them, and omitting it fails
+invisibly. A second argument is explicit, typed, local to the route, and free to
+an app that does not mount it. `activityRoute(ctx, { resolveEntitySeqs, … })` is
+the worked example.
+
+**Class C is `/api/meta`.** Its vocabulary is not a contribution to a shared
+route; it is the reason the route exists, and §7.4 requires that two apps'
+vocabularies never merge into one list. Each app writes the route and calls
+`platformMetaBlock(ctx, req, user, { currentApp })` for the identical half.
+The app builds its own `vocabulary`/`limits`/`media` object once and uses it in
+both the nested and the deprecated top-level position, so the two are the same
+reference by construction rather than by discipline.
+
 Why factories at all: every platform verb's route used to live physically inside
 `apps/issues/app/api/**`. With one app that was invisible; with two it means an
 app 404s on its own `/api/me`, `bk upload` attributes files to whichever app

@@ -70,7 +70,13 @@ and are now mounted by each app from one implementation:
 `/api/changelog`, `/api/me` (+ `/active-workspace`, `/pending-invitations`),
 `/api/tokens` (+ `/{id}`), `/api/users`, `/api/errors/client`, `/api/status`,
 `GET /api/workspaces`, and under `/api/workspaces/{ws}`: `search`, `links`,
-`members`, `invite-candidates`, `apps`.
+`members`, `invite-candidates`, `apps`, `activity`.
+
+`/api/meta` did NOT become shared, deliberately: its whole job is telling you
+what THIS app's vocabulary is. Its platform half (you, your workspaces, the apps
+you can reach, the link relations, the CLI versions) now comes from one place, so
+those fields will be identical on every app's origin, but the document stays
+per-app and `apps.<slug>.vocabulary` remains the only place an app's enums live.
 
 **Why it matters to a client:** it is what lets a second app serve these on its
 own domain. Until now they existed only on the issues host, so an app deployed
@@ -80,8 +86,9 @@ not another would get 403 from `bk search`.
 
 **Still served only by the issues deployment**, unchanged: trash, storage,
 labels, comments, the inbox, super-admin, `POST /api/workspaces`, `/api/auth/*`,
-`/api/upload`, `/api/meta`, workspace activity, `/api/status/errors`. Nothing to
-adapt — they are where they were.
+`/api/upload`, `/api/cli/authorize`, `/api/me/password/*`, `/api/status/errors`,
+and the workspace/member/invitation/app-access WRITE routes. Nothing to adapt —
+they are where they were.
 
 **New: per-app redaction of error context.** An app can now declare that request
 payload must never be written to `platform.error_events.context`. The issues app
