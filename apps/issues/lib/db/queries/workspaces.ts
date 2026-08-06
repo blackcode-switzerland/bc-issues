@@ -24,10 +24,12 @@ import {
 } from '../schema'
 import {
   accessibleWorkspaceIds,
+  getMembership as platformGetMembership,
   getWorkspaceById as platformGetWorkspaceById,
   getWorkspaceForUser as platformGetWorkspaceForUser,
   listMyWorkspaces as platformListMyWorkspaces,
   listWorkspaceMembers as platformListWorkspaceMembers,
+  removeMember as platformRemoveMember,
   setActiveWorkspace as platformSetActiveWorkspace,
   type WorkspaceWithMembership as PlatformWorkspaceWithMembership,
   enableAllAppsForWorkspace,
@@ -35,6 +37,7 @@ import {
   syncAppAccessRole,
 } from '@blackcode/platform-db'
 import { isAppAccessEnforced } from '@blackcode/platform-api'
+import { APP_SLUG } from '@/lib/app'
 import { recordEvent } from './events'
 
 // Aliased, not redeclared. Two structurally identical definitions in two
@@ -382,56 +385,23 @@ export function listWorkspaceMembers(workspaceId: number) {
   return platformListWorkspaceMembers(db, workspaceId)
 }
 
-export async function getMembership(
+export function getMembership(
   workspaceId: number,
   userId: number
 ): Promise<WorkspaceMember | null> {
-  const rows = await db
-    .select()
-    .from(workspaceMembers)
-    .where(
-      and(
-        eq(workspaceMembers.workspace_id, workspaceId),
-        eq(workspaceMembers.user_id, userId)
-      )
-    )
-    .limit(1)
-  return rows[0] ?? null
+  return platformGetMembership(db, workspaceId, userId)
 }
 
-// Removing a member also removes their app_access — by FK cascade, not by code
-// here. app_access's primary FK is to workspace_members (workspace_id, user_id)
-// ON DELETE CASCADE, which is why this function needs no Phase 4 change and why a
-// future third removal path cannot forget to do it. Verified on the rehearsal
-// branch: deleting one membership row took its app_access row with it.
-export async function removeMember(
+// Moved to @blackcode/platform-db on 2026-08-06 with
+// DELETE /api/workspaces/{ws}/members/{userId}, now a shared factory. It could
+// not move earlier: it records an event, and until D-23 the only recorder was
+// this app's. The app_access cascade note went with it.
+export function removeMember(
   workspaceId: number,
   userId: number,
   actorUserId: number
 ): Promise<boolean> {
-  return await db.transaction(async (tx) => {
-    const result = await tx
-      .delete(workspaceMembers)
-      .where(
-        and(
-          eq(workspaceMembers.workspace_id, workspaceId),
-          eq(workspaceMembers.user_id, userId)
-        )
-      )
-    const removed = (result.rowCount ?? 0) > 0
-    if (removed) {
-      const isSelf = actorUserId === userId
-      await recordEvent(tx, {
-        workspaceId,
-        actorUserId,
-        entityType: 'workspace_member',
-        entityId: userId,
-        action: isSelf ? 'member_left' : 'member_removed',
-        meta: { user_id: userId },
-      })
-    }
-    return removed
-  })
+  return platformRemoveMember({ db, app: APP_SLUG }, workspaceId, userId, actorUserId)
 }
 
 // NOTE: there is deliberately no `addMember` here. It existed until Phase 4 as a

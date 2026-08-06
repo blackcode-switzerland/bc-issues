@@ -25,3 +25,7 @@ export * from './inbox-write'
 // What next-auth's callbacks do to platform.users. `authOptions` stays per-app;
 // see the header of ./sign-in.ts and of packages/platform-auth/src/index.ts.
 export * from './sign-in'
+
+// Membership and invitation WRITES. They record events, so they could not be
+// shared until the D-23 seam existed; they are its first non-app callers.
+export * from './workspace-writes'

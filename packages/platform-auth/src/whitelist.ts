@@ -55,3 +55,27 @@ export async function isEmailAllowed(db: Executor, email: string): Promise<boole
   if (isSuperAdmin(normalized)) return true
   return isEmailAllowedByDb(db, normalized)
 }
+
+/**
+ * Add an address or a domain to the whitelist.
+ *
+ * `onConflictDoNothing`, returning null when the entry already existed — the
+ * caller's question is "is this address allowed now", and "it already was" is a
+ * success, not a conflict.
+ *
+ * Shared because the invitations route auto-adds when a SUPER ADMIN invites
+ * somebody outside the list, and that route serves every app.
+ */
+export async function addWhitelistEntry(
+  db: Executor,
+  data: { type: 'email' | 'domain'; value: string; added_by?: number | null }
+): Promise<{ id: number } | null> {
+  const res = await db.execute(sql`
+    INSERT INTO ${emailWhitelist} (type, value, added_by)
+    VALUES (${data.type}, ${data.value}, ${data.added_by ?? null})
+    ON CONFLICT DO NOTHING
+    RETURNING id
+  `)
+  const row = res.rows[0] as { id: number } | undefined
+  return row ?? null
+}

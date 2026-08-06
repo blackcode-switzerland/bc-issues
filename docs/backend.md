@@ -154,12 +154,20 @@ a pair because the contribution is a different KIND of thing in each:
 |---|---|---|
 | `.../activity` | `resolveEntitySeqs` | turning an `entity_id` into a #number means reading `issues`/`tasks`/`projects` |
 | `/api/me/password/request-otp` | `sendPasswordResetEmail` | a message carries an app's name, from-address and branding. There is no platform-branded email |
+| `.../invitations` (POST) | `sendInvitationEmail` | same reason. A person invited from sales must not receive "Blackcode Issues invited you" |
 
-The OTP itself — its length, expiry, attempt cap and rate limit — is platform, in
-`platform-auth`. One login serves every app, so letting each app write its own
-would mean each choosing its own rules against one shared credential, with the
-weakest setting the real floor. **Contribute the part that is genuinely yours,
-not the operation around it.**
+Two of the three are an email, and both times **only the sending is contributed.**
+The OTP's length, expiry, attempt cap and rate limit are platform; so are the
+invitation row, its token, the whitelist gate and the event. One login and one
+workspace serve every app, so letting each write its own rules against one shared
+credential means the weakest sets the floor. **Contribute the part that is
+genuinely yours, not the operation around it.**
+
+> **A convention can be cheaper than a contribution.** The invitation accept link
+> is `<the serving app's origin>/invitations/{token}`, built by the factory — not
+> a second knob. An app that mounts the route owes that page. Adding a parameter
+> for a value no app has yet wanted differently is the "parameter added to make it
+> generic" case; the day one does want it, it becomes a contribution then.
 
 **Class C is `/api/meta`.** Its vocabulary is not a contribution to a shared
 route; it is the reason the route exists, and §7.4 requires that two apps'
@@ -1006,9 +1014,9 @@ these; they never write SQL inline.
 
 | File | Responsibility |
 |------|----------------|
-| `workspaces.ts` | workspace CRUD, membership, `getWorkspaceForUser`, issue-seq allocation |
+| `workspaces.ts` | `createWorkspace` / `ensureDefaultWorkspace` (app-local: each has its own post-create step), `updateWorkspace`, `transferOwnership`, issue-seq allocation. The reads and `removeMember` are re-exports from `platform-db` |
 | `members.ts` | project member listing |
-| `invitations.ts` | invite CRUD, token mint, accept/decline. Pre-signup materialization is re-exported from `platform-db` — one login serves every app |
+| `invitations.ts` | accept/decline (Tier 2). Create, revoke, list, the token generator and pre-signup materialization are re-exports from `platform-db` — an invitation is to a WORKSPACE, not to an app |
 | `invite-candidates.ts` | suggested invitees — members of the owner's other workspaces (with shared-workspace context), plus all platform users for super admins; flags `already_member` / `invited` |
 | `users.ts` | password sign-up, and this app's bindings to `platform-db` for the rest: `getVisibleUsers` (workspace-mates only — privacy guard), the account reads/writes behind `/api/me`, and the four sign-in callbacks |
 | `projects.ts` | project CRUD; list joins lead + latest update health |

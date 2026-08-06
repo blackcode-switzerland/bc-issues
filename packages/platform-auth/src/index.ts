@@ -83,6 +83,7 @@ export { mintToken, verifyToken, listTokens, revokeToken } from './tokens'
 export type { MintedToken, TokenSummary } from './tokens'
 
 export {
+  addWhitelistEntry,
   getSuperAdminEmails,
   isSuperAdmin,
   isWhitelistEnabled,

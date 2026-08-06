@@ -30,6 +30,39 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — Every route the web UI and `bk` need can now be served by any app
+
+**Nothing you can observe changed today.** Same routes, same origin, same
+statuses, same bodies. This entry exists because it is the thing that stops being
+true the moment a second app is deployed, and an agent hitting that change should
+find it written down beforehand rather than after.
+
+The last routes that only the issues deployment could serve are now mounted from
+one shared implementation:
+
+- `DELETE /api/workspaces/{ws}/members/{userId}`
+- `GET`/`POST /api/workspaces/{ws}/invitations`, `DELETE .../invitations/{id}`
+- `PATCH /api/workspaces/{ws}/apps/{app}`
+- `POST`/`DELETE /api/workspaces/{ws}/apps/{app}/access(/{userId})`
+- `/api/upload`, `/api/upload/blob`, `/api/cli/authorize`, `/api/me/password/*`
+
+**What this will mean in practice.** Each of these records who did it, and "who"
+now includes WHICH APP. `bk activity --app sales` will show a member removed from
+the sales deployment as a sales event, even though membership belongs to no app —
+the question that filter answers is *which app did this happen in*. Same for a
+workspace enabled, an invitation sent, an access grant.
+
+**And the thing to actually change your habits about:** `bk login --server`,
+`bk upload` and `bk invite` should name the deployment you are working in. They
+have always been per-origin operations; until now there was only one origin, so
+it never mattered. A file uploaded through the wrong one is filed under the wrong
+app permanently (see the upload entry below).
+
+**Two routes deliberately stay per-app** and are not coming: `POST
+/api/workspaces` (no app but issues offers a create-workspace flow) and
+`/api/auth/*` (an app's own sign-in pages and providers).
+
+
 ## 2026-08-06 — **SECURITY:** `bk login` no longer completes from an invalidated session
 
 **The same gap as the `/api/tokens` entry below, in the other route that mints a
@@ -147,9 +180,13 @@ not another would get 403 from `bk search`.
 
 **Still served only by the issues deployment**, unchanged: trash, storage,
 labels, comments, the inbox, super-admin, `POST /api/workspaces`, `/api/auth/*`,
-`/api/upload`, `/api/cli/authorize`, `/api/me/password/*`, `/api/status/errors`,
-and the workspace/member/invitation/app-access WRITE routes. Nothing to adapt —
-they are where they were.
+and `/api/status/errors`. Nothing to adapt — they are where they were.
+
+> *Amended later the same day.* This list originally also named `/api/upload`,
+> `/api/cli/authorize`, `/api/me/password/*` and the workspace / member /
+> invitation / app-access WRITE routes. Those landed too — see the Tier 1 entry
+> at the top of this file. Corrected here rather than contradicted below, so
+> there is one list and it is the true one.
 
 **New: per-app redaction of error context.** An app can now declare that request
 payload must never be written to `platform.error_events.context`. The issues app

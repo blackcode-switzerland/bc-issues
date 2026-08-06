@@ -52,6 +52,8 @@ export { changelogRoute } from './changelog'
 export { cliAuthorizeRoute } from './cli-auth'
 export { passwordConfirmRoute, passwordRequestOtpRoute } from './password'
 export type { PasswordOtpSender } from './password'
+export { workspaceInvitationsRoute } from './invitations'
+export type { InvitationSender } from './invitations'
 export { linksRoute } from './links'
 export { activeWorkspaceRoute, meRoute, pendingInvitationsRoute } from './me'
 export { searchRoute } from './search'
@@ -65,3 +67,10 @@ export {
   workspaceMembersRoute,
   workspacesRoute,
 } from './workspace-reads'
+export {
+  workspaceAppAccessMemberRoute,
+  workspaceAppAccessRoute,
+  workspaceAppRoute,
+  workspaceInvitationRoute,
+  workspaceMemberRoute,
+} from './workspace-writes'
