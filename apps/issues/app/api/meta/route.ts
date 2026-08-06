@@ -30,13 +30,12 @@
 // `bk guide` — it is the complete usage guide for the binary in the agent's hand.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, publicProject } from '@/lib/api'
+import { platformMetaBlock } from '@blackcode/platform-api'
+import { apiHandler, Errors, publicProject, appContext } from '@/lib/api'
 import { resolveAuth } from '@/lib/auth/resolve'
 import { getUserById } from '@/lib/db/queries/users'
-import { getWorkspaceForUser, listWorkspaceMembers, listMyWorkspaces } from '@/lib/db/queries/workspaces'
 import { listProjectsInWorkspace } from '@/lib/db/queries/projects'
 import { listLabelsInWorkspace } from '@/lib/db/queries/labels'
-import { isSuperAdmin } from '@/lib/auth/whitelist'
 import {
   ISSUE_STATUSES,
   ISSUE_PRIORITIES,
@@ -44,12 +43,8 @@ import {
   PROJECT_PRIORITIES,
   PROJECT_UPDATE_STATUSES,
 } from '@/lib/work-items'
-import { META_LIMITS, META_MEDIA, META_CLI } from '@/lib/agent-meta'
-import { LINK_RELATIONS } from '@blackcode/platform-db'
+import { META_LIMITS, META_MEDIA } from '@/lib/agent-meta'
 import { ENTITY_TYPES } from '@/lib/entity-address'
-import { APP_SLUG } from '@/lib/app'
-import { db } from '@/lib/db/client'
-import { appsReachableByUser } from '@blackcode/platform-db'
 
 // This app's enum vocabulary, straight from the module the routes validate
 // against. Named once and served twice — nested under `apps.issues` (current)
@@ -69,153 +64,69 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const fresh = await getUserById(auth.user.id)
   if (!fresh) throw Errors.notFound('user')
 
-  // Workspace: explicit ?ws=<slug|id> override, else the caller's active one.
-  // getWorkspaceForUser returns null if it doesn't exist or the caller isn't a
-  // member (no existence leak).
-  const wsParam = request.nextUrl.searchParams.get('ws')
-  const slugOrId = wsParam ?? (fresh.active_workspace_id ? String(fresh.active_workspace_id) : null)
-  const workspace = slugOrId ? await getWorkspaceForUser(slugOrId, auth.user.id) : null
-
-  // Every workspace the caller belongs to AND can use this app in — the
-  // disambiguation list an agent needs to target the right tenant by
-  // (human-readable) name/slug. App-scoped since Phase 4: offering a workspace
-  // the caller cannot write to would be offering a guaranteed 403.
-  // `bk workspace list --all` is the escape hatch that shows the rest.
-  const myWorkspaces = await listMyWorkspaces(auth.user.id, { app: APP_SLUG })
-
-  // The apps this token can reach, anywhere. An agent working for a user with no
-  // sales access must not be able to discover that a sales app exists
-  // (docs/platform-architecture.md §4.5), so this is derived from grants, never from
-  // the registry. The unfiltered membership list is only used to turn the
-  // workspace ids those grants carry back into slugs.
-  const [reachableApps, allMyWorkspaces] = await Promise.all([
-    appsReachableByUser(db, auth.user.id),
-    listMyWorkspaces(auth.user.id),
-  ])
-
-  const [labels, projects, members] = workspace
-    ? await Promise.all([
-        listLabelsInWorkspace(workspace.id),
-        listProjectsInWorkspace(workspace.id, {}),
-        listWorkspaceMembers(workspace.id),
-      ])
-    : [[], [], []]
-
-  return NextResponse.json({
-    user: {
-      id: fresh.id,
-      email: fresh.email,
-      name: fresh.name,
-      avatar_url: fresh.avatar_url,
-      via: auth.via,
-      is_super_admin: isSuperAdmin(fresh.email),
-    },
-    active_workspace: workspace
-      ? {
-          id: workspace.id,
-          name: workspace.name,
-          slug: workspace.slug,
-          role: workspace.member_role,
-        }
-      : null,
-    // Every workspace you belong to. Pick the target by `name`/`slug` — do NOT
-    // rely on the numeric `id` to know which team it is. Address a workspace in
-    // routes as /api/workspaces/{slug}/… (or pass ?ws=<slug> to this endpoint).
-    workspaces: myWorkspaces.map((w) => ({
-      id: w.id,
-      name: w.name,
-      slug: w.slug,
-      role: w.member_role,
-      is_active: workspace ? w.id === workspace.id : false,
-    })),
-    // Which app you are talking to. Phase 5 namespaces the CLI per app
-    // (`bk issues issue create`); until then this is how an agent can tell.
-    current_app: APP_SLUG,
-    // The apps this token can reach, keyed by slug, each with the workspace slugs
-    // it can be used in. Derived from grants — an app the caller has no access to
-    // anywhere does not appear at all.
-    //
-    // AN OBJECT, NOT AN ARRAY, on purpose: Phase 5 moves each app's vocabulary
-    // and limits INSIDE its entry here (docs/platform-architecture.md §7.4). Keyed
-    // means that is an additive change; an array would have to be replaced, and
-    // replacing a field agents already parse is exactly the breakage this
-    // migration is sequenced to avoid.
-    //
-    // Phase 5: the CURRENT app's entry also carries its vocabulary, limits and
-    // media rules. Two apps must never share one top-level enum list — an agent
-    // has to be structurally unable to send a sales stage to the issue tracker
-    // (§7.4).
-    //
-    // Only the current app's entry carries them, and that is not an omission.
-    // This server is the issues app; it knows its own vocabulary and has no
-    // business inventing another app's. An agent reads a different app's
-    // vocabulary from that app's own /api/meta, which is what `base_url` is for.
-    // A merged registry here would be a hand-maintained copy of facts owned
-    // elsewhere — the exact thing that drifted and got deleted on 2026-08-03.
-    apps: Object.fromEntries(
-      reachableApps.map((a) => [
-        a.slug,
-        {
-          slug: a.slug,
-          name: a.name,
-          base_url: a.base_url,
-          is_current: a.slug === APP_SLUG,
-          workspaces: allMyWorkspaces
-            .filter((w) => a.workspace_ids.includes(w.id))
-            .map((w) => w.slug),
-          ...(a.slug === APP_SLUG
-            ? {
-                vocabulary: APP_VOCABULARY,
-                limits: META_LIMITS,
-                media: META_MEDIA,
-                // The entity types THIS app projects into platform.entities, so
-                // an agent knows what `bk search --type` and the `<entity-type>`
-                // segment of a URN accept here. Per-app for the same reason the
-                // vocabulary is: another app's types are none of this app's
-                // business (§7.4).
-                entity_types: ENTITY_TYPES,
-              }
-            : {}),
-        },
-      ])
-    ),
-    // ---------------------------------------------------------------------
-    // DEPRECATED (2026-08-04): the four keys below moved into
-    // `apps.<slug>`. They stay here, correct and identical, for TWO MINOR
-    // RELEASES so nothing breaks in the release that introduces the nested
-    // form — then they go away. Read `apps.issues.*` instead.
-    //
-    // Same object references, not copies: a divergence between the old and new
-    // spelling during the overlap would be worse than either shape alone.
-    // ---------------------------------------------------------------------
+  // What THIS app contributes to its own entry in `apps.<slug>`. Built once and
+  // handed to the platform helper, then spread again at the top level below —
+  // the SAME object references both times, which is the whole point of building
+  // them here rather than in the helper (§7.4 and the note on the deprecated
+  // keys). There is no second copy that could drift.
+  const currentApp = {
     vocabulary: APP_VOCABULARY,
     limits: META_LIMITS,
     media: META_MEDIA,
-    // Cross-app links (Phase 6). PLATFORM-level, not per-app: a link connects two
-    // apps, so its relation vocabulary cannot belong to either of them. Served
-    // here rather than written into a guide topic because it is a value — adding
-    // a relation must not require a CLI release, and `guide_test.go` fails the
-    // build if a topic hardcodes one.
-    links: {
-      relations: LINK_RELATIONS,
-      urn_format: 'bc:<app>:<workspace-slug>/<entity-type>/<number>',
-      urn_example: `bc:${APP_SLUG}:${workspace?.slug ?? '<workspace>'}/issue/1`,
-    },
-    // The bk versions this server advertises (also sent as X-BK-CLI-* headers).
-    cli: META_CLI,
-    // Pointers only — the behaviour itself lives in `bk guide`, which ships
-    // inside the binary and therefore always describes the binary in your hand.
+    // The entity types THIS app projects into platform.entities, so an agent
+    // knows what `bk search --type` and the `<entity-type>` segment of a URN
+    // accept here. Per-app for the same reason the vocabulary is: another app's
+    // types are none of this app's business (§7.4).
+    entity_types: ENTITY_TYPES,
+  }
+
+  const { meta, workspace } = await platformMetaBlock(appContext, request, fresh, { currentApp })
+
+  // Only this app's own entities are left to fetch — the platform helper has
+  // already resolved the workspace and read the members.
+  const [labels, projects] = workspace
+    ? await Promise.all([
+        listLabelsInWorkspace(workspace.id),
+        listProjectsInWorkspace(workspace.id, {}),
+      ])
+    : [[], []]
+
+  // Composed key by key rather than spread, so the rendered document keeps the
+  // exact shape and ORDER it had before the platform half was extracted. A
+  // reader can also see at a glance which half each field comes from.
+  return NextResponse.json({
+    user: meta.user,
+    active_workspace: meta.active_workspace,
+    // Every workspace you belong to. Pick the target by `name`/`slug` — do NOT
+    // rely on the numeric `id` to know which team it is. Address a workspace in
+    // routes as /api/workspaces/{slug}/… (or pass ?ws=<slug> to this endpoint).
+    workspaces: meta.workspaces,
+    current_app: meta.current_app,
+    apps: meta.apps,
+    // ---------------------------------------------------------------------
+    // DEPRECATED (2026-08-04): the three keys below moved into
+    // `apps.<slug>`. They stay here, correct and identical, for TWO MINOR
+    // RELEASES so nothing breaks in the release that introduced the nested
+    // form — then they go away. Read `apps.issues.*` instead.
+    //
+    // Same object references as the nested copies, not clones — see
+    // `currentApp` above. `lib/api/meta-shape.test.ts` asserts that identity;
+    // a divergence between the two spellings during the overlap would be worse
+    // than either shape alone.
+    // ---------------------------------------------------------------------
+    vocabulary: currentApp.vocabulary,
+    limits: currentApp.limits,
+    media: currentApp.media,
+    links: meta.links,
+    cli: meta.cli,
     conventions: {
-      interface:
-        'This product is operated through the bk CLI. Run `bk guide` for the complete, current usage guide for your installed binary; `bk <group> <command> --help` for flags.',
+      // This app's own convention, first — the platform ones follow. `id` names
+      // projects, tasks and issues, so it could never be platform text.
       id: 'A project/task/issue is addressed by its workspace #number (the #N shown in the app), unique per workspace. References back to a work item (comment.parent_id, attachment.issue_id, project_update.project_id) are this #number too — the internal db id is never exposed.',
-      workspace_selection:
-        'Before creating anything, confirm which workspace you are writing to. The `workspaces` array above lists every workspace you belong to; match the user\'s intent by `name`/`slug`, never by the numeric `id` (ids are opaque and easy to confuse). `active_workspace` is only a default — it is NOT necessarily where the user means to write. Set it with `bk workspace use <slug>`, or target one command with `bk --ws <slug> …`.',
-      staying_current:
-        'If a command that used to work now fails, run `bk skill sync` (updates your agent skill, and tells you when the binary itself is behind), then `bk changelog` for the dated record.',
+      ...(meta.conventions as Record<string, string>),
     },
     labels,
     projects: projects.map(publicProject),
-    members,
+    members: meta.members,
   })
 })
