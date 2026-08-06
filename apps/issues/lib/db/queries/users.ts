@@ -1,15 +1,18 @@
-import { eq, sql } from 'drizzle-orm'
 import { db } from '../client'
 import {
   deleteAccountReport as platformDeleteAccountReport,
+  getUserByEmail as platformGetUserByEmail,
   getUserById as platformGetUserById,
   getVisibleUsers as platformGetVisibleUsers,
   softDeleteUser as platformSoftDeleteUser,
+  touchLastLogin as platformTouchLastLogin,
   updateUserProfile as platformUpdateUserProfile,
+  upsertUserFromOAuth as platformUpsertUserFromOAuth,
   type DeleteAccountReport,
   type UpdateUserProfileInput,
+  type UpsertUserFromOAuthInput,
 } from '@blackcode/platform-db'
-import { apiTokens, inboxMessages, users, workspaceMembers, workspaces } from '../schema'
+import { users } from '../schema'
 import type { User } from '../schema'
 
 // DEPRECATED: returns every user on the platform. Do not expose to end users —
@@ -40,9 +43,14 @@ export function getVisibleUsers(callerId: number) {
   return platformGetVisibleUsers(db, callerId)
 }
 
-export async function getUserByEmail(email: string): Promise<User | null> {
-  const rows = await db.select().from(users).where(eq(users.email, email)).limit(1)
-  return rows[0] ?? null
+// The sign-in callbacks moved to @blackcode/platform-db on 2026-08-06
+// (docs/sales-app-plan.md Phase 1b-C). There is one login for every app — one
+// `platform.users` row, one password, one Google identity — so "find this person
+// by email" and "record that they just logged in" cannot belong to one of them.
+// `authOptions` itself stays per-app; the reason is in
+// packages/platform-auth/src/index.ts.
+export function getUserByEmail(email: string): Promise<User | null> {
+  return platformGetUserByEmail(db, email)
 }
 
 // Moved to @blackcode/platform-db on 2026-08-06 with /api/me, now a shared
@@ -52,38 +60,10 @@ export function getUserById(id: number): Promise<User | null> {
   return platformGetUserById(db, id)
 }
 
-export async function upsertUserFromOAuth(data: {
-  google_id?: string
-  email: string
-  name?: string | null
-  avatar_url?: string | null
-}): Promise<{ user: User; was_new: boolean }> {
-  // Inspect first to know whether this is a fresh signup, so the caller can
-  // materialize pending invitations and other first-login side effects.
-  const existing = await getUserByEmail(data.email)
-  const was_new = !existing
-
-  await db
-    .insert(users)
-    .values({
-      google_id: data.google_id,
-      email: data.email,
-      name: data.name ?? undefined,
-      avatar_url: data.avatar_url ?? undefined,
-      last_login: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: users.email,
-      set: {
-        name: data.name ?? undefined,
-        avatar_url: data.avatar_url ?? undefined,
-        last_login: new Date(),
-      },
-    })
-
-  const final = await getUserByEmail(data.email)
-  if (!final) throw new Error('upsert returned no user')
-  return { user: final, was_new }
+export function upsertUserFromOAuth(
+  data: UpsertUserFromOAuthInput
+): Promise<{ user: User; was_new: boolean }> {
+  return platformUpsertUserFromOAuth(db, data)
 }
 
 export async function createUserWithPassword(data: {
@@ -103,8 +83,8 @@ export async function createUserWithPassword(data: {
   return created ?? null
 }
 
-export async function touchLastLogin(id: number): Promise<void> {
-  await db.update(users).set({ last_login: new Date() }).where(eq(users.id, id))
+export function touchLastLogin(id: number): Promise<void> {
+  return platformTouchLastLogin(db, id)
 }
 
 // Soft-deletes the user: marks deleted_at, clears auth, revokes tokens.

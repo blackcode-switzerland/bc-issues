@@ -21,3 +21,7 @@ export * from './events-listing'
 // same notification twice.
 export * from './events-write'
 export * from './inbox-write'
+
+// What next-auth's callbacks do to platform.users. `authOptions` stays per-app;
+// see the header of ./sign-in.ts and of packages/platform-auth/src/index.ts.
+export * from './sign-in'

@@ -17,10 +17,13 @@
 // store the literal string. Tokens are unique by index.
 
 import { randomBytes } from 'crypto'
-import { and, desc, eq, gt, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../client'
-import { listPendingInvitationsForEmail as platformListPendingInvitationsForEmail } from '@blackcode/platform-db'
-import { inboxMessages, type WorkspaceInvitation, users, workspaceInvitations, workspaceMembers, workspaces } from '../schema'
+import {
+  listPendingInvitationsForEmail as platformListPendingInvitationsForEmail,
+  materializePendingInvitationsForUser as platformMaterializePendingInvitationsForUser,
+} from '@blackcode/platform-db'
+import { type WorkspaceInvitation, users, workspaceInvitations, workspaceMembers, workspaces } from '../schema'
 import { grantDefaultAppAccess } from '@blackcode/platform-db'
 import { recordEvent } from './events'
 
@@ -411,65 +414,14 @@ export async function declineInvitation(
   })
 }
 
-// Called from the signup paths (credentials register + Google OAuth first
-// signin). For every pending invitation matching the user's email, materialize
-// an inbox row so the user sees the invitation immediately. Idempotent: only
-// invitations that don't yet have an inbox row for the user get one.
-export async function materializePendingInvitationsForUser(
+// Moved to @blackcode/platform-db on 2026-08-06 (docs/sales-app-plan.md Phase
+// 1b-C). Called from the signup paths — credentials register, and a first Google
+// sign-in — and every app has those, because there is one login for all of them.
+// It reads platform.workspace_invitations + platform.workspaces and writes
+// platform.inbox_messages, in one transaction, and records no event.
+export function materializePendingInvitationsForUser(
   userId: number,
   email: string
 ): Promise<number> {
-  const normalized = email.trim().toLowerCase()
-  return await db.transaction(async (tx) => {
-    const invitations = await tx
-      .select({
-        id: workspaceInvitations.id,
-        workspace_id: workspaceInvitations.workspace_id,
-        invited_by: workspaceInvitations.invited_by,
-        workspace_name: workspaces.name,
-      })
-      .from(workspaceInvitations)
-      .leftJoin(workspaces, eq(workspaces.id, workspaceInvitations.workspace_id))
-      .where(
-        and(
-          sql`lower(${workspaceInvitations.email}) = ${normalized}`,
-          eq(workspaceInvitations.status, 'pending'),
-          gt(workspaceInvitations.expires_at, new Date())
-        )
-      )
-
-    let created = 0
-    for (const inv of invitations) {
-      // Skip if we've already materialized this invitation for this user
-      // (the fan-out path already handled it when the user existed).
-      const existing = await tx.execute<{ id: number }>(sql`
-        SELECT id FROM ${inboxMessages}
-        WHERE user_id = ${userId}
-          AND entity_type = 'invitation'
-          AND entity_id = ${inv.id}
-        LIMIT 1
-      `)
-      if (existing.rows[0]) continue
-
-      await tx.execute(sql`
-        INSERT INTO ${inboxMessages}
-          (user_id, workspace_id, type, entity_type, entity_id, actor_user_id, payload)
-        VALUES
-          (${userId},
-           ${inv.workspace_id},
-           'invitation',
-           'invitation',
-           ${inv.id},
-           ${inv.invited_by},
-           ${JSON.stringify({
-             workspace_id: inv.workspace_id,
-             workspace_name: inv.workspace_name ?? '',
-             invitation_id: inv.id,
-             materialized_on_signup: true,
-           })}::jsonb)
-      `)
-      created++
-    }
-    return created
-  })
+  return platformMaterializePendingInvitationsForUser(db, userId, email)
 }
