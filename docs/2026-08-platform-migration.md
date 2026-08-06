@@ -221,17 +221,14 @@ Nothing is broken. These are known, written down, and deliberately not done.
 
 ### If the npm package is ever renamed
 
-It has to land atomically across `cli/npm/package.json`, the guide topics,
-`/agent-updator`, the `bk skill` template, `README.md`, `CLAUDE.md`,
-`docs/cli.md`, `docs/devops.md` and `devops/release.sh`. The sequence:
+**Full runbook: [`npm-package-rename.md`](npm-package-rename.md)** — the name to
+pick, the ordered sequence, every file carrying the install string, the
+verification, and the conditions under which to abandon it.
 
-1. Publish under the new name.
-2. **Never unpublish the old one.**
-3. `npm deprecate` the old, pointing at the new.
-4. Update every install string in the same release.
-
-Good candidate to bundle with the `CLI_MIN_VERSION` raise, when a CLI release is
-happening anyway.
+The short version: publish under the new name, **never unpublish the old one**,
+`npm deprecate` the old pointing at the new, and update every install string in
+the same release. Good candidate to bundle with the `CLI_MIN_VERSION` raise,
+when a CLI release is happening anyway.
 
 ---
 

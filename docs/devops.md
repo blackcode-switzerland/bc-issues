@@ -6,25 +6,69 @@ All release operations are handled by a single script:
 ./devops/release.sh <command>
 ```
 
+> **One release per invocation.** A CLI release never deploys an app, and a web
+> deploy targets exactly one app. The two are shared surfaces with independent
+> audiences — the binary serves every app, an app serves only itself — so
+> bundling them meant a CLI release quietly shipped whatever happened to be on
+> `main` for the web as well. The old `cli` flow ended with a "deploy web too?"
+> prompt; it was removed on 2026-08-06.
+
 ---
 
 ## Commands
 
-### Deploy web app to production
+### List deployable apps
 
 ```bash
-./devops/release.sh web
+./devops/release.sh apps
 ```
 
-Runs preflight checks (Vercel auth, git branch, clean working tree), then deploys to Vercel production.
+Reads `app_registry()` in `devops/release.sh` — the single place an app's Vercel
+project is declared.
+
+### Deploy ONE app to production
+
+```bash
+./devops/release.sh web issues
+```
+
+The app slug is **required**. Without it the script lists the apps and exits 1;
+an unknown slug does the same. Preflight checks Vercel auth, the git branch and
+a clean tree, then asks to confirm before deploying.
 
 - **Production URL**: https://issues.blackcode.ch
 - **Vercel project**: `bc-issues`
 - **Dashboard**: https://vercel.com/balathanusans-projects-f76f8a7b/bc-issues
 
-> There is exactly **one** Vercel project for this app. A stray second project
-> named `issues` existed during the migration window and was deleted on
-> 2026-08-06 — it never built successfully and never served anything.
+Two things the script does deliberately:
+
+- **It deploys from the repo root.** Vercel applies each project's own Root
+  Directory. Running from inside `apps/<app>` uploads only that directory and
+  `npm install` then 404s on the workspace packages — found the hard way during
+  the migration.
+- **It sets `VERCEL_PROJECT_ID` explicitly**, overriding whatever
+  `.vercel/project.json` is linked. Without that, deploying a second app would
+  silently ship to whichever project the working copy was last linked to, and
+  you would only find out after it was live.
+
+> `apps/_template` is **absent from the registry on purpose**. The scaffold must
+> never be deployed, and leaving it out is what makes that true rather than
+> merely documented — `release.sh web _template` exits 1.
+
+> There is exactly **one** Vercel project per app. A stray second project named
+> `issues` existed during the migration window and was deleted on 2026-08-06 —
+> it never built successfully and never served anything.
+
+### Adding an app to the release script
+
+Add one line to `app_registry()` near the top of `devops/release.sh`:
+
+```
+slug|vercel-project-name|prj_xxxxxxxx|https://slug.blackcode.ch
+```
+
+Everything else in the script is app-agnostic. This is a step in
+[`adding-an-app.md`](adding-an-app.md).
 
 ### Release CLI to GitHub + npm
 
@@ -91,11 +135,14 @@ git add .
 git commit -m "fix: ..."
 git push origin main
 
-# 2. Deploy the web fix immediately
-./devops/release.sh web
+# 2. Deploy the web fix immediately — name the app
+./devops/release.sh web issues
 
 # 3. If the CLI was also changed, cut a new CLI release
 ./devops/release.sh cli patch
+
+# 4. Deploy web AGAIN to make the new version gate live
+./devops/release.sh web issues
 ```
 
 ---
@@ -116,7 +163,7 @@ vercel env add <NAME> production
 vercel env ls production
 ```
 
-After changing env vars, redeploy: `./devops/release.sh web`
+After changing env vars, redeploy the affected app: `./devops/release.sh web issues`
 
 ### Production env vars
 
