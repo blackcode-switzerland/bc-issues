@@ -27,7 +27,11 @@
 // events — workspace, membership, invitations, app access.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { listEvents } from '@blackcode/platform-db'
+import {
+  listEvents,
+  PLATFORM_ENTITY_TYPES,
+  PLATFORM_EVENT_ACTIONS,
+} from '@blackcode/platform-db'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
 import { createApiHandler, createResolveWorkspace } from '../handler'
@@ -43,33 +47,14 @@ interface Params {
  * An app's own nouns and verbs arrive in the contribution. Keeping the two lists
  * separate is what stops one app's vocabulary leaking into another's filter
  * validation.
+ *
+ * **Imported, not restated.** These are the same lists `recordPlatformEvent`
+ * writes from (`packages/platform-db/src/events-write.ts`, 2026-08-06 / D-23),
+ * and they have to be: `parseList` below DROPS an unrecognised filter rather
+ * than rejecting it, so an action the writer can produce and this list has not
+ * heard of returns the whole feed instead of a 400. That is not hypothetical —
+ * it is what Phase 4's `app_*` actions did here for months.
  */
-const PLATFORM_ENTITY_TYPES = [
-  'workspace',
-  'workspace_member',
-  'workspace_app',
-  'invitation',
-] as const
-
-const PLATFORM_ACTIONS = [
-  'created',
-  'updated',
-  'deleted',
-  'ownership_transferred',
-  'member_added',
-  'member_removed',
-  'member_left',
-  'app_enabled',
-  'app_disabled',
-  'app_default_access_changed',
-  'app_access_granted',
-  'app_access_revoked',
-  'invitation_created',
-  'invitation_revoked',
-  'invitation_accepted',
-  'invitation_declined',
-] as const
-
 export interface ActivityContribution {
   /** This app's own entity types, beyond the platform ones above. */
   entityTypes?: readonly string[]
@@ -189,7 +174,7 @@ export function activityRoute(app: AppContext, contribution: ActivityContributio
     ...PLATFORM_ENTITY_TYPES,
     ...(contribution.entityTypes ?? []),
   ])
-  const actions = new Set<string>([...PLATFORM_ACTIONS, ...(contribution.actions ?? [])])
+  const actions = new Set<string>([...PLATFORM_EVENT_ACTIONS, ...(contribution.actions ?? [])])
   const numbered = new Set<string>(contribution.numberedEntityTypes ?? [])
 
   return apiHandler(async (req: NextRequest, { params }: Params) => {

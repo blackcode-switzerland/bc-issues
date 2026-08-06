@@ -6,28 +6,48 @@
 //
 // The transaction handle is typed as `Tx` (a subset of the Drizzle interface).
 // Both `db` and `tx` satisfy it.
+//
+// ---------------------------------------------------------------------------
+// THIS RECORDER OWNS THIS APP'S ENTITY TYPES, NOT ALL OF THEM
+// ---------------------------------------------------------------------------
+// Since 2026-08-06 (docs/sales-app-plan.md D-23), an event about a workspace, a
+// membership, an app grant or an invitation is written by `recordPlatformEvent`
+// in @blackcode/platform-db, which this function delegates to. Nothing about a
+// call site changes — the delegation is below, in one place.
+//
+// Everything the app half does to an event, the platform half has no use for: a
+// `subject_urn` resolved from this app's tables (null for every platform entity
+// type, decided before a query runs) and a fan-out written in this app's nouns.
+// So the two halves are not the same function with a flag, and the split is not
+// a layering exercise: it is what lets a workspace created from the sales
+// deployment record a SALES event without sales owning a copy of this file.
 
 import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { events, users, issues, tasks, projects, type Event, type NewEvent } from '../schema'
 import { fanOutEvent } from './fanout'
 import {
+  isPlatformEntityType,
   listEvents as platformListEvents,
+  recordPlatformEvent,
   type EventsPage,
   type EventListItem,
   type ListEventsFilter as PlatformListEventsFilter,
+  type PlatformEventAction,
+  type PlatformEntityType,
 } from '@blackcode/platform-db'
 import { resolveSubjectUrn } from './entities'
 import { APP_SLUG } from '@/lib/app'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
+// The platform half of each vocabulary is IMPORTED, not restated (D-23). The
+// same two lists are what `recordPlatformEvent` will accept and what the
+// activity route validates `?entity_type=` / `?action=` against, so a third copy
+// here would be a third thing to keep in step — and the way that fails is
+// invisible: the activity route drops an unrecognised filter instead of
+// rejecting it, and returns the whole feed.
 export type EntityType =
-  | 'workspace'
-  | 'workspace_member'
-  // Which apps a workspace runs, and who may use them (Phase 4). entity_id is the
-  // workspace id; `meta.app` carries the slug, since the app is not a numeric row.
-  | 'workspace_app'
-  | 'invitation'
+  | PlatformEntityType
   | 'project'
   | 'task'
   | 'issue'
@@ -36,27 +56,7 @@ export type EntityType =
   | 'label'
 
 export type EventAction =
-  // workspace
-  | 'created'
-  | 'updated'
-  | 'deleted'
-  | 'ownership_transferred'
-  // members
-  | 'member_added'
-  | 'member_removed'
-  | 'member_left'
-  // apps (Phase 4). None of these fan out to the inbox — fanOutEvent's default
-  // case handles that — so they are activity-feed only.
-  | 'app_enabled'
-  | 'app_disabled'
-  | 'app_default_access_changed'
-  | 'app_access_granted'
-  | 'app_access_revoked'
-  // invitations
-  | 'invitation_created'
-  | 'invitation_revoked'
-  | 'invitation_accepted'
-  | 'invitation_declined'
+  | PlatformEventAction
   // issues / domain (used in later phases)
   | 'commented'
   | 'assigned'
@@ -128,6 +128,42 @@ function mergeDiff(
 }
 
 export async function recordEvent(tx: Tx, input: RecordEventInput): Promise<Event> {
+  // The platform half (D-23). Delegated here rather than at the call sites, for
+  // the same reason `subject_urn` is resolved here rather than at the ~40 of
+  // them: one place to be right beats forty places to remember.
+  //
+  // `app: APP_SLUG` is what makes `platform.events.app` the PRODUCING app —
+  // this deployment is the issues app, so a workspace created through it is an
+  // issues event even though a workspace belongs to no app. The same code
+  // compiled into sales records a sales event. Never hardcode a slug here.
+  if (isPlatformEntityType(input.entityType)) {
+    // Neither of these is supported on the platform side, and both would be
+    // dropped in silence otherwise. No call site passes either today; this
+    // exists so that the day one does, it says so.
+    if (input.coalesceWindowMs || input.subjectUrn !== undefined) {
+      throw new Error(
+        `recordEvent: '${input.entityType}' is a platform entity type (D-23), and ` +
+          'recordPlatformEvent supports neither coalesceWindowMs nor an explicit ' +
+          'subjectUrn. Coalescing is only safe for actions that do not reach the ' +
+          'inbox, and a platform event has no cross-app subject to address. If one ' +
+          'of these is genuinely needed, add it there rather than around this check.'
+      )
+    }
+    return recordPlatformEvent(tx, {
+      app: APP_SLUG,
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      actorTokenId: input.actorTokenId,
+      entityType: input.entityType as PlatformEntityType,
+      entityId: input.entityId,
+      action: input.action as PlatformEventAction,
+      diff: input.diff,
+      meta: input.meta,
+      idempotencyKey: input.idempotencyKey,
+      occurredAt: input.occurredAt,
+    })
+  }
+
   if (input.coalesceWindowMs && input.coalesceWindowMs > 0 && input.actorUserId != null) {
     const occurredAt = input.occurredAt ?? new Date()
     const windowStart = new Date(occurredAt.getTime() - input.coalesceWindowMs)

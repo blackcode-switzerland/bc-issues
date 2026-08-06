@@ -1,9 +1,28 @@
-// Fan-out: given a freshly recorded event, materialize per-user inbox messages
-// per the rules in §1.5 of docs/architecture-rebuild.md.
+// Fan-out: given a freshly recorded event about one of THIS APP's entities,
+// materialize per-user inbox messages per the rules in §1.5 of
+// docs/architecture-rebuild.md.
 //
 // This runs in the SAME transaction as the source event. It must be cheap and
 // never block on external systems. For high-fan-out events (e.g. workspace
 // deletion → notify all members), we accept up to ~50 inserts inline.
+//
+// ---------------------------------------------------------------------------
+// THE PLATFORM HALF IS NOT HERE ANY MORE
+// ---------------------------------------------------------------------------
+// Until 2026-08-06 this file also held five handlers for workspace, membership
+// and invitation events. They moved to
+// `packages/platform-db/src/fanout-platform.ts` (docs/sales-app-plan.md D-23),
+// because none of them referenced a single issues table and every app would
+// otherwise have needed its own copy — five copies of "who do we tell when
+// somebody is invited", drifting apart one bug fix at a time.
+//
+// The split ran along the `--- issue fan-out handlers ---` line that was already
+// in this file. Everything left below it reaches `issues`, `issue_watchers`,
+// `tasks` or `projects`, which is exactly why it stayed.
+//
+// **Do not re-add a platform case to this switch.** `recordPlatformEvent` fans
+// out its own events; a case here as well would post every invitation twice.
+// `recordEvent` no longer calls this for platform entity types at all.
 
 import { and, eq, ne, sql } from 'drizzle-orm'
 import { db } from '../client'
@@ -12,10 +31,8 @@ import {
   issues,
   tasks,
   projects,
-  users,
   workspaceMembers,
   workspaces,
-  workspaceInvitations,
   type Event,
 } from '../schema'
 import { createInboxMessage } from './inbox'
@@ -24,16 +41,6 @@ type Tx = Pick<typeof db, 'insert' | 'select' | 'update' | 'delete' | 'execute'>
 
 export async function fanOutEvent(tx: Tx, event: Event): Promise<void> {
   switch (event.action) {
-    case 'invitation_created':
-      return fanOutInvitationCreated(tx, event)
-    case 'member_added':
-      return fanOutMemberAdded(tx, event)
-    case 'member_removed':
-      return fanOutMemberRemoved(tx, event)
-    case 'ownership_transferred':
-      return fanOutOwnershipTransferred(tx, event)
-    case 'invitation_accepted':
-      return fanOutInvitationAccepted(tx, event)
     case 'assigned':
       return fanOutAssigned(tx, event)
     case 'unassigned':
@@ -47,174 +54,6 @@ export async function fanOutEvent(tx: Tx, event: Event): Promise<void> {
     default:
       return
   }
-}
-
-// --- handlers ---
-
-async function fanOutInvitationCreated(tx: Tx, event: Event): Promise<void> {
-  const email = (event.meta as { email?: string } | null)?.email
-  if (!email) return
-
-  const user = await tx
-    .select({ id: users.id })
-    .from(users)
-    .where(
-      and(
-        sql`lower(${users.email}) = ${email.toLowerCase()}`,
-        sql`${users.deleted_at} IS NULL`
-      )
-    )
-    .limit(1)
-  if (!user[0]) return // pre-signup invitation, materialized on signup
-
-  const ws = await tx
-    .select({ name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, event.workspace_id))
-    .limit(1)
-
-  // The accept page lives at /invitations/[token]; carry the token in the
-  // payload so the inbox detail pane can link to it directly.
-  const invite = await tx
-    .select({ token: workspaceInvitations.token })
-    .from(workspaceInvitations)
-    .where(eq(workspaceInvitations.id, event.entity_id))
-    .limit(1)
-
-  await createInboxMessage(tx, {
-    userId: user[0].id,
-    eventId: event.id,
-    workspaceId: event.workspace_id,
-    type: 'invitation',
-    entityType: 'invitation',
-    entityId: event.entity_id,
-    actorUserId: event.actor_user_id,
-    payload: {
-      workspace_id: event.workspace_id,
-      workspace_name: ws[0]?.name ?? '',
-      invitation_id: event.entity_id,
-      invitation_token: invite[0]?.token ?? null,
-    },
-  })
-}
-
-async function fanOutMemberAdded(tx: Tx, event: Event): Promise<void> {
-  // Notify the workspace owner that a new member joined (unless they ARE the
-  // new member — e.g. via accepting their own pending invite isn't a thing
-  // we model, but skip to be safe).
-  const ws = await tx
-    .select({ owner_id: workspaces.owner_id, name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, event.workspace_id))
-    .limit(1)
-  if (!ws[0]) return
-  const ownerId = ws[0].owner_id
-  if (ownerId === event.entity_id) return
-
-  await createInboxMessage(tx, {
-    userId: ownerId,
-    eventId: event.id,
-    workspaceId: event.workspace_id,
-    type: 'member_added',
-    entityType: 'workspace_member',
-    entityId: event.entity_id,
-    actorUserId: event.actor_user_id,
-    payload: {
-      workspace_id: event.workspace_id,
-      workspace_name: ws[0].name,
-      new_member_user_id: event.entity_id,
-    },
-  })
-}
-
-async function fanOutMemberRemoved(tx: Tx, event: Event): Promise<void> {
-  // Notify the user who was removed, unless they removed themselves.
-  if (event.actor_user_id === event.entity_id) return
-  const ws = await tx
-    .select({ name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, event.workspace_id))
-    .limit(1)
-  await createInboxMessage(tx, {
-    userId: event.entity_id,
-    eventId: event.id,
-    workspaceId: null, // they're no longer a member; show as cross-workspace system msg
-    type: 'member_removed',
-    entityType: 'workspace_member',
-    entityId: event.entity_id,
-    actorUserId: event.actor_user_id,
-    payload: {
-      workspace_id: event.workspace_id,
-      workspace_name: ws[0]?.name ?? '',
-    },
-  })
-}
-
-async function fanOutOwnershipTransferred(tx: Tx, event: Event): Promise<void> {
-  const meta = event.meta as
-    | { previous_owner_user_id?: number; new_owner_user_id?: number }
-    | null
-  if (!meta?.previous_owner_user_id || !meta?.new_owner_user_id) return
-
-  const ws = await tx
-    .select({ name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, event.workspace_id))
-    .limit(1)
-  const workspaceName = ws[0]?.name ?? ''
-
-  for (const uid of [meta.previous_owner_user_id, meta.new_owner_user_id]) {
-    await createInboxMessage(tx, {
-      userId: uid,
-      eventId: event.id,
-      workspaceId: event.workspace_id,
-      type: 'ownership_transferred',
-      entityType: 'workspace',
-      entityId: event.workspace_id,
-      actorUserId: event.actor_user_id,
-      payload: {
-        workspace_id: event.workspace_id,
-        workspace_name: workspaceName,
-        previous_owner_user_id: meta.previous_owner_user_id,
-        new_owner_user_id: meta.new_owner_user_id,
-        you_are: uid === meta.new_owner_user_id ? 'new_owner' : 'previous_owner',
-      },
-    })
-  }
-}
-
-async function fanOutInvitationAccepted(tx: Tx, event: Event): Promise<void> {
-  // Notify the original inviter. We need to look up the invitation row to find
-  // invited_by. Since the event entity_id is the invitation id, query it.
-  // We avoid importing workspace_invitations here to dodge a cycle; instead,
-  // load through a raw SQL.
-  const rows = await tx.execute<{ invited_by: number; email: string }>(sql`
-    SELECT invited_by, email FROM ${workspaceInvitations} WHERE id = ${event.entity_id}
-  `)
-  const row = rows.rows[0]
-  if (!row) return
-  if (row.invited_by === event.actor_user_id) return // self-accept edge case
-
-  const ws = await tx
-    .select({ name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, event.workspace_id))
-    .limit(1)
-  await createInboxMessage(tx, {
-    userId: row.invited_by,
-    eventId: event.id,
-    workspaceId: event.workspace_id,
-    type: 'invitation_accepted',
-    entityType: 'invitation',
-    entityId: event.entity_id,
-    actorUserId: event.actor_user_id,
-    payload: {
-      workspace_id: event.workspace_id,
-      workspace_name: ws[0]?.name ?? '',
-      invitee_email: row.email,
-      invitee_user_id: event.actor_user_id,
-    },
-  })
 }
 
 // --- issue fan-out handlers ---

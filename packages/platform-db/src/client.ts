@@ -94,3 +94,30 @@ export function createDb<TSchema extends Record<string, unknown>>(
  * typed against the narrow one takes either.
  */
 export type PlatformDb = PlatformDatabase<typeof import('./schema')>
+
+/**
+ * A `PlatformDb` **or** the transaction handle from inside `db.transaction()`.
+ *
+ * The third of the three client shapes in this package, and the one to reach for
+ * when a helper must run inside a caller's transaction AND wants the ordinary
+ * query builder:
+ *
+ * | Type | Accepts a `tx` | Query builder | Use for |
+ * |---|---|---|---|
+ * | `PlatformDb` | no | yes | a top-level read or a helper that opens its own transaction |
+ * | `Executor` | yes | no — `execute(sql)` only | raw-SQL helpers (`app-access.ts`, `entities.ts`) |
+ * | `PlatformTx` | yes | yes | this |
+ *
+ * `Executor` exists because Drizzle's two builders do not share a type and raw
+ * SQL is the shape they do share. That is still the right answer for a helper
+ * that is a single statement. It is the wrong answer for the event fan-out,
+ * which is fifteen selects and inserts that already exist as builder calls: a
+ * hand-rewrite into raw SQL is a rewrite of each one, and the migration doc has
+ * a worked example of what that costs (`workspaces.storage_limit_bytes`, a
+ * bigint the driver hands back as a STRING — only `mode: 'number'` was turning
+ * it back).
+ *
+ * An app's own `tx` is a `Pick` of its wider client, which is a superset of the
+ * platform tables, so it assigns to this.
+ */
+export type PlatformTx = Pick<PlatformDb, 'insert' | 'select' | 'update' | 'delete' | 'execute'>

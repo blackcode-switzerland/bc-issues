@@ -1,5 +1,5 @@
 export { createDb } from './client'
-export type { PlatformDatabase, PlatformDb } from './client'
+export type { PlatformDatabase, PlatformDb, PlatformTx } from './client'
 export * from './schema'
 export * from './app-access'
 export * from './urn'
@@ -14,3 +14,10 @@ export * from './directory'
 export * from './workspace-listing'
 export * from './error-events'
 export * from './events-listing'
+
+// Writing a platform event, and the inbox rows it fans out to (2026-08-06,
+// D-23). `fanOutPlatformEvent` is deliberately NOT exported: it is reached only
+// through `recordPlatformEvent`, and an app calling it directly would post the
+// same notification twice.
+export * from './events-write'
+export * from './inbox-write'

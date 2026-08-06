@@ -1,89 +1,32 @@
 // Inbox queries — user-scoped projection of events.
 //
 // createInboxMessage MUST be called inside the same transaction as the source
-// event when possible. This keeps the inbox consistent with activity.
-//
-// 60-second dedup: if a message of the same (user_id, entity_type, entity_id,
-// type) was created in the last 60s, we update its payload and bump created_at
-// rather than inserting a new row. This collapses rapid status flips into one
-// notification.
+// event. This keeps the inbox consistent with activity.
 
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import { db } from '../client'
+import { inboxMessages, type InboxMessage } from '../schema'
 import {
-  inboxMessages,
-  type InboxMessage,
-  type NewInboxMessage,
-} from '../schema'
+  createInboxMessage as platformCreateInboxMessage,
+  type CreateInboxInput,
+} from '@blackcode/platform-db'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
-
-const DEDUP_WINDOW_MS = 60_000
 
 type Tx = Pick<typeof db, 'insert' | 'select' | 'update' | 'delete' | 'execute'>
 
-export interface CreateInboxInput {
-  userId: number
-  eventId?: number | null
-  workspaceId?: number | null
-  type: string
-  entityType?: string | null
-  entityId?: number | null
-  actorUserId?: number | null
-  payload: Record<string, unknown>
-}
+// The WRITE moved to @blackcode/platform-db on 2026-08-06 with the platform half
+// of the event fan-out (docs/sales-app-plan.md D-23). `platform.inbox_messages`
+// is a platform table and always was: being added to a workspace is not an
+// issues fact, and a person invited from the sales deployment must see it in the
+// same inbox. Re-exported here rather than re-pointed at the call sites, so the
+// next person adding an inbox write still finds it in the file called `inbox`.
+//
+// Reading the inbox — everything below — did NOT move. It is Tier 2 and goes
+// when `/api/me/inbox/*` becomes a shared route.
+export type { CreateInboxInput }
 
-export async function createInboxMessage(
-  tx: Tx,
-  input: CreateInboxInput
-): Promise<InboxMessage> {
-  // Try to find a recent matching message to dedup against.
-  if (input.entityType && input.entityId != null) {
-    const cutoff = new Date(Date.now() - DEDUP_WINDOW_MS)
-    const existing = await tx
-      .select({ id: inboxMessages.id })
-      .from(inboxMessages)
-      .where(
-        and(
-          eq(inboxMessages.user_id, input.userId),
-          eq(inboxMessages.type, input.type),
-          eq(inboxMessages.entity_type, input.entityType),
-          eq(inboxMessages.entity_id, input.entityId),
-          gt(inboxMessages.created_at, cutoff),
-          isNull(inboxMessages.archived_at)
-        )
-      )
-      .orderBy(desc(inboxMessages.id))
-      .limit(1)
-    if (existing[0]) {
-      const [row] = await tx
-        .update(inboxMessages)
-        .set({
-          payload: input.payload,
-          created_at: new Date(),
-          read_at: null,
-          actor_user_id: input.actorUserId ?? null,
-          event_id: input.eventId ?? null,
-          workspace_id: input.workspaceId ?? null,
-        })
-        .where(eq(inboxMessages.id, existing[0].id))
-        .returning()
-      if (row) return row
-    }
-  }
-
-  const values: NewInboxMessage = {
-    user_id: input.userId,
-    event_id: input.eventId ?? null,
-    workspace_id: input.workspaceId ?? null,
-    type: input.type,
-    entity_type: input.entityType ?? null,
-    entity_id: input.entityId ?? null,
-    actor_user_id: input.actorUserId ?? null,
-    payload: input.payload,
-  }
-  const [row] = await tx.insert(inboxMessages).values(values).returning()
-  if (!row) throw new Error('inbox insert returned nothing')
-  return row
+export function createInboxMessage(tx: Tx, input: CreateInboxInput): Promise<InboxMessage> {
+  return platformCreateInboxMessage(tx, input)
 }
 
 // ---------- listing / read state ----------
