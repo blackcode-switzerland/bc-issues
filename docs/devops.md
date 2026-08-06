@@ -59,6 +59,24 @@ Two things the script does deliberately:
 > `issues` existed during the migration window and was deleted on 2026-08-06 —
 > it never built successfully and never served anything.
 
+### Two deploy traps
+
+- **`--skip-domain` is partial.** It protects the *custom* domain
+  (`issues.blackcode.ch`) from being re-aliased. It does **not** protect the
+  project's default `.vercel.app` aliases, which still move to the new
+  deployment. Reach for it when you want the custom domain to stay put; do not
+  read it as "this deploy is invisible".
+- **Do not test reachability with `curl -L`.** Deployment Protection covers
+  preview *and* production-target `.vercel.app` aliases. `curl -L` follows the
+  SSO redirect and returns **200 for the login page**, which is
+  indistinguishable from a healthy app. Check the *unfollowed* status
+  (`curl -sI`, or `curl -o /dev/null -w '%{http_code}'` without `-L`) and treat
+  a 3xx to `vercel.com` as protected-not-broken. Verify the real surface on the
+  custom domain.
+
+> This is the deploy-side instance of the standing rule: a green reading that
+> cannot distinguish success from a login page is not a check.
+
 ### Adding an app to the release script
 
 Add one line to `app_registry()` near the top of `devops/release.sh`:
