@@ -1,0 +1,100 @@
+// AppContext — the narrow bundle a SHARED handler needs from the app mounting it.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS TYPE IS SMALL, AND MUST STAY SMALL
+// ---------------------------------------------------------------------------
+// Every field here is a thing each future app must supply before it can serve a
+// single shared route. That is the cost side of the trade, and it is paid once
+// per app, forever. So the bar for adding a field is: **a shared route cannot be
+// written without it, and no app could supply a sensible default.**
+//
+// If a field would only serve one app, it does not belong here — that is the
+// standing rule ("if you have to add a parameter to make it generic, leave it in
+// the app", docs/2026-08-platform-migration.md). Adding an app-shaped callback so
+// one route can keep an app-specific behaviour is that rule being broken with
+// extra steps.
+//
+// ---------------------------------------------------------------------------
+// WHAT IS DELIBERATELY NOT HERE
+// ---------------------------------------------------------------------------
+// `schema`. docs/sales-app-plan.md D-2 sketched `{ db, schema, appSlug }`, and
+// the sketch was one field too generous. Shared code cannot use an app's schema:
+// it does not know what tables the app defines, and every table a shared route
+// DOES touch is a `platform.*` table it can import from `@blackcode/platform-db`
+// directly. A `schema` field would be an untyped bag that every app supplies and
+// no shared route reads — the exact shape of a parameter that exists to look
+// general.
+
+import type { NextRequest } from 'next/server'
+import type { Executor, User } from '@blackcode/platform-db'
+
+/**
+ * Where a stuck agent goes, advertised on every response as `X-BK-Help` /
+ * `X-BK-Changelog`.
+ *
+ * Optional on purpose: an app with no agent landing page must not advertise a
+ * URL that 404s. A missing breadcrumb is a smaller failure than a wrong one.
+ */
+export interface AppManifest {
+  /** Path to the app's "you are out of date, here is how to catch up" page. */
+  help: string
+  /** Path to the changelog feed, normally `/api/changelog`. */
+  changelog: string
+}
+
+export interface AppContext {
+  /**
+   * This app's slug in `platform.apps` — the identity the per-app access check
+   * is made against. Lives in the app (`lib/app.ts`), never in a platform
+   * package: a platform package that knew a slug would be one that knew about
+   * one app.
+   */
+  appSlug: string
+
+  /**
+   * The app's Drizzle client.
+   *
+   * Typed as `Executor` — the same narrow `execute(sql)` shape
+   * `packages/platform-db` uses — so a `db` and a transaction handle both
+   * satisfy it, for either driver, without this package having to name the app's
+   * schema in a generic.
+   *
+   * **Supply it as a getter if the app's client is lazy.** `createDb()` throws
+   * when `DATABASE_URL` is unset, and `next build` imports every route module to
+   * collect page data, so `db: getDb()` at module scope makes the app
+   * unbuildable without a database. `apps/_template/lib/api.ts` shows the shape;
+   * `apps/_template/lib/db/client.ts` records where that was found.
+   */
+  db: Executor
+
+  /**
+   * Who is calling, or null.
+   *
+   * App-supplied because the browser half is genuinely app-specific: a next-auth
+   * session depends on that app's providers, callbacks and cookie
+   * (`packages/platform-auth/src/index.ts` explains at length why `authOptions`
+   * did not move). The token half is shared — `verifyToken` from
+   * `@blackcode/platform-auth` — and an app with no UI can implement this as
+   * just that, which is what `apps/_template` does.
+   */
+  resolveUser(req: NextRequest): Promise<User | null>
+
+  /** Breadcrumb headers. Omit if the app has no agent landing page. */
+  manifest?: AppManifest
+
+  /**
+   * Omit the request-derived payload from what gets written to
+   * `platform.error_events.context` (D-19 item 2, docs/sales-app-plan.md §12).
+   *
+   * `sanitize()` strips credentials by KEY NAME — it was designed for issue
+   * titles and knows nothing about a person's name, email or the notes from a
+   * call with them. An app holding data about people at other companies cannot
+   * rely on it, so it opts out of context capture entirely rather than trusting
+   * a denylist to be complete.
+   *
+   * Absent/false is today's behaviour and what `apps/issues` uses. Redaction is
+   * per-app rather than per-route deliberately: a route added later must not be
+   * able to forget it.
+   */
+  redactBody?: boolean
+}

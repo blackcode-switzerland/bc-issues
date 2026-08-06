@@ -17,7 +17,6 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
-    "@blackcode/platform-api": "*",
     "@blackcode/platform-db": "*",
     "bcryptjs": "^3.0.3"
   },

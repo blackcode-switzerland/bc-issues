@@ -28,7 +28,7 @@ import {
   renameWorkspaceEntities,
   syncAppAccessRole,
 } from '@blackcode/platform-db'
-import { isAppAccessEnforced } from '@blackcode/platform-auth'
+import { isAppAccessEnforced } from '@blackcode/platform-api'
 import { recordEvent } from './events'
 
 export type WorkspaceWithMembership = Workspace & {

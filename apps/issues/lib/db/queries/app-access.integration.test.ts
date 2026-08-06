@@ -39,7 +39,7 @@ run('per-app access (integration)', () => {
   let workspacesQ: typeof import('./workspaces')
   let invitationsQ: typeof import('./invitations')
   let platformDb: typeof import('@blackcode/platform-db')
-  let platformAuth: typeof import('@blackcode/platform-auth')
+  let platformApi: typeof import('@blackcode/platform-api')
   let eq: typeof import('drizzle-orm')['eq']
 
   const APP = 'issues'
@@ -54,7 +54,7 @@ run('per-app access (integration)', () => {
     workspacesQ = await import('./workspaces')
     invitationsQ = await import('./invitations')
     platformDb = await import('@blackcode/platform-db')
-    platformAuth = await import('@blackcode/platform-auth')
+    platformApi = await import('@blackcode/platform-api')
     eq = (await import('drizzle-orm')).eq
 
     suffix = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`
@@ -214,7 +214,7 @@ run('per-app access (integration)', () => {
     // …and the denial is the actionable kind, not a dead end.
     let denial: unknown
     try {
-      await platformAuth.requireAppAccess(db, {
+      await platformApi.requireAppAccess(db, {
         app: APP,
         workspaceId: ws.id,
         userId: inviteeId,
@@ -239,7 +239,7 @@ run('per-app access (integration)', () => {
       { grantedBy: ownerId }
     )
     await expect(
-      platformAuth.requireAppAccess(db, { app: APP, workspaceId: ws.id, userId: inviteeId })
+      platformApi.requireAppAccess(db, { app: APP, workspaceId: ws.id, userId: inviteeId })
     ).resolves.toBeUndefined()
     const visible = await workspacesQ.listMyWorkspaces(inviteeId, { app: APP })
     expect(visible.map((w) => w.name)).toContain(`Invite Only ${suffix}`)

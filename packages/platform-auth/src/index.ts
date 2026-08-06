@@ -1,11 +1,19 @@
-// @blackcode/platform-auth — platform authentication and authorisation.
+// @blackcode/platform-auth — platform identity.
 //
-// Four things, all of which a second app needs UNCHANGED:
+// Three things, all of which a second app needs UNCHANGED:
 //
-//   requireAppAccess  who may open which app, in which workspace   (Phase 4)
 //   tokens            `bk_live_` API tokens: one token, every app  (Phase 6)
 //   whitelist         who may exist on the platform at all         (Phase 6)
 //   password          hashing + the validators that go with it     (Phase 6)
+//
+// `requireAppAccess` — "who may open which app, in which workspace" — was a
+// fourth until 2026-08-06, when it moved to `@blackcode/platform-api`. It is the
+// only thing here that ever constructed an HTTP response, which made this
+// package depend on platform-api, which became a cycle the moment the shared
+// request layer needed the check (docs/sales-app-plan.md Phase 1a). The header
+// of `packages/platform-api/src/require-app-access.ts` has the full reasoning.
+// Import it from `@blackcode/platform-api`; nothing about it changed but the
+// path. This package now knows nothing about HTTP.
 //
 // WHAT DELIBERATELY DID NOT MOVE, and why it is not an oversight.
 //
@@ -32,9 +40,6 @@
 //
 // `session.ts` and `resolve.ts` stay for the same reason — they are thin glue
 // over `authOptions` and follow it whenever it moves.
-
-export { requireAppAccess, isAppAccessEnforced } from './require-app-access'
-export type { RequireAppAccessArgs } from './require-app-access'
 
 export { mintToken, verifyToken, listTokens, revokeToken } from './tokens'
 export type { MintedToken, TokenSummary } from './tokens'

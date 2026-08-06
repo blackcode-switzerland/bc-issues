@@ -13,7 +13,7 @@
 // that quietly stops checking. Recovery is one variable to ADD.
 
 import { describe, expect, it, afterEach } from 'vitest'
-import { isAppAccessEnforced } from '@blackcode/platform-auth'
+import { isAppAccessEnforced } from '@blackcode/platform-api'
 
 const KEY = 'PLATFORM_ENFORCE_APP_ACCESS'
 

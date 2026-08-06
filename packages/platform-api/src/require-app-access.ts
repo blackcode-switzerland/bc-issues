@@ -6,6 +6,26 @@
 // next, and whether it is logged. There is exactly one of each.
 //
 // ---------------------------------------------------------------------------
+// WHY IT LIVES IN platform-api AND NOT platform-auth
+// ---------------------------------------------------------------------------
+// It was in `@blackcode/platform-auth` until 2026-08-06. It moved when the
+// shared request layer was extracted (docs/sales-app-plan.md Phase 1a, D-2):
+// `resolveWorkspace` is the one caller, it now lives in `./handler.ts`, and
+// importing it from platform-auth made the two packages depend on each other —
+// platform-auth needed `Errors` from here for the only thing this file does.
+// Turbo refuses that cycle, and it was right to: a cycle between two packages
+// usually means the boundary is in the wrong place, and it was.
+//
+// This file is HTTP. Its entire job is turning a query result into a 403 with a
+// hint an agent can act on — the status, the code, the `suggestion` string. That
+// belongs beside the error model it constructs. What is left in platform-auth is
+// identity and nothing else (tokens, whitelist, password), with no knowledge of
+// HTTP at all, which is a cleaner package than the one it replaced.
+//
+// The move changed the import path and nothing else. There is still exactly one
+// place that decides what a denial looks like; it is this one.
+//
+// ---------------------------------------------------------------------------
 // WHY THE KILL SWITCH IS AN OPT-OUT, NOT AN OPT-IN
 // ---------------------------------------------------------------------------
 // Enforcement is on unless `PLATFORM_ENFORCE_APP_ACCESS` is explicitly falsey.
@@ -29,7 +49,7 @@
 // backfill ever misses someone, the log says who instead of leaving a support
 // ticket to guess.
 
-import { Errors } from '@blackcode/platform-api'
+import { Errors } from './errors'
 import {
   explainAppAccessDenial,
   hasAppAccess,
