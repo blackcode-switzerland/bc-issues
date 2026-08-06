@@ -33,7 +33,7 @@ Commands come in three tiers and the spelling says which (D-11 —
 `invite`, `token`, `profile`, `inbox`, `meta`, …): the same answer from any app.
 **Cross-app** stays bare and tags its results (`search`, `activity`, `link`,
 `storage`). **App-owned** sits behind the app name — every app noun, plus
-`upload`, `trash` and `label` since 2.1.0, because a file's ownership, a recycle
+`upload`, `trash` and `label` since 3.0.0, because a file's ownership, a recycle
 bin and a label each belong to one app. You upload INTO one app and list ACROSS
 all of them. Shared code: `cli/internal/appverbs`.
 

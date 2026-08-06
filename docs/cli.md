@@ -526,7 +526,7 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
 
 ### Trash (recycle bin, workspace-scoped)
 
-All deletes (issues, projects, tasks) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk <app> trash` to inspect and manage the bin. **App-owned since 2.1.0**: each app has its own bin, so the app names itself; there is no bare `bk trash`.
+All deletes (issues, projects, tasks) are soft — rows move to a per-workspace Trash rather than being destroyed. Use `bk <app> trash` to inspect and manage the bin. **App-owned since 3.0.0**: each app has its own bin, so the app names itself; there is no bare `bk trash`.
 
 | Command | Backend call | Notes |
 |---|---|---|
@@ -548,7 +548,7 @@ Restore conflict flags: `--restore-parents` (also restore the parent when a chil
 ### Labels (workspace-scoped, app-owned)
 
 Operate on the active workspace; paths are `…/workspaces/{ws}/…`. **App-owned
-since 2.1.0** — `bk <app> label …`. CRUD is app-agnostic and lives in
+since 3.0.0** — `bk <app> label …`. CRUD is app-agnostic and lives in
 `internal/appverbs`; `attach`/`detach` name an entity in one app and are built in
 that app's package.
 
@@ -602,7 +602,7 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 
 ### Files (app-owned)
 
-**App-owned since 2.1.0** — `bk <app> upload …`. The receiving deployment is what
+**App-owned since 3.0.0** — `bk <app> upload …`. The receiving deployment is what
 `platform.uploads.app` records and what decides the storage prefix, so there is no
 bare spelling and no default.
 

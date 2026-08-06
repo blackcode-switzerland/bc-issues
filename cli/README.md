@@ -268,7 +268,7 @@ Deleting an issue, project, or task moves it to the Trash instead of
 removing it permanently. Restore items individually, in bulk, or as a delete
 group. Purging (permanent delete) is **owner-only**.
 
-**App-owned since 2.1.0** — each app has its own bin, so the app names itself.
+**App-owned since 3.0.0** — each app has its own bin, so the app names itself.
 
 ```
 bk <app> trash list [--type ...]
@@ -288,7 +288,7 @@ item's parent is itself still in the Trash, the items it was deleted *with*
 restore as a group; items deleted alone restore standalone — override per item in
 the UI, or force it CLI-wide with `--restore-parents` / `--standalone`.
 
-### Labels (workspace-scoped, app-owned since 2.1.0)
+### Labels (workspace-scoped, app-owned since 3.0.0)
 ```
 bk <app> label list
 bk <app> label view <id>

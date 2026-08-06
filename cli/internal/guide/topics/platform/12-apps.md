@@ -47,7 +47,7 @@ bk issues trash list
 bk issues label list
 ```
 
-`upload`, `trash` and `label` moved behind the app name in 2.1.0. They look
+`upload`, `trash` and `label` moved behind the app name in 3.0.0. They look
 shared, and they are not:
 
 | Verb | Why it belongs to one app |

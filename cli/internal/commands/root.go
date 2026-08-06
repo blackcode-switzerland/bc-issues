@@ -25,7 +25,7 @@ import (
 // `bk guide`. What stays here: what bk is, the first run, the global flags, the
 // exit codes, the command groups, and one loud pointer.
 //
-// ORGANISED BY TIER since 2.1.0 (docs/sales-app-plan.md D-11). This is the first
+// ORGANISED BY TIER since 3.0.0 (docs/sales-app-plan.md D-11). This is the first
 // text an agent reads, and the question it has to answer on the first pass is
 // not "what verbs exist?" but "which app is this command talking to?". A flat
 // list of verbs cannot answer that; three named groups can, and the tiers are
@@ -100,7 +100,7 @@ APPS — every app verb sits behind its app name:
   issues      issue, task, project, attachment, move, copy, analytics
               + the three above
 
-Renamed in 2.1.0: "upload", "trash" and "label" moved behind the app name —
+Renamed in 3.0.0: "upload", "trash" and "label" moved behind the app name —
 "bk issues upload", not "bk upload". There is no bare form and no alias: a bare
 spelling would have to pick an app silently, which is the mistake being removed.
 "bk storage attachments" became "bk issues attachment list". The old spellings

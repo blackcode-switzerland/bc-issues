@@ -30,7 +30,7 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
-## 2026-08-06 — **BREAKING (CLI 2.1.0):** every verb now belongs to one of three tiers, and three of them moved
+## 2026-08-06 — **BREAKING (CLI 3.0.0):** every verb now belongs to one of three tiers, and three of them moved
 
 **The idea first, because it is what the rest of this file will assume.** A `bk`
 verb sits in exactly one of three tiers, and **the tier is visible in the
@@ -95,7 +95,7 @@ downstream can tell it was a mistake.
 
 So the bare spellings fail loudly and immediately, and the
 `deprecations.go` rows that name their replacements stay for **two minor
-releases** (through 2.3.0). A stale script gets a recovery path, not a dead end.
+releases** (through 3.2.0). A stale script gets a recovery path, not a dead end.
 
 ### What to change in your scripts and agents
 

@@ -452,7 +452,7 @@ claim an issues route.
 
 Pre-namespace spellings exit non-zero and name their replacement, via
 `cli/internal/commands/deprecations.go`: `bk issue …` (removed 1.12.0),
-`bk upload|trash|label` (moved 2.1.0, no alias — an alias would have to pick an
+`bk upload|trash|label` (moved 3.0.0, no alias — an alias would have to pick an
 app silently) and `bk storage attachments`. That table is the recovery path for a stale script, and
 its entries outlive the thing they replace by one release on purpose. The
 end-to-end half of that guarantee is `cli/cmd/bk/main_test.go`, which runs the

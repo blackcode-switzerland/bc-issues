@@ -42,7 +42,7 @@ var deprecations = map[string]string{
 	"copy":      "`bk copy …` is now `bk issues copy …` — app verbs sit behind their app name. Same flags, same output.",
 	"analytics": "`bk analytics …` is now `bk issues analytics …` — it reports this app's statuses and priorities, so it moved with the app. Same flags, same output.",
 
-	// --- 2.1.0 (2026-08-06): the four app-owned verbs moved under the app ---
+	// --- 3.0.0 (2026-08-06): the four app-owned verbs moved under the app ---
 	//
 	// D-11. `upload`, `trash` and `label` are the verbs whose ANSWER DEPENDS ON
 	// THE APP: a file is attributed to the app that received it, a bin holds one
@@ -53,7 +53,7 @@ var deprecations = map[string]string{
 	// Unlike the 1.10.0 rename, these rows are LIVE from day one: there is no
 	// alias, because an alias would have to pick an app silently, which is the
 	// exact accident being removed. The failure is loud and names its replacement.
-	// Keep for two minor releases (through 2.3.0), then prune.
+	// Keep for two minor releases (through 3.2.0), then prune.
 	"upload": "`bk upload …` is now `bk <app> upload …` — a file is stored against one app, so the app names itself: `bk issues upload contract.pdf`. Run `bk --help` for the apps this binary knows, or `bk guide platform/apps` for why.",
 	"trash":  "`bk trash …` is now `bk <app> trash …` — each app has its own recycle bin, e.g. `bk issues trash list`. Run `bk guide platform/apps`.",
 	"label":  "`bk label …` is now `bk <app> label …` — labels are filtered by app, e.g. `bk issues label list`. Run `bk guide platform/apps`.",
@@ -72,7 +72,7 @@ var deprecations = map[string]string{
 	// run. A documented agent-facing command that does nothing is worse than a
 	// missing one: an agent that believes it can undo takes risks it would not
 	// otherwise take. Trash is the working undo and always was.
-	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk issues trash list` then `bk issues trash restore <type>:<#number>` (the recycle bin is per-app since 2.1.0).",
+	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk issues trash list` then `bk issues trash restore <type>:<#number>` (the recycle bin is per-app since 3.0.0).",
 }
 
 // flagRe pulls the offending token out of a cobra usage error, e.g.

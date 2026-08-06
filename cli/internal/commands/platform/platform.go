@@ -17,7 +17,7 @@
 //	           app-scoped would destroy the thing they exist for.
 //
 // The third tier — `upload`, `trash`, `label`, whose answer depends on the app —
-// moved to `bk <app> <verb>` in 2.1.0 and lives in internal/appverbs. Read that
+// moved to `bk <app> <verb>` in 3.0.0 and lives in internal/appverbs. Read that
 // package's header before adding a command here: the question is not "is it
 // shared code?" but "would two deployments give the same answer?". A label, a
 // file's ownership and a recycle bin would not; a file LISTING does — which is

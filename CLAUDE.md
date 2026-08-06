@@ -40,7 +40,7 @@ What the migration bought:
   crossing is the point, and tag each result with its app (`search`, `activity`,
   `link`, and `storage`, which lists every app's files against one workspace
   quota). **App-owned** verbs sit behind the app name — that is every app noun
-  *and* `upload`, `trash`, `label`, which moved there in 2.1.0 because a file's
+  *and* `upload`, `trash`, `label`, which moved there in 3.0.0 because a file's
   ownership, a bin and a label each belong to ONE app. **You upload INTO one app
   and list ACROSS all of them** (D-28: the tier is decided by "would two
   deployments answer differently?", never by "is it shared code?"). The shared
