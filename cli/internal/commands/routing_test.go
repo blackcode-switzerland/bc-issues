@@ -427,3 +427,95 @@ func TestNoCommandShadowsTheRoutingFlag(t *testing.T) {
 		t.Fatalf("only %d commands walked — the tree is not being traversed", checked)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 5. `bk meta` WRITES THE REGISTRY — THE SINGLE POINT OF FAILURE FOR RECOVERY
+// ---------------------------------------------------------------------------
+// Every routing failure in this CLI resolves to the same instruction: *run
+// `bk meta`*. The unknown-app error, the dead-host error and the no-registry
+// error all say it. If `bk meta` stops writing, all three become dead ends at
+// once and the suite stays green — which is not hypothetical, because that is
+// exactly what shipped for one commit: the routing PRINTER landed without the
+// registry REFRESH, and `bk meta` printed "(no app registry yet)" three lines
+// under a table listing both apps and their base_urls.
+//
+// THE TRAP, stated because it is what let that through: **a test that reads
+// `bk meta`'s printed output passes with the write removed.** The table is built
+// from the server's response, not from the config, so it looks identical either
+// way. This asserts the SIDE EFFECT — the bytes on disk — and nothing else.
+//
+// It also pins the precedence rule that makes vanity domains and previews work:
+// the registry declares `https://issues.example.test` for the app we are talking
+// to, and we reached it at the test server's URL instead. The one that ANSWERED
+// wins, because a column is a declaration and a live response is a proof.
+func TestMetaWritesTheAppRegistryToDisk(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/api/meta") {
+			_, _ = w.Write([]byte(`{
+				"user": {"id": 7, "email": "a@b.ch", "via": "token"},
+				"workspaces": [{"id":1,"name":"Acme","slug":"acme","role":"owner","is_active":true}],
+				"apps": {
+					"issues": {"slug":"issues","name":"Issues","base_url":"https://issues.example.test","is_current":true,"workspaces":["acme"]},
+					"sales":  {"slug":"sales","name":"Sales","base_url":"https://sales.example.test","is_current":false,"workspaces":["acme"]}
+				}
+			}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("BK_CONFIG_DIR", dir)
+	// A 2.x config: one `server`, no address book. This is what every existing
+	// user upgrades with, and `bk meta` is the one command that migrates it.
+	writeConfig(t, dir, map[string]any{
+		"server":                srv.URL,
+		"token":                 "bk_live_test",
+		"active_workspace_slug": "acme",
+	})
+
+	resetRoutingState()
+	if err := runRoot(t, "meta"); err != nil {
+		t.Fatalf("bk meta failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var got struct {
+		Server     string            `json:"server"`
+		HomeApp    string            `json:"home_app"`
+		HomeServer string            `json:"home_server"`
+		AppServers map[string]string `json:"app_servers"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("parse config: %v\n%s", err, raw)
+	}
+
+	if got.HomeApp != "issues" {
+		t.Errorf("home_app = %q; want %q — it is learned from the app the server says it IS",
+			got.HomeApp, "issues")
+	}
+	if got.HomeServer != srv.URL {
+		t.Errorf("home_server = %q; want %q", got.HomeServer, srv.URL)
+	}
+	if got.AppServers["issues"] != srv.URL {
+		t.Errorf("app_servers[issues] = %q; want the server that ANSWERED (%q), not the "+
+			"declared base_url — a column is a declaration, a response is a proof",
+			got.AppServers["issues"], srv.URL)
+	}
+	if got.AppServers["sales"] != "https://sales.example.test" {
+		t.Errorf("app_servers[sales] = %q; want the declared base_url — every app but the "+
+			"one we reached has nothing better", got.AppServers["sales"])
+	}
+	// The 2.x rollback path, deliberately preserved: a 2.x binary reads only
+	// `server`, so it must keep being written.
+	if got.Server != srv.URL {
+		t.Errorf("server = %q; want %q — it mirrors home_server so a rollback to a 2.x "+
+			"binary still works", got.Server, srv.URL)
+	}
+}

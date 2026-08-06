@@ -125,12 +125,33 @@ by tier:
 bk meta                      # refreshes the address book; prints where each tier goes
 bk app list                  # every app, its server, and whether it answers for you
 bk app use sales             # move the home app: the bare verbs now go to sales
-bk --app-server sales meta   # …or redirect ONE invocation, changing nothing
 ```
+
+**Upgrading from bk 2.x? Run `bk meta` once.** A 2.x config has no address book,
+and `bk` will not invent one — `bk <app> …` fails naming this command until it
+has been learned. Your login still works; nothing else is needed.
 
 `bk <app> …` ignores all of that. Its app is written on the command, so no mode,
 default or previous command can move it — which is the property that makes a
 namespace safer than a flag.
+
+### `--app-server` — the escape hatch, and when to reach for it
+
+Almost never. `bk app use <slug>` is how you change where the bare verbs go, and
+it is the right answer whenever you are going to run more than one command.
+
+`--app-server <slug>` redirects a SINGLE invocation and changes nothing on disk.
+Use it for a one-off look at another app's deployment — checking `bk meta` or
+`bk workspace list` through sales while you stay homed on issues — or in a script
+that must not disturb the config it found. If you are typing it twice, you wanted
+`bk app use`.
+
+```bash
+bk --app-server sales meta      # one look at sales, home app unchanged
+```
+
+It cannot move an app-owned verb: `bk --app-server sales issues upload x.pdf`
+still uploads to issues. The name on the command wins over the flag, always.
 
 **The flag is `--app-server`, not `--app`.** `--app` already means "filter by
 app" on `bk search`, `bk activity`, `bk storage list`, `bk changelog` and

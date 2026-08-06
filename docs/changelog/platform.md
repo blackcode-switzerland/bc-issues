@@ -32,6 +32,13 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ## 2026-08-06 — **CLI 3.0.0:** `bk` learned every app's address, and routes by tier
 
+> **UPGRADING FROM 2.x: run `bk meta` once.** Your login still works and you do
+> not re-authenticate — but a 2.x config has no address book, and `bk` will not
+> invent one, so `bk <app> …` fails until it has been learned. One command, once.
+> Why it is not inferred: inferring a routing address means inferring which
+> deployment receives a write, and `bk issues upload` filing a contract against
+> the wrong app has no undo.
+
 The companion to the verb tiers below, and the reason they can exist: with more
 than one deployment, "which app" is also "which server".
 
