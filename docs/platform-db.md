@@ -115,7 +115,7 @@ and all three are the **expand** half of expand → migrate → contract.
 |---|---|---|
 | `comments.parent_type` | `<app>:<noun>` | `issues:issue`, `sales:prospect` |
 | `deletion_batches.root_type` | `<app>:<noun>` | same |
-| `labels.app` | slug, or NULL | NULL = **shared** with every app in the workspace |
+| `labels.app` | slug, or NULL | NULL = **shared** with every app in the workspace. `0043` claimed every existing row for `issues`, so NULL has no instances — sharing is a deliberate `SET app = NULL` |
 
 Three things about them are easy to get wrong:
 

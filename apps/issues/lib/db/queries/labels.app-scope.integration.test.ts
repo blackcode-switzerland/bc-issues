@@ -135,6 +135,22 @@ run('label reads honour platform.labels.app (integration)', () => {
     await db.execute(sql`DELETE FROM platform.apps WHERE slug = ${FOREIGN_APP}`)
   })
 
+  // 0043 is not "the column was added" — it is "the column was added AND every
+  // existing label was claimed". A backfill that silently matched nothing leaves
+  // no symptom at all here (a NULL label is visible to this app either way); the
+  // symptom appears in the SECOND app's picker, months later, and looks like a
+  // filtering bug rather than a migration that did half its job.
+  //
+  // Scoped away from this suite's own workspace, which deliberately holds the
+  // one deliberately-shared label in the database.
+  it('0043 left no unclaimed label behind', async () => {
+    const r = await db.execute(sql`
+      SELECT count(*)::int AS n FROM platform.labels
+       WHERE app IS NULL AND workspace_id IS DISTINCT FROM ${wsId}
+    `)
+    expect(Number(r.rows[0].n)).toBe(0)
+  })
+
   it('listLabelsInWorkspace shows this app and shared, and hides the other app', async () => {
     const names = (await q.listLabelsInWorkspace(wsId)).map((l) => l.name).sort()
     expect(names).toEqual(['own-app-label', 'shared-label'])

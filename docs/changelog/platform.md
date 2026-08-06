@@ -43,8 +43,16 @@ A label is now either **scoped to one app** or **shared across every app** in th
 workspace.
 
 - `app = '<slug>'` — only that app lists it, attaches it, renames it or deletes it.
-- `app IS NULL` — **shared**. Every label that existed before today is shared, so
-  nothing you can see today disappeared.
+- `app IS NULL` — **shared** with every app in the workspace.
+
+**Every label that existed before today is now scoped to `issues`.** That records
+a fact rather than changing one — all of them were created in the issues app, for
+issues work — and nothing changes for you today, because issues is the only app
+serving them. It matters the moment a second app opens: its label picker starts
+empty rather than inheriting a taxonomy that was never meant for it.
+
+**To share a label, set `app` back to NULL** — there is no command for it, by
+design. Sharing is a decision somebody makes about one label.
 
 `bk issues label list` now genuinely means *issues'* labels: every read on the
 issues deployment is filtered to `app IS NULL OR app = 'issues'`, and that
@@ -55,8 +63,8 @@ be attached to an issue.**
 **Adapt:** a label object now carries `"app"` (a slug, or `null` for shared).
 `bk <app> label list` and `label view` print it as a `SCOPE` column. Labels you
 create through `bk issues label create` or through `--label` on an issue are
-scoped to `issues` from now on; existing ones stay shared until somebody decides
-otherwise. Nothing about label ids, colours or attachment changed.
+scoped to `issues`. Nothing about label ids, colours or attachment changed, and
+no label became invisible to anyone.
 
 ### `platform.comments.parent_type` and `platform.deletion_batches.root_type`
 

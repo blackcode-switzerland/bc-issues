@@ -532,10 +532,13 @@ export const labels = platformSchema.table(
     description: text('description'),
     // Which app this label belongs to (0043, D-14).
     //
-    //   NULL — shared: every app in the workspace sees it. Every row that
-    //          predates the column, and the reason it is nullable rather than
-    //          NOT NULL: adding it changed no deployed app's label list.
-    //   set  — scoped: only that app sees it.
+    //   set  — scoped: only that app lists, attaches, renames or deletes it.
+    //   NULL — shared: every app in the workspace sees it.
+    //
+    // 0043 backfilled every existing row to `'issues'`, so NULL currently has no
+    // instances — and that is the intended starting state, not an oversight.
+    // Sharing is a deliberate act (`SET app = NULL` on one label), never a state
+    // a label drifts into, and the column stays nullable to hold exactly that.
     //
     // A label read that ignores this column returns another app's labels while
     // its own command spelling (`bk <app> label list`) promises otherwise, so

@@ -18,8 +18,9 @@ import (
 //
 // APP SCOPE (D-14, migration 0043). `platform.labels.app` is what makes the app
 // segment in this spelling mean something: each deployment serves the labels
-// scoped to itself PLUS the shared ones (`app IS NULL`, which is every label
-// that predates the column), and creating one here stamps this app. So
+// scoped to itself PLUS the shared ones (`app IS NULL`), and creating one here
+// stamps this app. 0043 claimed every pre-existing label for `issues`, so a
+// SHARED label is only ever one somebody deliberately made shared. So
 // `bk sales label list` and `bk issues label list` genuinely differ — the
 // scoping is done by the SERVER the group's pin routes to, not by a flag here,
 // which is why there is no --app on any of these commands and must not be.

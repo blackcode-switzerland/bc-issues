@@ -20,10 +20,12 @@
 //   - attach would otherwise put a foreign app's label on an issue, which is
 //     the one failure D-14's `bk <app> label` spelling promises cannot happen.
 //
-// Creation stamps `app: APP_SLUG`. NULL is reachable only for rows that predate
-// 0043 — nothing in this app writes it, deliberately: a "shared" label is a
-// migration artefact today, not a feature, and inventing a flag for it would be
-// inventing a product decision nobody has made.
+// Creation stamps `app: APP_SLUG`, and nothing in this app ever writes NULL —
+// deliberately. 0043 claimed every pre-existing label for this app, so `NULL`
+// has no instances today and every shared label that ever exists will be one
+// somebody made shared on purpose (`UPDATE … SET app = NULL`, by hand). That is
+// the point: sharing is a decision about one label, not a default, and a --shared
+// flag would turn it back into one.
 //
 // `labels.app-scope.test.ts` enumerates the paths and asserts BOTH halves of the
 // predicate — that another app's labels are hidden, AND that this app's own are
