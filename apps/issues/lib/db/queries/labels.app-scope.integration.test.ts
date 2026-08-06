@@ -59,9 +59,26 @@ run('label reads honour platform.labels.app (integration)', () => {
 
     // A registered second app. The FK on `labels.app` means the fixture cannot
     // pretend an app exists — which is the point of the FK.
+    //
+    // `enabled = false` MATTERS, and not for this suite. `platform.apps` is
+    // global and vitest runs files in parallel, so while this row exists any
+    // workspace another suite creates picks it up: `enableAllAppsForWorkspace`
+    // selects every app with `enabled = true`. With `enabled = true` here,
+    // `app-access.integration.test.ts` failed on an assertion about invitation
+    // policy — `apps_granted` contained this fixture. An enabled app with no
+    // registered scanner would also re-arm the blob delete gate for the
+    // duration of the run.
+    //
+    // It is a RACE — it depends on whether this row exists at the instant the
+    // other suite inserts its workspace, and it does not reproduce on demand.
+    // That is the argument for removing the exposure rather than ordering the
+    // tests around it: a fixture that changes what a NEIGHBOURING suite observes
+    // fails somebody else, somewhere else, sometimes. Disabled is also the
+    // honest state — no workspace should ever enable this.
     await db.execute(sql`
-      INSERT INTO platform.apps (slug, name) VALUES (${FOREIGN_APP}, 'Label Scope Fixture')
-      ON CONFLICT (slug) DO NOTHING
+      INSERT INTO platform.apps (slug, name, enabled)
+      VALUES (${FOREIGN_APP}, 'Label Scope Fixture', false)
+      ON CONFLICT (slug) DO UPDATE SET enabled = false
     `)
 
     const u = await db.execute(sql`SELECT id FROM platform.users ORDER BY id LIMIT 1`)
