@@ -18,7 +18,7 @@ import {
   HorizontalBars,
   SERIES,
   SummaryCard,
-} from './analytics/charts'
+} from '@blackcode/platform-ui/charts'
 import {
   issuePriorityColor,
   issuePriorityLabel,

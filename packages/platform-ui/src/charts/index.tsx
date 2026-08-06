@@ -1,5 +1,5 @@
-// SVG chart kit for the analytics dashboard. No external chart library — these
-// are small, themed, accessible primitives that all take pre-computed data:
+// SVG chart kit. No external chart library — small, themed, accessible
+// primitives that all take pre-computed data:
 //
 //   KpiCard       — headline metric with trend badge + optional sparkline
 //   TrendBadge    — ▲/▼ percent-change pill (invert for "lower is better")
@@ -10,7 +10,43 @@
 //   ColumnChart   — vertical histogram (cycle time, aging) with hover
 //   BurndownChart — actual vs ideal remaining over time
 //
-// Colors use the live theme via CSS vars where possible (var(--primary)).
+// ---------------------------------------------------------------------------
+// WHY IT IS HERE AND NOT IN AN APP (D-12)
+// ---------------------------------------------------------------------------
+// It lived in `apps/issues/components/analytics/charts.tsx` while issues was the
+// only app. A second app needs four of the six on a headline page, and the two
+// alternatives were both wrong: a copy drifts within months, and a direct import
+// across apps is the cross-app dependency `app-isolation.test.ts` exists to
+// refuse. It is app-agnostic code — it takes numbers and returns SVG — so it
+// belongs where app-agnostic code belongs.
+//
+// ---------------------------------------------------------------------------
+// THE THEMING CONTRACT — THE PART TO NOT GET WRONG
+// ---------------------------------------------------------------------------
+// **This file names no colour.** Every value in `SERIES` is a CSS variable the
+// APP defines, so one kit renders in issues' blue and in sales' emerald-teal
+// with no branch, no prop and no `if (app === …)` anywhere.
+//
+// An app that mounts these charts must define, in its Tailwind stylesheet:
+//
+//     --chart-series-created    the "new work arrived" series
+//     --chart-series-completed  the "work finished" series
+//     --chart-series-activity   the "things happened" series
+//     --chart-series-ideal      the reference/target line
+//
+// An undefined variable resolves to nothing and the stroke silently disappears,
+// so this is a real obligation rather than a nicety. `apps/issues` defines all
+// four in `app/globals.css`, at exactly the literals this file used to hardcode
+// — which is what let the move be proved byte-identical
+// (`apps/issues/lib/charts-parity.test.ts`).
+//
+// Everything else already read the live theme (`var(--primary)`,
+// `text-muted-foreground`, `currentColor`) and needed no change.
+//
+// **Tailwind classes in this file are only generated if the app's stylesheet
+// `@source`s this package.** It does not follow from `transpilePackages`. See
+// `packages/platform-testing/test/ui-package-styling.test.ts`, which exists
+// because for months it did not.
 
 'use client'
 
@@ -24,12 +60,13 @@ export function formatNumber(n: number): string {
   return Math.abs(n) >= 10000 ? fmtCompact.format(n) : fmt.format(n)
 }
 
-// Shared series palette (used by line/area + activity charts).
+// The shared series palette. Names are ROLES, not colours — see the theming
+// contract above. Nothing here may become a literal again.
 export const SERIES = {
-  created: 'var(--primary)',
-  completed: '#22c55e',
-  activity: '#8b5cf6',
-  ideal: '#a1a1aa',
+  created: 'var(--chart-series-created)',
+  completed: 'var(--chart-series-completed)',
+  activity: 'var(--chart-series-activity)',
+  ideal: 'var(--chart-series-ideal)',
 }
 
 // ---------- Trend badge ----------

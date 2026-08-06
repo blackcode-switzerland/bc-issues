@@ -182,9 +182,16 @@ this app's own.
 
 The `/dashboard/analytics` page is a multi-tab BI dashboard over the analytics
 payload (see `docs/backend.md` → *Analytics contract*). All chart primitives
-live in `components/analytics/charts.tsx` (hand-rolled themed SVG — **no chart
-library**; use `var(--primary)` and the `SERIES` palette, never hardcode the
-old `#5e6ad2`).
+come from **`@blackcode/platform-ui/charts`** (hand-rolled themed SVG — **no
+chart library**). They moved out of this app on 2026-08-06 (D-12); the kit is
+shared because the second app needs four of the six, and `docs/frontend.md` is
+now where it is documented.
+
+What stays this app's business is the **palette**: the kit names no colour, and
+this app defines `--chart-series-{created,completed,activity,ideal}` in
+`app/globals.css`. Use `var(--primary)` and the `SERIES` roles, never a literal —
+a hardcoded hex in a chart is a colour a second app cannot re-theme, and
+`lib/charts-parity.test.ts` will fail on it if it changes what this page renders.
 
 - **Controls (sticky):** a scope segmented control (Workspace / Project /
   Task / Member) with a searchable target picker; a granularity toggle

@@ -29,7 +29,7 @@ import {
   KpiCard,
   SERIES,
   formatNumber,
-} from './analytics/charts'
+} from '@blackcode/platform-ui/charts'
 import {
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,

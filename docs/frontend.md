@@ -24,6 +24,7 @@ data flows. **Source of truth is the code** — this describes it as it is today
 - [Project layout](#project-layout)
 - [Configuration files](#configuration-files)
 - [Theme & styling system](#theme--styling-system)
+- [The chart kit](#the-chart-kit--blackcodeplatform-uicharts)
 - [Routes](#routes)
 - [App shell & providers](#app-shell--providers)
 - [Components](#components)
@@ -67,8 +68,6 @@ components/
   ui/                 primitives (buttons, modal, confirm dialog, date picker,
                       work-item icons, property select, member avatar, …)
   listings/           list/kanban/timeline views + filter bar + bulk actions + active-ws hook
-  analytics/          SVG chart kit (charts.tsx) — KpiCard, AreaLineChart, DonutChart,
-                      HorizontalBars, ColumnChart, BurndownChart; no external chart lib
   marketing/          public site chrome
   *.tsx               feature components (detail views, create modals, settings)
 lib/                  shared client/server helpers (work-items.ts lives here)
@@ -124,6 +123,53 @@ Change the brand accent by editing `--primary` (and `--ring`,
 `--sidebar-primary`, `--chart-1`) in both `:root` and `.dark`. To shift surfaces
 off pure-neutral, give the OKLCH values a non-zero chroma. Don't hard-code
 colors in components — use the token utilities.
+
+## The chart kit — `@blackcode/platform-ui/charts`
+
+Hand-rolled themed SVG. **No chart library, and none is wanted**: `KpiCard`,
+`TrendBadge`, `Sparkline`, `AreaLineChart`, `DonutChart`, `HorizontalBars`,
+`ColumnChart`, `BurndownChart`. Every one takes pre-computed data and returns
+SVG — no fetching, no formatting decisions, no app vocabulary.
+
+It lived in `apps/issues/components/analytics/` until 2026-08-06 and moved here
+under D-12, when a second app needed four of the six. A copy would have drifted
+within months and a cross-app import is what `app-isolation.test.ts` exists to
+refuse.
+
+**The kit names no colour.** `SERIES` is four CSS variables and the app defines
+them:
+
+| Token | Role |
+|---|---|
+| `--chart-series-created` | new work arrived |
+| `--chart-series-completed` | work finished |
+| `--chart-series-activity` | things happened |
+| `--chart-series-ideal` | the reference / target line |
+
+That is the whole extension point: issues defines them blue-and-green, sales
+defines them emerald-teal, and neither app branches on the other. **An undefined
+token resolves to nothing and the stroke silently disappears** — so these four
+are an obligation for any app that mounts the kit, not a nicety.
+
+Two guards, and they cover different halves:
+
+- `apps/issues/lib/charts-parity.test.ts` renders every component to static
+  markup, resolves the tokens through `app/globals.css`, and compares the result
+  with a recording taken before the move. It catches a shifted colour, a dropped
+  gridline, a changed coordinate — none of which any other test in this repo can
+  see.
+- `packages/platform-testing/test/ui-package-styling.test.ts` catches the other
+  half: markup can be identical while the CSS behind a class does not exist.
+  See below.
+
+> **`transpilePackages` makes the TypeScript compile; `@source` makes the CSS
+> exist.** Tailwind v4 skips `node_modules`, and the platform packages reach an
+> app through a workspace symlink there — so an app's stylesheet must carry
+> `@source "…/packages/platform-ui/src";` or every class used *only* inside the
+> package is silently never generated. When this was found on 2026-08-06 it was
+> **151 classes** in `apps/issues`, including the login page's tab active state
+> and the landing page's accordion animation. There is no error and no build
+> failure; the page just renders slightly wrong.
 
 ### Notable CSS helpers
 

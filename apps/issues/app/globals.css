@@ -80,6 +80,24 @@
   --input: oklch(0.908 0.005 264);
   --ring: #007bd3;
 
+  /*
+   * Chart SERIES roles, consumed by `@blackcode/platform-ui/charts`.
+   *
+   * The kit names no colour of its own (D-12) — these four are the contract,
+   * and an undefined one makes a stroke silently disappear. The values are the
+   * literals the kit hardcoded before it moved packages, unchanged, which is
+   * what `lib/charts-parity.test.ts` proves the analytics page still renders.
+   *
+   * Defined once, in `:root` only: they were hardcoded before, so they were the
+   * same in both themes, and overriding them under `.dark` would be a visual
+   * change wearing a refactor's clothes. A second app picks its own palette by
+   * defining these four differently — that is the whole extension point.
+   */
+  --chart-series-created: var(--primary);
+  --chart-series-completed: #22c55e;
+  --chart-series-activity: #8b5cf6;
+  --chart-series-ideal: #a1a1aa;
+
   /* Charts — brand indigo lead, then neutral-friendly distinct hues */
   --chart-1: #007bd3;
   --chart-2: oklch(0.62 0.13 200);
