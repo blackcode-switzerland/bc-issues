@@ -36,7 +36,7 @@ import each other.**
 
 | Package | What it gives you |
 |---|---|
-| `platform-db` | The Drizzle schema and client factory for the `platform.*` tables — users, workspaces, members, app access, uploads, comments, labels, events, entities, links, the blob-reference index |
+| `platform-db` | The Drizzle schema and client factory for the `platform.*` tables — users, workspaces, members, app access, uploads, comments, labels, events, entities, links, the blob-reference index. Plus the platform-owned WRITES you must not reimplement: `recordPlatformEvent` + the platform fan-out (D-23), `createInboxMessage`, and the four sign-in callbacks (`getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`, `materializePendingInvitationsForUser`) |
 | `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories** (`@blackcode/platform-api/routes`), per-app access enforcement (`requireAppAccess` — the 403 with a hint), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits |
 | `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist. No HTTP — `requireAppAccess` moved to `platform-api` on 2026-08-06, because its whole job is constructing a 403 |
 | `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions |
@@ -331,6 +331,24 @@ Two things a real app adds, each needing a decision only you can make:
   in `packages/platform-auth/src/index.ts`. Until you add one, do not mount
   `/api/tokens`: it requires `AppContext.resolveSessionUser` and throws at import
   time without it, on purpose.
+
+  **What those callbacks DO to the database is not app-specific, and is already
+  written.** `getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth` and
+  `materializePendingInvitationsForUser` come from `@blackcode/platform-db` —
+  there is one login for every app, so a second copy is a second chance to
+  swallow somebody's pending invitations. What you write yourself is
+  `authOptions` (your providers, your cookie, your redirect pages) and your own
+  `createWorkspace` / `ensureDefaultWorkspace`, because each app has its own
+  post-create step.
+
+- **Anything that records an event.** Use `recordPlatformEvent(tx, { app, … })`
+  from `@blackcode/platform-db` for workspace / membership / app-access /
+  invitation events; write your own `recordEvent` only for your own entity types,
+  and delegate the platform ones to it in ONE place. Two rules, both load-bearing
+  (see `docs/backend.md` → *The seam*): pass your `APP_SLUG` rather than a
+  literal — `platform.events.app` is the **producing** app — and never handle the
+  five platform fan-out actions in your own `fanOutEvent` as well, or every
+  invitation notification is delivered twice.
 
 **An error log used to be a third item here.** It no longer is: the shared
 `apiHandler` writes to `platform.error_events` for every app that uses it, so

@@ -71,7 +71,9 @@ request
           → getWorkspaceForUser()  → { user, workspace, role }
       → query layer          (lib/db/queries/* — the only place that touches the DB)
           → recordEvent(tx)  (events spine, in the same transaction)
-              → fanOutEvent(tx)  (materializes inbox rows)
+              → fanOutEvent(tx)          (this app's inbox rows)
+              → recordPlatformEvent(tx)  (platform entity types — D-23)
+                  → fanOutPlatformEvent(tx)
   → NextResponse.json(...)
 ```
 
@@ -468,12 +470,17 @@ takes the slug as an argument.
 
 **Where the code is.** The data layer is
 `@blackcode/platform-db`'s `app-access.ts` — queries and grant/revoke helpers, no
-HTTP knowledge. The enforcement layer is `@blackcode/platform-auth`'s
+HTTP knowledge. The enforcement layer is `@blackcode/platform-api`'s
 `requireAppAccess` — one place that decides what a denial looks like (403,
 `app_access_denied`, a `suggestion`, and a `console.warn` naming user + workspace +
-app). `platform-auth` currently contains only this; the session/token half of auth
-moves there in Phase 6, once `events.ts` stops hardcoding issue/task/project
-entity types.
+app).
+
+> It sat in `platform-auth` until 2026-08-06 and moved because the shared
+> `resolveWorkspace` has to call it, and `platform-auth` importing `Errors` from
+> `platform-api` was the one edge that made the package graph a cycle. The
+> resulting split is worth stating plainly, because it is the rule for anything
+> added later: **`platform-db` queries · `platform-api` enforcement and errors ·
+> `platform-auth` identity only, no HTTP.**
 
 **The kill switch.** `PLATFORM_ENFORCE_APP_ACCESS` — enforced unless explicitly
 falsey (`0`/`false`/`no`/`off`/empty). Opt-out rather than opt-in because the
@@ -533,8 +540,55 @@ are TypeScript unions (e.g. `assigned`, `status_changed`, `commented`,
 Each recorded event is handed to `fanOutEvent(tx, event)`
 (`lib/db/queries/fanout.ts`), which materializes per-user `inbox_messages`
 according to the event type (assignees, watchers, mentioned users, invitees).
-`lib/db/queries/inbox.ts` writes those rows with a short dedup window so rapid
-status flips don't spam the inbox.
+`createInboxMessage` writes those rows with a short dedup window so rapid status
+flips don't spam the inbox.
+
+### The seam: two recorders, one table (D-23)
+
+`platform.events` is one table, but writing to it splits cleanly in two, and
+since 2026-08-06 it is split:
+
+| | writes | lives in |
+|---|---|---|
+| **`recordPlatformEvent(tx, { app, … })`** | `workspace`, `workspace_member`, `workspace_app`, `invitation` | `packages/platform-db/src/events-write.ts` |
+| **`recordEvent(tx, …)`** | that app's own entity types | each app's `lib/db/queries/events.ts` |
+
+An app's `recordEvent` **delegates** the platform types, in one place, passing
+its own `APP_SLUG`. No call site knows which half it reached.
+
+**Why the split is clean rather than a compromise.** The app half of the recorder
+does exactly two app-specific things, and a platform event needs neither:
+
+- `resolveSubjectUrn` returns null for every entity type except
+  issue/task/project — in a literal early return, before it touches a table. So
+  `subject_urn` is null for every platform event, and that is the *answer*, not a
+  gap: a workspace or a membership has no cross-app address.
+- the fan-out rules are written in an app's nouns. The five platform handlers —
+  invitation created, member added, member removed, ownership transferred,
+  invitation accepted — reference **no** app table, which is why they moved to
+  `packages/platform-db/src/fanout-platform.ts` along with `createInboxMessage`.
+  All 18 app-table references were in the handlers below that file's
+  `--- issue fan-out handlers ---` line, and that is where the switch was cut.
+
+**Two rules that are load-bearing, not stylistic:**
+
+1. **An app must not also route the five platform actions through its own
+   `fanOutEvent`.** `recordPlatformEvent` fans out its own events; a case in both
+   switches delivers every invitation notification twice.
+2. **The platform vocabulary is declared once**, beside the writer
+   (`PLATFORM_ENTITY_TYPES` / `PLATFORM_EVENT_ACTIONS`), and the activity route
+   imports it. Two copies drift silently, because `parseList` in that route
+   *drops* an unrecognised filter rather than rejecting it — so a value the
+   writer can produce and the route has not heard of returns the whole feed. That
+   is not hypothetical: Phase 4's `app_*` actions were missing there for months.
+
+**`createWorkspace` and `ensureDefaultWorkspace` did NOT move**, and should not.
+Each app has an app-specific post-create step — issues inserts
+`issues.workspace_counters` — and an app-specific statement inside a shared
+function is how the boundary rots. They stay per-app and call the shared
+recorder.
+
+The seam is guarded by `apps/issues/lib/db/queries/platform-event-seam.test.ts`.
 
 **Coalescing.** Generic `updated` events (title/description/etc. edits on
 issues/tasks/projects) pass `coalesceWindowMs: UPDATE_COALESCE_WINDOW_MS` (10
@@ -551,11 +605,17 @@ every event, and derives `subject_urn` from `(entityType, entityId)` via
 `resolveSubjectUrn`. Both are resolved in `recordEvent` rather than at the ~40
 call sites: one of them forgetting would be a hole in the feed that nothing would
 ever report. `app` means the **producing** app — a workspace or member event
-recorded by this deployment is an issues-app event, because that is what wrote it.
+recorded by this deployment is an issues-app event, because that is what wrote it,
+and the same event recorded from the sales deployment is a *sales* event. That
+survives the seam above because the app slug is a parameter to
+`recordPlatformEvent`, never a default: a platform package with a default app
+name would be a platform package that knew about one app.
 `subject_urn` is null for subjects that are not projected entities (a comment, a
 label, a member, an invitation), which is an answer rather than a gap. Pass
 `subjectUrn` explicitly only when the subject row is already gone by the time the
-event is recorded.
+event is recorded — and only for an app's own entity types; the platform half
+takes neither `subjectUrn` nor `coalesceWindowMs`, and `recordEvent` throws
+rather than dropping either in silence.
 
 This single spine is read by:
 
@@ -937,9 +997,9 @@ these; they never write SQL inline.
 |------|----------------|
 | `workspaces.ts` | workspace CRUD, membership, `getWorkspaceForUser`, issue-seq allocation |
 | `members.ts` | project member listing |
-| `invitations.ts` | invite CRUD, token mint, accept/decline, pre-signup materialization |
+| `invitations.ts` | invite CRUD, token mint, accept/decline. Pre-signup materialization is re-exported from `platform-db` — one login serves every app |
 | `invite-candidates.ts` | suggested invitees — members of the owner's other workspaces (with shared-workspace context), plus all platform users for super admins; flags `already_member` / `invited` |
-| `users.ts` | user CRUD, `getVisibleUsers` (workspace-mates only — privacy guard), OAuth upsert, password sign-up |
+| `users.ts` | password sign-up, and this app's bindings to `platform-db` for the rest: `getVisibleUsers` (workspace-mates only — privacy guard), the account reads/writes behind `/api/me`, and the four sign-in callbacks |
 | `projects.ts` | project CRUD; list joins lead + latest update health |
 | `project-relations.ts` | project ↔ member and project ↔ label sets |
 | `project-updates.ts` | status-update feed (on_track/at_risk/off_track) |
@@ -950,9 +1010,9 @@ these; they never write SQL inline.
 | `attachments.ts` | issue attachments; `getWorkspaceAttachments` (owner-wide view) |
 | `uploads.ts` | this app's binding to the shared upload ledger — the queries live in `@blackcode/platform-storage`; what stays here is stamping `APP_SLUG` on every `recordUpload` |
 | `watchers.ts` | issue watchers (manual/assigned/reporter) |
-| `events.ts` | the event spine — `recordEvent`, `EntityType`/`EventAction` |
-| `fanout.ts` | event → per-user inbox materialization |
-| `inbox.ts` | inbox writes (dedup window) + listing |
+| `events.ts` | this app's half of the event spine — `recordEvent`, `EntityType`/`EventAction`. Platform entity types are delegated to `recordPlatformEvent` (D-23) |
+| `fanout.ts` | event → per-user inbox materialization, **for this app's events only**. The five platform handlers live in `platform-db` |
+| `inbox.ts` | inbox listing and read state. The write (`createInboxMessage`, dedup window) is re-exported from `platform-db` |
 | `activity.ts` | activity feed reads |
 | `analytics.ts` | workspace/project/task/member analytics — see below |
 | `deletion.ts` | soft-delete engine — `softDelete*`, `previewDeletion`, `listTrash`, `previewRestore`, `restoreItems/Batch`, `purgeItems/Batch`, `emptyTrash` |
