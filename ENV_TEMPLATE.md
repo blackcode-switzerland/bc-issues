@@ -50,9 +50,23 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 ## Production (Vercel)
 
 ```env
-NEXTAUTH_URL=https://your-deployment.vercel.app
+NEXTAUTH_URL=https://issues.blackcode.ch
 NEXTAUTH_SECRET=your-production-secret
-DATABASE_URL=postgres://…           # your hosted Postgres
+
+# TWO database credentials, and the split is deliberate.
+# DATABASE_URL is the bounded per-app role (issues_app): it owns nothing and
+# CANNOT migrate. That is the app boundary, not a limitation.
+DATABASE_URL=postgres://issues_app:…@…/…
+
+# MIGRATE_DATABASE_URL is the schema owner, used by `postbuild` and nothing else.
+# WITHOUT IT, PRODUCTION DEPLOYS FAIL AT POSTBUILD WITH 42501 — the app role is
+# refused, correctly. See docs/platform-db.md.
+MIGRATE_DATABASE_URL=postgres://neondb_owner:…@…/…
+
+# Gates the postbuild migration. Production ONLY — never locally, never preview.
+# If this is ever removed, deploys keep succeeding while migrations silently stop.
+RUN_MIGRATIONS=1
+
 # plus any optional integrations above
 
 # Deliberately NOT set: PLATFORM_ENFORCE_APP_ACCESS. Unset means per-app access

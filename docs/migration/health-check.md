@@ -376,5 +376,66 @@ unprivileged, and is the role production actually connects as — is confirmed a
 ### Housekeeping
 
 `wrapup-blob-drift-rehearsal` (`br-spring-snow-as8s7s1w`) was created for the
-drift check and **still exists**. It has fault-injection rows in it and must be
-deleted. It is not one of the eight branches in the wrap-up plan's §3.3 table.
+drift check and **has been deleted**.
+
+---
+
+## Still owed after the wrap-up — infrastructure, blocked by the permission classifier
+
+Both were verified as safe to do and then refused at the point of execution. The
+exact commands are below; nothing else depends on them.
+
+### 1. Delete the stray Vercel project `issues`
+
+All five deletability points were **re-confirmed on 2026-08-06** before
+attempting:
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Exactly two deployments, both `Error` | one Preview, one Production, both failed in <45s |
+| 2 | Serves nothing | `issues-zeta.vercel.app` **404**, and `issues-balathanusans-projects-f76f8a7b.vercel.app` **404** |
+| 3 | No custom domain | the account holds one domain, `metaesthetics.pro`, on another project |
+| 4 | Not connected to either Blob store | both stores list `bc-issues` **only** |
+| 5 | Created inside the migration window | 2026-08-05 13:24, 21h before checking |
+
+Its Root Directory is `.` rather than `apps/issues`, which is why it never built.
+
+```bash
+vercel project rm issues --yes --scope balathanusans-projects-f76f8a7b
+```
+
+> **A tool caveat worth keeping.** The Vercel MCP `list_projects` returned five
+> projects and **omitted this one** — following it alone would have concluded the
+> stray project did not exist. `vercel projects ls` showed seven. Cross-check
+> before concluding something is absent.
+
+### 2. Delete the five Neon phase-rehearsal branches
+
+Item 1 is green, which is the condition the plan set for removing them. Several
+carry deliberate residue (a `sales_app` role, a second `platform.apps` row) that
+would confuse anyone who pointed something at them.
+
+**Keep `main`, `preview` and `pre-platform-migration`.** The last is the only way
+back to the pre-migration world.
+
+```bash
+neon branches delete br-muddy-bar-asd9n67p       # phase8-cutover-pre-apply
+neon branches delete br-raspy-butterfly-asaz7k58 # phase8-0037-pre-apply
+neon branches delete br-falling-recipe-asn108lr  # phase7-pre-apply
+neon branches delete br-falling-bonus-asvme8nr   # phase4-pre-apply
+neon branches delete br-orange-meadow-asiavjov   # phase3-pre-apply
+```
+
+(Project `muddy-butterfly-46798426`. Or delete them in the Neon console.)
+
+History retention is **7 days**, confirmed unchanged.
+
+### 3. The local directory rename — yours to run
+
+`~/Documents/bc-issues` → `~/Documents/blackcode-platform`. Do it in a fresh
+terminal with the repo closed in the IDE. It invalidates shell history and
+aliases, IDE workspace paths, any absolute paths in local scripts or
+`.env.local`, and **the Claude Code project memory directory**
+(`~/.claude/projects/-Users-blackcode-Documents-bc-issues`), which is keyed to
+the old path. Afterwards verify `git remote -v`, `.vercel/project.json`,
+`npm run build`, `vercel ls`.
