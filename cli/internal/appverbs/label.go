@@ -16,6 +16,14 @@ import (
 // What is HERE is app-agnostic: a label row belongs to the workspace, and the
 // routes are the shared `/api/workspaces/{ws}/labels…` ones.
 //
+// APP SCOPE (D-14, migration 0043). `platform.labels.app` is what makes the app
+// segment in this spelling mean something: each deployment serves the labels
+// scoped to itself PLUS the shared ones (`app IS NULL`, which is every label
+// that predates the column), and creating one here stamps this app. So
+// `bk sales label list` and `bk issues label list` genuinely differ — the
+// scoping is done by the SERVER the group's pin routes to, not by a flag here,
+// which is why there is no --app on any of these commands and must not be.
+//
 // What is NOT here is attach/detach. Attaching a label names an ENTITY — an
 // issue, a prospect — and posts to that app's own route, so each app builds its
 // own attach/detach and adds them to this group (see
@@ -25,7 +33,12 @@ import (
 func newLabelCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "label",
-		Short: "Manage labels (workspace-scoped)",
+		Short: fmt.Sprintf("Manage %s labels (workspace-scoped)", cfg.App),
+		Long: fmt.Sprintf(`Labels in the active workspace, as %[1]s sees them.
+
+A label is either scoped to one app or SHARED across every app in the workspace.
+This group shows %[1]s's own labels and the shared ones; another app's are not
+listed and cannot be attached here. A label created here is scoped to %[1]s.`, cfg.App),
 	}
 	cmd.AddCommand(
 		newLabelListCmd(),
@@ -68,6 +81,7 @@ func newLabelViewCmd() *cobra.Command {
 				fmt.Fprintf(w, "ID:          %d\n", l.ID)
 				fmt.Fprintf(w, "Name:        %s\n", l.Name)
 				fmt.Fprintf(w, "Color:       %s\n", l.Color)
+				fmt.Fprintf(w, "Scope:       %s\n", l.Scope())
 				fmt.Fprintf(w, "Description: %s\n", cmdutil.DerefOr(l.Description, "—"))
 				return nil
 			})
@@ -99,9 +113,9 @@ func newLabelListCmd() *cobra.Command {
 			}
 			return output.Render(format, labels, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "ID\tNAME\tCOLOR\tISSUES")
+				fmt.Fprintln(tw, "ID\tNAME\tCOLOR\tSCOPE\tISSUES")
 				for _, l := range labels {
-					fmt.Fprintf(tw, "%d\t%s\t%s\t%d\n", l.ID, l.Name, l.Color, l.IssueCount)
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\n", l.ID, l.Name, l.Color, l.Scope(), l.IssueCount)
 				}
 				return tw.Flush()
 			})
@@ -135,8 +149,8 @@ func newLabelCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Created label %s (id %d, color %s)\n",
-				label.Name, label.ID, label.Color)
+			fmt.Fprintf(cmd.OutOrStdout(), "Created label %s (id %d, color %s, scope %s)\n",
+				label.Name, label.ID, label.Color, label.Scope())
 			return nil
 		},
 	}

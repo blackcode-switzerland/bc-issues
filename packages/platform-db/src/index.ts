@@ -1,6 +1,7 @@
 export { createDb } from './client'
 export type { PlatformDatabase, PlatformDb, PlatformTx } from './client'
 export * from './schema'
+export * from './qualified-type'
 export * from './app-access'
 export * from './urn'
 export * from './entities'

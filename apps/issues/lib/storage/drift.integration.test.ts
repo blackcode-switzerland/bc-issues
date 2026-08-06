@@ -173,7 +173,7 @@ run('blob_references triggers + reconciler (integration)', () => {
     await inRolledBackTx(async (tx) => {
       const r = await tx.execute(sql`
         INSERT INTO platform.comments (workspace_id, parent_type, parent_id, user_id, content)
-        VALUES (${wsId}, 'issue', 1, ${userId}, ${`c ${FILE_A}`}) RETURNING id
+        VALUES (${wsId}, 'issues:issue', 1, ${userId}, ${`c ${FILE_A}`}) RETURNING id
       `)
       const id = Number(r.rows[0].id)
       expect(await indexRows(tx, 'platform', 'comment', id)).toEqual([FILE_A])

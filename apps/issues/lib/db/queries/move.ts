@@ -47,7 +47,8 @@ import {
 } from '../schema'
 import { recordEvent } from './events'
 import { projectEntity, syncEntityDeletedState } from './entities'
-import { resolveOrCreateLabels } from './labels'
+import { resolveOrCreateLabels, VISIBLE_TO_THIS_APP } from './labels'
+import { ownType, ownTypeForms } from './qualified-type'
 import {
   allocateNextIssueSeq,
   allocateNextProjectSeq,
@@ -487,7 +488,7 @@ async function copyLabels(
   const names = await tx
     .select({ name: labels.name })
     .from(labels)
-    .where(inArray(labels.id, rows.map((r) => r.label_id)))
+    .where(and(inArray(labels.id, rows.map((r) => r.label_id)), VISIBLE_TO_THIS_APP))
   if (names.length === 0) return
   const targetLabelIds = await resolveOrCreateLabels(
     tx,
@@ -609,7 +610,7 @@ async function copyComments(
     .where(
       and(
         eq(comments.workspace_id, sourceWs),
-        eq(comments.parent_type, parentType),
+        inArray(comments.parent_type, ownTypeForms(parentType)),
         eq(comments.parent_id, sourceParentId)
       )
     )
@@ -630,7 +631,9 @@ async function copyComments(
       .insert(comments)
       .values({
         workspace_id: targetWs,
-        parent_type: parentType,
+        // App-qualified since 0041 — a copy is a new write, so it stores the
+        // current form even when the source row still carries the legacy one.
+        parent_type: ownType(parentType),
         parent_id: targetParentId,
         user_id: author,
         content: c.content,
@@ -677,7 +680,7 @@ async function softDeleteSource(
       workspace_id: workspaceId,
       actor_user_id: actorUserId,
       mode: 'cascade',
-      root_type: rootType,
+      root_type: ownType(rootType),
       root_id: rootId,
     })
     .returning({ id: deletionBatches.id })

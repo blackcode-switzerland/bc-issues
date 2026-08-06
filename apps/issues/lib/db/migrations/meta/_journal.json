@@ -288,6 +288,27 @@
       "when": 1785949891936,
       "tag": "0040_move_workspace_counters_to_issues",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1785949951936,
+      "tag": "0041_comments_parent_type_app_qualified",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1785950011936,
+      "tag": "0042_deletion_batches_root_type_app_qualified",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1785950071936,
+      "tag": "0043_labels_app_scope",
+      "breakpoints": true
     }
   ]
 }

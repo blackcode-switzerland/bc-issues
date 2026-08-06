@@ -1,14 +1,51 @@
-// Label queries — workspace-scoped. Labels are shared across all projects in
-// the workspace and can be applied to issues directly. The legacy project_id
-// column is no longer required.
+// Label queries — workspace-scoped AND app-scoped. Labels are shared across all
+// projects in the workspace and can be applied to issues directly. The legacy
+// project_id column is no longer required.
 //
 // Names are case-insensitive unique within a workspace (enforced at the
 // application layer; Phase 13 cleanup will add a partial unique index).
+//
+// ---------------------------------------------------------------------------
+// THE APP LENS (0043, D-14) — IT IS ON EVERY READ, NOT JUST THE LIST
+// ---------------------------------------------------------------------------
+// `platform.labels.app` is NULL for a label shared across every app in the
+// workspace, and the app's slug for one scoped to it. `VISIBLE_TO_THIS_APP` is
+// that predicate and belongs on EVERY query in this file, because "read path"
+// here does not mean "the list route":
+//
+//   - the dup check behind create/rename would otherwise refuse a name another
+//     app owns, leaking that app's label set through a 409;
+//   - update/delete would otherwise let this app rename or destroy another
+//     app's label by id;
+//   - attach would otherwise put a foreign app's label on an issue, which is
+//     the one failure D-14's `bk <app> label` spelling promises cannot happen.
+//
+// Creation stamps `app: APP_SLUG`. NULL is reachable only for rows that predate
+// 0043 — nothing in this app writes it, deliberately: a "shared" label is a
+// migration artefact today, not a feature, and inventing a flag for it would be
+// inventing a product decision nobody has made.
+//
+// `labels.app-scope.test.ts` enumerates the paths and asserts BOTH halves of the
+// predicate — that another app's labels are hidden, AND that this app's own are
+// still shown. A filter that hid everything would pass the first half alone.
 
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import { db } from '../client'
 import { issueLabels, issues, labels, type Label } from '../schema'
 import { recordEvent } from './events'
+import { APP_SLUG } from '@/lib/app'
+
+/** `app IS NULL OR app = 'issues'` — shared labels, plus this app's own. */
+export const VISIBLE_TO_THIS_APP: SQL = sql`(${labels.app} IS NULL OR ${labels.app} = ${APP_SLUG})`
+
+/**
+ * The same predicate for the reads written in raw SQL, which address the table
+ * through an alias (`l`, `lb`) rather than through the drizzle symbol.
+ */
+export function visibleToThisApp(alias: string): SQL {
+  const col = sql.raw(`${alias}.app`)
+  return sql`(${col} IS NULL OR ${col} = ${APP_SLUG})`
+}
 
 export interface LabelListItem extends Label {
   issue_count: number
@@ -22,7 +59,7 @@ export async function listLabelsInWorkspace(workspaceId: number): Promise<LabelL
         WHERE il.label_id = l.id AND i.workspace_id = ${workspaceId}
           AND i.deleted_at IS NULL) AS issue_count
     FROM ${labels} l
-    WHERE l.workspace_id = ${workspaceId}
+    WHERE l.workspace_id = ${workspaceId} AND ${visibleToThisApp('l')}
     ORDER BY l.name ASC
   `)
   return rows.rows as unknown as LabelListItem[]
@@ -35,7 +72,7 @@ export async function getLabelInWorkspace(
   const rows = await db
     .select()
     .from(labels)
-    .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId)))
+    .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
     .limit(1)
   return rows[0] ?? null
 }
@@ -50,6 +87,7 @@ async function findLabelByName(
     .where(
       and(
         eq(labels.workspace_id, workspaceId),
+        VISIBLE_TO_THIS_APP,
         sql`lower(${labels.name}) = ${name.toLowerCase()}`
       )
     )
@@ -75,6 +113,7 @@ export async function createLabel(input: CreateLabelInput): Promise<Label> {
       .insert(labels)
       .values({
         workspace_id: input.workspaceId,
+        app: APP_SLUG,
         name,
         color: input.color ?? '#6b7280',
         description: input.description ?? null,
@@ -119,7 +158,13 @@ export async function resolveOrCreateLabels(
     const existing = await tx
       .select({ id: labels.id })
       .from(labels)
-      .where(and(eq(labels.workspace_id, workspaceId), sql`lower(${labels.name}) = ${key}`))
+      .where(
+        and(
+          eq(labels.workspace_id, workspaceId),
+          VISIBLE_TO_THIS_APP,
+          sql`lower(${labels.name}) = ${key}`
+        )
+      )
       .limit(1)
     if (existing[0]) {
       ids.push(existing[0].id)
@@ -128,7 +173,7 @@ export async function resolveOrCreateLabels(
 
     const [created] = await tx
       .insert(labels)
-      .values({ workspace_id: workspaceId, name, color: '#6b7280', created_by: actorUserId })
+      .values({ workspace_id: workspaceId, app: APP_SLUG, name, color: '#6b7280', created_by: actorUserId })
       .returning({ id: labels.id, name: labels.name, color: labels.color })
     if (!created) continue
     ids.push(created.id)
@@ -169,7 +214,7 @@ export async function updateLabel(
     const beforeRows = await tx
       .select()
       .from(labels)
-      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId)))
+      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
       .limit(1)
     const before = beforeRows[0]
     if (!before) return null
@@ -189,7 +234,7 @@ export async function updateLabel(
     const [after] = await tx
       .update(labels)
       .set(updates)
-      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId)))
+      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
       .returning()
     if (!after) return null
 
@@ -222,7 +267,7 @@ export async function deleteLabel(
     const beforeRows = await tx
       .select()
       .from(labels)
-      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId)))
+      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
       .limit(1)
     if (!beforeRows[0]) return false
 
@@ -237,7 +282,7 @@ export async function deleteLabel(
 
     const result = await tx
       .delete(labels)
-      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId)))
+      .where(and(eq(labels.id, id), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
     return (result.rowCount ?? 0) > 0
   })
 }
@@ -263,7 +308,7 @@ export async function attachLabel(
     const lbl = await tx
       .select({ id: labels.id, name: labels.name, color: labels.color })
       .from(labels)
-      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId)))
+      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
       .limit(1)
     if (!lbl[0]) return false
 
@@ -297,7 +342,7 @@ export async function detachLabel(
     const lbl = await tx
       .select({ id: labels.id, name: labels.name })
       .from(labels)
-      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId)))
+      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId), VISIBLE_TO_THIS_APP))
       .limit(1)
     if (!lbl[0]) return false
 
@@ -327,12 +372,13 @@ export async function listIssueLabels(issueId: number): Promise<Label[]> {
       name: labels.name,
       color: labels.color,
       description: labels.description,
+      app: labels.app,
       created_by: labels.created_by,
       created_at: labels.created_at,
     })
     .from(issueLabels)
     .innerJoin(labels, eq(labels.id, issueLabels.label_id))
-    .where(eq(issueLabels.issue_id, issueId))
+    .where(and(eq(issueLabels.issue_id, issueId), VISIBLE_TO_THIS_APP))
     .orderBy(labels.name)
   return rows
 }

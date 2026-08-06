@@ -30,6 +30,59 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-06 — Labels belong to an app, and two shared columns became `<app>:<noun>`
+
+Three changes to tables **every** app shares (`platform.labels`,
+`platform.comments`, `platform.deletion_batches`), so that a second deployment
+can use them without colliding with this one. All three are the **expand** half
+of expand → migrate → contract; nothing is removed yet.
+
+### `platform.labels.app` — labels are app-scoped
+
+A label is now either **scoped to one app** or **shared across every app** in the
+workspace.
+
+- `app = '<slug>'` — only that app lists it, attaches it, renames it or deletes it.
+- `app IS NULL` — **shared**. Every label that existed before today is shared, so
+  nothing you can see today disappeared.
+
+`bk issues label list` now genuinely means *issues'* labels: every read on the
+issues deployment is filtered to `app IS NULL OR app = 'issues'`, and that
+includes the ones that are not a list — resolving a label by name while creating
+an issue, attaching one, renaming one, deleting one. **Another app's label cannot
+be attached to an issue.**
+
+**Adapt:** a label object now carries `"app"` (a slug, or `null` for shared).
+`bk <app> label list` and `label view` print it as a `SCOPE` column. Labels you
+create through `bk issues label create` or through `--label` on an issue are
+scoped to `issues` from now on; existing ones stay shared until somebody decides
+otherwise. Nothing about label ids, colours or attachment changed.
+
+### `platform.comments.parent_type` and `platform.deletion_batches.root_type`
+
+Both stored one app's bare noun (`'issue'`, `'task'`, `'project'`) in a column
+every app writes, which meant the database rejected a comment on anything a
+second app owns, and that two apps inventing the same word would have collided
+silently. Both columns are now `<app>:<noun>` — `issues:issue`, `sales:prospect`
+— and both CHECK constraints accept that shape from **any** app.
+
+Existing rows were rewritten to the qualified form in the same migration.
+
+**Adapt: nothing, for HTTP clients.** These are storage-level changes. Every
+route that returns one of these values still returns the bare noun
+(`parent_type: "issue"`, `batch_root_type: "project"`), because the route is
+already scoped to one app by its path. No response field changed shape.
+
+**Not breaking.** Both constraints still accept the three bare legacy values, and
+every read matches both forms, so a request in flight during the deploy is fine
+either way. Dropping the bare form is a later release.
+
+> **Operationally:** the backfill is invisible to the build that ships with it
+> and to any other app, but a build from *before* it still looks for the bare
+> form. Migration and promote must be chained, not run hours apart.
+
+---
+
 ## 2026-08-06 — **CLI 3.0.0:** `bk` learned every app's address, and routes by tier
 
 > **UPGRADING FROM 2.x: run `bk meta` once.** Your login still works and you do

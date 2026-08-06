@@ -530,11 +530,29 @@ export const labels = platformSchema.table(
     name: varchar('name', { length: 50 }).notNull(),
     color: varchar('color', { length: 7 }).default('#6b7280'),
     description: text('description'),
+    // Which app this label belongs to (0043, D-14).
+    //
+    //   NULL — shared: every app in the workspace sees it. Every row that
+    //          predates the column, and the reason it is nullable rather than
+    //          NOT NULL: adding it changed no deployed app's label list.
+    //   set  — scoped: only that app sees it.
+    //
+    // A label read that ignores this column returns another app's labels while
+    // its own command spelling (`bk <app> label list`) promises otherwise, so
+    // "app IS NULL OR app = <serving app>" belongs in EVERY read — not just the
+    // list route. `apps/issues/lib/db/queries/labels.ts` is the reference
+    // implementation and `labels.app-scope.test.ts` enumerates the paths.
+    //
+    // ON DELETE set null, like `uploads.app` and `workspace_invitations.app`:
+    // `issues.issue_labels` cascades from this table, so deregistering an app
+    // must not take live rows' labels with it.
+    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
     created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
   },
   (t) => ({
     wsIdx: index('idx_labels_workspace').on(t.workspace_id),
+    wsAppIdx: index('idx_labels_workspace_app').on(t.workspace_id, t.app),
   })
 )
 
@@ -714,7 +732,10 @@ export const deletionBatches = platformSchema.table(
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     actor_user_id: integer('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
     mode: varchar('mode', { length: 10 }).notNull(),
-    root_type: varchar('root_type', { length: 20 }).notNull(),
+    // App-qualified `<app>:<noun>` since 0042 (D-14). 81 = apps.slug (40) + ':'
+    // + entities.entity_type (40). See `comments.parent_type` below for why the
+    // CHECK validates the shape rather than enumerating anyone's nouns.
+    root_type: varchar('root_type', { length: 81 }).notNull(),
     root_id: integer('root_id').notNull(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -723,7 +744,8 @@ export const deletionBatches = platformSchema.table(
     modeCheck: check('deletion_batches_mode_check', sql`${t.mode} IN ('cascade', 'detach')`),
     rootTypeCheck: check(
       'deletion_batches_root_type_check',
-      sql`${t.root_type} IN ('project', 'task', 'issue')`
+      // The bare trio is LEGACY and goes away at the contract step.
+      sql`${t.root_type} IN ('project', 'task', 'issue') OR ${t.root_type} ~ '^[a-z][a-z0-9_-]{0,39}:[a-z][a-z0-9_-]{0,39}$'`
     ),
   })
 )
@@ -778,10 +800,21 @@ export const comments = platformSchema.table(
     id: serial('id').primaryKey(),
     // Phase 1: nullable during backfill. Phase 13 tightens.
     workspace_id: integer('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    // Polymorphic parent: 'issue' | 'task' | 'project'.
-    // Existing rows backfill with parent_type='issue', parent_id=issue_id.
-    // We keep `issue_id` in place for one release for safety; new code uses parent_*.
-    parent_type: varchar('parent_type', { length: 20 }),
+    // Polymorphic parent, APP-QUALIFIED since 0041 (D-14): `<app>:<noun>` —
+    // 'issues:issue', 'sales:prospect'. 81 = apps.slug (40) + ':' +
+    // entities.entity_type (40).
+    //
+    // The CHECK validates the SHAPE, never the vocabulary: `platform` does not
+    // enumerate an app's nouns here any more than it does in
+    // `entities.entity_type`, and an enumeration would mean a shared-table
+    // migration every time any app adds one. So `'nonsense:thing'` is accepted
+    // and `'prospect'` — a NEW unqualified noun, the collision D-14 exists to
+    // prevent — is not. Migration 0041's header has the full reasoning,
+    // including why an FK to `apps.slug` is refused.
+    //
+    // The three bare values are LEGACY and stay accepted for one release; reads
+    // in `apps/issues` match both forms until the contract step drops them.
+    parent_type: varchar('parent_type', { length: 81 }),
     parent_id: integer('parent_id'),
     user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
     content: text('content').notNull(),
@@ -796,7 +829,7 @@ export const comments = platformSchema.table(
     parentCommentIdx: index('idx_comments_parent_comment').on(t.parent_comment_id),
     parentTypeCheck: check(
       'comments_parent_type_check',
-      sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'task', 'project')`
+      sql`${t.parent_type} IS NULL OR ${t.parent_type} IN ('issue', 'task', 'project') OR ${t.parent_type} ~ '^[a-z][a-z0-9_-]{0,39}:[a-z][a-z0-9_-]{0,39}$'`
     ),
   })
 )

@@ -300,8 +300,22 @@ type Label struct {
 	Name        string  `json:"name" yaml:"name"`
 	Color       string  `json:"color" yaml:"color"`
 	Description *string `json:"description" yaml:"description"`
-	IssueCount  int     `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
-	CreatedAt   *string `json:"created_at" yaml:"created_at"`
+	// Which app owns this label. Empty/null means SHARED — visible to every app
+	// in the workspace, which is what every label created before the column
+	// existed is. A server only ever returns labels it can see, so this is never
+	// another app's slug; it is here so `label list` can say WHICH of the two a
+	// row is, rather than leaving an agent to infer it.
+	App        *string `json:"app,omitempty" yaml:"app,omitempty"`
+	IssueCount int     `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
+	CreatedAt  *string `json:"created_at" yaml:"created_at"`
+}
+
+// Scope is the human word for `App`: the app slug, or "shared".
+func (l Label) Scope() string {
+	if l.App == nil || *l.App == "" {
+		return "shared"
+	}
+	return *l.App
 }
 
 func (c *Client) ListLabels(slugOrID string) ([]Label, error) {

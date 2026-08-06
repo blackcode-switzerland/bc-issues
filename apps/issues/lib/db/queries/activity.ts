@@ -10,6 +10,7 @@
 import { sql } from 'drizzle-orm'
 import { comments, users } from '../schema'
 import { db } from '../client'
+import { ownTypeIn } from './qualified-type'
 
 export async function getIssueActivity(issueId: number) {
   const commentRows = (
@@ -24,7 +25,7 @@ export async function getIssueActivity(issueId: number) {
         c.created_at
       FROM ${comments} c
       LEFT JOIN ${users} u ON u.id = c.user_id
-      WHERE c.parent_type = 'issue' AND c.parent_id = ${issueId}
+      WHERE c.parent_type IN ${ownTypeIn('issue')} AND c.parent_id = ${issueId}
       ORDER BY c.created_at DESC
     `)
   ).rows

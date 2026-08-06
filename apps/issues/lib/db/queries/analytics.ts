@@ -15,6 +15,7 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '../client'
 import { comments, events, issueAssignees, issueLabels, issues, labels, projects, tasks, users, workspaceMembers, workspaces } from '../schema'
+import { visibleToThisApp } from './labels'
 
 export type AnalyticsView = 'workspace' | 'project' | 'task' | 'member'
 export type AnalyticsInterval = 'day' | 'week'
@@ -333,7 +334,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     SELECT l.id AS label_id, l.name, l.color, COUNT(*)::int AS count
     FROM ${issueLabels} il
     INNER JOIN ${issues} i ON i.id = il.issue_id
-    INNER JOIN ${labels} l ON l.id = il.label_id
+    INNER JOIN ${labels} l ON l.id = il.label_id AND ${visibleToThisApp('l')}
     WHERE ${where}
     GROUP BY l.id, l.name, l.color
     ORDER BY count DESC

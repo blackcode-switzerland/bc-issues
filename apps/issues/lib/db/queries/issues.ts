@@ -20,7 +20,8 @@ import { projectEntity } from './entities'
 import { softDeleteIssue } from './deletion'
 import { allocateNextIssueSeq } from './workspaces'
 import { addWatcher, removeAutoWatcher } from './watchers'
-import { resolveOrCreateLabels } from './labels'
+import { resolveOrCreateLabels, VISIBLE_TO_THIS_APP, visibleToThisApp } from './labels'
+import { ownTypeIn } from './qualified-type'
 import { toRichTextHtml } from '@/lib/rich-text'
 import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
 
@@ -61,9 +62,9 @@ const issueListSelect = sql`
   p.icon AS project_icon,
   p.color AS project_color,
   p.seq AS project_seq,
-  (SELECT COUNT(*)::int FROM ${comments} c WHERE c.parent_type = 'issue' AND c.parent_id = i.id) AS comment_count,
+  (SELECT COUNT(*)::int FROM ${comments} c WHERE c.parent_type IN ${ownTypeIn('issue')} AND c.parent_id = i.id) AS comment_count,
   (SELECT COUNT(*)::int FROM ${attachments} a WHERE a.issue_id = i.id) AS attachment_count,
-  COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM ${issueLabels} il JOIN ${labels} lb ON lb.id = il.label_id WHERE il.issue_id = i.id), '[]'::json) AS labels
+  COALESCE((SELECT json_agg(json_build_object('id', lb.id, 'name', lb.name, 'color', lb.color) ORDER BY lb.name) FROM ${issueLabels} il JOIN ${labels} lb ON lb.id = il.label_id WHERE il.issue_id = i.id AND ${visibleToThisApp('lb')}), '[]'::json) AS labels
 `
 
 export interface ListIssuesOptions {
@@ -240,7 +241,13 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
       const valid = await tx
         .select({ id: labels.id })
         .from(labels)
-        .where(and(eq(labels.workspace_id, input.workspaceId), inArray(labels.id, input.labelIds)))
+        .where(
+          and(
+            eq(labels.workspace_id, input.workspaceId),
+            VISIBLE_TO_THIS_APP,
+            inArray(labels.id, input.labelIds)
+          )
+        )
       valid.forEach((l) => labelIdSet.add(l.id))
     }
     if (input.labelNames && input.labelNames.length > 0) {

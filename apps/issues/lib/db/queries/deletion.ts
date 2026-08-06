@@ -25,6 +25,7 @@ import { db } from '../client'
 import { attachments, comments, deletionBatches, issues, projectUpdates, projects, tasks, users } from '../schema'
 import { recordEvent } from './events'
 import { purgeMissingEntities, syncEntityDeletedState } from './entities'
+import { bareType, ownType, ownTypeForms } from './qualified-type'
 import { extractUploadedUrls, sweepOrphanedUrls } from '@/lib/storage'
 
 export type TrashType = 'issue' | 'project' | 'task'
@@ -198,7 +199,9 @@ async function createBatch(
       workspace_id: workspaceId,
       actor_user_id: actorUserId,
       mode,
-      root_type: rootType,
+      // App-qualified since 0042 (D-14). Read back bare in `listTrash` below —
+      // `components/trash-view.tsx` compares it against the item's bare `type`.
+      root_type: ownType(rootType),
       root_id: rootId,
     })
     .returning({ id: deletionBatches.id })
@@ -502,7 +505,7 @@ export async function listTrash(
     deleted_by_name: (r.deleted_by_name as string | null) ?? null,
     batch_id: r.delete_batch_id != null ? Number(r.delete_batch_id) : null,
     batch_mode: (r.batch_mode as DeleteMode | null) ?? null,
-    batch_root_type: (r.batch_root_type as TrashType | null) ?? null,
+    batch_root_type: (bareType(r.batch_root_type as string | null) as TrashType | null) ?? null,
     batch_root_id: r.batch_root_id != null ? Number(r.batch_root_id) : null,
     project_id: r.project_id != null ? Number(r.project_id) : null,
     task_id: r.task_id != null ? Number(r.task_id) : null,
@@ -905,7 +908,13 @@ async function collectPurgeUrls(
   const cmts = await tx
     .select({ content: comments.content })
     .from(comments)
-    .where(and(eq(comments.workspace_id, workspaceId), eq(comments.parent_type, type), eq(comments.parent_id, id)))
+    .where(
+      and(
+        eq(comments.workspace_id, workspaceId),
+        inArray(comments.parent_type, ownTypeForms(type)),
+        eq(comments.parent_id, id)
+      )
+    )
   for (const c of cmts) urls.push(...extractUploadedUrls(c.content))
   return urls
 }

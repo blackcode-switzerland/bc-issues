@@ -9,6 +9,7 @@
 
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../client'
+import { bareType, ownType, ownTypeForms } from './qualified-type'
 import {
   comments,
   issues,
@@ -64,6 +65,14 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export type CommentParentType = 'issue' | 'task' | 'project'
 
+// `parent_type` is stored app-qualified since 0041 ('issues:issue') and returned
+// bare ('issue'). Every row this module hands back goes through here, so the
+// wire format and the CommentParentType union stay the three bare nouns they
+// have always been — see ./qualified-type.ts for why the wire is not qualified.
+function withBareParent<T extends { parent_type: string | null }>(row: T): T {
+  return { ...row, parent_type: bareType(row.parent_type) }
+}
+
 export interface CommentListItem extends Comment {
   author_name: string | null
   author_email: string | null
@@ -86,10 +95,15 @@ export async function listComments(
     })
     .from(comments)
     .leftJoin(users, eq(users.id, comments.user_id))
-    .where(and(eq(comments.parent_type, parentType), eq(comments.parent_id, parentId)))
+    .where(
+      and(
+        inArray(comments.parent_type, ownTypeForms(parentType)),
+        eq(comments.parent_id, parentId)
+      )
+    )
     .orderBy(asc(comments.created_at))
   return rows.map((r) => ({
-    ...r.c,
+    ...withBareParent(r.c),
     author_name: r.author_name,
     author_email: r.author_email,
     author_avatar: r.author_avatar,
@@ -176,7 +190,7 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
       .insert(comments)
       .values({
         workspace_id: input.workspaceId,
-        parent_type: input.parentType,
+        parent_type: ownType(input.parentType),
         parent_id: input.parentId,
         user_id: input.userId,
         content: toRichTextHtml(input.content),
@@ -186,6 +200,10 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
       .returning()
     if (!row) throw new Error('comment insert returned nothing')
 
+    // `recordEvent`'s entityType is the EVENT vocabulary, not this column: it is
+    // already app-scoped by `platform.events.app`, and `bk activity --type
+    // issue` filters on the bare noun. Deliberately left bare — the two
+    // vocabularies are separate and merging them would change the activity feed.
     await recordEvent(tx, {
       workspaceId: input.workspaceId,
       actorUserId: input.userId,
@@ -232,7 +250,7 @@ export async function createComment(input: CreateCommentInput): Promise<Comment>
       })
     }
 
-    return row
+    return withBareParent(row)
   })
 }
 
@@ -268,7 +286,7 @@ export async function updateComment(
       action: 'updated',
       diff: { before: { content: before.content }, after: { content: after.content } },
     })
-    return after
+    return withBareParent(after)
   })
 }
 
@@ -295,7 +313,9 @@ export async function deleteComment(
       entityId: id,
       action: 'deleted',
       meta: {
-        parent_type: before.parent_type,
+        // Bare, matching every other `parent_type` this app emits — the event
+        // row already carries `app`.
+        parent_type: bareType(before.parent_type),
         parent_id: before.parent_id,
       },
     })
