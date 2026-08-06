@@ -140,6 +140,12 @@ cmd.AddCommand(appverbs.New(appverbs.Config{App: Slug, TrashTypes: […]}).All()
 Forget it and your own `lib/cli-parity.test.ts` fails: `POST /api/upload` is
 real in your tree and no `bk` command claims it.
 
+Registering the group in `root.go` is also what PINS its server: everything under
+`bk <app> …` resolves through `app_servers[<app>]`, learned from your
+`platform.apps.base_url` (§3). Nothing else is needed — but if that column is
+NULL, every command in your group fails with *"no server known for app …"*
+rather than quietly reaching somebody else's deployment.
+
 ---
 
 ## 1. The app directory
@@ -211,6 +217,12 @@ Every deny must be `42501`.
 INSERT INTO platform.apps (slug, name, description, base_url, enabled)
 VALUES ('sales', 'Sales', 'Deals and quotes', 'https://sales.blackcode.ch', true);
 ```
+
+**`base_url` is load-bearing since CLI 3.0.0 (D-1).** It is what `bk login` and
+`bk meta` learn each app's address from, and the CLI refuses to guess: with the
+column NULL, `bk sales …` fails with *"no server known for app sales"* on every
+machine, however correct everything else is. Set it to the real deployment URL in
+this row — not later, not in a follow-up. `bk app list` is where you check it.
 
 **Read this before you run it.** The moment this row exists, every deployment's
 blob-delete gate asks whether `sales` references a file. Until step 4 gives it an
