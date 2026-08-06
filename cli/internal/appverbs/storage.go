@@ -20,15 +20,15 @@ import (
 func newStorageCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "storage",
-		Short: scoped(cfg, "Manage uploaded files in the active workspace (owner only)"),
-		Long: `Review and clean up files uploaded into the workspace.
+		Short: "Manage uploaded files in the active workspace (owner only)",
+		Long: fmt.Sprintf(`Review and clean up files uploaded into the workspace, as the %s app.
 
 Every file ever uploaded (via the web, the API, or the CLI) is tracked. Removing
 a file from a description or comment does NOT delete the stored bytes — that is
 deliberate, so trash-restore stays safe. Use these commands to see what is taking
 up space and to permanently delete files that nothing references.
 
-Owner only.`,
+Owner only.`, cfg.App),
 	}
 	cmd.AddCommand(newStorageListCmd(cfg), newStorageRmCmd(cfg))
 	return cmd

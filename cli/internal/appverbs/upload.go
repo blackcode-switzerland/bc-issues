@@ -21,7 +21,7 @@ func newUploadCmd(cfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "upload <file> [<file> ...]",
 		Annotations: map[string]string{"routes": "GET /api/upload,POST /api/upload,POST /api/upload/blob"},
-		Short:       scoped(cfg, "Upload file(s) and print the public URL(s)"),
+		Short:       "Upload file(s) and print the public URL(s)",
 		Long: fmt.Sprintf(`Upload one or more files and print the resulting public URL.
 
 The file is stored against the %s app: that is what the app segment in

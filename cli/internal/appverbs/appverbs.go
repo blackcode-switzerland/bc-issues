@@ -45,7 +45,6 @@
 package appverbs
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -109,10 +108,4 @@ func New(cfg Config) Set {
 		Trash:   newTrashCmd(cfg),
 		Label:   newLabelCmd(cfg),
 	}
-}
-
-// scoped renders "(sales)" for the one-line Short of each group, so
-// `bk --help` and `bk <app> --help` both say which app answers.
-func scoped(cfg Config, short string) string {
-	return fmt.Sprintf("%s (%s)", short, cfg.App)
 }

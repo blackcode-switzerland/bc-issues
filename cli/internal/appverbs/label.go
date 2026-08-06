@@ -25,7 +25,7 @@ import (
 func newLabelCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "label",
-		Short: scoped(cfg, "Manage labels (workspace-scoped)"),
+		Short: "Manage labels (workspace-scoped)",
 	}
 	cmd.AddCommand(
 		newLabelListCmd(),

@@ -24,7 +24,15 @@ func newTrashCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "trash",
 		Aliases: []string{"recycle", "bin"},
-		Short:   scoped(cfg, "Manage the recycle bin"),
+		Short:   "Manage the recycle bin",
+		Long: fmt.Sprintf(`The %s app's recycle bin: list, restore, purge, empty.
+
+Deletes are soft — an item moves here instead of being destroyed. This bin holds
+THIS app's entities only; another app's deleted items are in its own bin, which
+is why the app is part of the command. "purge" and "empty" are the only
+irreversible actions in the product, and both echo what they destroyed.
+
+Refs are <type>:<#number>, exactly as printed in the REF column of "list".`, cfg.App),
 	}
 	cmd.AddCommand(
 		newTrashListCmd(cfg),
