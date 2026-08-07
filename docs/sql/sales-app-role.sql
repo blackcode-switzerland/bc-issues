@@ -13,15 +13,58 @@
 --   sales_app     the APP role. DML only, owns nothing, so it cannot ALTER or
 --                 DROP — including tables in `platform` that every other app
 --                 depends on.
+--
+-- ---------------------------------------------------------------------------
+-- \set ON_ERROR_STOP on. NOT OPTIONAL, AND HERE IS WHAT IT COST TO LEARN.
+-- ---------------------------------------------------------------------------
+-- Rehearsed 2026-08-07 against a copy of the local database, in the order
+-- `salesImplementation/DEPLOY-TODO.txt` gave (role first, migrations later).
+-- **Five of this file's ten statements failed and psql exited 0:**
+--
+--     psql:role.sql:18: ERROR:  role "sales_app" already exists   (rehearsal only)
+--     psql:role.sql:22: ERROR:  schema "sales" does not exist
+--     psql:role.sql:25: ERROR:  schema "sales" does not exist
+--     psql:role.sql:30: ERROR:  schema "sales" does not exist
+--     psql:role.sql:36: ERROR:  schema "sales" does not exist
+--     psql:role.sql:38: ERROR:  schema "sales" does not exist
+--     PSQL EXIT=0
+--
+-- Steps 2–5 are every grant this role has. Skipping them all leaves a LOGIN role
+-- with no USAGE on any schema — the app cannot start, and the provisioning step
+-- that was supposed to create it reported success. That is CLAUDE.md finding #7
+-- (`psql` printing 27 errors and exiting 0) reproduced in a provisioning script,
+-- by the third file in this directory to carry a warning about it.
+--
+-- Two fixes, both applied:
+--   * `\set ON_ERROR_STOP on` below, so the failure is the exit code too.
+--   * step 1b, which creates the schema this file always assumed was there.
+--     `apps/issues` never hit it because `issues` was created by migration 0033
+--     years before anyone wrote a role script for it.
+\set ON_ERROR_STOP on
 
 -- 1. The role.
 CREATE ROLE sales_app LOGIN PASSWORD '<generated-password>';
+
+-- 1b. The schema — **BEFORE the grants, because steps 2–5 all name it.**
+--     `IF NOT EXISTS`, and migration 0001 opens with the same statement, so it
+--     does not matter which of the two gets there first. Owned by the MIGRATOR;
+--     the app role must own nothing.
+CREATE SCHEMA IF NOT EXISTS sales AUTHORIZATION neondb_owner;
 
 -- 2. Reach the schemas. USAGE alone grants nothing inside them.
 --    NOTE `sales` and NOT `issues` — that omission IS the app boundary.
 GRANT USAGE ON SCHEMA platform, sales TO sales_app;
 
 -- 3. Data access. NO TRUNCATE, NO REFERENCES, NO TRIGGER — DML only.
+--
+--    `ON ALL TABLES` means "all tables that exist RIGHT NOW", and at this point
+--    `sales` is empty — so this line grants exactly nothing in it and everything
+--    in `platform`. That is correct and not a gap: step 5 is what covers the
+--    seventeen tables migration 0001 is about to create. Verified in the
+--    2026-08-07 rehearsal — after the migrations, with no re-grant of any kind,
+--    `sales_app` could read `sales.prospects` and held USAGE on 10 of 10 new
+--    sequences. **If you ever move this file to AFTER the migrations, step 5
+--    still has to run; do not delete it because step 3 looks sufficient.**
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA platform, sales TO sales_app;
 
 -- 4. Sequences. Easy to forget, and the failure is confusing: every INSERT into
@@ -72,9 +115,16 @@ ALTER ROLE sales_app SET search_path = platform, sales;
 REVOKE ALL ON SCHEMA drizzle FROM sales_app;
 
 -- ---------------------------------------------------------------------------
--- THEN PROVE IT, AS THE NEW ROLE. NOT OPTIONAL.
+-- THEN PROVE IT, AS THE NEW ROLE — **AFTER THE MIGRATIONS, NOT NOW.**
 -- ---------------------------------------------------------------------------
 --   psql "postgres://sales_app:<pw>@<host>/<db>" -f docs/sql/app-boundary-probe.sql
+--
+-- The probe needs the schema to have TABLES: its check (1) reads one, and its
+-- check (4e) purges this app's own references. Run at this point, with `sales`
+-- freshly created and empty, it reports `(1) FAILED: schema sales has no tables`
+-- and then denies the rest for the wrong reason. See the probe's own header —
+-- the rehearsal that found this is written up there, because that is where
+-- somebody about to run it will be standing.
 --
 -- Every deny must be `42501`. `SET ROLE` from the owner is NOT a substitute and
 -- quietly gives the wrong answer: `session_user` ignores SET ROLE by design, and

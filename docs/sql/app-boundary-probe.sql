@@ -24,6 +24,44 @@
 --
 -- EXPECTED: every line prints `ok`. Anything else is a boundary that is not
 -- there.
+--
+-- ---------------------------------------------------------------------------
+-- RUN IT AFTER THE APP'S MIGRATIONS, AND READ THE `ok` LINES, NOT THE ERRORS
+-- ---------------------------------------------------------------------------
+-- **This file cannot tell "the boundary holds" apart from "this role was never
+-- granted anything" by its denials alone.** Rehearsed 2026-08-07 against a role
+-- that had been created and then given no grants at all — the failure mode
+-- `sales-app-role.sql` produces when it is run before the app's schema exists:
+--
+--     (1)  ERROR: (1) FAILED: schema sales has no tables — did the migration run?
+--     (2)  ERROR: permission denied for schema platform
+--     (3)  ERROR: permission denied for schema platform       ← reads as a pass
+--     (4b) ERROR: permission denied for schema platform       ← reads as a pass
+--     (4c) ERROR: permission denied for schema platform       ← reads as a pass
+--     (4d) ERROR: permission denied for schema platform       ← reads as a pass
+--     (5)  ERROR: permission denied for schema drizzle        ← reads as a pass
+--     PSQL EXIT=0
+--
+-- Every one of those is SQLSTATE 42501, so the closing line of this script —
+-- "every deny above must be 42501" — is satisfied by a role that can do
+-- literally nothing. Six of the eight denial checks pass for the wrong reason,
+-- and (4d) is the worst of them: it prints a SCHEMA denial instead of
+-- `blob_refs_purge`'s own authorisation refusal, which is the exact check
+-- CLAUDE.md finding #2 exists for.
+--
+-- **The checks that distinguish the two states are the POSITIVE ones** — (1),
+-- (4a) and (4e). Read those first. A correct run looks like this, and the
+-- reason it does is that the migrations had already run:
+--
+--     (1)  ok: sales.prospects readable (0 rows)
+--     (2)  ok: issues.tasks refused (42501)
+--     (4a) blob_references: <a count>
+--     (4d) ERROR: blob_refs_purge: role sales_app may not purge references
+--                 held by app not-this-app        ← the FUNCTION refusing, not the schema
+--     (4e) purged: 0
+--
+-- If (4d) names the function, the boundary is real. If it says "permission
+-- denied for schema platform", you are looking at a role with no grants.
 
 \set ON_ERROR_STOP off
 \echo '--- app boundary probe, running as:'
@@ -139,4 +177,9 @@ ROLLBACK;
 \echo '\n(5) migration ledger refused — expect 42501'
 SELECT count(*) FROM drizzle.__drizzle_migrations;
 
-\echo '\n--- probe complete. Every deny above must be 42501.'
+\echo '\n--- probe complete.'
+\echo '--- Every deny above must be 42501 — but that is the WEAKER half of the check.'
+\echo '--- Read (1), (4a) and (4e) FIRST: a role with no grants at all denies'
+\echo '--- everything with 42501 and passes six of the eight denial checks.'
+\echo '--- (4d) must name blob_refs_purge. "permission denied for schema platform"'
+\echo '--- there means the grants never landed. See this file''s header.'

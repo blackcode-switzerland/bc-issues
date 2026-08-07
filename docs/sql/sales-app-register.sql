@@ -3,6 +3,28 @@
 -- **HUMAN STEP, AND THE ORDER IS LOAD-BEARING.** Run part 1, then the
 -- migrations, then part 2. Running them together, or part 2 first, stops blob
 -- deletion in every deployment until it is undone.
+--
+-- ---------------------------------------------------------------------------
+-- YOU DO NOT HAVE TO SPLIT THIS FILE. RUN THE WHOLE THING, TWICE.
+-- ---------------------------------------------------------------------------
+-- "Run part 1" reads like an instruction to select half a file in an editor at
+-- an hour when nobody should be doing that. It is not:
+--
+--     psql … -f docs/sql/sales-app-register.sql     BEFORE the migrations
+--     <run the migrations>
+--     psql … -f docs/sql/sales-app-register.sql     AFTER them
+--
+-- Part 2 is an UPDATE guarded on `maintains_blob_index = true`, which only 0002
+-- sets — so on the first run it matches nothing and the app stays disabled.
+-- Rehearsed 2026-08-07 against a copy of the local database:
+--
+--     INSERT 0 1
+--     UPDATE 0                                      ← part 2, before 0002
+--     sales | enabled=f | maintains_blob_index=f
+--
+-- And part 1's `ON CONFLICT DO UPDATE` touches name, description and base_url
+-- only — never `enabled` — so the second run cannot switch the app back off.
+-- Both halves are idempotent in both directions. Split it only if you enjoy it.
 
 -- ---------------------------------------------------------------------------
 -- PART 1 — BEFORE the sales migrations. `enabled = false`.
