@@ -25,8 +25,61 @@ const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const REPO_ROOT = join(APP_ROOT, '..', '..')
 const CLI_DIR = join(REPO_ROOT, 'cli')
 
-/** Routes deliberately not reachable from the CLI. Each needs a reason. */
+/**
+ * Routes deliberately not reachable from the CLI at all. Each needs a reason.
+ *
+ * Reach for one LAST. Writing the `routes` annotations is what surfaces the
+ * holes, and in `apps/issues` only two entries turned out to be genuine product
+ * decisions. An unexplained exclusion is how coverage quietly rots.
+ */
 const EXCLUDED_PATHS = new Map<string, string>()
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * METHODS THIS APP DOES NOT SERVE ON A PATH IT DOES MOUNT (D-36, as amended)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * You will need this the moment you mount your first platform route factory,
+ * and the reason is not obvious: drift is scoped to paths this app has a FILE
+ * for, so mounting `GET /api/workspaces/{ws}` puts EVERY platform claim on that
+ * path — `PATCH`, `DELETE` — into your check, whether or not you export them.
+ *
+ * That is correct behaviour and not a bug to route around. **An app serving a
+ * SUBSET of the platform surface is permanent and legitimate; an ACCIDENTAL
+ * subset is a bug.** The test is: does every bare verb have a host, from THIS
+ * app's login? `bk workspace edit` has one — the issues deployment — so not
+ * serving it here is a decision. `bk workspace use` would NOT have had one, so
+ * `GET` is mounted beside them.
+ *
+ * An entry here is a DECISION WITH A REASON, not a way to quiet a failure.
+ * `EXCLUDED_PATHS` cannot express it: an exclusion pushes on coverage (`real`),
+ * and it would remove the path from the very set drift compares against.
+ *
+ * The scaffold's three entries are real — it mounts the workspace reads and not
+ * the writes — and they are also the worked example to copy.
+ */
+const UNSERVED_OPERATIONS = new Map<string, string>([
+  [
+    'POST /api/workspaces',
+    'a workspace is the COMPANY (D-3). You are granted access to one; you do not ' +
+      'open one from a new app. `bk workspace create` is answered by the issues ' +
+      'deployment. GET is mounted beside it because `bk workspace use` cannot ' +
+      'select a workspace without it — which is what made the sales north-star ' +
+      'script fail at its second command.',
+  ],
+  [
+    'PATCH /api/workspaces/{ws}',
+    'renaming a workspace is company-level administration and `updateWorkspace` ' +
+      'is still app-local to issues. This app READS the workspace it works in and ' +
+      'does not administer it. `bk workspace edit` is answered by issues.',
+  ],
+  [
+    'DELETE /api/workspaces/{ws}',
+    'destroying a workspace carries a cascade with exactly one implementation, on ' +
+      'purpose. Two deployments able to run it is two places for that cascade to ' +
+      'diverge, and the failure would be unrecoverable. `bk workspace delete` is ' +
+      'answered by issues.',
+  ],
+])
 
 describe('CLI ↔ routes parity', () => {
   // There is no `hostsPlatformRoutes` to set, and that is one less thing to get
@@ -40,7 +93,7 @@ describe('CLI ↔ routes parity', () => {
   // asserted once, for the whole repo, in packages/platform-testing's own suite.
   // Do not add a copy here: the failure "nobody serves GET /api/inbox" is not
   // your app's, and N copies of it tempt whoever hits it to fix their own.
-  const { real, claimed, ownClaims, appOwnClaims, invisibleExports, cli } = collectAppRoutes(
+  const { real, allPaths, claimed, ownClaims, appOwnClaims, invisibleExports, cli } = collectAppRoutes(
     { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: APP_SLUG },
     new Set(EXCLUDED_PATHS.keys())
   )
@@ -103,6 +156,7 @@ describe('CLI ↔ routes parity', () => {
   it('every route this app claims actually exists (no drift)', () => {
     const drift: string[] = []
     for (const r of ownClaims) {
+      if (UNSERVED_OPERATIONS.has(`${r.method} ${r.path}`)) continue
       const methods = real.get(r.path)
       if (!methods || !methods.has(r.method)) {
         drift.push(`${r.method} ${r.path}  (claimed by ${r.command})`)
@@ -111,6 +165,26 @@ describe('CLI ↔ routes parity', () => {
     expect(
       drift,
       `bk claims routes that do not exist — fix the \`routes\` annotation:\n${drift.join('\n')}`
+    ).toEqual([])
+  })
+
+  // An exclusion outliving its reason is coverage quietly dropped, and it is the
+  // failure mode nobody looks for: the entry keeps working, so nothing ever
+  // draws attention to it. `allPaths` includes excluded routes, so an entry
+  // pointing at a path this app no longer mounts is still detectable — which is
+  // why the two sets are kept separate rather than subtracted from `real`.
+  it('every exclusion names a route this app still has', () => {
+    const stale: string[] = []
+    for (const [path, reason] of EXCLUDED_PATHS) {
+      if (!allPaths.has(path)) stale.push(`${path} — "${reason}"`)
+    }
+    for (const [op, reason] of UNSERVED_OPERATIONS) {
+      const path = op.slice(op.indexOf(' ') + 1)
+      if (!allPaths.has(path)) stale.push(`${op} — "${reason}"`)
+    }
+    expect(
+      stale,
+      `these exclusions point at routes this app no longer has — delete them:\n${stale.join('\n')}`
     ).toEqual([])
   })
 })
