@@ -57,3 +57,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Sales-app implementation scratch — master/agent handoff files. Temporary.
+/salesImplementation/

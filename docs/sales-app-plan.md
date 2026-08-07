@@ -1,7 +1,48 @@
 # The sales app — master plan
 
-**Status: PLAN, decisions locked. Nothing here is built yet.**
-Written 2026-08-06. Decisions settled 2026-08-06.
+> # ⚠️ SUPERSEDED — 2026-08-07. DO NOT FOLLOW THIS AS INSTRUCTIONS.
+>
+> **`apps/sales` is built. This plan has shipped, and a shipped plan is a
+> document prescribing a finished design** — which this repo's own rule
+> (`CLAUDE.md`, Docs sync) says is worse than no doc.
+>
+> ## If you are adding an app, read [`adding-an-app.md`](adding-an-app.md)
+>
+> That document was rewritten on 2026-08-07 from what building this app actually
+> found, and it is now self-contained. Its "what you no longer have to do"
+> section is the half of this plan that was one-time platform work; you do not
+> pay it again.
+>
+> ## If you are deploying sales, read `salesImplementation/DEPLOY-TODO.txt`
+>
+> Release 2. It is the ordered runbook, and its database steps are in a
+> **different order from anything written here** — the order in this plan was
+> rehearsed on 2026-08-07 and it fails silently (CLAUDE.md guardrails #15, #16).
+>
+> ## What this file is still good for
+>
+> **The 44 numbered decisions, D-1 to D-44, and only those.** They are the record
+> of what was chosen and *why the alternative was rejected*, and several were
+> re-litigated during the build and held. Where a decision was later amended the
+> amendment is in `adding-an-app.md` or `platform-architecture.md`, not here:
+>
+> | Decision | Amended by |
+> |---|---|
+> | D-36 (platform route subsets) | *a permanent subset is legitimate, an accidental one is a bug, and the test is whether every bare verb has a host from THIS app's login* — `adding-an-app.md` §11, `platform-architecture.md` §7.6 |
+> | D-38 (the scaffold's slug) | done: `template` → `scaffold` |
+> | D-39 (`NEXTAUTH_SECRET`) | `docs/env.md`, which said the opposite |
+>
+> **Everything else in this file — the phase plan, the checklists, the test
+> plan, the timings — describes work that is finished.** The ~30 findings its
+> phases accumulated have been moved into `adding-an-app.md`; that is where they
+> are maintained now.
+>
+> Delete this file once the decisions have somewhere better to live.
+
+---
+
+**Status: SHIPPED 2026-08-07. Historical.**
+Written 2026-08-06. Decisions settled 2026-08-06. Built 2026-08-06/07.
 
 This is the phase-by-phase plan for adding **`apps/sales`** — blackcode's own
 internal sales / business-development tracker — as the platform's **second real
@@ -23,6 +64,9 @@ app**.
 >
 > The measure of success is not "sales works". It is **Phase 13** — the scaffold
 > and `docs/adding-an-app.md` updated so the next app never reads this file.
+>
+> *(2026-08-07: Phase 13 landed. This box's own test is therefore that you are
+> not reading this file — see the superseded note above.)*
 
 ### The north star
 
@@ -1145,6 +1189,25 @@ platform command's claim (`cli-parity.ts:202`).
 > A platform **route** is answered by the apps that mount it.
 > A platform **command** must be answerable by **at least one** app.
 
+> **AMENDED 2026-08-07 — a permanent subset is legitimate; an ACCIDENTAL one is
+> a bug.** D-36 was read as licence for sales to serve almost nothing. It served
+> **7 of the 54** platform routes `bk` claims, so `bk search`, `bk link create`
+> and `bk workspace use` — two of them north-star steps, the third a
+> prerequisite for the script's first command — all 404'd from a sales login,
+> printing 30 lines of HTML to stderr.
+>
+> **The factories already existed.** Nobody had mounted them. The root cause was
+> the original Tier-1 scoping, which asked *"what does the sales web UI need?"*
+> instead of ***"what does a sales-homed `bk` user need?"*** — a strictly larger
+> set, because the CLI is the interface this platform exists for.
+>
+> **The test is: does every BARE verb have a host from this app's login?** Where
+> a route genuinely cannot be mounted — `bk super-admin` (platform administration
+> lives in one app, D-28) and `bk inbox` (factories unbuilt) — the CLI must fail
+> with **one line naming the app and a recovery**, never a raw HTML 404. A
+> permanent absence is a routing fact to be stated; an accidental one is a
+> promise the deployment does not keep.
+
 Per-app drift for a platform claim is scoped to what that app mounts; a
 cross-app assertion then requires every platform claim to be mounted *somewhere*.
 Without the second half, "nobody mounts it" and "somebody else mounts it" are
@@ -1295,6 +1358,14 @@ flagged three files whose only offence was a comment explaining the rule; a cook
 guard that caught the comment written to explain the cookie rename; and a
 read-only guard that failed on its own header.
 
+> **And the rule belongs in the guard, not here.** The one instance caught
+> *before* committing was caught because the previous write-up sat in the file
+> that agent happened to open that morning — not because anyone had read a
+> decision list. **A lesson lands where the next person will be standing, not
+> where it is catalogued.** Phase 13 should put this paragraph in the header of
+> every guard that matches text; this entry's job is to make that happen, not to
+> be the place it is read.
+
 The escapes that work, in order of preference: strip comments before matching;
 anchor to a syntactic position a comment cannot occupy (start of line, an actual
 declaration); or write the explanation so it does not contain the needle. **An
@@ -1305,6 +1376,47 @@ Related, and the third instance this week of `CLAUDE.md` finding #9: an input
 assertion written as `toContain('export function useSalesSearch')` matched
 `useSalesSearchRENAMED`. Anchor input assertions too — they are checks like any
 other, and they were found by running the regression rather than by reading it.
+
+### D-43 — a correct change can silently retarget an existing assertion
+
+Found 2026-08-07 by re-running a guardrail the master had specifically flagged.
+
+`cli-parity.test.ts`'s *"no bk command belongs to this app"* assertion — the one
+`CLAUDE.md` finding #5 was caught by — **stopped firing.** Deleting
+`topics/sales/` dropped sales' route attribution from 68 to 0 and the suite
+stayed green.
+
+Nothing was written wrong. **D-36's own fix widened `ownClaims` into a union**
+including every mounted platform route, so the set the assertion tests can never
+empty. A correct change, made for a good reason, left an existing assertion
+pointing at a wider set than it was phrased for.
+
+> This is not an inert guard, a cited guard, or a guard that runs too late. It is
+> a guard that **was** correct and was retargeted by a change elsewhere. **When
+> you widen a set, grep for what asserts on it.**
+
+The repair splits `appOwnClaims` from the union and was proved in both
+directions — remove `topics/sales/` → sales red; remove `topics/template/` →
+`_template` red; restore → green.
+
+### D-44 — where a value can arrive after the check, the cure is total, not detective
+
+Settled 2026-08-07. Three bugs shipped past typecheck, lint and tests by
+rendering a vocabulary the app does not own (`check_in` raw, "1 deals",
+"3 whatsapps"). The obvious response is a scanner over the call sites.
+
+**It was refused, and the refusal is the ruling.** The vocabularies are served
+live by `bk meta` and **can gain a value without a deploy**, so the value that
+breaks the page does not exist when any static check runs. A scanner would prove
+every call site correct and say nothing about the case that fails.
+
+The actual defect was a fallback that returned the raw value; it now humanises
+whatever arrives, so the page stops needing to know the vocabulary — which is
+what `bk meta` was supposed to buy in the first place.
+
+> **A guard for a class of bug that a total fix eliminates is a guard for
+> nothing.** Ask whether the failing input can exist at check time. If it cannot,
+> build the cure, not the detector.
 
 ### D-20 — `/api/meta` stays per-app; only its platform half is shared
 
@@ -2059,6 +2171,11 @@ See §11.
       Fixed in Phase 2-3; **belongs in `CLAUDE.md`'s table as entry #10.**
       *(Found by agent4, 2026-08-07, by experiment — prime green, restore the
       file byte-identically, watch turbo say FULL TURBO over a red suite.)*
+- [ ] **Put D-42's paragraph in the header of every guard that matches text.**
+      A lesson lands where the next person will be standing, not where it is
+      catalogued — the one self-reference trap caught before commit was caught
+      because the previous write-up was in a file somebody had reason to open.
+      *(agent7, 2026-08-07.)*
 - [ ] **Rename the scaffold's app slug `template` -> `scaffold`** (D-38). It bit
       three guards in one phase because it is a word every app uses as an entity,
       a local and a directory. Five places plus a deprecation row, and it gets
@@ -2201,22 +2318,26 @@ The real acceptance test is the behaviour the project exists for. Run it end to
 end against preview deployments, **with one token and one login**:
 
 ```bash
-bk login --server https://sales.blackcode.ch
+# ONE login, against the SALES host. No `bk app use`, no --app-server: the
+# whole point is that the app you sign into is the app you can work from.
+bk login --token --server https://sales.blackcode.ch
+bk workspace use <slug>                         # sales serves this (2026-08-07)
 bk app list                                     # both apps, both servers, reachable
 bk guide platform/apps                          # the three tiers, readable
 
 # --- record sales work ---
 bk sales prospect create --name "Acme SA" --city Lausanne --value 18000
-bk sales comm log --prospect 1 --channel call --dir out --at now \
+bk sales comm log --prospect 1 --channel call --dir out \
   --body "Intro call. Needs SSO before they can sign."
 bk sales meeting schedule --prospect 1 --at "2026-08-14T10:00+02:00" \
   --type video --title "Demo"
-bk sales objection raise --prospect 1 --type pricing --spoken "…" --counter "…"
+bk sales objection raise 1 --type pricing --spoken "Too expensive for a pilot"
+bk sales objection counter 1 <objection-id> --counter "Two-milestone offer"
 bk sales upload proposal.pdf                    # → filed under SALES
 bk sales prospect stage 1 meeting --note "Demo booked"
 
-# --- cross the boundary, without re-auth ---
-bk issues issue create --title "SSO for Acme SA — blocks CHF 18k deal" --priority 1
+# --- cross the boundary, without re-auth and WITHOUT CHANGING HOST ---
+bk issues issue create --project <n> --title "SSO for Acme SA — blocks CHF 18k deal" --priority 1
 bk link create bc:issues:blackcode/issue/N bc:sales:blackcode/prospect/1 --rel blocks
 
 # --- and back ---
@@ -2228,9 +2349,29 @@ bk sales prospect delete 1 --confirm "Acme SA"  # reports WHAT it deleted
 bk sales trash list                             # it is there
 ```
 
-Then open **both** web apps and confirm: one sign-in covers both, the sales app
-is read-only with no editing affordances anywhere, and the prospect page shows
-the linked issue as a working link.
+> **Four corrections landed on 2026-08-07, after the script was run for the
+> first time and did not work.** They are listed because a script in a plan that
+> does not run is worse than no script — somebody follows it and blames
+> themselves.
+>
+> - `--at now` is rejected; omit the flag instead (the error says so).
+> - `objection raise` takes the prospect POSITIONALLY, not `--prospect`.
+> - `--counter` is its own subcommand, `objection counter <prospect> <id>`.
+> - `bk issues issue create` requires `--project`.
+> - `bk workspace use` was added at the top: without it every later command
+>   reports "no active workspace", which is a true statement about a cause three
+>   commands earlier.
+
+
+Then open **both** web apps and confirm: one sign-in covers both, and the
+prospect page shows the linked issue as a working link into the other app's
+deployment.
+
+> The original wording also asked that "the sales app is read-only with no
+> editing affordances anywhere". **That was superseded by full mode (D-7).** The
+> web app writes; `ui_mode` is an affordance switch and never a permission, which
+> `apps/sales/lib/ui-mode.test.ts` asserts structurally. Rewritten rather than
+> footnoted, because a checklist item nobody can satisfy gets ticked anyway.
 
 **If any step needs a second login, a second token, a manual server switch, or
 leaves a file in the wrong app — the project is not done.**
@@ -2436,6 +2577,8 @@ Each exists because something went wrong once, and each header explains what:
 | D-24 | `/api/tokens` uses the validated session resolver (real privilege-escalation fix) | 2026-08-06 |
 | D-25 | `packages/platform-*` gets its own cross-schema guard, with a derived schema list | 2026-08-06 |
 | D-26 | Prove-it-fires is three steps: fail it, question it, **inject the regression** | 2026-08-06 |
+| D-44 | Where a value arrives after the check, build the cure, not the detector | 2026-08-07 |
+| D-43 | A correct change can silently retarget an existing assertion | 2026-08-07 |
 | D-42 | A guard that matches text will match the text that explains it | 2026-08-07 |
 | D-41 | A guard can check correctly and too late | 2026-08-07 |
 | D-40 | Share a UI component only where it lets the app render its own values | 2026-08-07 |

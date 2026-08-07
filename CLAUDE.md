@@ -7,15 +7,19 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 - **`apps/issues`** — an AI-native issue tracker (Linear-style). Next.js 16 App
   Router, TypeScript, Tailwind v4, Drizzle ORM + PostgreSQL, next-auth, TanStack
   Query, Framer Motion. This is the product.
-- **`apps/_template`** — the scaffold. A real, minimal app: one entity, one
-  route, one CLI command group, one guide topic, one page. It builds, lints and
-  passes every guardrail. **Copy it to add an app; do not edit it in place.**
+- **`apps/_scaffold`** — the scaffold. A real, minimal app: one entity, one
+  route, its own migrations and ledger, nine platform route factories, an entity
+  projection and its reconciler, a CLI command group, a guide topic, a page.
+  It builds, lints and passes every guardrail. **Copy it to add an app; do not
+  edit it in place.** (Renamed from `apps/_template` on 2026-08-07 — D-38: the
+  word `template` is also a sales entity, a Go local and a directory, and four
+  guards mis-fired on the collision.)
 
 **The platform migration is finished — all nine phases (0–8) landed 2026-08-05.**
 
 | Need | Read |
 |---|---|
-| **Add an app** | **`docs/adding-an-app.md`** — the authoritative, self-contained checklist. Copy `apps/_template`, follow it top to bottom |
+| **Add an app** | **`docs/adding-an-app.md`** — the authoritative, self-contained checklist. Copy `apps/_scaffold`, follow it top to bottom. Rewritten 2026-08-07 from what building the second app actually found |
 | Current design rules | `docs/platform-architecture.md` |
 | Why the repo looks like this | `docs/2026-08-platform-migration.md` — and what is **still owed** |
 | Remove an app | `docs/extracting-an-app.md` |
@@ -70,13 +74,14 @@ end to end. Extracting one is **`docs/extracting-an-app.md`**, rehearsed.
 
 ```
 apps/issues/          the issue tracker — app/ components/ lib/ types/ docs/ public/
-apps/_template/       the scaffold. Copy it; don't edit it
+apps/sales/           the sales app — prospects, meetings, communications
+apps/_scaffold/       the scaffold. Copy it; don't edit it
 cli/                  the `bk` Go binary (repo root — shared by every app)
   internal/commands/platform/   bare verbs: workspace, label, upload, trash, …
   internal/commands/issues/     that app's nouns, behind `bk issues …`
-  internal/commands/template/   the scaffold's, behind `bk template …`
+  internal/commands/scaffold/    the scaffold's, behind `bk scaffold …`
   internal/cmdutil/             what both need; app packages never import each other
-  internal/guide/topics/{platform,issues,template}/
+  internal/guide/topics/{platform,issues,sales,scaffold}/
 packages/             shared libraries — apps import these, never each other
 docs/                 PLATFORM docs only (see the Docs sync rule)
 docs/changelog/       one file per app + platform.md — merged by `bk changelog`
@@ -118,8 +123,8 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Nine guardrails in this repo have been found
-green-but-inert** — eight during the migration, and the count is still growing.
+This is not a style preference. **Nineteen guardrails in this repo have been
+found green-but-inert** — eight during the migration, and the count is still growing.
 Every one looked like working protection:
 
 | # | The check | How it was inert |
@@ -133,19 +138,59 @@ Every one looked like working protection:
 | 7 | `pg_dump --schema=issues` as an extraction | Emits the triggers and FKs, all of which fail at restore; `psql` prints 27 errors and **exits 0**. The database boots, serves, and has silently lost referential integrity and all blob-index maintenance |
 | 8 | `TestRemovedSpellingsStillCarryAHint` | Asserted a **hand-written** cobra error string. The real one contains the whole remaining argv, so the three most-used spellings fell through to the generic hint. **Written by the same session that wrote this rule, an hour after writing it** |
 | 9 | `guide_test.go`'s dynamic-value guard | A substring match over six hand-written strings. A topic containing the **entire** issue status vocabulary, the **entire** priority vocabulary and a **stale** `50 MB` limit passed every section. It banned `100MB` — the *correct* spelling — so the one case it could not catch was a topic that had gone out of date. Widened 2026-08-06 to match sizes by shape |
+| 10 | `cli-parity.test.ts`'s vacuous-pass assertion | Asserted on `ownClaims` — a UNION of the app's own claims and every *platform* route it mounts. Deleting `cli/internal/guide/topics/sales/` drops `bk __routes`' sales attribution from 68 routes to **0**, and the suite stayed 5/5 green, because the seven platform routes sales mounts kept the union non-empty. Widened by the same commit that retired `hostsPlatformRoutes` (D-36); the assertion was phrased for the old, narrower set and left reading the new one. **Found by the plan telling agent8 to "confirm it still fires" — it did not.** Fixed 2026-08-07 (`appOwnClaims`) |
+| 11 | `lib/dashboard-paths.test.ts`'s `?focus=` check | Two inert versions in one sitting. First scanned whole component *files*, so `ProductsPage` vouched for a `DocumentsPage` that ignored `?focus=` entirely — three listings share one file. Rewritten to scan the component *body*, it then matched the **word** `focus` and passed against `const focus = null`. It now matches the call. **The granularity of a text scan is part of what it checks** |
+| 12 | `integrationDescribe`'s "loud" skip | Written to replace `describe.skip` because a silent skip reports success — and used `console.warn`, which vitest intercepts and **drops** for a skipped suite. Output was byte-identical to the thing it replaced. The notice nobody sees, reintroduced inside its own replacement. Raw `process.stderr.write` now |
+| 13 | `platform-testing`'s cross-app import scanner | `IMPORT_RE` matched `from` and `import` only, so `require('../../issues/lib/work-items')` — the one spelling of "reach into another app" that does not say *import* — passed 5/5. This file **is** the boundary between apps; the ESLint rule it replaced is #4 above. The `.js`-extension half of the same report was already caught |
+| 14 | `bk super-admin entity-drift` | Not a test — a *reconciler*, which is worse. Its help said it checked "the cross-app entity index against **each app's** source tables". It is bound to one deployment's app and cannot be otherwise (an app's Postgres role has no grant on another app's schema). Run against a database with **51 unprojected sales rows**, it reported no drift and exited 0 |
+
+| 15 | `docs/sql/app-role.sql` (and its sales copy) | Every grant names a schema the file never creates. Run in the documented order for a NEW app — before the migration that creates it — **five of its ten statements fail and `psql` exits 0**, leaving a LOGIN role with no grants at all and a provisioning step that reported success. It had never bitten `apps/issues`, whose schema predates the script by years. Finding #7's mechanism, in a provisioning script, in a directory where two neighbouring files already warn about it |
+| 16 | `docs/sql/app-boundary-probe.sql` | It **cannot tell a boundary from an unprovisioned role**. A role granted nothing denies everything with 42501 and passes SIX of its eight denial checks — and check (4d) prints a schema denial instead of `blob_refs_purge`'s own refusal, which is the check finding #2 exists for. Its closing line, "every deny above must be 42501", is satisfied by a role that can do literally nothing. Only its POSITIVE checks — (1), (4a), (4e) — discriminate |
+| 17 | `TestUnknownAppFailsInsteadOfFallingBack` | Ran `bk template note list` and asserted the error was non-nil and contained `"template"`. Renaming the scaffold's slug left it **green while checking nothing**: a binary with no `template` group answers `unknown command "template"`, which is non-nil and contains the word. Cobra's arg parser stood in for the routing failure the test exists to observe. Found by grepping for the renamed string — the suite was green |
+| 18 | Four comments citing `*.test.ts` files that do not exist | Three named one file that has never been written, in headers describing invariants on the blob-deletion path; the fourth claimed a test asserted that `SURFACES` matches migration 0002's triggers, and none did. **A citation is a claim about what this repo protects,** and a reader deciding whether a change is safe takes it as one. Now guarded by `platform-testing/test/cited-tests-exist.test.ts`; the scanner⇄migration test is written |
+| 19 | The `packages/*` ESLint config | Banned app imports and **nothing else** — `const x: any = 1` in `platform-api` passed clean. Finding #1's neighbourhood: that was three packages with no config at all, and a config that exists and checks almost nothing reads as the same protection while giving less. Widened 2026-08-07 with six rules, each watched fail individually; adoption immediately surfaced a dead import in `platform-storage/src/references.ts` |
+
+**Findings 10–14 all landed on 2026-08-07, in the phase whose entire job was to
+disbelieve the previous seven agents — and 11 and 12 are that phase's own new
+guards, found inert within minutes of being written.** The rate does not fall as
+the rule gets better known.
+
+**15–19 landed later the same day, in the phase after that one**, whose job was
+to make the next app cheap. #17 is the sharpest: it was created by a correct
+rename in that very phase, and it was found by grepping for the renamed string
+rather than by running the suite, **because the suite was green**.
 
 #8 is the one to remember: **you cannot tell by looking, including at your own.**
 #4 and #9 were found by the wrap-up verification *after* the migration closed —
 assume the next one exists.
 
-Two corollaries worth stating separately, because they are different mechanisms:
+Four corollaries worth stating separately, because they are different
+mechanisms:
 
 - **A commented-out or skipped check reports success.** If a check cannot run
   yet, make it **skip loudly** (`RAISE NOTICE`, `t.Logf`, a non-empty assertion),
-  never silently.
+  never silently. #12 is what "loudly" costs when you get it wrong: the notice
+  was `console.warn`, which the test runner drops.
 - **Assert your inputs.** Every "did we find anything to check?" assertion in
   this repo exists because a guard that found nothing would otherwise pass. #5
   was caught by exactly such an assertion.
+- **A correct change can silently retarget an existing assertion**, and this is
+  the most insidious shape found so far, because nothing is written wrong.
+  Finding #10: widening `ownClaims` into a union was the right fix for D-36, and
+  it left an assertion phrased for the old, narrower set pointing at the new,
+  wider one — which could no longer be empty. The guard kept passing and stopped
+  guarding. **When you widen or rename a value, grep for what asserts on it**;
+  the diff that breaks a guard rarely touches the guard. Finding #17 is the same
+  mechanism through a RENAME rather than a widening, and it was created and found
+  inside one phase.
+- **A guard's denials can be satisfied by nothing at all.** Findings #15 and #16
+  are one story: a provisioning script that failed every grant and exited 0, and
+  the probe written to catch exactly that, which passed it. Every refusal the
+  probe saw was a real `42501` — from a role that had been granted nothing, so
+  there was nothing to refuse it. **A check built on "was this denied?" cannot
+  distinguish a working boundary from an absent subject.** Give it a positive
+  case: assert the thing that must SUCCEED, first, and treat the denials as the
+  weaker half.
 
 ## Design system
 
