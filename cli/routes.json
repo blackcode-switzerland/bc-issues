@@ -657,8 +657,158 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/communications/{n}",
+      "command": "bk sales comm rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/documents/{n}",
+      "command": "bk sales doc rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/documents/{n}/links",
+      "command": "bk sales doc unlink",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk sales label delete",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/meetings/{n}",
+      "command": "bk sales meeting rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/products/{n}",
+      "command": "bk sales product delete",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/prospects/{n}",
       "command": "bk sales prospect delete",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/prospects/{n}/contacts/{cid}",
+      "command": "bk sales contact rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/prospects/{n}/labels/{lid}",
+      "command": "bk sales label detach",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/prospects/{n}/matches",
+      "command": "bk sales match clear",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/prospects/{n}/objections/{oid}",
+      "command": "bk sales objection rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/templates/{n}",
+      "command": "bk sales template delete",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/trash/purge",
+      "command": "bk sales trash purge",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/upload",
+      "command": "bk sales upload",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/communications",
+      "command": "bk sales comm list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/communications/{n}",
+      "command": "bk sales comm show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/documents",
+      "command": "bk sales doc list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/documents/{n}",
+      "command": "bk sales doc show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/labels",
+      "command": "bk sales label list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk sales label view",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/meetings",
+      "command": "bk sales meeting list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/meetings/{n}",
+      "command": "bk sales meeting show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/metrics",
+      "command": "bk sales metrics",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/pipeline",
+      "command": "bk sales pipeline",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/products",
+      "command": "bk sales product list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/products/{n}",
+      "command": "bk sales product show",
       "app": "sales"
     },
     {
@@ -674,9 +824,165 @@
       "app": "sales"
     },
     {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}/contacts",
+      "command": "bk sales contact list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}/journey",
+      "command": "bk sales journey list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}/labels",
+      "command": "bk sales label attach",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}/matches",
+      "command": "bk sales match list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}/objections",
+      "command": "bk sales objection list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/sales-search",
+      "command": "bk sales search",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/templates",
+      "command": "bk sales template list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/templates/{n}",
+      "command": "bk sales template show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/today",
+      "command": "bk sales today",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/trash",
+      "command": "bk sales trash list",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/documents/{n}",
+      "command": "bk sales doc edit",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/labels/{id}",
+      "command": "bk sales label edit",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/meetings/{n}",
+      "command": "bk sales meeting outcome",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/products/{n}",
+      "command": "bk sales product edit",
+      "app": "sales"
+    },
+    {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/prospects/{n}",
       "command": "bk sales prospect edit",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/prospects/{n}/contacts/{cid}",
+      "command": "bk sales contact edit",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/prospects/{n}/next-action",
+      "command": "bk sales prospect next",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/prospects/{n}/objections/{oid}",
+      "command": "bk sales objection resolve",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/templates/{n}",
+      "command": "bk sales template edit",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "command": "bk sales upload",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload/blob",
+      "command": "bk sales upload",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/communications",
+      "command": "bk sales comm log",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/documents",
+      "command": "bk sales doc add",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/documents/{n}/links",
+      "command": "bk sales doc link",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/labels",
+      "command": "bk sales label create",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/meetings",
+      "command": "bk sales meeting schedule",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/products",
+      "command": "bk sales product create",
       "app": "sales"
     },
     {
@@ -687,8 +993,62 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/contacts",
+      "command": "bk sales contact add",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/journey",
+      "command": "bk sales journey add",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/labels",
+      "command": "bk sales label attach",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/matches",
+      "command": "bk sales match set",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/objections",
+      "command": "bk sales objection raise",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/prospects/{n}/stage",
       "command": "bk sales prospect stage",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/templates",
+      "command": "bk sales template create",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/templates/{n}/render",
+      "command": "bk sales template render",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/trash/empty",
+      "command": "bk sales trash empty",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/trash/restore",
+      "command": "bk sales trash restore",
       "app": "sales"
     },
     {

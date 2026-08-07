@@ -406,6 +406,79 @@ export async function updateProspect(
 }
 
 /**
+ * Set what we owe this prospect next — all four columns at once.
+ *
+ * One function rather than four fields on `updateProspect`, because they are one
+ * intention: a `next_action_type` with no due date is half a commitment, and the
+ * Today queue filters on the date. Passing `type: null` clears the whole thing,
+ * which is what "there is nothing owed" means.
+ */
+export async function setNextAction(
+  workspaceId: number,
+  seq: number,
+  patch: {
+    type?: string | null
+    /** A resolved `YYYY-MM-DD`. */
+    due?: string | null
+    /** The phrase the agent wrote. Displayed in preference to the date. */
+    dueLabel?: string | null
+    note?: string | null
+    ownerUserId?: number | null
+    ownerLabel?: string | null
+  },
+  actor: Actor
+): Promise<ProspectRow | null> {
+  const db = getDb()
+  const existing = await getProspectBySeq(workspaceId, seq)
+  if (!existing) return null
+
+  const updated = await db.transaction(async (tx) => {
+    const values: Record<string, unknown> = { updated_at: new Date() }
+    if (patch.type !== undefined) values.next_action_type = patch.type
+    if (patch.due !== undefined) values.next_action_due = patch.due
+    if (patch.dueLabel !== undefined) values.next_action_due_label = patch.dueLabel
+    if (patch.note !== undefined) values.next_action_note = patch.note
+    if (patch.ownerUserId !== undefined) values.next_action_owner_user_id = patch.ownerUserId
+    if (patch.ownerLabel !== undefined) values.next_action_owner_label = patch.ownerLabel
+
+    // Clearing the type clears the rest. A due date on a prospect with no action
+    // is a row the Today queue would surface with nothing to say about it.
+    if (patch.type === null) {
+      values.next_action_due = null
+      values.next_action_due_label = null
+      values.next_action_note = null
+      values.next_action_owner_user_id = null
+      values.next_action_owner_label = null
+    }
+
+    const [row] = await tx
+      .update(prospects)
+      .set(values)
+      .where(and(eq(prospects.workspace_id, workspaceId), eq(prospects.seq, seq)))
+      .returning()
+    if (!row) throw new Error('next-action update returned nothing')
+
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'prospect',
+      entityId: row.id,
+      action: 'next_action_changed',
+      diff: {
+        before: { type: existing.next_action_type, due: existing.next_action_due },
+        after: { type: row.next_action_type, due: row.next_action_due },
+      },
+      meta: { name: row.name },
+    })
+    return row
+  })
+
+  const [decorated] = await decorate([updated])
+  return decorated ?? null
+}
+
+/**
  * Move a deal to another stage, and write the journey step that proves it.
  *
  * `won` and `lost` are terminal (`TERMINAL_STAGES`): they set `closed_at` and

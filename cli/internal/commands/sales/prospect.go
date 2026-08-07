@@ -38,6 +38,7 @@ func newProspectCmd() *cobra.Command {
 		newProspectEditCmd(),
 		newProspectAssignCmd(),
 		newProspectStageCmd(),
+		newProspectNextCmd(),
 		newProspectDeleteCmd(),
 	)
 	return cmd
@@ -388,6 +389,96 @@ Run "bk meta" for the current stage values.`,
 	return cmd
 }
 
+// newProspectNextCmd sets what we owe this prospect next.
+//
+// ---------------------------------------------------------------------------
+// THE DATE AND THE WORDS ARE BOTH STORED
+// ---------------------------------------------------------------------------
+// `--due` is a RESOLVED date, because a date is what sorts, what filters, and
+// what `bk sales today` reads. `--due-label` keeps the phrase you actually
+// wrote, because resolving "this week" to a guessed Friday and then discarding
+// the words loses the difference between "due Friday" and "sometime this week,
+// Friday is my guess" — which is exactly the difference a human needs when the
+// follow-up is late.
+//
+// Its own command rather than four flags on `edit`, because they are one
+// intention: a type with no due date is half a commitment, and half of one is
+// what a caller ends up with when the four are set separately.
+func newProspectNextCmd() *cobra.Command {
+	var actionType, due, dueLabel, note, owner string
+	var clear bool
+	cmd := &cobra.Command{
+		Use:         "next <n> --type <type> --due <YYYY-MM-DD>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}/next-action"},
+		Short:       "Set (or clear) what this prospect is owed next",
+		Long: `Record the next action on a prospect.
+
+--due is a REAL DATE (YYYY-MM-DD). Resolve "next Thursday" yourself before
+sending it: the date is what sorts and what "bk sales today" reads.
+--due-label keeps the phrase you wrote, verbatim, and is displayed in preference
+to the date. It is never parsed.
+
+--owner may be an email, "me", or any label — and unlike the DEAL owner it can be
+an agent, because writing the next action is not the same as owning the deal.
+
+--clear removes the next action entirely.
+
+Run "bk meta" for the current next-action types.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := prospectNumber(args[0])
+			if err != nil {
+				return err
+			}
+			req := client.SetNextActionRequest{}
+			if clear {
+				// Clearing the type clears the rest server-side: a due date on a
+				// prospect with no action is a row `today` would surface with
+				// nothing to say about it.
+				req.Type = client.Clear()
+			} else {
+				req.Type = patched(cmd, "type", actionType)
+				req.Due = patched(cmd, "due", due)
+				req.DueLabel = patched(cmd, "due-label", dueLabel)
+				req.Note = patched(cmd, "note", note)
+				req.Owner = patched(cmd, "owner", owner)
+				if req.Type == nil && req.Due == nil && req.DueLabel == nil &&
+					req.Note == nil && req.Owner == nil {
+					return fmt.Errorf("nothing to set — pass --type/--due/--note/--owner, or --clear")
+				}
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			p, err := c.SetNextAction(ws, n, req)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, p, func(w io.Writer) error {
+				if p.NextAction.Type == "" {
+					_, err := fmt.Fprintf(w, "prospect #%d (%s) has no next action\n", p.Number, p.Name)
+					return err
+				}
+				_, err := fmt.Fprintf(w, "prospect #%d (%s) next: %s\n",
+					p.Number, p.Name, nextActionCell(p.NextAction))
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actionType, "type", "", "What is owed (`bk meta` for the values)")
+	cmd.Flags().StringVar(&due, "due", "", "When, as a real date YYYY-MM-DD")
+	cmd.Flags().StringVar(&dueLabel, "due-label", "", "The phrase you wrote (\"this week\") — kept verbatim")
+	cmd.Flags().StringVar(&note, "note", "", "What exactly is owed")
+	cmd.Flags().StringVar(&owner, "owner", "", "Who owes it: an email, \"me\", or any label")
+	cmd.Flags().BoolVar(&clear, "clear", false, "Remove the next action entirely")
+	return cmd
+}
+
 // newProspectDeleteCmd bins a prospect.
 //
 // ---------------------------------------------------------------------------
@@ -508,14 +599,21 @@ func clientAndWorkspace() (*client.Client, string, error) {
 	return c, ws, nil
 }
 
-// prospectNumber parses the `<n>` argument — a #number, never a row id.
-func prospectNumber(raw string) (int, error) {
+// entityNumber parses a `<n>` argument — a workspace #number, never a row id.
+//
+// One helper for every addressable noun in this app, because the failure it
+// prevents is the same everywhere: a caller that pasted a row id from somewhere
+// gets a clear refusal rather than a request that acts on a different record.
+func entityNumber(raw, noun string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || n <= 0 {
-		return 0, fmt.Errorf("invalid prospect #number %q — run `bk sales prospect list` to see them", raw)
+		return 0, fmt.Errorf("invalid %s #number %q — run `bk sales %s list` to see them", noun, raw, noun)
 	}
 	return n, nil
 }
+
+// prospectNumber is entityNumber for the noun everything else hangs off.
+func prospectNumber(raw string) (int, error) { return entityNumber(raw, "prospect") }
 
 // patched turns a flag into a PATCH field: nil when it was not passed, an
 // explicit clear when it was passed empty, the value otherwise.

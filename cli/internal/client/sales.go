@@ -290,3 +290,937 @@ func (c *Client) DeleteProspect(slugOrID string, number int, confirm string) (*S
 func salesPath(slugOrID, suffix string) string {
 	return "/api/workspaces/" + slugOrID + "/" + suffix
 }
+
+// ---------------------------------------------------------------------------
+// The prospect's children — reached BY ROW ID, and that is not a slip
+// ---------------------------------------------------------------------------
+// A contact, a journey step, an objection and a match have no #number: none is
+// independently addressable and none is projected into `platform.entities`, so
+// there is no URN and nothing for `bk search` to return. They are reached
+// through their prospect, by the id their own listing prints — which is exactly
+// how `bk issues issue delete-comment` reaches a comment.
+//
+// The rule, in one line: a record with a URN is addressed by its #number and its
+// row id is never exposed; a record without one is reached through its parent.
+
+type SalesContact struct {
+	ID        int    `json:"id" yaml:"id"`
+	Name      string `json:"name" yaml:"name"`
+	Role      string `json:"role" yaml:"role"`
+	Email     string `json:"email" yaml:"email"`
+	Phone     string `json:"phone" yaml:"phone"`
+	IsPrimary bool   `json:"is_primary" yaml:"is_primary"`
+	Notes     string `json:"notes" yaml:"notes"`
+}
+
+type ContactRequest struct {
+	Name      string `json:"name,omitempty"`
+	Role      string `json:"role,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	IsPrimary *bool  `json:"is_primary,omitempty"`
+	Notes     string `json:"notes,omitempty"`
+}
+
+func (c *Client) ListContacts(ws string, prospect int) ([]SalesContact, error) {
+	var resp struct {
+		Data []SalesContact `json:"data"`
+	}
+	if err := c.get(salesPath(ws, fmt.Sprintf("prospects/%d/contacts", prospect)), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) AddContact(ws string, prospect int, req ContactRequest) (*SalesContact, error) {
+	var out SalesContact
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/contacts", prospect))
+	if err := c.postJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateContact(ws string, prospect, contact int, req ContactRequest) (*SalesContact, error) {
+	var out SalesContact
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/contacts/%d", prospect, contact))
+	if err := c.patchJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) RemoveContact(ws string, prospect, contact int) (*SalesDeleted, error) {
+	var out SalesDeleted
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/contacts/%d", prospect, contact))
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// AddJourneyStepRequest records a step that did NOT move the deal. Moving it is
+// SetProspectStage — two calls, because a flag defaulting to "also move it"
+// would be a second, undocumented way to change a prospect's stage.
+type AddJourneyStepRequest struct {
+	Stage      string `json:"stage"`
+	Status     string `json:"status,omitempty"`
+	Note       string `json:"note,omitempty"`
+	OccurredAt string `json:"occurred_at,omitempty"`
+}
+
+func (c *Client) ListJourney(ws string, prospect int) ([]SalesJourneyStep, error) {
+	var resp struct {
+		Data []SalesJourneyStep `json:"data"`
+	}
+	if err := c.get(salesPath(ws, fmt.Sprintf("prospects/%d/journey", prospect)), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) AddJourneyStep(ws string, prospect int, req AddJourneyStepRequest) (*SalesJourneyStep, error) {
+	var out SalesJourneyStep
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/journey", prospect))
+	if err := c.postJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesObjection keeps the three text columns apart: what they SAID, what we
+// think they MEAN, and what we say back. Collapsing them would delete the only
+// structured sales insight in the product.
+type SalesObjection struct {
+	ID       int    `json:"id" yaml:"id"`
+	Type     string `json:"type" yaml:"type"`
+	RaisedBy string `json:"raised_by" yaml:"raised_by"`
+	RaisedAt string `json:"raised_at" yaml:"raised_at"`
+	Status   string `json:"status" yaml:"status"`
+	Spoken   string `json:"spoken" yaml:"spoken"`
+	RealFear string `json:"real_fear" yaml:"real_fear"`
+	Counter  string `json:"counter" yaml:"counter"`
+}
+
+type RaiseObjectionRequest struct {
+	Type     string `json:"type"`
+	RaisedBy string `json:"raised_by,omitempty"`
+	RaisedAt string `json:"raised_at,omitempty"`
+	Spoken   string `json:"spoken,omitempty"`
+	RealFear string `json:"real_fear,omitempty"`
+}
+
+type UpdateObjectionRequest struct {
+	Status   string `json:"status,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Spoken   string `json:"spoken,omitempty"`
+	RealFear string `json:"real_fear,omitempty"`
+	Counter  string `json:"counter,omitempty"`
+}
+
+func (c *Client) ListObjections(ws string, prospect int) ([]SalesObjection, error) {
+	var resp struct {
+		Data []SalesObjection `json:"data"`
+	}
+	if err := c.get(salesPath(ws, fmt.Sprintf("prospects/%d/objections", prospect)), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) RaiseObjection(ws string, prospect int, req RaiseObjectionRequest) (*SalesObjection, error) {
+	var out SalesObjection
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/objections", prospect))
+	if err := c.postJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateObjection(ws string, prospect, objection int, req UpdateObjectionRequest) (*SalesObjection, error) {
+	var out SalesObjection
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/objections/%d", prospect, objection))
+	if err := c.patchJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesObjectionDeleted is what an objection removal reports. The row is GONE —
+// objections carry no bin state — so this echo and the event are the only
+// remaining record of what it said.
+type SalesObjectionDeleted struct {
+	Deleted       bool   `json:"deleted" yaml:"deleted"`
+	ID            int    `json:"id" yaml:"id"`
+	ObjectionType string `json:"objection_type" yaml:"objection_type"`
+	Spoken        string `json:"spoken" yaml:"spoken"`
+}
+
+func (c *Client) DeleteObjection(ws string, prospect, objection int, confirm string) (*SalesObjectionDeleted, error) {
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/objections/%d", prospect, objection)) +
+		"?confirm=" + url.QueryEscape(confirm)
+	var out SalesObjectionDeleted
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesMatch is the agent's stored verdict for one (prospect, product) pair.
+// The app never computes it — see the route.
+type SalesMatch struct {
+	ProductNumber  int    `json:"product_number" yaml:"product_number"`
+	ProductName    string `json:"product_name" yaml:"product_name"`
+	TemplateNumber *int   `json:"template_number" yaml:"template_number"`
+	TemplateName   string `json:"template_name" yaml:"template_name"`
+	Fit            *int   `json:"fit" yaml:"fit"`
+	Why            string `json:"why" yaml:"why"`
+	ComputedAt     string `json:"computed_at" yaml:"computed_at"`
+	ComputedBy     string `json:"computed_by" yaml:"computed_by"`
+}
+
+type SetMatchRequest struct {
+	Product  int    `json:"product"`
+	Fit      *int   `json:"fit,omitempty"`
+	Template *int   `json:"template,omitempty"`
+	Why      string `json:"why,omitempty"`
+}
+
+func (c *Client) ListMatches(ws string, prospect int) ([]SalesMatch, error) {
+	var resp struct {
+		Data []SalesMatch `json:"data"`
+	}
+	if err := c.get(salesPath(ws, fmt.Sprintf("prospects/%d/matches", prospect)), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) SetMatch(ws string, prospect int, req SetMatchRequest) (*SalesMatch, error) {
+	var out SalesMatch
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/matches", prospect))
+	if err := c.postJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ClearMatch(ws string, prospect, product int) error {
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/matches", prospect)) +
+		fmt.Sprintf("?product=%d", product)
+	return c.deleteJSON(p, nil, nil)
+}
+
+// SetNextActionRequest is what we owe this prospect next — all four columns at
+// once, because a type with no due date is half a commitment. `Due` is a
+// RESOLVED date; `DueLabel` keeps the words the agent wrote.
+type SetNextActionRequest struct {
+	Type     *NullString `json:"type,omitempty"`
+	Due      *NullString `json:"due,omitempty"`
+	DueLabel *NullString `json:"due_label,omitempty"`
+	Note     *NullString `json:"note,omitempty"`
+	Owner    *NullString `json:"owner,omitempty"`
+}
+
+func (c *Client) SetNextAction(ws string, prospect int, req SetNextActionRequest) (*Prospect, error) {
+	var out Prospect
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/next-action", prospect))
+	if err := c.patchJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// The two ledgers
+// ---------------------------------------------------------------------------
+
+type SalesMeeting struct {
+	Number         int      `json:"number" yaml:"number"`
+	ProspectNumber int      `json:"prospect_number" yaml:"prospect_number"`
+	ProspectName   string   `json:"prospect_name" yaml:"prospect_name"`
+	StartsAt       string   `json:"starts_at" yaml:"starts_at"`
+	DurationMin    *int     `json:"duration_min" yaml:"duration_min"`
+	Type           string   `json:"type" yaml:"type"`
+	Status         string   `json:"status" yaml:"status"`
+	Title          string   `json:"title" yaml:"title"`
+	Attendees      []string `json:"attendees" yaml:"attendees"`
+	Agenda         string   `json:"agenda" yaml:"agenda"`
+	Outcome        string   `json:"outcome" yaml:"outcome"`
+	URN            string   `json:"urn" yaml:"urn"`
+	DeletedAt      string   `json:"deleted_at" yaml:"deleted_at"`
+}
+
+type ListMeetingsOpts struct {
+	Prospect       int
+	Statuses       []string
+	From, To       string
+	Limit, Cursor  int
+	IncludeDeleted bool
+}
+
+type MeetingsPage struct {
+	Data       []SalesMeeting `json:"data" yaml:"data"`
+	NextCursor *int           `json:"next_cursor" yaml:"next_cursor"`
+}
+
+func (c *Client) ListMeetings(ws string, opts ListMeetingsOpts) (*MeetingsPage, error) {
+	q := url.Values{}
+	if opts.Prospect > 0 {
+		q.Set("prospect", strconv.Itoa(opts.Prospect))
+	}
+	if len(opts.Statuses) > 0 {
+		q.Set("status", strings.Join(opts.Statuses, ","))
+	}
+	if opts.From != "" {
+		q.Set("from", opts.From)
+	}
+	if opts.To != "" {
+		q.Set("to", opts.To)
+	}
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Cursor > 0 {
+		q.Set("cursor", strconv.Itoa(opts.Cursor))
+	}
+	if opts.IncludeDeleted {
+		q.Set("include_deleted", "true")
+	}
+	path := salesPath(ws, "meetings")
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var page MeetingsPage
+	if err := c.get(path, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
+func (c *Client) GetMeeting(ws string, n int) (*SalesMeeting, error) {
+	var m SalesMeeting
+	if err := c.get(salesPath(ws, fmt.Sprintf("meetings/%d", n)), &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// CreateMeetingRequest covers both `schedule` and `log`: one insert, and the
+// caller's `Status` (or the presence of an outcome) says which moment it is.
+type CreateMeetingRequest struct {
+	Prospect    int      `json:"prospect"`
+	At          string   `json:"at"`
+	Type        string   `json:"type"`
+	Status      string   `json:"status,omitempty"`
+	Title       string   `json:"title"`
+	DurationMin *int     `json:"duration_min,omitempty"`
+	Attendees   []string `json:"attendees,omitempty"`
+	Agenda      string   `json:"agenda,omitempty"`
+	Outcome     string   `json:"outcome,omitempty"`
+}
+
+func (c *Client) CreateMeeting(ws string, req CreateMeetingRequest) (*SalesMeeting, error) {
+	var out SalesMeeting
+	if err := c.postJSON(salesPath(ws, "meetings"), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type UpdateMeetingRequest struct {
+	Status      string      `json:"status,omitempty"`
+	Title       string      `json:"title,omitempty"`
+	Outcome     *NullString `json:"outcome,omitempty"`
+	Agenda      *NullString `json:"agenda,omitempty"`
+	At          string      `json:"at,omitempty"`
+	DurationMin *int        `json:"duration_min,omitempty"`
+	Attendees   []string    `json:"attendees,omitempty"`
+}
+
+func (c *Client) UpdateMeeting(ws string, n int, req UpdateMeetingRequest) (*SalesMeeting, error) {
+	var out SalesMeeting
+	if err := c.patchJSON(salesPath(ws, fmt.Sprintf("meetings/%d", n)), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteMeeting(ws string, n int, confirm string) (*SalesDeleted, error) {
+	p := salesPath(ws, fmt.Sprintf("meetings/%d", n)) + "?confirm=" + url.QueryEscape(confirm)
+	var out SalesDeleted
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SalesComm struct {
+	Number         int    `json:"number" yaml:"number"`
+	ProspectNumber int    `json:"prospect_number" yaml:"prospect_number"`
+	ProspectName   string `json:"prospect_name" yaml:"prospect_name"`
+	Channel        string `json:"channel" yaml:"channel"`
+	Direction      string `json:"direction" yaml:"direction"`
+	OccurredAt     string `json:"occurred_at" yaml:"occurred_at"`
+	Subject        string `json:"subject" yaml:"subject"`
+	Body           string `json:"body" yaml:"body"`
+	Contact        string `json:"contact" yaml:"contact"`
+	LoggedBy       string `json:"logged_by" yaml:"logged_by"`
+	URN            string `json:"urn" yaml:"urn"`
+	DeletedAt      string `json:"deleted_at" yaml:"deleted_at"`
+}
+
+type ListCommsOpts struct {
+	Prospect       int
+	Channels       []string
+	Direction      string
+	From, To       string
+	Limit, Cursor  int
+	IncludeDeleted bool
+}
+
+type CommsPage struct {
+	Data       []SalesComm `json:"data" yaml:"data"`
+	NextCursor *int        `json:"next_cursor" yaml:"next_cursor"`
+}
+
+func (c *Client) ListComms(ws string, opts ListCommsOpts) (*CommsPage, error) {
+	q := url.Values{}
+	if opts.Prospect > 0 {
+		q.Set("prospect", strconv.Itoa(opts.Prospect))
+	}
+	if len(opts.Channels) > 0 {
+		q.Set("channel", strings.Join(opts.Channels, ","))
+	}
+	if opts.Direction != "" {
+		q.Set("dir", opts.Direction)
+	}
+	if opts.From != "" {
+		q.Set("from", opts.From)
+	}
+	if opts.To != "" {
+		q.Set("to", opts.To)
+	}
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Cursor > 0 {
+		q.Set("cursor", strconv.Itoa(opts.Cursor))
+	}
+	if opts.IncludeDeleted {
+		q.Set("include_deleted", "true")
+	}
+	path := salesPath(ws, "communications")
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var page CommsPage
+	if err := c.get(path, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
+func (c *Client) GetComm(ws string, n int) (*SalesComm, error) {
+	var out SalesComm
+	if err := c.get(salesPath(ws, fmt.Sprintf("communications/%d", n)), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type LogCommRequest struct {
+	Prospect  int    `json:"prospect"`
+	Channel   string `json:"channel"`
+	Direction string `json:"direction"`
+	At        string `json:"at,omitempty"`
+	Subject   string `json:"subject,omitempty"`
+	Body      string `json:"body,omitempty"`
+	Contact   *int   `json:"contact,omitempty"`
+}
+
+func (c *Client) LogComm(ws string, req LogCommRequest) (*SalesComm, error) {
+	var out SalesComm
+	if err := c.postJSON(salesPath(ws, "communications"), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteComm(ws string, n int, confirm string) (*SalesDeleted, error) {
+	p := salesPath(ws, fmt.Sprintf("communications/%d", n)) + "?confirm=" + url.QueryEscape(confirm)
+	var out SalesDeleted
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// The catalog: products, templates, documents
+// ---------------------------------------------------------------------------
+
+type SalesProduct struct {
+	Number      int      `json:"number" yaml:"number"`
+	Category    string   `json:"category" yaml:"category"`
+	Name        string   `json:"name" yaml:"name"`
+	PriceLabel  string   `json:"price_label" yaml:"price_label"`
+	PriceFrom   string   `json:"price_from" yaml:"price_from"`
+	PriceTo     string   `json:"price_to" yaml:"price_to"`
+	Currency    string   `json:"currency" yaml:"currency"`
+	Description string   `json:"description" yaml:"description"`
+	Fit         []string `json:"fit" yaml:"fit"`
+	Pitch       string   `json:"pitch" yaml:"pitch"`
+	StatusLabel string   `json:"status_label" yaml:"status_label"`
+	Refs        []string `json:"refs" yaml:"refs"`
+	URN         string   `json:"urn" yaml:"urn"`
+	DeletedAt   string   `json:"deleted_at" yaml:"deleted_at"`
+}
+
+type ProductRequest struct {
+	Category    string   `json:"category,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	PriceLabel  string   `json:"price_label,omitempty"`
+	PriceFrom   string   `json:"price_from,omitempty"`
+	PriceTo     string   `json:"price_to,omitempty"`
+	Currency    string   `json:"currency,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Fit         []string `json:"fit,omitempty"`
+	Pitch       string   `json:"pitch,omitempty"`
+	StatusLabel string   `json:"status_label,omitempty"`
+	Refs        []string `json:"refs,omitempty"`
+}
+
+func (c *Client) ListProducts(ws, category, query string, limit int) ([]SalesProduct, error) {
+	q := url.Values{}
+	if category != "" {
+		q.Set("category", category)
+	}
+	if query != "" {
+		q.Set("q", query)
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	path := salesPath(ws, "products")
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var resp struct {
+		Data []SalesProduct `json:"data"`
+	}
+	if err := c.get(path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetProduct(ws string, n int) (*SalesProduct, error) {
+	var out SalesProduct
+	if err := c.get(salesPath(ws, fmt.Sprintf("products/%d", n)), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) CreateProduct(ws string, req ProductRequest) (*SalesProduct, error) {
+	var out SalesProduct
+	if err := c.postJSON(salesPath(ws, "products"), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateProduct(ws string, n int, req ProductRequest) (*SalesProduct, error) {
+	var out SalesProduct
+	if err := c.patchJSON(salesPath(ws, fmt.Sprintf("products/%d", n)), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteProduct(ws string, n int, confirm string) (*SalesDeleted, error) {
+	p := salesPath(ws, fmt.Sprintf("products/%d", n)) + "?confirm=" + url.QueryEscape(confirm)
+	var out SalesDeleted
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SalesTemplate struct {
+	Number    int      `json:"number" yaml:"number"`
+	Channel   string   `json:"channel" yaml:"channel"`
+	Category  string   `json:"category" yaml:"category"`
+	Stage     string   `json:"stage" yaml:"stage"`
+	Name      string   `json:"name" yaml:"name"`
+	Subject   string   `json:"subject" yaml:"subject"`
+	Body      string   `json:"body" yaml:"body"`
+	Variables []string `json:"variables" yaml:"variables"`
+	URN       string   `json:"urn" yaml:"urn"`
+	DeletedAt string   `json:"deleted_at" yaml:"deleted_at"`
+}
+
+type TemplateRequest struct {
+	Channel  string `json:"channel,omitempty"`
+	Category string `json:"category,omitempty"`
+	Stage    string `json:"stage,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Subject  string `json:"subject,omitempty"`
+	Body     string `json:"body,omitempty"`
+}
+
+func (c *Client) ListTemplates(ws, channel, category, stage, query string, limit int) ([]SalesTemplate, error) {
+	q := url.Values{}
+	for k, v := range map[string]string{"channel": channel, "category": category, "stage": stage, "q": query} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	path := salesPath(ws, "templates")
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var resp struct {
+		Data []SalesTemplate `json:"data"`
+	}
+	if err := c.get(path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetTemplate(ws string, n int) (*SalesTemplate, error) {
+	var out SalesTemplate
+	if err := c.get(salesPath(ws, fmt.Sprintf("templates/%d", n)), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) CreateTemplate(ws string, req TemplateRequest) (*SalesTemplate, error) {
+	var out SalesTemplate
+	if err := c.postJSON(salesPath(ws, "templates"), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateTemplate(ws string, n int, req TemplateRequest) (*SalesTemplate, error) {
+	var out SalesTemplate
+	if err := c.patchJSON(salesPath(ws, fmt.Sprintf("templates/%d", n)), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteTemplate(ws string, n int, confirm string) (*SalesDeleted, error) {
+	p := salesPath(ws, fmt.Sprintf("templates/%d", n)) + "?confirm=" + url.QueryEscape(confirm)
+	var out SalesDeleted
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RenderedTemplate is a template filled in. Nothing was sent and nothing was
+// recorded — rendering is a pure function over a stored template.
+type RenderedTemplate struct {
+	Number  int      `json:"number" yaml:"number"`
+	Name    string   `json:"name" yaml:"name"`
+	Channel string   `json:"channel" yaml:"channel"`
+	Subject string   `json:"subject" yaml:"subject"`
+	Body    string   `json:"body" yaml:"body"`
+	Unused  []string `json:"unused" yaml:"unused"`
+}
+
+func (c *Client) RenderTemplate(ws string, n int, vars map[string]string) (*RenderedTemplate, error) {
+	var out RenderedTemplate
+	body := map[string]any{"vars": vars}
+	if err := c.postJSON(salesPath(ws, fmt.Sprintf("templates/%d/render", n)), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SalesDocument struct {
+	Number      int      `json:"number" yaml:"number"`
+	Title       string   `json:"title" yaml:"title"`
+	Kind        string   `json:"kind" yaml:"kind"`
+	UploadURL   string   `json:"upload_url" yaml:"upload_url"`
+	ExternalURL string   `json:"external_url" yaml:"external_url"`
+	SizeBytes   *int     `json:"size_bytes" yaml:"size_bytes"`
+	MimeType    string   `json:"mime_type" yaml:"mime_type"`
+	Description string   `json:"description" yaml:"description"`
+	Tags        []string `json:"tags" yaml:"tags"`
+	AddedBy     string   `json:"added_by" yaml:"added_by"`
+	Prospects   []int    `json:"prospects" yaml:"prospects"`
+	Products    []int    `json:"products" yaml:"products"`
+	URN         string   `json:"urn" yaml:"urn"`
+	DeletedAt   string   `json:"deleted_at" yaml:"deleted_at"`
+}
+
+// URL returns wherever the document actually is. Exactly one of the two columns
+// is set — the database CHECK enforces it — so this cannot be ambiguous.
+func (d SalesDocument) URL() string {
+	if d.UploadURL != "" {
+		return d.UploadURL
+	}
+	return d.ExternalURL
+}
+
+type DocumentRequest struct {
+	Title       string   `json:"title,omitempty"`
+	Kind        string   `json:"kind,omitempty"`
+	UploadURL   string   `json:"upload_url,omitempty"`
+	ExternalURL string   `json:"external_url,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+func (c *Client) ListDocuments(ws, kind, query string, prospect, limit int) ([]SalesDocument, error) {
+	q := url.Values{}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
+	if query != "" {
+		q.Set("q", query)
+	}
+	if prospect > 0 {
+		q.Set("prospect", strconv.Itoa(prospect))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	path := salesPath(ws, "documents")
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var resp struct {
+		Data []SalesDocument `json:"data"`
+	}
+	if err := c.get(path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetDocument(ws string, n int) (*SalesDocument, error) {
+	var out SalesDocument
+	if err := c.get(salesPath(ws, fmt.Sprintf("documents/%d", n)), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) AddDocument(ws string, req DocumentRequest) (*SalesDocument, error) {
+	var out SalesDocument
+	if err := c.postJSON(salesPath(ws, "documents"), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateDocument(ws string, n int, req DocumentRequest) (*SalesDocument, error) {
+	var out SalesDocument
+	if err := c.patchJSON(salesPath(ws, fmt.Sprintf("documents/%d", n)), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteDocument(ws string, n int, confirm string) (*SalesDeleted, error) {
+	p := salesPath(ws, fmt.Sprintf("documents/%d", n)) + "?confirm=" + url.QueryEscape(confirm)
+	var out SalesDeleted
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DocumentLinkRequest names exactly ONE target. The route refuses zero or two.
+type DocumentLinkRequest struct {
+	Prospect *int `json:"prospect,omitempty"`
+	Product  *int `json:"product,omitempty"`
+	Template *int `json:"template,omitempty"`
+}
+
+func (c *Client) LinkDocument(ws string, n int, req DocumentLinkRequest) (*SalesDocument, error) {
+	var out SalesDocument
+	if err := c.postJSON(salesPath(ws, fmt.Sprintf("documents/%d/links", n)), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UnlinkDocument(ws string, n int, req DocumentLinkRequest) (*SalesDocument, error) {
+	q := url.Values{}
+	if req.Prospect != nil {
+		q.Set("prospect", strconv.Itoa(*req.Prospect))
+	}
+	if req.Product != nil {
+		q.Set("product", strconv.Itoa(*req.Product))
+	}
+	if req.Template != nil {
+		q.Set("template", strconv.Itoa(*req.Template))
+	}
+	// Query parameters rather than a body: a DELETE with a body is legal and
+	// widely mishandled by proxies and clients.
+	path := salesPath(ws, fmt.Sprintf("documents/%d/links", n)) + "?" + q.Encode()
+	var out SalesDocument
+	if err := c.deleteJSON(path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// The three aggregates — COMPUTED server-side, never stored (D-33)
+// ---------------------------------------------------------------------------
+
+type SalesDueAction struct {
+	Number     int    `json:"number" yaml:"number"`
+	Name       string `json:"name" yaml:"name"`
+	Stage      string `json:"stage" yaml:"stage"`
+	ActionType string `json:"action_type" yaml:"action_type"`
+	Due        string `json:"due" yaml:"due"`
+	DueLabel   string `json:"due_label" yaml:"due_label"`
+	Note       string `json:"note" yaml:"note"`
+	Owner      string `json:"owner" yaml:"owner"`
+	Overdue    bool   `json:"overdue" yaml:"overdue"`
+}
+
+type SalesMeetingSlot struct {
+	Number         int    `json:"number" yaml:"number"`
+	ProspectNumber int    `json:"prospect_number" yaml:"prospect_number"`
+	ProspectName   string `json:"prospect_name" yaml:"prospect_name"`
+	Title          string `json:"title" yaml:"title"`
+	StartsAt       string `json:"starts_at" yaml:"starts_at"`
+	Type           string `json:"type" yaml:"type"`
+	Status         string `json:"status" yaml:"status"`
+}
+
+type SalesToday struct {
+	Date       string             `json:"date" yaml:"date"`
+	DueActions []SalesDueAction   `json:"due_actions" yaml:"due_actions"`
+	Meetings   []SalesMeetingSlot `json:"meetings" yaml:"meetings"`
+	Counts     struct {
+		DueToday      int `json:"due_today" yaml:"due_today"`
+		Overdue       int `json:"overdue" yaml:"overdue"`
+		MeetingsToday int `json:"meetings_today" yaml:"meetings_today"`
+	} `json:"counts" yaml:"counts"`
+}
+
+func (c *Client) SalesToday(ws string) (*SalesToday, error) {
+	var out SalesToday
+	if err := c.get(salesPath(ws, "today"), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SalesStageBucket struct {
+	Stage    string `json:"stage" yaml:"stage"`
+	Count    int    `json:"count" yaml:"count"`
+	Value    string `json:"value" yaml:"value"`
+	Currency string `json:"currency" yaml:"currency"`
+}
+
+type SalesTotals struct {
+	Count int    `json:"count" yaml:"count"`
+	Value string `json:"value" yaml:"value"`
+}
+
+type SalesPipeline struct {
+	Stages   []SalesStageBucket `json:"stages" yaml:"stages"`
+	Open     SalesTotals        `json:"open" yaml:"open"`
+	Won      SalesTotals        `json:"won" yaml:"won"`
+	Lost     SalesTotals        `json:"lost" yaml:"lost"`
+	Currency string             `json:"currency" yaml:"currency"`
+}
+
+func (c *Client) SalesPipeline(ws string) (*SalesPipeline, error) {
+	var out SalesPipeline
+	if err := c.get(salesPath(ws, "pipeline"), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SalesMetrics struct {
+	PeriodDays int    `json:"period_days" yaml:"period_days"`
+	From       string `json:"from" yaml:"from"`
+	To         string `json:"to" yaml:"to"`
+	Closed     struct {
+		Won  SalesTotals `json:"won" yaml:"won"`
+		Lost SalesTotals `json:"lost" yaml:"lost"`
+		// Null when nothing closed. "We closed nothing" and "we lost
+		// everything" are not the same month, so this is a pointer.
+		WinRate    *string `json:"win_rate" yaml:"win_rate"`
+		AverageWon *string `json:"average_won" yaml:"average_won"`
+	} `json:"closed" yaml:"closed"`
+	Created  SalesTotals `json:"created" yaml:"created"`
+	Activity struct {
+		Communications int `json:"communications" yaml:"communications"`
+		Meetings       int `json:"meetings" yaml:"meetings"`
+	} `json:"activity" yaml:"activity"`
+	Currency string `json:"currency" yaml:"currency"`
+}
+
+func (c *Client) SalesMetrics(ws, period string) (*SalesMetrics, error) {
+	path := salesPath(ws, "metrics")
+	if period != "" {
+		path += "?period=" + url.QueryEscape(period)
+	}
+	var out SalesMetrics
+	if err := c.get(path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesSearchHit is a full-text hit INSIDE this app's records — the other half
+// of D-9. `Snippet` comes from a column `platform.entities` never holds, which
+// is what makes this a different answer from `bk search`.
+type SalesSearchHit struct {
+	Type           string  `json:"type" yaml:"type"`
+	Number         *int    `json:"number" yaml:"number"`
+	ProspectNumber *int    `json:"prospect_number" yaml:"prospect_number"`
+	Title          string  `json:"title" yaml:"title"`
+	Snippet        string  `json:"snippet" yaml:"snippet"`
+	Rank           float64 `json:"rank" yaml:"rank"`
+	URN            string  `json:"urn" yaml:"urn"`
+}
+
+func (c *Client) SalesSearch(ws, query string, types []string, limit int) ([]SalesSearchHit, error) {
+	q := url.Values{}
+	q.Set("q", query)
+	if len(types) > 0 {
+		q.Set("type", strings.Join(types, ","))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var resp struct {
+		Data []SalesSearchHit `json:"data"`
+	}
+	if err := c.get(salesPath(ws, "sales-search")+"?"+q.Encode(), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// AttachProspectLabel / DetachProspectLabel are the sales half of
+// `bk sales label attach|detach`. They post to a SALES route, which is why they
+// live here and not in the shared appverbs package — see that package's header.
+func (c *Client) AttachProspectLabel(ws string, prospect, labelID int) error {
+	body := map[string]int{"label_id": labelID}
+	return c.postJSON(salesPath(ws, fmt.Sprintf("prospects/%d/labels", prospect)), body, nil)
+}
+
+func (c *Client) DetachProspectLabel(ws string, prospect, labelID int) error {
+	return c.deleteJSON(salesPath(ws, fmt.Sprintf("prospects/%d/labels/%d", prospect, labelID)), nil, nil)
+}

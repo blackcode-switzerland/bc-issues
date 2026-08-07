@@ -128,3 +128,308 @@ function iso(v: Date | string | null | undefined): string | null {
   if (v == null) return null
   return v instanceof Date ? v.toISOString() : String(v)
 }
+
+// ---------------------------------------------------------------------------
+// The children of a prospect — no #number, so no `number` field and no URN
+// ---------------------------------------------------------------------------
+// `id` here is a row id, and that is the correct address for a row with no
+// independent identity: `lib/db/queries/prospect-children.ts` states the rule
+// once, and `apps/issues` addresses comments the same way. The absence of `urn`
+// is the visible half — a caller can tell from the shape that there is no
+// cross-app address to be had.
+
+export function publicContact(c: {
+  id: number
+  name: string
+  role: string | null
+  email: string | null
+  phone: string | null
+  is_primary: boolean
+  notes: string | null
+}) {
+  return {
+    id: c.id,
+    name: c.name,
+    role: c.role,
+    email: c.email,
+    phone: c.phone,
+    is_primary: c.is_primary,
+    notes: c.notes,
+  }
+}
+
+export function publicJourneyStep(s: {
+  id: number
+  stage: string
+  status: string
+  occurred_at: Date | null
+  actor_label: string | null
+  note: string | null
+}) {
+  return {
+    id: s.id,
+    stage: s.stage,
+    status: s.status,
+    occurred_at: iso(s.occurred_at),
+    actor: s.actor_label,
+    note: s.note,
+  }
+}
+
+export function publicObjection(o: {
+  id: number
+  type: string
+  raised_by: string | null
+  raised_at: Date | null
+  status: string
+  spoken: string | null
+  real_fear: string | null
+  counter: string | null
+}) {
+  return {
+    id: o.id,
+    type: o.type,
+    raised_by: o.raised_by,
+    raised_at: iso(o.raised_at),
+    status: o.status,
+    // The three columns stay three. Collapsing them into one "notes" field
+    // would delete the only structured sales insight in the product: what they
+    // SAID, what we think they MEAN, and what we say back.
+    spoken: o.spoken,
+    real_fear: o.real_fear,
+    counter: o.counter,
+  }
+}
+
+export function publicMatch(m: {
+  product_number: number
+  product_name: string
+  template_number: number | null
+  template_name: string | null
+  fit: number | null
+  why: string | null
+  computed_at: Date
+  computed_by_label: string | null
+}) {
+  return {
+    product_number: m.product_number,
+    product_name: m.product_name,
+    template_number: m.template_number,
+    template_name: m.template_name,
+    fit: m.fit,
+    why: m.why,
+    computed_at: iso(m.computed_at),
+    // WHO decided. A match is a judgement, so the record says whose.
+    computed_by: m.computed_by_label,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The ledgers and the catalog — all six have a #number and a URN
+// ---------------------------------------------------------------------------
+
+export function publicMeeting(
+  m: {
+    seq: number
+    prospect_number: number
+    prospect_name: string
+    starts_at: Date
+    duration_min: number | null
+    type: string
+    status: string
+    title: string
+    attendees: string[] | null
+    agenda: string | null
+    outcome: string | null
+    created_at: Date
+    deleted_at: Date | null
+  },
+  workspaceSlug: string
+) {
+  return {
+    number: m.seq,
+    prospect_number: m.prospect_number,
+    prospect_name: m.prospect_name,
+    starts_at: iso(m.starts_at)!,
+    duration_min: m.duration_min,
+    type: m.type,
+    status: m.status,
+    title: m.title,
+    attendees: m.attendees ?? [],
+    agenda: m.agenda,
+    outcome: m.outcome,
+    urn: entityUrnOrNull(workspaceSlug, 'meeting', m.seq),
+    created_at: iso(m.created_at)!,
+    deleted_at: iso(m.deleted_at),
+  }
+}
+
+export function publicComm(
+  c: {
+    seq: number
+    prospect_number: number
+    prospect_name: string
+    channel: string
+    direction: string
+    occurred_at: Date
+    subject: string | null
+    body: string | null
+    contact_name: string | null
+    logged_by_label: string | null
+    created_at: Date
+    deleted_at: Date | null
+  },
+  workspaceSlug: string
+) {
+  return {
+    number: c.seq,
+    prospect_number: c.prospect_number,
+    prospect_name: c.prospect_name,
+    channel: c.channel,
+    direction: c.direction,
+    occurred_at: iso(c.occurred_at)!,
+    subject: c.subject,
+    body: c.body,
+    contact: c.contact_name,
+    logged_by: c.logged_by_label,
+    urn: entityUrnOrNull(workspaceSlug, 'communication', c.seq),
+    created_at: iso(c.created_at)!,
+    deleted_at: iso(c.deleted_at),
+  }
+}
+
+export function publicProduct(
+  p: {
+    seq: number
+    category: string
+    name: string
+    price_label: string | null
+    price_from: string | null
+    price_to: string | null
+    currency: string
+    description: string | null
+    fit: string[] | null
+    pitch: string | null
+    status_label: string | null
+    refs: string[] | null
+    deleted_at: Date | null
+  },
+  workspaceSlug: string
+) {
+  return {
+    number: p.seq,
+    category: p.category,
+    name: p.name,
+    // The price AS WRITTEN and the machine-readable half, both. Half the
+    // catalogue is not a single number, and neither derives from the other.
+    price_label: p.price_label,
+    price_from: p.price_from,
+    price_to: p.price_to,
+    currency: p.currency,
+    description: p.description,
+    fit: p.fit ?? [],
+    pitch: p.pitch,
+    status_label: p.status_label,
+    refs: p.refs ?? [],
+    urn: entityUrnOrNull(workspaceSlug, 'product', p.seq),
+    deleted_at: iso(p.deleted_at),
+  }
+}
+
+export function publicTemplate(
+  t: {
+    seq: number
+    channel: string
+    category: string
+    stage: string | null
+    name: string
+    subject: string | null
+    body: string | null
+    variables: string[] | null
+    deleted_at: Date | null
+  },
+  workspaceSlug: string
+) {
+  return {
+    number: t.seq,
+    channel: t.channel,
+    category: t.category,
+    stage: t.stage,
+    name: t.name,
+    subject: t.subject,
+    body: t.body,
+    // Parsed from the body on write, served so a caller knows what `render`
+    // will demand BEFORE it fails.
+    variables: t.variables ?? [],
+    urn: entityUrnOrNull(workspaceSlug, 'template', t.seq),
+    deleted_at: iso(t.deleted_at),
+  }
+}
+
+export function publicDocument(
+  d: {
+    seq: number
+    title: string
+    kind: string
+    upload_url: string | null
+    external_url: string | null
+    size_bytes: number | null
+    mime_type: string | null
+    description: string | null
+    tags: string[] | null
+    added_by_label: string | null
+    prospect_numbers: number[]
+    product_numbers: number[]
+    deleted_at: Date | null
+  },
+  workspaceSlug: string
+) {
+  return {
+    number: d.seq,
+    title: d.title,
+    kind: d.kind,
+    // One of the two is always null — the CHECK enforces it — and both are
+    // served rather than collapsed into a single `url`, because which one it is
+    // decides whether the blob-reference index has anything to say about it.
+    upload_url: d.upload_url,
+    external_url: d.external_url,
+    size_bytes: d.size_bytes,
+    mime_type: d.mime_type,
+    description: d.description,
+    tags: d.tags ?? [],
+    added_by: d.added_by_label,
+    prospects: d.prospect_numbers,
+    products: d.product_numbers,
+    urn: entityUrnOrNull(workspaceSlug, 'document', d.seq),
+    deleted_at: iso(d.deleted_at),
+  }
+}
+
+/**
+ * A label, in the shape `bk <app> label` already parses.
+ *
+ * `issue_count` is the field name that wire uses for "how many things carry
+ * this", and it is filled with the PROSPECT count here. Renaming it would mean
+ * a sales-specific client type for a command whose whole point is that it is the
+ * same one under every app; the honest fix is to rename the field on both sides,
+ * which is a platform change and not this phase's.
+ */
+export function publicLabel(l: {
+  id: number
+  workspace_id: number | null
+  name: string
+  color: string | null
+  description: string | null
+  app: string | null
+  usage: number
+}) {
+  return {
+    id: l.id,
+    workspace_id: l.workspace_id,
+    name: l.name,
+    color: l.color,
+    description: l.description,
+    app: l.app,
+    issue_count: l.usage,
+  }
+}
