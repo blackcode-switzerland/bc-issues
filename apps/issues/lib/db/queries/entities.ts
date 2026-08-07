@@ -22,7 +22,7 @@
 // write rolls back, and the result is an entities row for an issue that does not
 // exist. That failure is invisible: `bk search` returns a title, the link
 // resolves, and nothing is wrong until somebody clicks through to a 404 weeks
-// later. `entities.projection.test.ts` asserts the rollback case directly.
+// later. `entities.integration.test.ts` asserts the rollback case directly.
 //
 // The second guard is `reconcileEntities` below, which re-derives the whole
 // projection from the source tables. It ships in this phase rather than later

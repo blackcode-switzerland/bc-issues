@@ -104,8 +104,25 @@ export interface ParityInputs {
   appSlug: string
 }
 
-/** Every `route.ts` under a directory, recursively. */
+/**
+ * Every `route.ts` under a directory, recursively.
+ *
+ * ── A MISSING DIRECTORY IS AN ANSWER, NOT AN EXCEPTION ─────────────────────
+ * This used to call `readdirSync` on a path that may not exist, so a BRAND-NEW
+ * app — one copied from the scaffold before it has any routes, which is the
+ * state every app is in for its first hour — got an ENOENT stack trace out of
+ * `node:fs` instead of the assertion message written to teach it what was
+ * wrong. The reader's first encounter with this repo's central guardrail was a
+ * crash inside a dependency.
+ *
+ * Returning `[]` is safe here precisely BECAUSE the caller asserts its inputs:
+ * `cli-parity.test.ts`'s first case fails on `real.size === 0` with a message
+ * naming the directory it looked in. Swallowing the error would be dangerous in
+ * a scan that had no such assertion — which is the general rule, and the reason
+ * this comment exists rather than a bare `existsSync`.
+ */
 export function walkRoutes(dir: string): string[] {
+  if (!existsSync(dir)) return []
   const out: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name)

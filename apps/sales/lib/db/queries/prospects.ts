@@ -15,7 +15,7 @@
 // enclosing `db.transaction()` is what makes them atomic with the row they
 // describe. A projection written outside it commits even when the source write
 // rolls back, and the result is a `bk search` hit that 404s weeks later —
-// `entities.projection.test.ts` asserts that case directly.
+// `entities.integration.test.ts` asserts that case directly.
 //
 // ---------------------------------------------------------------------------
 // `seq`, NEVER `id`
