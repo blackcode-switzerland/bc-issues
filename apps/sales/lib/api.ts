@@ -11,21 +11,31 @@ import {
 } from '@blackcode/platform-api'
 import { verifyToken } from '@blackcode/platform-auth'
 import { getDb } from './db/client'
+import { getValidatedSessionUser } from './auth/session'
 import { APP_SLUG } from './app'
 
 /**
- * The caller, from a `bk_live_…` bearer token.
+ * The caller, from a `bk_live_…` bearer token **or** a browser session.
  *
- * Token only, for now. The browser half is a NextAuth session and arrives with
- * the web foundation (Phase 6); until then the CLI path — the path agents use —
- * works from the first commit. `resolveSessionUser` stays absent deliberately:
- * the routes that require it fail at MOUNT time rather than silently accepting a
- * bearer token where a session is required.
+ * The token half was the whole of it until Phase 6, because the CLI path is the
+ * path agents use and it had to work from the first commit. The session half
+ * arrives with the web surface: every fetch the dashboard makes goes to this
+ * app's own origin carrying a cookie and no Authorization header (D-10), so
+ * without this branch every page would 401 against its own API.
+ *
+ * ── THE ORDER IS NOT ARBITRARY ──────────────────────────────────────────────
+ * Token first. A request carrying an explicit `Authorization` header is stating
+ * which credential it wants used; falling through to an ambient cookie when that
+ * token is invalid would mean a revoked token silently kept working for anyone
+ * who happened to be signed in in the same browser. A bad token is an answer,
+ * not a reason to look elsewhere.
  */
 async function resolveUser(req: NextRequest) {
   const header = req.headers.get('authorization') ?? ''
-  if (!header.startsWith('Bearer ')) return null
-  return verifyToken(getDb(), header.slice('Bearer '.length).trim())
+  if (header.startsWith('Bearer ')) {
+    return verifyToken(getDb(), header.slice('Bearer '.length).trim())
+  }
+  return getValidatedSessionUser()
 }
 
 export const appContext: AppContext = {
@@ -38,6 +48,13 @@ export const appContext: AppContext = {
     return getDb()
   },
   resolveUser,
+
+  // Session ONLY — never a bearer token. `/api/tokens` and `/api/cli/authorize`
+  // use this one, because a token that can mint another token is privilege
+  // escalation: revoking the original does not revoke what it created. Passed by
+  // reference rather than wrapped so the wiring stays observable to a test.
+  // Full reasoning: `packages/platform-api/src/app-context.ts`.
+  resolveSessionUser: getValidatedSessionUser,
 
   // ── D-19 ITEM 2 — AND READ ITS CEILING BEFORE QUOTING IT ───────────────────
   // Sales holds names, emails, phone numbers and free-text notes about people at

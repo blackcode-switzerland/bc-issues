@@ -10,28 +10,32 @@
 // no command is a capability agents cannot reach, and a command naming a route
 // that does not exist is a broken command waiting to be called.
 //
-// Note there are no exclusions below. Reach for one LAST: writing the `routes`
-// annotations is what surfaces the holes, and in `apps/issues` only two
-// exclusions turned out to be genuine product decisions. An unexplained
-// exclusion is how coverage quietly rots, so every entry must carry a reason.
+// There is ONE exclusion below and it is not a product capability. Reach for one
+// LAST: writing the `routes` annotations is what surfaces the holes, and in
+// `apps/issues` only two exclusions turned out to be genuine product decisions.
+// An unexplained exclusion is how coverage quietly rots, so every entry must
+// carry a reason.
 //
 // ---------------------------------------------------------------------------
-// THIS FILE IS RED ON PURPOSE UNTIL PHASE 4/5. DO NOT WEAKEN IT.
+// IT WENT GREEN WITH PHASE 4/5, AND IT WAS RED ON PURPOSE BEFORE THAT
 // ---------------------------------------------------------------------------
-// Phase 2 scaffolds the app; Phase 4 adds the `bk sales` command group and
-// Phase 5 adds the HTTP routes. Until both exist, the FIRST assertion below —
-// "discovers both sides" — fails with `no API routes found under
-// apps/sales/app/api` and `no bk command belongs to "sales"`.
-//
+// Phase 2 scaffolded the app with no routes and no commands, and the FIRST
+// assertion below — "discovers both sides" — failed for exactly that reason.
 // That assertion exists precisely so an app cannot pass this guard by having
 // nothing to check (CLAUDE.md finding #5: `bk __routes` deduped two apps into
 // one, and only this assertion made it visible). Turning it off, adding a
-// "skip if empty" branch, or deleting the file until the routes land would
-// re-open the hole it was written to close — and would do so in the one window
-// where nobody would notice, because there is nothing to check yet.
+// "skip if empty" branch, or deleting the file in that window would have
+// re-opened the hole it was written to close, in the one window where nobody
+// would have noticed.
 //
-// It goes green when agent5 lands the routes and the command group. Nothing
-// else about this file should change.
+// VERIFIED 2026-08-07 (Phase 6), three ways, each watched failing and restored:
+//   - a route with no command       → "no uncovered capability" RED
+//   - that route re-exported via an export list → the coverage check goes quiet
+//     and the INVISIBLE-EXPORT check fires instead. That is the pair working:
+//     the first guard alone would have passed on it.
+//   - the exclusion below removed   → the NextAuth route immediately fails the
+//     invisible-export check, which is what proves the entry is load-bearing
+//     rather than a string that matches nothing.
 
 import { describe, it, expect } from 'vitest'
 import { join } from 'node:path'
@@ -43,8 +47,24 @@ const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const REPO_ROOT = join(APP_ROOT, '..', '..')
 const CLI_DIR = join(REPO_ROOT, 'cli')
 
-/** Routes deliberately not reachable from the CLI. Each needs a reason. */
-const EXCLUDED_PATHS = new Map<string, string>()
+/**
+ * Routes deliberately not reachable from the CLI. Each needs a reason.
+ *
+ * There is exactly one, and it is not a product capability: NextAuth's catch-all
+ * is browser session machinery. An agent authenticates with a `bk_live_…` token
+ * and never touches this path, so a `bk` command for it would be a command that
+ * signs a browser in — which is `bk login`, and that goes somewhere else.
+ *
+ * Excluding it also settles how it exports its handlers: NextAuth necessarily
+ * writes `export { handler as GET, handler as POST }`, which the
+ * invisible-export check would otherwise flag. Exclusions are read FIRST for
+ * that reason (`packages/platform-testing/src/cli-parity.ts`) — an excluded
+ * route's methods are never compared against anything, so the form it exports
+ * them in cannot hide a capability.
+ */
+const EXCLUDED_PATHS = new Map<string, string>([
+  ['/api/auth/{nextauth}', 'NextAuth handler — browser session machinery, never called by the binary'],
+])
 
 describe('CLI ↔ routes parity', () => {
   // There is no `hostsPlatformRoutes`, retired on 2026-08-07 — and this app is
