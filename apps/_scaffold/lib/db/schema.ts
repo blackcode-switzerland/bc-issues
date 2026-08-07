@@ -40,6 +40,16 @@ export const notes = scaffoldSchema.table('notes', {
   created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  /**
+   * Soft delete — `bk <app> trash`. NULL means live.
+   *
+   * Every addressable entity on this platform is soft-deleted first and purged
+   * separately, and the reason is `platform.blob_references`: a hard DELETE
+   * fires this table's trigger and drops the row's references, so a file that
+   * was only referenced here becomes deletable the instant somebody presses
+   * delete — before anyone can change their mind. Two steps, two decisions.
+   */
+  deleted_at: timestamp('deleted_at', { withTimezone: true }),
 })
 
 export type Note = typeof notes.$inferSelect

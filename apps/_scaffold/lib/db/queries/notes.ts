@@ -3,15 +3,16 @@
 // Routes stay thin — they authenticate, validate, call one of these, and shape
 // the JSON. Business logic that lives in a route is logic the CLI, a future UI
 // and a background job each have to reimplement.
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import { noteCounters, notes, type Note } from '../schema'
+import { markEntityDeleted, projectEntity } from './entities'
 
 export async function listNotes(workspaceId: number, limit = 50): Promise<Note[]> {
   return getDb()
     .select()
     .from(notes)
-    .where(eq(notes.workspace_id, workspaceId))
+    .where(and(eq(notes.workspace_id, workspaceId), isNull(notes.deleted_at)))
     .orderBy(desc(notes.seq))
     .limit(Math.min(Math.max(limit, 1), 200))
 }
@@ -33,13 +34,17 @@ export async function getNoteByNumber(workspaceId: number, number: number): Prom
  * collide on the unique index. This is the single most-copied piece of an app's
  * schema and the easiest to get subtly wrong.
  *
- * A REAL app also projects the row into `platform.entities` here, in this same
- * transaction, so it becomes addressable as `bc:<app>:<ws>/note/<n>` and shows
- * up in `bk search` and `bk link`. That is deliberately left out of the
- * scaffold: it needs the app's URL scheme, and copying it half-configured would
- * produce a projection pointing at pages that do not exist. See
- * `apps/issues/lib/db/queries/entities.ts` and step 10 of
- * `docs/adding-an-app.md`.
+ * ── AND `projectEntity` IS IN THE SAME TRANSACTION. THAT IS THE POINT. ──────
+ * It used to be left out of this scaffold with a note saying a real app adds it,
+ * which is precisely how it became "the single most forgettable operational step
+ * in the app". It is here now, wired, so that copying this file copies the
+ * ordering too.
+ *
+ * Written AFTER the insert and INSIDE the same `tx`. Move it outside and the
+ * projection commits even when the source write rolls back, leaving an
+ * `entities` row for a note that does not exist — a URN that resolves to a 404
+ * that nobody discovers for weeks. `lib/db/queries/entities.ts` has the full
+ * argument; this call site is the one that has to be right.
  */
 export async function createNote(
   workspaceId: number,
@@ -65,6 +70,46 @@ export async function createNote(
         created_by: data.createdBy ?? null,
       })
       .returning()
+
+    await projectEntity(tx, {
+      workspaceId,
+      entityType: 'note',
+      number: seq,
+      title: data.title,
+    })
+
+    return row
+  })
+}
+
+/**
+ * Soft delete — into `bk <app> trash`, not gone.
+ *
+ * The projection is MARKED deleted, not removed: a link pointing at something in
+ * the recycle bin still has to resolve, and restoring the note has to bring its
+ * links back with it. Only a purge calls `purgeProjectedEntity`.
+ */
+export async function softDeleteNote(workspaceId: number, number: number): Promise<Note | null> {
+  return getDb().transaction(async (tx) => {
+    const now = new Date()
+    const [row] = await tx
+      .update(notes)
+      .set({ deleted_at: now, updated_at: now })
+      .where(
+        and(
+          eq(notes.workspace_id, workspaceId),
+          eq(notes.seq, number),
+          isNull(notes.deleted_at)
+        )
+      )
+      .returning()
+    if (!row) return null
+    await markEntityDeleted(tx, {
+      workspaceId,
+      entityType: 'note',
+      number,
+      deletedAt: now,
+    })
     return row
   })
 }
