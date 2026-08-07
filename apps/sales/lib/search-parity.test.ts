@@ -129,16 +129,57 @@ describe('search: one endpoint, one call site (D-9)', () => {
     ).toEqual([])
   })
 
-  it('this app does not mount the PLATFORM search route (D-9, two paths)', () => {
+  // -------------------------------------------------------------------------
+  // REVERSED 2026-08-07. THIS APP NOW MOUNTS BOTH, AND MUST.
+  // -------------------------------------------------------------------------
+  // This case used to assert that `app/api/workspaces/[ws]/search/route.ts` did
+  // NOT exist, reasoning that "serving both from this host makes which one an
+  // agent gets depend on which deployment it was pointed at."
+  //
+  // That reasoning does not survive contact, and the rewrite rather than an
+  // appended note is deliberate — a check that prescribes a rejected design is
+  // worse than no check.
+  //
+  // **The deployment never decided which search you got. The VERB does.**
+  // `bk search` calls `…/search`; `bk sales search` calls `…/sales-search`. Two
+  // paths, two commands, no ambiguity — which is D-11 working, not D-11 at risk.
+  // What NOT mounting the platform route actually bought was `bk search`
+  // returning a 404 page to anyone homed on sales, and `bk search` is a
+  // north-star step. Phase 10 ran it and it failed.
+  //
+  // So the property worth asserting is the opposite one, and it is the same
+  // property in both directions: **both paths exist and stay distinct.** A
+  // single host serving one path under the other's semantics is the real
+  // failure, and it is what the call-site assertions above already prevent for
+  // the web surfaces.
+
+  it('this app mounts BOTH search paths, and they stay distinct (D-9)', () => {
     const platformSearch = join(APP_ROOT, 'app/api/workspaces/[ws]/search/route.ts')
+    const salesSearch = join(APP_ROOT, 'app/api/workspaces/[ws]/sales-search/route.ts')
+
+    expect(
+      existsSync(salesSearch),
+      'app/api/workspaces/[ws]/sales-search/route.ts is gone. That is this app\'s ' +
+        'OWN full-text search over sales.*, and ⌘K and the search page both go ' +
+        'through it.'
+    ).toBe(true)
+
     expect(
       existsSync(platformSearch),
-      'app/api/workspaces/[ws]/search/route.ts exists. That is the PLATFORM search ' +
-        '(platform.entities, titles only, every app) and this app serves ' +
-        '/sales-search instead. Serving both from this host makes which one an ' +
-        'agent gets depend on which deployment it was pointed at — the ambiguity ' +
-        'D-11 removes from the verbs. If mounting it is deliberate, D-9 has to be ' +
-        'revisited first.'
+      'app/api/workspaces/[ws]/search/route.ts is missing. That is the PLATFORM ' +
+        'search (platform.entities, every app, URNs out) and `bk search` is a ' +
+        'north-star step: without this file it answers 404 for anyone homed on ' +
+        'sales. Mounting it is three lines — searchRoute(appContext).'
+    ).toBe(true)
+
+    // Distinct implementations, not one re-exporting the other. If they ever
+    // collapse into one, the two-layer model in D-9 is gone and only this says so.
+    const platformSrc = readFileSync(platformSearch, 'utf8')
+    expect(
+      /sales-search/.test(platformSrc),
+      'the platform search route mentions /sales-search. These are two layers: ' +
+        'titles across every app, and full text within this one. Serving either ' +
+        'under the other\'s path is the collapse D-9 exists to prevent.'
     ).toBe(false)
   })
 })

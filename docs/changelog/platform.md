@@ -30,6 +30,45 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-07 — The sales host now answers 20 more platform routes, including `bk search` and `bk link`
+
+**If you are homed on the sales deployment, most bare verbs used to 404.** They
+work now.
+
+`bk login --server <sales>` makes sales your home app, and neutral and cross-app
+verbs go to the home app's server. The sales deployment mounted 7 of the 54
+platform routes `bk` claims, so from a sales login these answered with an HTML
+404 page:
+
+`bk search` · `bk link create|list|rm` · `bk workspace list|use` · `bk app list|enable|access` ·
+`bk member list|remove` · `bk invite list|send|revoke|candidates|pending` · `bk user view` ·
+`bk changelog` · `bk skill sync`
+
+Two of those — `bk search` and `bk link create` — are steps in the acceptance
+test this platform exists for, so the failure was not cosmetic: an agent working
+in sales could not find anything outside sales, or record a relationship to it.
+`bk workspace use` could not set an active workspace at all, which meant nothing
+after it ran either.
+
+The route implementations were already shared factories in
+`@blackcode/platform-api/routes`; sales simply did not mount them. Nothing about
+what these routes DO has changed, and no client needs to adapt — a call that
+used to fail now succeeds.
+
+**Still not served by the sales host, and each for a reason:**
+
+| Verb | Why |
+|---|---|
+| `bk super-admin …` | Platform administration lives in one app. The data is platform-wide, so any host gives the same answer, and the issues host gives it. |
+| `bk inbox …` | No shared factory exists yet. |
+| `bk storage list \| rm` | Not yet a factory, and the delete path reaches blob deletion — not something to duplicate casually. D-28 still holds: one ledger, same rows from the issues host. |
+| `bk workspace show \| edit \| delete \| transfer`, `bk member leave`, `bk invite accept \| decline` | Not yet factories — the queries still live in the issues app. |
+| `bk workspace create` | D-3: a workspace is the company, and sales has no create-workspace flow. A capability decision, not a gap. |
+
+**Reaching one of those from a sales-homed CLI now tells you so**, instead of
+printing a page of HTML: the error names the app that did not serve it and the
+`--app-server` flag that will.
+
 ## 2026-08-07 — `bk super-admin entity-drift` answers for ONE app: the one you are pointed at
 
 No behaviour change — a **correction to what the command claims**, which was

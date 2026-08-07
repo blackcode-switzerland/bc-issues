@@ -72,6 +72,37 @@ const EXCLUDED_PATHS = new Map<string, string>([
   ],
 ])
 
+
+/**
+ * Platform operations this app MOUNTS THE PATH FOR and deliberately does not
+ * serve, `"<METHOD> <path>"` → why.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A METHOD-LEVEL EXCLUSION EXISTS AT ALL
+ * ---------------------------------------------------------------------------
+ * The drift scope is by PATH: mount a platform route and this app becomes
+ * responsible for every method `bk` claims on it. That coarseness is deliberate
+ * and worth keeping — scoping by (method, path) would make the check vacuous,
+ * since it would only ever ask about methods that already exist.
+ *
+ * So the one legitimate case — "this app serves GET here and will never serve
+ * POST" — needs to be SAID, and saying it is the point. Reach for this last;
+ * writing the annotation is what surfaces the holes.
+ *
+ * Kept honest by the staleness assertion at the bottom of this file: an entry
+ * naming a path this app no longer mounts fails the suite.
+ */
+const UNSERVED_OPERATIONS = new Map<string, string>([
+  [
+    'POST /api/workspaces',
+    'D-3 — a workspace is the COMPANY, and sales has no create-workspace flow: ' +
+      'you are granted access to one, you do not open one from a sales context. ' +
+      '`bk workspace create` is answered by the issues deployment. GET is mounted ' +
+      'beside it because `bk workspace use` cannot select a workspace without it, ' +
+      'which is what made the north-star script fail at its second command.',
+  ],
+])
+
 describe('CLI ↔ routes parity', () => {
   // There is no `hostsPlatformRoutes`, retired on 2026-08-07 — and this app is
   // why. It could not express "serves SOME of the platform surface", which is
@@ -84,7 +115,7 @@ describe('CLI ↔ routes parity', () => {
   // a file for. Mount `/api/meta` and that route joins this check; nothing else
   // does. The other half — "is every platform command answerable by SOMEBODY?" —
   // is asserted once for the whole repo in packages/platform-testing's suite.
-  const { real, claimed, ownClaims, appOwnClaims, invisibleExports, cli } = collectAppRoutes(
+  const { real, allPaths, claimed, ownClaims, appOwnClaims, invisibleExports, cli } = collectAppRoutes(
     { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: APP_SLUG },
     new Set(EXCLUDED_PATHS.keys())
   )
@@ -147,6 +178,7 @@ describe('CLI ↔ routes parity', () => {
   it('every route this app claims actually exists (no drift)', () => {
     const drift: string[] = []
     for (const r of ownClaims) {
+      if (UNSERVED_OPERATIONS.has(`${r.method} ${r.path}`)) continue
       const methods = real.get(r.path)
       if (!methods || !methods.has(r.method)) {
         drift.push(`${r.method} ${r.path}  (claimed by ${r.command})`)
@@ -155,6 +187,24 @@ describe('CLI ↔ routes parity', () => {
     expect(
       drift,
       `bk claims routes that do not exist — fix the \`routes\` annotation:\n${drift.join('\n')}`
+    ).toEqual([])
+  })
+
+  // An exclusion outliving its reason is coverage quietly dropped. `allPaths`
+  // includes excluded routes, so an entry pointing at a path this app no longer
+  // mounts is still detectable — which is why the two sets are kept separate.
+  it('every exclusion names a route this app still has', () => {
+    const stale: string[] = []
+    for (const [path, reason] of EXCLUDED_PATHS) {
+      if (!allPaths.has(path)) stale.push(`${path} — "${reason}"`)
+    }
+    for (const [op, reason] of UNSERVED_OPERATIONS) {
+      const path = op.slice(op.indexOf(' ') + 1)
+      if (!allPaths.has(path)) stale.push(`${op} — "${reason}"`)
+    }
+    expect(
+      stale,
+      `these exclusions point at routes this app no longer has — delete them:\n${stale.join('\n')}`
     ).toEqual([])
   })
 })
