@@ -36,10 +36,12 @@ import {
   Moon,
   Package,
   Menu,
+  Search,
   Sun,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react'
+import { CommandPalette } from './command-palette'
 
 /** `seg` is the path under `/dashboard/{ws}`; '' is Today. */
 interface NavEntry {
@@ -87,10 +89,25 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
   const base = `/dashboard/${ws}`
   const [mobileOpen, setMobileOpen] = useState(false)
   const [override, setOverride] = useState<string | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
+
+  // ⌘K / Ctrl-K. Bound at the window so it works from anywhere on the page, and
+  // `preventDefault` because ⌘K is Safari's address-bar search — without it the
+  // palette opens behind the browser stealing focus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const navTitle =
     [...NAV_MAIN, ...NAV_CATALOG].find((e) => isActive(pathname, base, e.seg))?.label ?? 'b/sales'
@@ -163,12 +180,24 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
             </button>
             <h1 className="truncate text-sm font-medium text-foreground">{override ?? navTitle}</h1>
             <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => setPaletteOpen(true)}
+                className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Search size={14} />
+                <span className="hidden sm:inline">Search</span>
+                <kbd className="hidden rounded border border-border px-1 font-sans text-[10px] sm:inline">
+                  ⌘K
+                </kbd>
+              </button>
               <ThemeToggle />
             </div>
           </header>
 
           <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
         </div>
+
+        <CommandPalette ws={ws} open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       </div>
     </PageTitleContext.Provider>
   )
