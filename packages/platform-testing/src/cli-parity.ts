@@ -72,6 +72,36 @@
 // The fix is not a better parser. It is `invisibleExports` below: the form is
 // DETECTED and the app's suite fails naming the file, so an invisible hole
 // becomes a stated rule — the trade this repo makes everywhere else.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// THIS GUARD MATCHES TEXT. READ THIS BEFORE YOU CHANGE A PATTERN IN IT. (D-42)
+// ═══════════════════════════════════════════════════════════════════════════
+// **The granularity of a text scan is part of what it checks**, and this repo
+// has found five guards inert for exactly that reason — every one of them
+// looking like working protection:
+//
+//   #4  three globs that matched none of the imports that actually escape an
+//       app, and that SURVIVED THEIR OWN DIAGNOSIS, still green on the real
+//       shape four days later, sitting beside the working replacement
+//   #9  a substring match over six hand-written strings, which passed a topic
+//       containing an entire stale vocabulary and banned the CORRECT spelling
+//   #11 a scan of whole FILES, so one component vouched for two others; then
+//       rewritten to match the WORD `focus`, which `const focus = null`
+//       satisfies. Two inert versions in one sitting
+//   #13 an import regex that knew `import` and `from` but not `require` — the
+//       one spelling of "reach into another app" that does not say *import*
+//
+// And a sixth mechanism that is not about patterns at all: **a correct change
+// can silently retarget an assertion** (#10). When you widen or rename a value,
+// grep for what asserts on it; the diff that breaks a guard rarely touches the
+// guard.
+//
+// TWO RULES FOR CHANGING ANYTHING BELOW:
+//   1. Break the thing this guards, watch it go red, restore. A pattern you have
+//      not watched fail is not a pattern.
+//   2. Keep the input assertion. A scan that finds nothing must FAIL, not pass —
+//      every "did we find anything to check?" case in this repo exists because a
+//      guard that found nothing would otherwise report success.
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
