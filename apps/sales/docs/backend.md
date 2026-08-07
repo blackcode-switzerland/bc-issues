@@ -318,7 +318,7 @@ D-4 exists to prevent.
 CSS exist, and only the first fails loudly (D-30).
 
 **React is pinned to 18.3.1, and that is a decision rather than an accident.**
-`apps/_template` declares `react: ^19.2.0` and npm installs 19.2.8 into it, but
+`apps/_scaffold` declares `react: ^19.2.0` and npm installs 19.2.8 into it, but
 `@blackcode/platform-ui` declares `peerDependencies: react ^18` and `apps/issues`
 runs 18.3.1. So an app that copies the scaffold *and* uses the shared UI package —
 which is every real app — inherits a peer conflict `docs/adding-an-app.md` does
@@ -405,7 +405,7 @@ a second thing that can disagree.
 Under `app/api/**`. Private plumbing, **no OpenAPI spec, ever** — the CLI is the
 only supported interface. Conventions are the platform's and are not repeated
 here (`docs/backend.md` at the root, and the annotated scaffold route at
-`apps/_template/app/api/workspaces/[ws]/notes/route.ts`). What this section
+`apps/_scaffold/app/api/workspaces/[ws]/notes/route.ts`). What this section
 records is what is specific to this app.
 
 ### 7.1 The surface

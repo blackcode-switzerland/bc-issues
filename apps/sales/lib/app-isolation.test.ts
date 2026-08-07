@@ -32,10 +32,10 @@ const APPS_ROOT = join(APP_ROOT, '..')
  * Postgres schemas belonging to OTHER apps. Never `platform`, never our own.
  *
  * The list is symmetric by hand: adding this app meant adding `'sales'` to
- * `apps/issues` and `apps/_template` in the same change. A one-sided guard only
+ * `apps/issues` and `apps/_scaffold` in the same change. A one-sided guard only
  * catches the app that remembered.
  */
-const OTHER_SCHEMAS = ['issues', 'template']
+const OTHER_SCHEMAS = ['issues', 'scaffold']
 
 /**
  * Deliberate exceptions, each with a reason. **Reach for one last.**

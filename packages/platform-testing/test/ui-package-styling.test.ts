@@ -211,7 +211,7 @@ describe('an app that compiles the shared UI package also scans it', () => {
 
   it.each(compiling)('apps/$dir', (app) => {
     // An app with no stylesheet at all has no Tailwind build to be missing
-    // classes from. `apps/_template` is in this state today: it lists the
+    // classes from. `apps/_scaffold` is in this state today: it lists the
     // package in transpilePackages ahead of using it, and has no CSS.
     if (app.allCss.length === 0) return
 

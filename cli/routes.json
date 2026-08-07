@@ -1066,14 +1066,14 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/notes",
-      "command": "bk template note list",
-      "app": "template"
+      "command": "bk scaffold note list",
+      "app": "scaffold"
     },
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/notes",
-      "command": "bk template note create",
-      "app": "template"
+      "command": "bk scaffold note create",
+      "app": "scaffold"
     }
   ]
 }

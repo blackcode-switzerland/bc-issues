@@ -3,7 +3,7 @@
 //
 // It is a separate module because the alternative is copying six functions into
 // each route file, and a validator copied is a validator that gets fixed in one
-// place. `apps/_template` keeps its two helpers inline, which is right for one
+// place. `apps/_scaffold` keeps its two helpers inline, which is right for one
 // route and stops being right at the third.
 //
 // ---------------------------------------------------------------------------

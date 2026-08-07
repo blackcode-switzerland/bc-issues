@@ -1,5 +1,5 @@
 {
-  "name": "template",
+  "name": "scaffold",
   "version": "0.0.0",
   "description": "Scaffold app \u2014 the worked example docs/adding-an-app.md walks. Copy it, do not edit it in place.",
   "private": true,

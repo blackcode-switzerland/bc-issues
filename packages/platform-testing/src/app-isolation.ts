@@ -8,7 +8,7 @@
 // patterns `**/apps/*/**`, `../../apps/*` and `../../apps/*/**` — and none of
 // them match the import that actually reaches another app:
 //
-//     // in apps/_template/lib/foo.ts
+//     // in apps/_scaffold/lib/foo.ts
 //     import { APP_SLUG } from '../../issues/lib/app'   // ← allowed by all three
 //
 // Because the climb out of an app directory has no fixed depth (`../../` from

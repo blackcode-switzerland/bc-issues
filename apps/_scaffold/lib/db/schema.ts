@@ -2,7 +2,7 @@
 //
 // THE BOUNDARY RULE: this app's tables live in ITS OWN Postgres schema, and it
 // may not read or write another app's. That is enforced by grants, not by
-// review — `template_app` simply has no SELECT on `issues.*`. See
+// review — `scaffold_app` simply has no SELECT on `issues.*`. See
 // docs/platform-architecture.md §4.3 and docs/sql/app-role.sql.
 //
 // Deciding where a new table goes is one question: "would a second app need this
@@ -12,7 +12,7 @@ import { pgSchema, serial, varchar, text, integer, timestamp } from 'drizzle-orm
 import { users, workspaces } from '@blackcode/platform-db'
 
 /** This app's Postgres schema. Named for the app slug — see lib/app.ts. */
-export const templateSchema = pgSchema('template')
+export const scaffoldSchema = pgSchema('scaffold')
 
 // Re-export the platform tables so `@/lib/db/schema` is the single import site
 // for the whole schema, exactly as it is in apps/issues.
@@ -24,11 +24,11 @@ export * from '@blackcode/platform-db/schema'
  *
  * Note `seq` — the workspace-scoped **#number**. Every addressable entity in the
  * platform has one, because that is what agents and URNs use
- * (`bc:_template:acme/note/7`); the serial `id` is an internal detail that no
+ * (`bc:scaffold:acme/note/7`); the serial `id` is an internal detail that no
  * surface should ever print. `apps/issues` learned this the hard way: `bk trash`
  * exposed row ids until Phase 8.
  */
-export const notes = templateSchema.table('notes', {
+export const notes = scaffoldSchema.table('notes', {
   id: serial('id').primaryKey(),
   workspace_id: integer('workspace_id')
     .notNull()
@@ -59,7 +59,7 @@ export type Note = typeof notes.$inferSelect
  * last_value)` would be better and is recorded as a follow-up — but it is a
  * migration of a shared table, not something a new app should have to do.)
  */
-export const noteCounters = templateSchema.table('note_counters', {
+export const noteCounters = scaffoldSchema.table('note_counters', {
   workspace_id: integer('workspace_id')
     .primaryKey()
     .references(() => workspaces.id, { onDelete: 'cascade' }),

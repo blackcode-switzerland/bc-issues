@@ -121,7 +121,7 @@ function literal(block: string, key: string): string | undefined | null {
  * Which ledger each app under `appsRoot` will migrate into.
  *
  * Apps with no drizzle config are skipped — they have no migrations to collide.
- * `apps/_template` is in that state today.
+ * `apps/_scaffold` is in that state today.
  */
 export function appLedgers(appsRoot: string): AppLedger[] {
   const out: AppLedger[] = []

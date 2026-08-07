@@ -1,4 +1,4 @@
-// The scaffold app's command group: `bk template …`.
+// The scaffold app's command group: `bk scaffold …`.
 //
 // ---------------------------------------------------------------------------
 // WHY THIS SHIPS IN THE REAL BINARY
@@ -20,7 +20,7 @@
 // If that cost is ever judged too high, the alternative is a `//go:build
 // template` tag — which keeps the binary clean at the price of a second build
 // configuration that nothing runs by default, and therefore rots.
-package template
+package scaffold
 
 import (
 	"fmt"
@@ -32,18 +32,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewCmd builds `bk template`. Registered from commands/root.go, exactly as an
+// NewCmd builds `bk scaffold`. Registered from commands/root.go, exactly as an
 // app's group should be.
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "template",
+		Use:     "scaffold",
 		Short:   "Scaffold app — the worked example behind docs/adding-an-app.md (not deployed)",
 		Aliases: []string{},
 		Long: `The scaffold app's commands.
 
 This app is not deployed. It exists so that docs/adding-an-app.md describes
 something real and so the repo's cross-app guardrails have a second app to check
-against. Copy apps/_template and cli/internal/commands/template/ to start a real
+against. Copy apps/_scaffold and cli/internal/commands/scaffold/ to start a real
 one; see docs/adding-an-app.md.`,
 	}
 	cmd.AddCommand(newNoteCmd())
@@ -78,7 +78,7 @@ func newNoteListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			notes, err := c.ListTemplateNotes(ws, limit)
+			notes, err := c.ListScaffoldNotes(ws, limit)
 			if err != nil {
 				return err
 			}
@@ -121,7 +121,7 @@ func newNoteCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			note, err := c.CreateTemplateNote(ws, client.CreateTemplateNoteRequest{Title: title, Body: body})
+			note, err := c.CreateScaffoldNote(ws, client.CreateScaffoldNoteRequest{Title: title, Body: body})
 			if err != nil {
 				return err
 			}

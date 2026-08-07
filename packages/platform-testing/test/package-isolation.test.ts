@@ -71,18 +71,18 @@ describe('the inputs — assert these first, or the check below is theatre', () 
   it('reads the slug rather than the directory name', () => {
     // The standing proof that the two differ, and the reason this cannot be a
     // directory listing: npm refuses a package name starting with `_`.
-    const scaffold = APPS.find((a) => a.dir === '_template')
+    const scaffold = APPS.find((a) => a.dir === '_scaffold')
     if (!scaffold) {
       // Not a silent skip: if the scaffold is ever removed, this premise has to
       // be replaced rather than quietly stop being checked.
       throw new Error(
-        'apps/_template is gone. It was the only app whose directory name and ' +
+        'apps/_scaffold is gone. It was the only app whose directory name and ' +
           'APP_SLUG differ, which is what proved this list is derived from the ' +
           'constant. Point this case at whatever now demonstrates that, or delete ' +
           'it deliberately.'
       )
     }
-    expect(scaffold.slug).toBe('template')
+    expect(scaffold.slug).toBe('scaffold')
   })
 
   it('found platform packages, and read files in them', () => {

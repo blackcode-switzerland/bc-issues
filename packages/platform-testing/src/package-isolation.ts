@@ -27,14 +27,14 @@
 // ---------------------------------------------------------------------------
 // THE SLUG LIST IS DERIVED, NOT TYPED OUT
 // ---------------------------------------------------------------------------
-// A hand-maintained `['issues', 'template', 'sales']` is a list that is wrong on
+// A hand-maintained `['issues', 'scaffold', 'sales']` is a list that is wrong on
 // the day app four lands, and its failure is silence: the new app's schema is
 // simply never looked for. So the names come from each app's own `APP_SLUG`,
 // which is already the single source of truth for that string and says so in its
 // own header.
 //
-// It cannot be inferred from the directory name, and `apps/_template` is the
-// standing proof — directory `_template`, slug `template`, because npm refuses a
+// It cannot be inferred from the directory name, and `apps/_scaffold` is the
+// standing proof — directory `_scaffold`, slug `scaffold`, because npm refuses a
 // package name starting with an underscore.
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -43,7 +43,7 @@ import { isDir } from './app-isolation'
 
 /** One app's directory and the slug it declares. */
 export interface AppSlug {
-  /** Directory name under `apps/` — `_template`, not `template`. */
+  /** Directory name under `apps/` — `_scaffold`, not `scaffold`. */
   dir: string
   /** `APP_SLUG`, which is also the app's Postgres schema name. */
   slug: string

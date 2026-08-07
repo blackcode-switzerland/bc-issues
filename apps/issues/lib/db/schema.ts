@@ -56,10 +56,10 @@ export * from '@blackcode/platform-db/schema'
  *
  * docs/platform-architecture.md §4.6 originally prescribed reshaping it to
  * `(workspace_id, app, entity_type, last_seq)` so every app could share one
- * table. Building `apps/_template` in Phase 8 showed a better answer: apps
+ * table. Building `apps/_scaffold` in Phase 8 showed a better answer: apps
  * should not share a counter at all. Sharing it buys nothing — no query ever
  * spans two apps' counters — and costs a shared write point and a shared
- * migration. Each app keeps its own, in its own schema. `_template` does the
+ * migration. Each app keeps its own, in its own schema. `_scaffold` does the
  * same, in three lines.
  *
  * Allocation is `UPDATE … RETURNING`, never read-then-write: two concurrent

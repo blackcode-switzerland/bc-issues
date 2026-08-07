@@ -298,15 +298,34 @@ func TestUnknownAppFailsInsteadOfFallingBack(t *testing.T) {
 	})
 
 	resetRoutingState()
-	// `bk template …` is a real group whose app is deliberately absent from the
+	// `bk scaffold …` is a real group whose app is deliberately absent from the
 	// registry — the scaffold is not deployed. That makes it the honest fixture
 	// for "an app this binary knows and this platform has no address for", which
 	// is exactly what `bk sales …` looks like before the sales app ships.
-	err := runRoot(t, "template", "note", "list")
+	//
+	// ── THE ASSERTION BELOW IS PHRASED TO EXCLUDE THE WRONG PASS ──────────────
+	// Both halves of this used to be satisfiable by the group NOT EXISTING.
+	// `runRoot(t, "template", …)` on a binary with no `template` group returns
+	// `unknown command "template" for "bk"` — non-nil, and containing the word
+	// "template". So when the scaffold's slug was renamed to `scaffold` on
+	// 2026-08-07 this test stayed green while checking nothing at all: cobra's
+	// arg parser was standing in for the routing failure it is here to observe.
+	//
+	// Caught the same day, by grepping for the renamed string rather than by
+	// running the suite — the suite was green. CLAUDE.md's third corollary: a
+	// correct change silently retargeted an assertion, and the diff that broke
+	// the guard did not touch the guard.
+	//
+	// It now asserts on the ROUTING error's own words. `unknown command` is
+	// checked for explicitly, because that is the specific wrong pass.
+	err := runRoot(t, "scaffold", "note", "list")
 	if err == nil {
-		t.Fatal("`bk template note list` succeeded — an app with no server must fail")
+		t.Fatal("`bk scaffold note list` succeeded — an app with no server must fail")
 	}
-	if !strings.Contains(err.Error(), "template") {
+	if strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("the `scaffold` group is not registered, so this never reached routing: %v", err)
+	}
+	if !strings.Contains(err.Error(), "scaffold") {
 		t.Errorf("the failure does not name the app: %v", err)
 	}
 	if len(*hits) > 0 {

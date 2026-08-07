@@ -69,7 +69,7 @@ export async function listMyWorkspaces(
  * are not in the answer must be 404, so its existence does not leak.
  *
  * NOTE: it does NOT filter `deleted_at IS NULL`. `apps/issues` never did and
- * `apps/_template` did — the two disagreed, and nothing in either app has ever
+ * `apps/_scaffold` did — the two disagreed, and nothing in either app has ever
  * written that column, so they behaved identically. This keeps the production
  * app's semantics rather than settling the question inside a refactor. Whoever
  * gives that column a writer decides it here, once.

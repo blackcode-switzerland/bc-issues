@@ -358,7 +358,7 @@ export const links = platformSchema.table(
 // `last_task_seq` — one app's entity types, sitting in the schema that is
 // supposed to hold only what every app shares. docs/platform-architecture.md §4.6
 // used to prescribe reshaping it to `(workspace_id, app, entity_type, last_seq)`
-// so apps could share it; building `apps/_template` showed the better answer is
+// so apps could share it; building `apps/_scaffold` showed the better answer is
 // that they should not share it at all. A counter is app data. Each app keeps
 // its own, in its own schema, and no app ever has to ALTER a platform table to
 // add an entity type.

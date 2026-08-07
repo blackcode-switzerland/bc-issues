@@ -58,6 +58,21 @@ var deprecations = map[string]string{
 	"trash":  "`bk trash …` is now `bk <app> trash …` — each app has its own recycle bin, e.g. `bk issues trash list`. Run `bk guide platform/apps`.",
 	"label":  "`bk label …` is now `bk <app> label …` — labels are filtered by app, e.g. `bk issues label list`. Run `bk guide platform/apps`.",
 
+	// --- 3.1.0 (2026-08-07): the scaffold's slug is `scaffold`, not `template` ---
+	//
+	// D-38. Nothing a user deployed is affected — the scaffold app is never
+	// deployed — but `bk template …` was in the advertised surface, in `bk --help`
+	// and in `bk __routes`, so a script or an agent on stale context can have it.
+	//
+	// It was renamed because `template` is not a word this platform can spend on
+	// an app: `sales` has a `template` ENTITY (`bk sales template list`, URN
+	// `bc:sales:{ws}/template/{n}`), Go code has locals called `template`, and
+	// guards that match text cannot tell the three apart. Four of them mis-fired
+	// on the collision, the last one found on the day of the rename — a routing
+	// test that kept passing because cobra's "unknown command \"template\"" also
+	// contains the word it was asserting on.
+	"template": "`bk template …` is now `bk scaffold …` — the scaffold app's slug was renamed on 2026-08-07 (D-38) because `template` collides with `bk sales template`. Same commands, same output: `bk scaffold note list`.",
+
 	// `bk storage` itself STAYS BARE (D-28): one ledger, one quota, the same rows
 	// from every app. Only its issues-only subcommand moved, and it moved to a
 	// noun of that app rather than to `bk issues storage attachments` — one noun

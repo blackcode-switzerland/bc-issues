@@ -1,4 +1,4 @@
-# Template app — notes
+# Scaffold app — notes
 
 This is the scaffold app. It is not deployed anywhere; it exists so that
 `docs/adding-an-app.md` describes something real, and so every cross-app
@@ -13,8 +13,8 @@ A **note** has a title, an optional body, and a workspace `#number` — the same
 address every entity in the platform uses. Row ids are never printed.
 
 ```bash
-bk template note list
-bk template note create --title "First note" --body "…"
+bk scaffold note list
+bk scaffold note create --title "First note" --body "…"
 ```
 
 `--json` and `--yaml` work here exactly as everywhere else, and the exit codes
@@ -36,4 +36,4 @@ decision only the real app can make:
 Run `bk meta` for the live vocabularies, limits and workspaces — never assume a
 value you read in a guide topic.
 
-Related commands: `bk template note list|create`, `bk meta`, `bk workspace use`
+Related commands: `bk scaffold note list|create`, `bk meta`, `bk workspace use`

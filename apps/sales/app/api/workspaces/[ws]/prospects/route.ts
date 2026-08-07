@@ -2,7 +2,7 @@
 // POST /api/workspaces/{ws}/prospects — create one
 //
 // The first routes this app serves. They follow the shape every app's routes
-// follow (`apps/_template/app/api/workspaces/[ws]/notes/route.ts` explains each
+// follow (`apps/_scaffold/app/api/workspaces/[ws]/notes/route.ts` explains each
 // part), plus the two things a sales route adds:
 //
 //   - a VOCABULARY check against `lib/pipeline.ts`, never a hardcoded list, with

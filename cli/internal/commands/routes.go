@@ -35,8 +35,8 @@ type RouteEntry struct {
 	//
 	// Added in Phase 8, when a second app made parity a PER-APP question. Before
 	// it, "the CLI claims a route that does not exist" could be answered against
-	// one app's app/api/** tree. With two, `bk _template note list` legitimately
-	// claims a route that exists only in apps/_template, and checking it against
+	// one app's app/api/** tree. With two, `bk scaffold note list` legitimately
+	// claims a route that exists only in apps/_scaffold, and checking it against
 	// apps/issues would report drift that is not drift — or, worse, be silenced
 	// by an exclusion and stop checking anything.
 	App string `json:"app"`

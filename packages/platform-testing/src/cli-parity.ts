@@ -5,8 +5,8 @@
 // WHY PARITY BECAME A PER-APP QUESTION IN PHASE 8
 // ---------------------------------------------------------------------------
 // With one app, "does the CLI claim a route that does not exist?" could be
-// answered against one `app/api/**` tree. With two, `bk _template note list`
-// legitimately claims a route that exists only in `apps/_template`, and checking
+// answered against one `app/api/**` tree. With two, `bk scaffold note list`
+// legitimately claims a route that exists only in `apps/_scaffold`, and checking
 // it against `apps/issues` reports drift that is not drift. The tempting fix —
 // add an exclusion — would silence the check for that route forever, which is
 // how coverage rots.
@@ -346,7 +346,7 @@ export interface PlatformMount {
   method: string
   path: string
   command: string
-  /** App DIRECTORIES (`issues`, `_template`) with a route file at that path. */
+  /** App DIRECTORIES (`issues`, `_scaffold`) with a route file at that path. */
   mountedBy: string[]
 }
 

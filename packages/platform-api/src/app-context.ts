@@ -85,8 +85,8 @@ export interface AppContext {
    * **Supply it as a getter if the app's client is lazy.** `createDb()` throws
    * when `DATABASE_URL` is unset, and `next build` imports every route module to
    * collect page data, so `db: getDb()` at module scope makes the app
-   * unbuildable without a database. `apps/_template/lib/api.ts` shows the shape;
-   * `apps/_template/lib/db/client.ts` records where that was found.
+   * unbuildable without a database. `apps/_scaffold/lib/api.ts` shows the shape;
+   * `apps/_scaffold/lib/db/client.ts` records where that was found.
    */
   db: AppDatabase
 
@@ -98,7 +98,7 @@ export interface AppContext {
    * (`packages/platform-auth/src/index.ts` explains at length why `authOptions`
    * did not move). The token half is shared — `verifyToken` from
    * `@blackcode/platform-auth` — and an app with no UI can implement this as
-   * just that, which is what `apps/_template` does.
+   * just that, which is what `apps/_scaffold` does.
    */
   resolveUser(req: NextRequest): Promise<User | null>
 

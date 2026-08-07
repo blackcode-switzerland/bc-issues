@@ -314,7 +314,7 @@ func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 				// name. `apps/sales` has an entity called `template`, whose URN is
 				// `bc:sales:{ws}/template/{n}` — so a sales topic teaching its own
 				// address scheme would have been reported as describing the
-				// `_template` app. That is a guard failing on correct writing,
+				// `_scaffold` app. That is a guard failing on correct writing,
 				// which is how a guard gets weakened or deleted and then protects
 				// nothing; CLAUDE.md finding #9 is the same guard's previous
 				// round of exactly this. **Do not restore the bare form as a

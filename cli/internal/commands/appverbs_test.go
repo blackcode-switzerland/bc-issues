@@ -77,7 +77,7 @@ func TestAppOwnedVerbsHaveNoBareSpelling(t *testing.T) {
 // list` to fail with "unknown command" while `bk sales upload` works — which
 // reads as "sales has no recycle bin" rather than "this was not wired up".
 //
-// It cannot assert that a given app mounts them at all: `bk template …` is the
+// It cannot assert that a given app mounts them at all: `bk scaffold …` is the
 // scaffold and its deployment serves no platform routes, so claiming
 // `POST /api/upload` there would be a claim on a route that does not exist. What
 // catches a REAL app that forgets the mount is its own lib/cli-parity.test.ts —

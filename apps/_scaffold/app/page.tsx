@@ -8,14 +8,14 @@ export default function Home() {
     <main style={{ fontFamily: 'system-ui', padding: 48, maxWidth: 640 }}>
       <h1>Template app</h1>
       <p>
-        This is the scaffold from <code>apps/_template</code>. Copy the directory,
+        This is the scaffold from <code>apps/_scaffold</code>. Copy the directory,
         rename the slug in the five places listed in <code>lib/app.ts</code>, and
         follow <code>docs/adding-an-app.md</code>.
       </p>
       <p>
         It defines one entity (<code>note</code>), one route
         (<code>/api/workspaces/{'{ws}'}/notes</code>), one CLI command group
-        (<code>bk template note</code>) and one guide topic — enough for every
+        (<code>bk scaffold note</code>) and one guide topic — enough for every
         guardrail in the repo to have something real to check.
       </p>
     </main>

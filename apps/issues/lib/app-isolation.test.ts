@@ -33,7 +33,7 @@ const APPS_ROOT = join(APP_ROOT, '..')
  * other app, in the same change. A one-sided guard only catches the app that
  * remembered.
  */
-const OTHER_SCHEMAS = ['template', 'sales']
+const OTHER_SCHEMAS = ['scaffold', 'sales']
 
 /**
  * Deliberate exceptions, each with a reason. **Reach for one last.**
