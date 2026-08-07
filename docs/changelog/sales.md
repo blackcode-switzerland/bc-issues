@@ -22,6 +22,32 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-07 — There is a web app now: sign in and watch the pipeline
+
+**What a human can now see.** Until today b/sales had no window: everything an
+agent wrote through `bk sales` was real and invisible. Sign in at the sales host
+and you land on **Today** — the actions due, the ones already overdue, the
+meetings coming up across every prospect, and the open pipeline. The nav carries
+the rest of the surface; those pages arrive over the next few changes.
+
+It is **read-only on purpose**, and it will stay that way by default. The agent
+operates the funnel and the human supervises: nothing on this surface sends a
+message, approves a draft or edits a record, and there is no AI running in the
+page. Everything shown is a record of something that already happened.
+
+**Nothing changed for agents.** No route was added, removed or altered, no `bk`
+command changed, and `bk sales` behaves exactly as it did this morning.
+
+**One thing worth knowing if you script against this host.** Routes under
+`/api/workspaces/{ws}/…` now also accept a **browser session** where before they
+accepted only a `bk_live_…` bearer token — that is what lets the web pages talk
+to their own API. A request that sends an `Authorization: Bearer` header is still
+resolved from that token and only that token: an invalid token is an answer, not
+a reason to fall back to whatever cookie the browser happens to be carrying. If
+your token was revoked, you will get a 401 exactly as before.
+
+---
+
 ## 2026-08-07 — The sales app is reachable: `bk sales`, fourteen nouns
 
 **What you can now do.** Run blackcode's business-development pipeline from `bk`.
