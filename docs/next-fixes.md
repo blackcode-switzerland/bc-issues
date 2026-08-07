@@ -12,6 +12,43 @@
 Dated items still owed. Everything under the horizontal rule below this section
 is the closed 2026-06-18 record and is history — read it, do not act on it.
 
+### 2026-08-07 — GUARDRAIL #10: `npm test` replayed a cached green over a failing suite
+
+**For `CLAUDE.md`'s table of green-but-inert guardrails — agent9 adds the row at
+Phase 13. Recorded here so it is not lost in between. The cause is FIXED
+(`turbo.json`); the entry stays because the table is the memory.**
+
+Turbo's `inputs` globs are resolved **relative to the package**, and the `test`
+task declared only `**/*.ts`, `**/*.tsx` and `cli/`. The two tests in
+`packages/platform-testing/test/` scan `apps/**` and `packages/platform-*/src/**`
+— neither of which was in the key, and neither of which reaches it through a
+dependency edge. So the cache could not see the files those tests exist to read.
+
+Observed on 2026-08-07, same commit, same minute:
+
+```
+$ npm test --workspace=@blackcode/platform-testing     1 failed | 15 passed
+$ npx turbo run test --filter=@blackcode/platform-testing
+                                                       1 successful, 1 cached
+                                                       >>> FULL TURBO
+```
+
+It is worse than the nine before it. An inert check fails to *catch* something;
+this one **actively reported a pass over a failing suite**, to four agents in a
+row who had each been told to prove their guards fire. And of everything it could
+have hidden, it hid the two tests `docs/adding-an-app.md` promises a new app
+inherits *"with nothing to register"* — `package-isolation` and the D-30
+`@source` guard. The guarantee and the thing making it untrue shipped in the same
+week.
+
+Two corollaries worth keeping:
+
+- **A cache is part of a check.** A guard is only as honest as the key that
+  decides whether to run it, and nothing in this repo had ever reviewed one.
+- **Deleting `inputs` would not have fixed it.** The fallback is the package's
+  own files — the same package-scoped blindness with fewer words, and it would
+  have dropped `cli/` from `apps/issues`' parity key as well.
+
 ### 2026-08-06 — purging an issue orphans its comments, and that leaks blobs
 
 Found while app-qualifying `comments.parent_type` (Phase 1e). Unrelated to that

@@ -40,13 +40,58 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
+    // ─────────────────────────────────────────────────────────────────────────
+    // THE GATE WAS LYING. READ THIS BEFORE NARROWING `inputs` AGAIN.
+    // ─────────────────────────────────────────────────────────────────────────
+    // `inputs` globs are resolved RELATIVE TO THE PACKAGE. This task used to
+    // declare `["**/*.ts", "**/*.tsx", cli/routes.json, cli/**/*.go]`, which
+    // describes a test that reads its own package and the CLI — and several of
+    // this repo's tests do not.
+    //
+    //   packages/platform-testing/test/package-isolation.test.ts   scans
+    //     packages/platform-*/src AND derives its app list from apps/*/lib/app.ts
+    //   packages/platform-testing/test/ui-package-styling.test.ts  scans
+    //     apps/*/next.config.js and every app stylesheet (D-30's @source guard)
+    //   apps/issues/lib/changelog.test.ts                          reads
+    //     docs/changelog/*.md
+    //
+    // None of those paths were in the key, so the cache could not see the files
+    // the tests exist to look at. Observed 2026-08-07, and it is worse than an
+    // inert check — it actively REPORTED A PASS OVER A FAILING SUITE:
+    //
+    //   $ npm test --workspace=@blackcode/platform-testing   1 failed | 15 passed
+    //   $ npx turbo run test --filter=@blackcode/platform-testing
+    //                                                        1 successful
+    //                                                        >>> FULL TURBO
+    //
+    // Same commit, same minute. Four agents in a row had cited "npm test: 0" as
+    // evidence, and the two tests it hid are exactly the two that
+    // docs/adding-an-app.md promises a new app inherits "with nothing to
+    // register". Tenth entry in CLAUDE.md's table; see docs/next-fixes.md.
+    //
+    // So the key now covers what the tests READ, not what the package CONTAINS.
+    // A cross-cutting test invalidates more often than a self-contained one —
+    // that is the correct trade for a guard, and at this repo's size the whole
+    // suite is seconds. **Deleting `inputs` does not fix this**: the fallback is
+    // the package's own files, which is the same package-scoped blindness with
+    // fewer words, and it would drop `cli/` from apps/issues' parity key.
+    //
+    // The negations are belt-and-braces. Turbo already skips gitignored paths,
+    // but `.next/` holds generated `.ts` that would otherwise churn the key on
+    // every build.
     "test": {
       "dependsOn": ["^build"],
       "inputs": [
-        "**/*.ts",
-        "**/*.tsx",
+        "$TURBO_DEFAULT$",
+        "../../apps/*/**/*.{ts,tsx,css,js,mjs,json,sql}",
+        "../../packages/*/src/**",
+        "../../packages/*/test/**",
         "../../cli/routes.json",
-        "../../cli/**/*.go"
+        "../../cli/**/*.go",
+        "../../docs/changelog/*.md",
+        "!../../apps/*/.next/**",
+        "!../../apps/*/node_modules/**",
+        "!../../packages/*/node_modules/**"
       ]
     }
   }
