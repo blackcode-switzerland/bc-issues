@@ -17,7 +17,11 @@
 import { describe, it, expect } from 'vitest'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { findCrossAppImports, findCrossSchemaQueries } from '@blackcode/platform-testing'
+import {
+  findCrossAppImports,
+  scanCrossSchemaQueries,
+  type SchemaQueryAllowance,
+} from '@blackcode/platform-testing'
 
 const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const APPS_ROOT = join(APP_ROOT, '..')
@@ -31,6 +35,69 @@ const APPS_ROOT = join(APP_ROOT, '..')
  */
 const OTHER_SCHEMAS = ['template', 'sales']
 
+/**
+ * Deliberate exceptions, each with a reason. **Reach for one last.**
+ *
+ * The scanner already subtracts the two GENERIC false-positive shapes — a
+ * hostname (`issues.blackcode.ch`) and a path (`docs/changelog/sales.md`) — so an
+ * entry here is a genuine one-off, not a recurring class. Every entry is checked
+ * for staleness below: if its `match` stops appearing in its `file`, the suite
+ * fails rather than letting a dead exclusion keep suppressing.
+ */
+const ALLOW: SchemaQueryAllowance[] = [
+  {
+    file: 'lib/db/queries/qualified-type.test.ts',
+    // Split across a concatenation so THIS LINE does not itself trip the
+    // scanner. That is not cleverness for its own sake — it is the same
+    // self-reference platform-testing's app-isolation.ts header already records
+    // for imports ("a detector that flags its own explanation is a detector
+    // people learn to override"), and suppressing it with a second allowance
+    // would create an entry that keeps ITSELF alive and can therefore never go
+    // stale. The runtime value is exactly  'sales.prospect',
+    match: `'sales.` + `prospect',`,
+    reason:
+      'A D-29 qualified-type fixture, not a query. The CHECK validates the SHAPE ' +
+      '`<app>:<noun>`, so this dotted spelling is a REJECTED example — the test ' +
+      'asserts it is refused. It reads as `schema.table` by construction, and no ' +
+      'generic shape rule can tell the two apart.',
+  },
+]
+
+const scan = scanCrossSchemaQueries({
+  root: APP_ROOT,
+  otherSchemas: OTHER_SCHEMAS,
+  allow: ALLOW,
+})
+
+describe('the inputs — assert these first, or the check below is theatre', () => {
+  // A scan over zero files, or for zero schema names, finds zero violations and
+  // reports a confident green. CLAUDE.md names this as a corollary of the
+  // standing rule, and finding #5 was caught by exactly such an assertion.
+  it('read some files', () => {
+    expect(
+      scan.filesScanned,
+      `scanned 0 files under ${APP_ROOT} — it could not have found a violation if one existed`
+    ).toBeGreaterThan(0)
+  })
+
+  it('has other apps to look for', () => {
+    expect(
+      scan.schemas.length,
+      'OTHER_SCHEMAS is empty, so the scan below looks for nothing and always passes'
+    ).toBeGreaterThan(0)
+  })
+
+  it('every allowance still matches something', () => {
+    expect(
+      scan.stale.map((a) => `${a.file}: ${a.match}`),
+      'these allowances no longer match anything. A stale exclusion is coverage that ' +
+        'was dropped and then kept off — the line moved or was rewritten, and the entry ' +
+        'now suppresses nothing while still reading as a considered decision. Delete it, ' +
+        'or fix its `match`.'
+    ).toEqual([])
+  })
+})
+
 describe('app isolation', () => {
   it('imports nothing from another app', () => {
     const found = findCrossAppImports(APP_ROOT, APPS_ROOT)
@@ -42,12 +109,13 @@ describe('app isolation', () => {
   })
 
   it('queries no other app schema', () => {
-    const found = findCrossSchemaQueries(APP_ROOT, OTHER_SCHEMAS)
     expect(
-      found.map((f) => `${f.file}: ${f.line}`),
+      scan.hits.map((f) => `${f.file}:${f.lineNumber}: ${f.line}`),
       'an app may read and write `platform.*` and its own schema, nothing else. ' +
         'In production the per-app Postgres role refuses it outright (docs/sql/app-role.sql); ' +
-        'this catches it before a shared local credential lets it work by accident.'
+        'this catches it before a shared local credential lets it work by accident. ' +
+        'This scan covers `lib/db/migrations/*.sql` too — a trigger copied from another ' +
+        "app's migration and not fully renamed is the way this bug actually happens."
     ).toEqual([])
   })
 })
