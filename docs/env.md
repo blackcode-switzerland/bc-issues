@@ -2,13 +2,22 @@
 
 All production env vars live in Vercel. This guide covers where each one comes from, how to set or update it, and what breaks if it's missing.
 
+**Each Vercel project has its own set, and most of these values are per-project.
+Two are not.** Get the distinction wrong on a new app and the failure is silent:
+
+| Scope | Vars | What a mismatch does |
+|---|---|---|
+| **Platform-wide — the same value in every project** | `NEXTAUTH_SECRET` (D-39), `AUTH_COOKIE_DOMAIN` | One sign-in stops covering every app, with no error anywhere |
+| **Shared resource, same value, different reason** | `DATABASE_URL` and `MIGRATE_DATABASE_URL` point at the **same Neon project** (different roles per app); `BLOB_READ_WRITE_TOKEN` at the **same Blob store** | A second database or store breaks every cross-app feature |
+| **Per project** | `NEXTAUTH_URL`, `SUPER_ADMINS`, `GOOGLE_CLIENT_ID`/`SECRET`, `RESEND_*`, `RUN_MIGRATIONS`, `PLATFORM_ENFORCE_APP_ACCESS` | Nothing shared; set them per app |
+
 **Quick commands:**
 ```bash
 vercel env ls production                          # list all
 vercel env add <NAME> production --value "..." --yes   # add
 vercel env rm <NAME> production --yes             # remove
 # then redeploy:
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 ---
@@ -30,7 +39,7 @@ Only needed if you migrate to a different database. Remove old value, add new:
 ```bash
 vercel env rm DATABASE_URL production --yes
 vercel env add DATABASE_URL production --value "<new-url>" --yes
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 After changing, always run migrations against the new DB:
@@ -46,16 +55,54 @@ DATABASE_URL="<new-url>" npm run db:migrate
 |---|---|
 | **Purpose** | Signs and encrypts NextAuth session tokens |
 | **Status** | Set ✓ |
-| **Source** | Generated with `openssl rand -base64 32` |
+| **Source** | Generated with `openssl rand -base64 32` — **once, for the whole platform** |
+| **Scope** | **PLATFORM-WIDE (D-39).** Every app's Vercel project holds the *same* value |
 | **Impact if missing** | All authentication breaks — no one can log in |
 
-**How to regenerate** (e.g. if compromised — invalidates all active sessions):
+> ### This is not a per-project value. Copy it; never generate a second one.
+>
+> Since D-16 the session cookie is one credential shared across every deployment
+> on `.blackcode.ch`, and it is **encrypted** with this secret. An app holding a
+> different one cannot decrypt a cookie the others issued — it sees
+> `JWEDecryptionFailed`, treats the caller as signed out, and bounces them to its
+> own login page.
+>
+> The failure is silent in every way that matters: both deploys are green, both
+> apps work in isolation, nothing appears in the logs, and the symptom is one
+> person saying "it keeps asking me to sign in again". **Provisioning a new app
+> is where this gets got wrong**, because generating a secret is what every
+> NextAuth guide tells you to do:
+>
+> ```bash
+> vercel env pull                              # from an EXISTING app's project
+> vercel env add NEXTAUTH_SECRET production    # paste the SAME value verbatim
+> ```
+
+**How to rotate** (e.g. if compromised — invalidates every active session, in
+every app, and signs everyone out once):
+
 ```bash
-openssl rand -base64 32   # copy the output
-vercel env rm NEXTAUTH_SECRET production --yes
-vercel env add NEXTAUTH_SECRET production --value "<new-secret>" --yes
-./devops/release.sh web
+openssl rand -base64 32   # copy the output — ONE new value for all apps
 ```
+
+Then, **for every app in `devops/release.sh`'s `app_registry()`** — not just the
+one you were thinking about:
+
+```bash
+vercel env rm  NEXTAUTH_SECRET production --yes   # against that app's project
+vercel env add NEXTAUTH_SECRET production --value "<the same new secret>" --yes
+```
+
+…and only then redeploy them, one per app:
+
+```bash
+./devops/release.sh web issues
+# ./devops/release.sh web sales      ← and every other registered app
+```
+
+Rotating one app and not the others produces exactly the split-brain above,
+except now it is the app you *did* rotate that cannot read anyone's cookie.
+`./devops/release.sh apps` is the authoritative list.
 
 ---
 
@@ -72,7 +119,7 @@ vercel env add NEXTAUTH_SECRET production --value "<new-secret>" --yes
 ```bash
 vercel env rm NEXTAUTH_URL production --yes
 vercel env add NEXTAUTH_URL production --value "https://yourdomain.com" --yes
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 Also update Google OAuth (see `GOOGLE_CLIENT_ID` section below).
@@ -124,7 +171,7 @@ entry published first.
 ```bash
 vercel env rm SUPER_ADMINS production --yes
 vercel env add SUPER_ADMINS production --value "admin1@example.com,admin2@example.com" --yes
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 ---
@@ -147,7 +194,7 @@ vercel env rm GOOGLE_CLIENT_ID production --yes
 vercel env rm GOOGLE_CLIENT_SECRET production --yes
 vercel env add GOOGLE_CLIENT_ID production --value "<id>" --yes
 vercel env add GOOGLE_CLIENT_SECRET production --value "<secret>" --yes
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 **When you switch to a custom domain** — no new OAuth client needed, just update the existing one:
@@ -177,7 +224,7 @@ Vercel dashboard → Storage → `bc-issues-blob` → Settings → Tokens → `B
 ```bash
 vercel env rm BLOB_READ_WRITE_TOKEN production --yes
 vercel env add BLOB_READ_WRITE_TOKEN production --value "<new-token>" --yes
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 ---
@@ -199,7 +246,7 @@ vercel env add BLOB_READ_WRITE_TOKEN production --value "<new-token>" --yes
 ```bash
 vercel env add RESEND_API_KEY production --value "re_..." --yes
 vercel env add RESEND_FROM_EMAIL production --value "admin@issues.blackcode.ch" --yes
-./devops/release.sh web
+./devops/release.sh web issues   # the project you changed
 ```
 
 `RESEND_FROM_EMAIL` must be on a domain verified in Resend — `onboarding@resend.dev` works for testing only.
