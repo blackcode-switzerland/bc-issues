@@ -166,9 +166,11 @@ func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
 // docs/platform-architecture.md §7.2: a topic under topics/<app>/ may not describe
 // another app.
 //
-// With one app this cannot fail, and saying so is more useful than pretending
-// otherwise — its job starts the day topics/sales/ exists, which is exactly when
-// nobody will think to write it. It is here now because that is when it is free.
+// It was written while there was one app, when it could not fail — saying so was
+// more useful than pretending otherwise, and its job started the day
+// `topics/sales/` existed, which is exactly when nobody would have thought to
+// write it. That day was 2026-08-07, and the first thing it did was surface a
+// needle that was wrong; see below.
 func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 	apps := AppSections()
 	if len(apps) == 0 {
@@ -184,8 +186,27 @@ func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 				if other == app {
 					continue
 				}
-				// `bk sales …` in an issues topic, or the bare app name.
-				for _, needle := range []string{"bk " + other + " ", other + "/"} {
+				// THE NEEDLES ARE THE SHAPES THIS RULE ACTUALLY MEANS, and the
+				// bare `other + "/"` that used to be here is deliberately gone.
+				//
+				// It was trying to catch a reference to another app's GUIDE
+				// TOPICS, and it matched any slash-suffixed occurrence of an app
+				// name. `apps/sales` has an entity called `template`, whose URN is
+				// `bc:sales:{ws}/template/{n}` — so a sales topic teaching its own
+				// address scheme would have been reported as describing the
+				// `_template` app. That is a guard failing on correct writing,
+				// which is how a guard gets weakened or deleted and then protects
+				// nothing; CLAUDE.md finding #9 is the same guard's previous
+				// round of exactly this. **Do not restore the bare form as a
+				// tightening.**
+				//
+				// `bk <other> ` stays unchanged: it is unambiguous, and it is the
+				// one that catches a topic teaching another app's commands.
+				for _, needle := range []string{
+					"bk " + other + " ",       // another app's commands
+					"topics/" + other + "/",   // another app's topic files
+					"bk guide " + other + "/", // another app's topics, as a reader reaches them
+				} {
 					if strings.Contains(top.Body, needle) {
 						t.Errorf("topic %q mentions the %q app (%q) — an app topic describes "+
 							"its own app only; shared behaviour belongs in topics/platform/",

@@ -100,3 +100,21 @@ names the company that *is* at that number.
 
 The delete is reversible — it moves the prospect and everything logged against it
 to the recycle bin — and it prints what it binned, by type, #number and name.
+
+## Addressing: the #number and the URN
+
+Everything in this app is reached by its **#number** — `bk sales prospect show
+12` means prospect #12 of that workspace. Row ids are never served and never
+accepted.
+
+The same number is the tail of the record's cross-app address:
+
+```
+bc:sales:<workspace>/prospect/<n>
+bc:sales:<workspace>/template/<n>
+```
+
+That is what makes a record findable from another app and linkable to one
+(`bk search`, `bk link create`). Run `bk meta` for the full list of addressable
+types — it grows as this app does, which is exactly why this page does not
+enumerate it.
