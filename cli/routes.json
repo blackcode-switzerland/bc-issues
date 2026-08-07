@@ -656,6 +656,42 @@
       "app": "platform"
     },
     {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/prospects/{n}",
+      "command": "bk sales prospect delete",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects",
+      "command": "bk sales prospect list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}",
+      "command": "bk sales prospect show",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/prospects/{n}",
+      "command": "bk sales prospect edit",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects",
+      "command": "bk sales prospect create",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/stage",
+      "command": "bk sales prospect stage",
+      "app": "sales"
+    },
+    {
       "method": "GET",
       "path": "/api/workspaces/{ws}/notes",
       "command": "bk template note list",

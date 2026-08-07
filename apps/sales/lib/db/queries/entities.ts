@@ -40,7 +40,16 @@ import {
   upsertEntity,
   type Executor,
 } from '@blackcode/platform-db'
-import { communications, documents, entities, meetings, products, prospects, templates } from '../schema'
+import {
+  communications,
+  documents,
+  entities,
+  meetings,
+  products,
+  prospects,
+  templates,
+  workspaces,
+} from '../schema'
 import { APP_SLUG } from '@/lib/app'
 import {
   ENTITY_TYPES,
@@ -180,6 +189,47 @@ const SOURCE: Record<SalesEntityType, { table: SourceTable }> = {
   product: { table: products },
   template: { table: templates },
   document: { table: documents },
+}
+
+/** Is this string one of the six types this app projects? */
+function isProjectedType(t: string): t is SalesEntityType {
+  return (ENTITY_TYPES as readonly string[]).includes(t)
+}
+
+/**
+ * The cross-app address of an event's subject, from its in-app coordinates.
+ *
+ * `recordEvent` calls this for every event it writes, so the contract is narrow
+ * and strict: **null, never a throw.** It runs inside every create, update and
+ * delete this app performs, and a URN that cannot be built must cost an untagged
+ * event rather than a failed write.
+ *
+ * Null is also the CORRECT answer, not a gap, for the four sales entity types
+ * with no #number — a contact, a stage entry, an objection and a match are all
+ * reached through their prospect and have no address of their own
+ * (`lib/entity-address.ts` explains why projecting one would be worse than not
+ * being findable). `entityType` is typed as a plain string for exactly that
+ * reason: the caller's union is wider than the projected six, and narrowing it
+ * here is the whole job.
+ */
+export async function resolveSubjectUrn(
+  tx: Executor,
+  workspaceId: number,
+  entityType: string,
+  entityId: number
+): Promise<string | null> {
+  if (!isProjectedType(entityType)) return null
+  const table = SOURCE[entityType].table
+  const res = await tx.execute(sql`
+    SELECT w.slug AS slug, x.seq AS seq
+    FROM ${table} x
+    JOIN ${workspaces} w ON w.id = x.workspace_id
+    WHERE x.id = ${entityId} AND x.workspace_id = ${workspaceId}
+    LIMIT 1
+  `)
+  const row = res.rows[0]
+  if (!row || row.seq == null) return null
+  return entityUrnOrNull(String(row.slug), entityType, Number(row.seq))
 }
 
 /**

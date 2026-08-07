@@ -8,6 +8,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/issues"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/sales"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/template"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
@@ -99,6 +100,7 @@ run "bk guide platform/apps" for the rule and the reasoning.
 APPS — every app verb sits behind its app name:
   issues      issue, task, project, attachment, move, copy, analytics
               + the three above
+  sales       prospect
 
 Renamed in 3.0.0: "upload", "trash" and "label" moved behind the app name —
 "bk issues upload", not "bk upload". There is no bare form and no alias: a bare
@@ -157,7 +159,7 @@ func NewRoot() *cobra.Command {
 	// it there rather than here is what lets an app add its own entity-specific
 	// subcommands to those groups (`bk issues label attach`) without this file
 	// knowing any app's nouns.
-	for _, group := range []*cobra.Command{issues.NewGroup(), template.NewCmd()} {
+	for _, group := range []*cobra.Command{issues.NewGroup(), sales.NewGroup(), template.NewCmd()} {
 		pinApp(group, group.Name())
 		root.AddCommand(group)
 	}

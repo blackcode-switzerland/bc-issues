@@ -6,11 +6,11 @@ the root [`docs/backend.md`](../../../docs/backend.md) and are not repeated here
 An app's docs never describe another app
 (`docs/platform-architecture.md` §7.5).
 
-Status: **Phases 2 and 3 landed 2026-08-07.** The app, its schema, its
-migrations, the blob-reference triggers, the URN projection, the reference
-scanner and the dev seed all exist. There is still no CLI group and no HTTP
-route — Phases 4 and 5 add those, and the app is **not deployed and not enabled
-in `platform.apps`** until Phase 12.
+Status: **Phases 2 and 3 landed 2026-08-07. Phase 4/5 is in progress** — the
+first vertical slice (`bk sales prospect`, and the three routes behind it) landed
+the same day. The app, its schema, its migrations, the blob-reference triggers,
+the URN projection, the reference scanner and the dev seed all exist. The app is
+**not deployed and not enabled in `platform.apps`** until Phase 12.
 
 ---
 
@@ -400,12 +400,72 @@ file nobody can fetch) and no `platform.entities` or `platform.events` — those
 belong to the real write paths, and a second implementation of the projection is
 a second thing that can disagree.
 
-## 7. What is not built yet
+## 7. The HTTP surface
+
+Under `app/api/**`. Private plumbing, **no OpenAPI spec, ever** — the CLI is the
+only supported interface. Conventions are the platform's and are not repeated
+here (`docs/backend.md` at the root, and the annotated scaffold route at
+`apps/_template/app/api/workspaces/[ws]/notes/route.ts`). What this section
+records is what is specific to this app.
+
+### 7.1 What exists today
+
+| Route | Command |
+|---|---|
+| `GET \| POST /api/workspaces/{ws}/prospects` | `bk sales prospect list \| create` |
+| `GET \| PATCH \| DELETE …/prospects/{n}` | `bk sales prospect show \| edit \| delete` |
+| `POST …/prospects/{n}/stage` | `bk sales prospect stage` |
+
+`{n}` is the workspace #number in every one of them. **No platform route factory
+is mounted yet**, which is why `lib/cli-parity.test.ts` still sets
+`hostsPlatformRoutes = false`; see §7.5.
+
+### 7.2 The four files a write path goes through
+
+```
+lib/http-input.ts          coercion + the vocabulary checks, shared by every route
+lib/actor.ts               who did this, and the label to write beside the FK
+lib/db/queries/events.ts   this app's recordEvent — the platform half delegated
+lib/views.ts               the public shape: `number` not `id`, and no rendering
+```
+
+`lib/db/queries/events.ts` is the one that did not exist before Phase 5 and is
+easy to assume away. `recordPlatformEvent` in `@blackcode/platform-db` owns the
+four **platform** entity types and nothing else (D-23); an event about a prospect
+needs a `subject_urn` derived from `sales.*`, so each app carries its own
+recorder. Sales' differs from issues' in three stated ways — no fan-out (D-13
+left this app with no inbox to fan out to), no coalescing (writes are
+agent-issued commands, not autosave), and `actor_token_id` actually populated.
+
+### 7.3 An error message never recites a dynamic value
+
+A 400 for an unknown stage says *"run `bk meta` for the current stage values"* and
+does not list them. Same rule as the guide topics, same reason: the vocabulary
+changes without a deploy, and a stale list is worst in front of an agent that is
+already failing and has no reason to doubt what it just read. Limits ARE
+interpolated — from `lib/limits.ts`, which the route already imports, so there is
+no second copy to drift.
+
+### 7.4 Two shapes that are contracts, not preferences
+
+- **Moving a deal is `POST …/{n}/stage`, and `PATCH …/{n}` refuses `stage`** with
+  a 400 naming the right route. A stage change writes a `stage_entries` row and
+  sets `closed_at`; a PATCH that set the column alone would leave a prospect
+  whose own journey disagrees with it, silently.
+- **`DELETE …/{n}` requires `?confirm=<name>`, checked server-side.** `Confirm()`
+  in the CLI auto-approves under `BK_NO_PROMPT=1` and on a non-TTY, so the guard
+  has to be the caller repeating the target back — and it is enforced on the
+  server so it cannot be skipped by a stale binary or by curl. The target is the
+  **company name**, not the #number the caller already typed: repeating the
+  number proves nothing about whether it is the right one. The response carries
+  the type, #number and name of what was binned, captured before the delete.
+
+### 7.5 What is not built yet
 
 | | Phase |
 |---|---|
-| `bk sales` command group and guide topics | 4 |
-| HTTP routes, and the platform route factories this app mounts | 5 |
+| The rest of the `bk sales` nouns, the aggregates, and guide topics 01–04 | 4 |
+| The remaining routes, `/api/meta`, and the platform route factories this app mounts | 5 |
 | NextAuth (`lib/auth.ts`), the app shell, theme provider, pages | 6–7 |
 | `bk sales search` and the ⌘K palette | 8 |
 | Read-only / full mode | 9 |

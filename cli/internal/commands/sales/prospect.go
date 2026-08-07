@@ -1,0 +1,618 @@
+package sales
+
+import (
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
+	"github.com/spf13/cobra"
+)
+
+// `bk sales prospect` — the core noun. A prospect IS the deal (D-5): the
+// company, its pipeline stage, its value, its owner and what we owe it next, in
+// one addressable row.
+//
+// ---------------------------------------------------------------------------
+// WHAT THESE COMMANDS DELIBERATELY DO NOT DO
+// ---------------------------------------------------------------------------
+// They never name a stage, a next-action type or a limit in their help text.
+// Those are DYNAMIC values served by `bk meta`: they change without a release of
+// this binary, and a help string that listed them would be confidently wrong the
+// first time one changed, with nothing to say so. Every message that needs one
+// points at `bk meta` instead — which is the same rule the embedded guide lives
+// under, applied to `--help`.
+
+func newProspectCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "prospect",
+		Short: "Prospects — a company and its deal, in one record",
+	}
+	cmd.AddCommand(
+		newProspectListCmd(),
+		newProspectShowCmd(),
+		newProspectCreateCmd(),
+		newProspectEditCmd(),
+		newProspectStageCmd(),
+		newProspectDeleteCmd(),
+	)
+	return cmd
+}
+
+func newProspectListCmd() *cobra.Command {
+	var (
+		stages         []string
+		owner          string
+		label          string
+		query          string
+		limit          int
+		cursor         int
+		includeDeleted bool
+	)
+	cmd := &cobra.Command{
+		Use:         "list",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects"},
+		Short:       "List prospects in the active workspace",
+		Long: `List prospects, most recently touched first.
+
+--q is a SUBSTRING match on the COMPANY NAME — a filter on this listing, not a
+search. Finding a phrase inside a record is a different thing, and so is finding
+something by name across every app ("bk search").
+
+--owner takes an email, or the literal "me".
+--stage may be repeated or comma-separated; run "bk meta" for the current values.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			page, err := c.ListProspects(ws, client.ListProspectsOpts{
+				Stages:         splitAll(stages),
+				Owner:          owner,
+				Label:          label,
+				Query:          query,
+				Limit:          limit,
+				Cursor:         cursor,
+				IncludeDeleted: includeDeleted,
+			})
+			if err != nil {
+				return err
+			}
+			return output.Render(format, page, func(w io.Writer) error {
+				tw := output.Tabwriter(w)
+				fmt.Fprintln(tw, "#\tCOMPANY\tSTAGE\tVALUE\tOWNER\tNEXT\tUPDATED")
+				for _, p := range page.Data {
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+						p.Number,
+						cmdutil.Truncate(p.Name, 28),
+						p.Stage,
+						money(p.Value, p.Currency),
+						ownerName(p.Owner),
+						nextActionCell(p.NextAction),
+						dateOnly(p.UpdatedAt),
+					)
+				}
+				if err := tw.Flush(); err != nil {
+					return err
+				}
+				if len(page.Data) == 0 {
+					fmt.Fprintln(cmd.ErrOrStderr(), "(no prospects)")
+				}
+				if page.NextCursor != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"more results: --cursor %d\n", *page.NextCursor)
+				}
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringSliceVar(&stages, "stage", nil, "Filter by pipeline stage (repeatable; `bk meta` for the values)")
+	cmd.Flags().StringVar(&owner, "owner", "", "Filter by deal owner: an email, or \"me\"")
+	cmd.Flags().StringVar(&label, "label", "", "Filter by label name")
+	cmd.Flags().StringVar(&query, "q", "", "Substring match on the company name")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Max prospects to return (`bk meta` for the cap)")
+	cmd.Flags().IntVar(&cursor, "cursor", 0, "Continue from the cursor printed by the previous page")
+	cmd.Flags().BoolVar(&includeDeleted, "include-deleted", false, "Include prospects that are in the recycle bin")
+	return cmd
+}
+
+func newProspectShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "show <n>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}"},
+		Short:       "Show one prospect, its deal journey and its cross-app links",
+		Long: `Show one prospect by #number.
+
+The output includes the DEAL JOURNEY — one row per stage, including the steps
+not reached yet — and every cross-app LINK touching this prospect (D-18), each
+with an absolute URL you can follow into the other app.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := prospectNumber(args[0])
+			if err != nil {
+				return err
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			p, err := c.GetProspect(ws, n)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, p, func(w io.Writer) error {
+				return renderProspect(w, p)
+			})
+		},
+	}
+	return cmd
+}
+
+func newProspectCreateCmd() *cobra.Command {
+	var req client.CreateProspectRequest
+	cmd := &cobra.Command{
+		Use:         "create --name <company>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects"},
+		Short:       "Create a prospect",
+		Long: `Create a prospect — a company and its deal in one record.
+
+--stage defaults to the first stage of the pipeline; run "bk meta" for the
+current values. --value is a plain amount ("24000"), never a formatted one, and
+--currency is separate. --owner is an email or "me"; it is a real person, because
+an agent can log a call and write history but cannot own a deal.
+
+The opening journey step is written for you, attributed to whoever ran this.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			p, err := c.CreateProspect(ws, req)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, p, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "created prospect #%d: %s\n%s\n", p.Number, p.Name, p.URN)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&req.Name, "name", "", "Company name (required)")
+	cmd.Flags().StringVar(&req.City, "city", "", "City")
+	cmd.Flags().StringVar(&req.Sector, "sector", "", "Sector, free text (\"SaaS · staffing\")")
+	cmd.Flags().StringVar(&req.Stage, "stage", "", "Pipeline stage (`bk meta` for the values)")
+	cmd.Flags().StringVar(&req.Value, "value", "", "Deal value, a plain amount (\"24000\")")
+	cmd.Flags().StringVar(&req.Currency, "currency", "", "ISO currency code (default CHF)")
+	cmd.Flags().StringVar(&req.Owner, "owner", "", "Deal owner: an email, or \"me\"")
+	cmd.Flags().StringVar(&req.Source, "source", "", "How we found them (\"referral\", \"word of mouth\")")
+	cmd.Flags().StringVar(&req.Summary, "summary", "", "Where this deal stands, in prose")
+	_ = cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+func newProspectEditCmd() *cobra.Command {
+	var name, city, sector, value, currency, owner, source, summary string
+	cmd := &cobra.Command{
+		Use:         "edit <n>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}"},
+		Short:       "Edit a prospect's details, or reassign it",
+		Long: `Edit a prospect. Only the flags you pass are changed.
+
+PASSING AN EMPTY VALUE CLEARS THE FIELD: --city "" removes the city, and
+--owner "" unassigns the deal. Not passing the flag leaves it alone. The three
+states are distinct on the wire, so "did nothing" and "cleared it" cannot be
+confused.
+
+--stage is NOT here. Moving a deal writes a journey entry and may close it, so it
+is its own command: "bk sales prospect stage <n> <stage>".`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := prospectNumber(args[0])
+			if err != nil {
+				return err
+			}
+			// `Changed` is what makes "cleared" expressible: cobra reports a flag
+			// that was passed as "" as changed, and only that path sends a JSON
+			// null. Reading the value alone would make "" indistinguishable from
+			// "not passed".
+			req := client.UpdateProspectRequest{
+				Name:     patched(cmd, "name", name),
+				City:     patched(cmd, "city", city),
+				Sector:   patched(cmd, "sector", sector),
+				Value:    patched(cmd, "value", value),
+				Currency: patched(cmd, "currency", currency),
+				Owner:    patched(cmd, "owner", owner),
+				Source:   patched(cmd, "source", source),
+				Summary:  patched(cmd, "summary", summary),
+			}
+			if isEmptyPatch(req) {
+				return fmt.Errorf("nothing to change — pass at least one flag (bk sales prospect edit --help)")
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			p, err := c.UpdateProspect(ws, n, req)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, p, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "updated prospect #%d: %s\n", p.Number, p.Name)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "Company name")
+	cmd.Flags().StringVar(&city, "city", "", "City (\"\" clears)")
+	cmd.Flags().StringVar(&sector, "sector", "", "Sector (\"\" clears)")
+	cmd.Flags().StringVar(&value, "value", "", "Deal value, a plain amount (\"\" clears)")
+	cmd.Flags().StringVar(&currency, "currency", "", "ISO currency code")
+	cmd.Flags().StringVar(&owner, "owner", "", "Deal owner: an email, \"me\", or \"\" to unassign")
+	cmd.Flags().StringVar(&source, "source", "", "How we found them (\"\" clears)")
+	cmd.Flags().StringVar(&summary, "summary", "", "Where this deal stands (\"\" clears)")
+	return cmd
+}
+
+func newProspectStageCmd() *cobra.Command {
+	var note, reason string
+	cmd := &cobra.Command{
+		Use:         "stage <n> <stage>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/stage"},
+		Short:       "Move a deal to another stage and record the journey step",
+		Long: `Move a prospect to another pipeline stage.
+
+This is not a field edit. It writes a step in the deal journey, attributed to
+whoever ran it, and on a closing stage it also sets the close date — which is why
+"bk sales prospect edit" refuses --stage.
+
+--note is the journey step's note ("they asked for a revised quote").
+--reason is the close reason, and is only read for a closing stage.
+
+Run "bk meta" for the current stage values.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := prospectNumber(args[0])
+			if err != nil {
+				return err
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			p, err := c.SetProspectStage(ws, n, client.SetProspectStageRequest{
+				Stage:  strings.TrimSpace(args[1]),
+				Note:   note,
+				Reason: reason,
+			})
+			if err != nil {
+				return err
+			}
+			return output.Render(format, p, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "prospect #%d (%s) is now at stage %s\n",
+					p.Number, p.Name, p.Stage)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&note, "note", "", "What happened, recorded on the journey step")
+	cmd.Flags().StringVar(&reason, "reason", "", "Close reason (only read for a closing stage)")
+	return cmd
+}
+
+// newProspectDeleteCmd bins a prospect.
+//
+// ---------------------------------------------------------------------------
+// `--confirm` IS THE GUARD, AND `Confirm()` IS NOT
+// ---------------------------------------------------------------------------
+// cmdutil.Confirm() auto-approves under BK_NO_PROMPT=1 and on a non-TTY, which
+// is exactly how an agent runs. So the real guard is repeating the target back —
+// and here the target is the COMPANY NAME, not the #number the caller already
+// typed. That is deliberate: `bk workspace delete <slug> --confirm <slug>` can
+// only catch a mis-scoped loop, while requiring a name for a number also catches
+// the wrong number, which is the mistake an agent actually makes.
+//
+// The check runs in TWO places and both are needed. Here, so the failure costs
+// no round trip and can name the row. On the SERVER, so the guard is not
+// something a caller can skip by shelling out to curl or by running a stale
+// binary — see the route's header.
+//
+// The prospect is FETCHED FIRST so that what is destroyed can be reported before
+// it is destroyed: type, #number and name. A count alone is the difference
+// between a wrong delete caught in a minute and one found in a month.
+func newProspectDeleteCmd() *cobra.Command {
+	var confirm string
+	var yes bool
+	cmd := &cobra.Command{
+		Use:         "delete <n> --confirm <company>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n},DELETE /api/workspaces/{ws}/prospects/{n}"},
+		Short:       "Move a prospect to the recycle bin (requires the company name)",
+		Long: `Move a prospect, and everything logged against it, to the recycle bin.
+
+--confirm must be the COMPANY NAME of the prospect at that #number — not the
+number again. It is required even with --yes and even under BK_NO_PROMPT=1,
+because a prompt an agent auto-approves is not a guard.
+
+  bk sales prospect delete 12 --confirm StaffUp
+
+If the name does not match, nothing is deleted and the error names the company
+that IS at that number.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := prospectNumber(args[0])
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(confirm) == "" {
+				return fmt.Errorf(
+					"--confirm is required and must be the company name of prospect #%d "+
+						"— run `bk sales prospect show %d` to see it", n, n)
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			// Before the delete, not after: this is what gets reported.
+			target, err := c.GetProspect(ws, n)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(confirm) != target.Name {
+				return fmt.Errorf(
+					"--confirm %q does not name prospect #%d, which is %q — nothing was deleted",
+					confirm, n, target.Name)
+			}
+			if !cmdutil.Confirm(fmt.Sprintf(
+				"Move prospect #%d (%s) and everything logged against it to the recycle bin?",
+				target.Number, target.Name), yes) {
+				return fmt.Errorf("aborted")
+			}
+			deleted, err := c.DeleteProspect(ws, n, confirm)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, deleted, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "binned %s #%d: %s\n",
+					deleted.Type, deleted.Number, deleted.Name)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&confirm, "confirm", "",
+		"Repeat the COMPANY NAME to authorise the delete (required, even with --yes)")
+	cmdutil.AddYesFlag(cmd, &yes)
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+// clientAndWorkspace is the two questions every sales command answers first:
+// which server (the group's pin, D-1) and which workspace (--ws, then active).
+func clientAndWorkspace() (*client.Client, string, error) {
+	c, cfg, err := cmdutil.NewClientAndConfig()
+	if err != nil {
+		return nil, "", err
+	}
+	ws, err := cmdutil.RequireActiveWorkspace(cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	return c, ws, nil
+}
+
+// prospectNumber parses the `<n>` argument — a #number, never a row id.
+func prospectNumber(raw string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("invalid prospect #number %q — run `bk sales prospect list` to see them", raw)
+	}
+	return n, nil
+}
+
+// patched turns a flag into a PATCH field: nil when it was not passed, an
+// explicit clear when it was passed empty, the value otherwise.
+func patched(cmd *cobra.Command, flag, value string) *client.NullString {
+	if !cmd.Flags().Changed(flag) {
+		return nil
+	}
+	return client.Set(value)
+}
+
+func isEmptyPatch(r client.UpdateProspectRequest) bool {
+	return r.Name == nil && r.City == nil && r.Sector == nil && r.Value == nil &&
+		r.Currency == nil && r.Owner == nil && r.Source == nil && r.Summary == nil
+}
+
+// splitAll accepts both `--stage a --stage b` and `--stage a,b`. StringSliceVar
+// already splits on commas, but a value containing a space around one does not,
+// and an agent writing "meeting, negotiation" should not get a silent no-match.
+func splitAll(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		for _, part := range strings.Split(s, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// money renders an amount for a table cell. The amount arrives as a decimal
+// STRING and is printed as one: a CRM must not round a deal value on the way to
+// a terminal, and nothing here does arithmetic on it.
+func money(value, currency string) string {
+	if strings.TrimSpace(value) == "" {
+		return "—"
+	}
+	// Trim a trailing ".00" — every value in this app is a whole number of francs
+	// in practice, and two zero decimals in every row of a table is noise.
+	v := strings.TrimSuffix(value, ".00")
+	if currency == "" {
+		return v
+	}
+	return currency + " " + v
+}
+
+func ownerName(o *client.SalesOwner) string {
+	if o == nil {
+		return "—"
+	}
+	if strings.TrimSpace(o.Name) != "" {
+		return cmdutil.Truncate(o.Name, 18)
+	}
+	return cmdutil.Truncate(o.Email, 18)
+}
+
+// nextActionCell prefers the LABEL the agent wrote over the resolved date. The
+// difference between "due Friday" and "sometime this week, Friday is my guess"
+// is what a human needs when the follow-up is late, and only the label carries
+// it.
+func nextActionCell(a client.SalesNextAction) string {
+	if strings.TrimSpace(a.Type) == "" {
+		return "—"
+	}
+	when := strings.TrimSpace(a.DueLabel)
+	if when == "" {
+		when = dateOnly(a.Due)
+	}
+	if when == "—" || when == "" {
+		return a.Type
+	}
+	return a.Type + " · " + when
+}
+
+// dateOnly keeps the date half of an ISO timestamp. A listing is scanned, not
+// audited; the full instant is in --json.
+func dateOnly(ts string) string {
+	if strings.TrimSpace(ts) == "" {
+		return "—"
+	}
+	if i := strings.IndexByte(ts, 'T'); i > 0 {
+		return ts[:i]
+	}
+	return ts
+}
+
+func renderProspect(w io.Writer, p *client.Prospect) error {
+	fmt.Fprintf(w, "#%d  %s\n", p.Number, p.Name)
+	if p.URN != "" {
+		fmt.Fprintf(w, "%s\n", p.URN)
+	}
+	fmt.Fprintln(w)
+
+	tw := output.Tabwriter(w)
+	fmt.Fprintf(tw, "stage\t%s\n", p.Stage)
+	fmt.Fprintf(tw, "value\t%s\n", money(p.Value, p.Currency))
+	fmt.Fprintf(tw, "owner\t%s\n", ownerName(p.Owner))
+	if p.City != "" || p.Sector != "" {
+		fmt.Fprintf(tw, "where\t%s\n", strings.TrimSpace(strings.Trim(p.City+" · "+p.Sector, " ·")))
+	}
+	if p.Source != "" {
+		fmt.Fprintf(tw, "source\t%s\n", p.Source)
+	}
+	fmt.Fprintf(tw, "next\t%s\n", nextActionCell(p.NextAction))
+	if p.ClosedAt != "" {
+		fmt.Fprintf(tw, "closed\t%s%s\n", dateOnly(p.ClosedAt), suffix(p.ClosedReason))
+	}
+	if p.DeletedAt != "" {
+		fmt.Fprintf(tw, "binned\t%s\n", dateOnly(p.DeletedAt))
+	}
+	if len(p.Labels) > 0 {
+		names := make([]string, 0, len(p.Labels))
+		for _, l := range p.Labels {
+			names = append(names, l.Name)
+		}
+		fmt.Fprintf(tw, "labels\t%s\n", strings.Join(names, ", "))
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+
+	if p.Summary != "" {
+		fmt.Fprintf(w, "\n%s\n", p.Summary)
+	}
+	if p.NextAction.Note != "" {
+		fmt.Fprintf(w, "\nnext action: %s\n", p.NextAction.Note)
+	}
+
+	if len(p.Journey) > 0 {
+		fmt.Fprintln(w, "\nJOURNEY")
+		jt := output.Tabwriter(w)
+		for _, s := range p.Journey {
+			fmt.Fprintf(jt, "  %s\t%s\t%s\t%s\n",
+				s.Stage, s.Status, dateOnly(s.OccurredAt), actorOf(s))
+		}
+		if err := jt.Flush(); err != nil {
+			return err
+		}
+	}
+
+	// D-18: the link has to be VISIBLE, not just storable. The URL is absolute
+	// and points into the other app's deployment.
+	if len(p.Links) > 0 {
+		fmt.Fprintln(w, "\nLINKED")
+		lt := output.Tabwriter(w)
+		for _, l := range p.Links {
+			flag := ""
+			if l.Deleted {
+				flag = "  (in the other app's recycle bin)"
+			}
+			fmt.Fprintf(lt, "  %s\t%s\t%s%s\n",
+				l.Rel, l.URN, cmdutil.Truncate(l.Title, 40), flag)
+		}
+		if err := lt.Flush(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func actorOf(s client.SalesJourneyStep) string {
+	who := strings.TrimSpace(s.Actor)
+	if who == "" {
+		return ""
+	}
+	out := "by " + who
+	if n := strings.TrimSpace(s.Note); n != "" {
+		out += " — " + cmdutil.Truncate(n, 60)
+	}
+	return out
+}
+
+func suffix(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return ""
+	}
+	return " — " + s
+}
