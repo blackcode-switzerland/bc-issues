@@ -8,4 +8,5 @@
 import { workspaceAppRoute } from '@blackcode/platform-api/routes'
 import { appContext } from '@/lib/api'
 
-export const PATCH = workspaceAppRoute(appContext)
+const handlers = workspaceAppRoute(appContext)
+export const PATCH = handlers.PATCH

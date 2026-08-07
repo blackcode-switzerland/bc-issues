@@ -132,3 +132,74 @@ describe('activity feed serialization is unchanged by the Class-B move', () => {
     expect(purged.entity_id, 'an internal row id reached the response').toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// THE MERGED FEED: ROWS THAT BELONG TO ANOTHER APP
+// ---------------------------------------------------------------------------
+// The shape above is frozen against the pre-extraction implementation and stays
+// frozen. THIS block is the deliberate change of 2026-08-07, made in the same
+// commit as the changelog entry, exactly as the header of this file requires.
+//
+// `platform.events` is merged and every deployment serves the whole thing, but
+// `numberedEntityTypes` and `resolveEntitySeqs` describe the MOUNTING app. A
+// foreign row therefore fell through with its `entity_id` intact — an internal
+// serial, printed by `bk activity` with a `#` in front of it. Measured on a real
+// pair of dev servers: the same feed reported prospect `29` from the issues host
+// and `9` from the sales host, for one row whose #number is 9.
+//
+// The two assertions below are one property in two halves, and the master's
+// instruction was explicit about why: "a fix that made both hosts agree by
+// breaking the local one would look identical from one side."
+describe('the merged feed does not leak another app\'s row ids', () => {
+  const foreign = (over: Row = {}): Row =>
+    event({
+      app: 'sales',
+      entity_type: 'prospect',
+      entity_id: 29, // the sales serial
+      subject_urn: 'bc:sales:acme/prospect/9', // …whose #number is 9
+      ...over,
+    })
+
+  it('reports the #number from subject_urn, never the foreign serial', () => {
+    const out = publicEvent(foreign(), SEQ_MAP, NUMBERED, 'issues')
+    expect(out.entity_id, "another app's internal row id reached the response").toBe(9)
+  })
+
+  it('reports NOTHING when the foreign row has no subject_urn', () => {
+    // An unprojected type has no #number to report. Nothing is better than a
+    // plausible wrong number — falling back to entity_id here is the whole bug.
+    const out = publicEvent(foreign({ subject_urn: null }), SEQ_MAP, NUMBERED, 'issues')
+    expect(out.entity_id).toBeNull()
+  })
+
+  it('and a malformed subject_urn is also nothing, not a parse artefact', () => {
+    const out = publicEvent(foreign({ subject_urn: 'not-a-urn' }), SEQ_MAP, NUMBERED, 'issues')
+    expect(out.entity_id).toBeNull()
+  })
+
+  it('THE OTHER HALF: a LOCAL row is untouched by any of this', () => {
+    // Same call, same app slug, a row that belongs here. If this ever changes,
+    // the fix above achieved agreement by breaking the side that already worked
+    // — which reads as success from the foreign side alone.
+    const local = event({ app: 'issues', entity_type: 'issue', entity_id: 4210 })
+    const withSlug = publicEvent(local, SEQ_MAP, NUMBERED, 'issues')
+    const withoutSlug = publicEvent(local, SEQ_MAP, NUMBERED)
+    expect(JSON.stringify(withSlug)).toBe(JSON.stringify(withoutSlug))
+    expect(withSlug.entity_id).toBe(SEQ_MAP.get('issue:4210'))
+  })
+
+  it('a foreign row is NOT resolved against a local table of the same name', () => {
+    // The latent one. `numbered.has(type)` never consulted the row's app, so a
+    // foreign row whose type name matched a local type would have been looked up
+    // in the WRONG table and reported a confidently wrong #number. No two apps
+    // share a type name today; that is not a guarantee.
+    const collision = event({
+      app: 'sales',
+      entity_type: 'issue', // a name this app also uses
+      entity_id: 4210, // …and an id that IS in this app's seq map
+      subject_urn: 'bc:sales:acme/issue/77',
+    })
+    const out = publicEvent(collision, SEQ_MAP, NUMBERED, 'issues')
+    expect(out.entity_id, 'resolved a foreign row against this app\'s tables').toBe(77)
+  })
+})

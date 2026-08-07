@@ -2,4 +2,5 @@
 import { workspaceAppAccessMemberRoute } from '@blackcode/platform-api/routes'
 import { appContext } from '@/lib/api'
 
-export const DELETE = workspaceAppAccessMemberRoute(appContext)
+const handlers = workspaceAppAccessMemberRoute(appContext)
+export const DELETE = handlers.DELETE

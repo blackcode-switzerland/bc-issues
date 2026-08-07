@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   listEvents,
+  parseUrn,
   PLATFORM_ENTITY_TYPES,
   PLATFORM_EVENT_ACTIONS,
 } from '@blackcode/platform-db'
@@ -94,14 +95,59 @@ type EventRow = Record<string, unknown>
  * The fallback chain is load-bearing and unchanged from the pre-extraction
  * version: the seq map first, then the event's own `meta.seq` (recorded at write
  * time, so it survives the row being purged), then null. Never the raw id.
+ *
+ * ---------------------------------------------------------------------------
+ * THE FOURTH ARGUMENT, AND THE BUG IT CLOSES (2026-08-07)
+ * ---------------------------------------------------------------------------
+ * This feed is MERGED: `platform.events` holds every app's rows, and every
+ * deployment serves the whole thing. But `numberedEntityTypes` and
+ * `resolveEntitySeqs` describe the MOUNTING app, and only it can read its own
+ * tables. So a row belonging to another app fell through untouched and its
+ * `entity_id` — an internal serial — went out on the wire:
+ *
+ *     via issues:3000    sales   created  prospect  29    ← sales' row id
+ *     via sales:3100     sales   created  prospect  9     ← the #number
+ *     via sales:3100     issues  created  issue     #727  ← issues' row id
+ *     via issues:3000    issues  created  issue     #3    ← the #number
+ *
+ * Each host got its OWN app right and the other wrong, and `bk activity` prints
+ * a `#` in front of it either way — so a serial was presented AS a #number,
+ * which is worse than omitting it. "The serial `id` is never exposed — not in a
+ * route, not in CLI output, not in a URL" is one of the platform's oldest rules.
+ *
+ * The fix needs no cross-schema read, which is the whole reason it is possible:
+ * `platform.events.subject_urn` was written by the producing app, in the same
+ * transaction as the row, and the #number is IN it.
+ *
+ * **Where a foreign row has no `subject_urn`, the answer is null and not a
+ * fallback.** An unprojected type has no #number to report, and nothing is
+ * better than a plausible wrong number — that is the entire finding.
+ *
+ * `appSlug` is optional so the frozen pinning test keeps calling this with three
+ * arguments and keeps proving the LOCAL path is byte-identical. Omitting it
+ * means "every row is local", which is what a single-app world was.
+ *
+ * It also closes a latent one: `numbered.has(type)` never consulted the row's
+ * app, so a foreign row whose type name matched a local type would have been
+ * resolved against the WRONG TABLE and reported a confidently wrong #number.
+ * No two apps share a type name today. That is not a guarantee.
  */
 export function publicEventIds(
   row: EventRow,
   seqMap: Map<string, number>,
-  numbered: ReadonlySet<string>
+  numbered: ReadonlySet<string>,
+  appSlug?: string
 ): EventRow {
   const type = row.entity_type as string
   const eid = row.entity_id as number | null
+
+  const rowApp = row.app as string | null | undefined
+  if (appSlug && rowApp && rowApp !== appSlug) {
+    // Another app's row. This deployment cannot resolve its id and must not try.
+    const parsed = typeof row.subject_urn === 'string' ? parseUrn(row.subject_urn) : null
+    return { ...row, entity_id: parsed ? parsed.number : null }
+  }
+
   if (numbered.has(type) && eid != null) {
     const meta = row.meta as { seq?: number } | null
     return { ...row, entity_id: seqMap.get(`${type}:${eid}`) ?? meta?.seq ?? null }
@@ -232,7 +278,9 @@ export function activityRoute(app: AppContext, contribution: ActivityContributio
       page.data as unknown as Array<{ entity_type: string; entity_id: number }>
     )
     return NextResponse.json({
-      data: (page.data as unknown as EventRow[]).map((e) => publicEventIds(e, seqMap, numbered)),
+      data: (page.data as unknown as EventRow[]).map((e) =>
+        publicEventIds(e, seqMap, numbered, app.appSlug)
+      ),
       next_cursor: page.next_cursor,
     })
   })

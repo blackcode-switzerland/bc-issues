@@ -2,4 +2,5 @@
 import { workspaceInvitationRoute } from '@blackcode/platform-api/routes'
 import { appContext } from '@/lib/api'
 
-export const DELETE = workspaceInvitationRoute(appContext)
+const handlers = workspaceInvitationRoute(appContext)
+export const DELETE = handlers.DELETE

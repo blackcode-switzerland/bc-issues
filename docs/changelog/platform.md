@@ -30,6 +30,43 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-07 — `bk activity` no longer prints another app's internal row id
+
+**Breaking if you parsed the `id` column of a cross-app activity row.** It was
+wrong; it is now right or absent.
+
+`platform.events` is a merged feed and every deployment serves the whole thing —
+but only the app that OWNS a row can turn its `entity_id` (an internal serial)
+into the workspace #number, because that means reading its own tables. Rows
+belonging to another app fell through with the serial intact, and `bk activity`
+prints a `#` in front of it. So the same feed, from two hosts:
+
+```
+via issues host    sales   created  prospect  29     ← sales' row id
+via sales  host    sales   created  prospect  9      ← the #number
+via sales  host    issues  created  issue     #727   ← issues' row id
+via issues host    issues  created  issue     #4     ← the #number
+```
+
+Each host got its own app right and every other app wrong, and presented the
+serial **as** a #number — worse than omitting it, because an agent that copies
+it acts on the wrong row. "The serial `id` is never exposed" is one of the
+platform's oldest rules.
+
+**Fixed.** A foreign row's number now comes from `platform.events.subject_urn`,
+written by the producing app in the same transaction as the event, so no
+cross-schema read is involved. Both hosts now report the same number for the
+same row, and it is the #number.
+
+**Where a foreign row has no `subject_urn`** — an entity type its app does not
+project — the field is `null` and there is no fallback. Nothing is better than a
+plausible wrong number.
+
+**How to adapt.** If you stored ids read from a cross-app activity row, they were
+that app's internal serials and are not addressable. Re-read them, or use
+`subject_urn`, which was always correct. Rows for the app you are pointed at are
+unchanged, byte for byte.
+
 ## 2026-08-07 — The sales host now answers 20 more platform routes, including `bk search` and `bk link`
 
 **If you are homed on the sales deployment, most bare verbs used to 404.** They
