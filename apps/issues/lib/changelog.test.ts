@@ -84,7 +84,17 @@ describe('changelog', () => {
     expect(issues.entries.every((e) => e.app === 'issues')).toBe(true)
 
     // Every entry lands in exactly one section.
-    expect(platform.entries.length + issues.entries.length).toBe(cl.entries.length)
+    //
+    // Summed over `cl.apps` rather than over the two sections named above, and
+    // that is not a tidy-up: written as `platform + issues === total` it was an
+    // assertion that FAILED the moment a third section grew its first entry —
+    // which happened on 2026-08-07, when `sales.md` did. A merge test that has to
+    // be edited by whoever adds an app is a merge test that will be edited by
+    // whoever adds an app, and the cheapest edit is to add their own section to
+    // the sum, which is how this property quietly becomes "the sections I
+    // remembered add up".
+    const perSection = cl.apps.map((app) => getChangelogFor(app)!.entries.length)
+    expect(perSection.reduce((a, b) => a + b, 0)).toBe(cl.entries.length)
 
     // An unknown app is null, not an empty feed. "No entries" and "no such app"
     // must not look the same to an agent — one means nothing changed, the other
@@ -92,15 +102,28 @@ describe('changelog', () => {
     expect(getChangelogFor('nosuchapp')).toBeNull()
     expect(getChangelogMarkdown('nosuchapp')).toBeNull()
 
-    // The other side of that distinction, which only became testable when
-    // `sales.md` was created ahead of the app (docs/sales-app-plan.md, Phase 0):
-    // a section that EXISTS but has no dated entries yet must answer with an
-    // empty feed, not null. Until 2026-08-06 this case had no example and
-    // `'sales'` was the string this test used for "unknown app".
-    const sales = getChangelogFor('sales')
-    expect(sales, 'docs/changelog/sales.md exists, so this must not be null').not.toBeNull()
-    expect(sales!.entries).toEqual([])
-    expect(getChangelogMarkdown('sales')).not.toBeNull()
+    // The other side of that distinction: a section that EXISTS but has no dated
+    // entries yet must answer with an empty feed, not null.
+    //
+    // `'sales'` was that example from 2026-08-06, when the file was created ahead
+    // of the app, until 2026-08-07, when the app's first entry landed in it. So
+    // the example is now found rather than named — and when there is none, this
+    // SAYS SO rather than passing quietly. A check with no input reports success,
+    // which is the corollary in CLAUDE.md's standing rule, and an empty-section
+    // example only exists in the window between `docs/changelog/<app>.md` being
+    // created and that app shipping anything.
+    const emptySection = cl.apps.find((app) => getChangelogFor(app)!.entries.length === 0)
+    if (emptySection) {
+      expect(getChangelogFor(emptySection)!.entries).toEqual([])
+      expect(getChangelogMarkdown(emptySection)).not.toBeNull()
+    } else {
+      console.warn(
+        '[changelog.test] NOT CHECKED: "an existing section with no entries answers with an ' +
+          'empty feed, not null" has no example right now — every section in ' +
+          `${JSON.stringify(cl.apps)} has at least one dated entry. The next app to get a ` +
+          'docs/changelog/<app>.md before it ships will restore it.'
+      )
+    }
     // Empty/omitted means the whole feed.
     expect(getChangelogFor('')!.entries.length).toBe(cl.entries.length)
   })

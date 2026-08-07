@@ -371,7 +371,15 @@ that IS at that number.`,
 			if err != nil {
 				return err
 			}
-			if strings.TrimSpace(confirm) == "" {
+			// Trimmed ONCE, here, and the trimmed value is what both the local
+			// check and the request use. Validating one string and sending
+			// another is how a guard becomes decorative: `--confirm " Roches "`
+			// passed the check below and put the untrimmed value on the wire, so
+			// the server was deciding on input the CLI had never looked at.
+			// Found by feeding this exact value to a stand-in server that
+			// compares strictly.
+			confirm = strings.TrimSpace(confirm)
+			if confirm == "" {
 				return fmt.Errorf(
 					"--confirm is required and must be the company name of prospect #%d "+
 						"— run `bk sales prospect show %d` to see it", n, n)
@@ -385,10 +393,16 @@ that IS at that number.`,
 			if err != nil {
 				return err
 			}
-			if strings.TrimSpace(confirm) != target.Name {
+			if confirm != target.Name {
+				// Worded to contain "required" on purpose. cmd/bk/main.go's
+				// classify() maps that substring to exit 2 (bad usage), which is
+				// what `bk workspace delete`'s guard already exits with — and
+				// two spellings of the same irreversible-command guard returning
+				// different exit codes is exactly the inconsistency an agent
+				// branching on the code would trip over.
 				return fmt.Errorf(
-					"--confirm %q does not name prospect #%d, which is %q — nothing was deleted",
-					confirm, n, target.Name)
+					"--confirm is required to match prospect #%d, which is %q — got %q; nothing was deleted",
+					n, target.Name, confirm)
 			}
 			if !cmdutil.Confirm(fmt.Sprintf(
 				"Move prospect #%d (%s) and everything logged against it to the recycle bin?",
