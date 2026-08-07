@@ -19,7 +19,9 @@
 // that ignored the workspace would be wrong in a way nobody would reproduce.
 
 import { useQuery } from '@tanstack/react-query'
+import type { EventListItem } from '@blackcode/platform-db'
 import type { MetricsResult, PipelineResult, TodayResult } from '@/lib/db/queries/aggregates'
+import type { SearchHit, SearchType } from '@/lib/db/queries/search'
 import type { PublicLink, PublicProspect } from '@/lib/views'
 import { apiGet, query, wsPath, type ListPage } from '@/lib/client'
 
@@ -382,5 +384,106 @@ export function useTrash(ws: string) {
   return useQuery({
     queryKey: ['trash', ws],
     queryFn: async () => (await apiGet<ListPage<TrashItem>>(wsPath(ws, '/trash'))).data,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Activity
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of the workspace feed.
+ *
+ * `EventListItem` is the DATABASE row and this is the WIRE shape, and they differ
+ * in exactly one field: `publicEventIds` in the shared route replaces
+ * `entity_id` with the workspace #number for this app's projected types, and
+ * serves **null** when the source row has been purged. The database column is
+ * `notNull`, so the widening is stated here rather than left for a reader to
+ * discover from a runtime null.
+ *
+ * Everything else is imported. Retyping the row would put a second copy of ten
+ * fields in a client module with nobody holding the two together.
+ */
+export type ActivityEvent = Omit<EventListItem, 'entity_id'> & { entity_id: number | null }
+
+export interface ActivityFilters {
+  entity_type?: string
+  action?: string
+  actor?: number
+}
+
+/**
+ * The workspace feed, filtered to this app.
+ *
+ * **`app=sales` is not decoration.** `platform.events` holds every app's rows
+ * for a workspace, so an unfiltered feed on this deployment would render issues'
+ * events with sales' vocabulary — an `issue` entity type this app has no label
+ * or colour for, linking nowhere. Reading across apps is `bk activity`'s job and
+ * it tags every row with its app; a page that cannot show the tag must not show
+ * the rows. D-9's two layers, one level down.
+ */
+export function useActivity(ws: string, filters: ActivityFilters = {}) {
+  return useQuery({
+    queryKey: ['activity', ws, filters],
+    queryFn: () =>
+      apiGet<ListPage<ActivityEvent>>(
+        wsPath(ws, '/activity') + query({ ...filters, app: 'sales', limit: 100 })
+      ),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Search — D-9's app-owned half, and the ONLY call site for it
+// ---------------------------------------------------------------------------
+
+export type { SearchHit, SearchType }
+
+/**
+ * Search INSIDE this app's records: `GET …/sales-search`.
+ *
+ * **⌘K and `/dashboard/{ws}/search` both go through here, and that is a
+ * property rather than tidiness.** They are two presentations of one answer —
+ * the palette shows the top few, the page groups and facets them — and the
+ * moment either builds its own request they can rank differently, paginate
+ * differently, or hit different endpoints for the same term, with nothing to
+ * say which one is right. `lib/search-parity.test.ts` asserts that no component
+ * names the `sales-search` path.
+ *
+ * The platform half (`…/search`, over `platform.entities`, every app, URNs out)
+ * is a different path and this app does not mount it. If a facet needs data this
+ * route does not return, the answer is to say so — not to add a second search
+ * API beside it (D-9).
+ *
+ * ── THE RACE IS THE QUERY KEY ───────────────────────────────────────────────
+ * A slow "ro" landing after a fast "roches" must not repaint the older answer
+ * over the newer one. The term is part of the key, so a resolved request can
+ * only ever write into its own cache entry; nothing hand-rolled is needed and
+ * there is no sequence counter to get wrong. Debouncing is the CALLER's, because
+ * a palette wants it per keystroke and a page whose term comes from the URL does
+ * not.
+ */
+export function useSalesSearch(
+  ws: string,
+  term: string,
+  opts: { types?: SearchType[]; limit?: number } = {}
+) {
+  const q = term.trim()
+  const types = opts.types?.length ? [...opts.types].sort().join(',') : ''
+  return useQuery({
+    queryKey: ['sales-search', ws, q, types, opts.limit ?? null],
+    // Only "is there a term at all" is decided here. The MINIMUM LENGTH is the
+    // server's (`SEARCH_QUERY_MIN`, served by `bk meta`), and it stays there:
+    // copying the number into a client module would be a second declaration of a
+    // limit, and importing it would pull `@blackcode/platform-api`'s barrel —
+    // handler, drizzle, storage — into the browser bundle for one integer. A
+    // too-short term gets the route's own 400, which carries the number and a
+    // suggestion, and `ErrorState` renders both.
+    enabled: q.length > 0,
+    queryFn: async () =>
+      (
+        await apiGet<ListPage<SearchHit>>(
+          wsPath(ws, '/sales-search') + query({ q, type: types, limit: opts.limit })
+        )
+      ).data,
   })
 }

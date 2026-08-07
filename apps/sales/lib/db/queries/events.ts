@@ -50,8 +50,19 @@ import {
   type PlatformEventAction,
   type PlatformTx,
 } from '@blackcode/platform-db'
-import { events } from '../schema'
+import { inArray } from 'drizzle-orm'
+import {
+  communications,
+  documents,
+  events,
+  meetings,
+  products,
+  prospects,
+  templates,
+} from '../schema'
+import { getDb } from '../client'
 import { APP_SLUG } from '@/lib/app'
+import { ENTITY_TYPES, type SalesEntityType } from '@/lib/entity-address'
 import { resolveSubjectUrn } from './entities'
 
 /**
@@ -68,20 +79,34 @@ import { resolveSubjectUrn } from './entities'
  * inconsistency: an event is about something that happened, and "a contact was
  * added to StaffUp" happened whether or not a contact has its own address.
  * Those events simply carry `subject_urn: null` — see `resolveSubjectUrn`.
+ *
+ * ── AN ARRAY, AND THE UNION IS DERIVED FROM IT (2026-08-07) ─────────────────
+ * `GET …/activity` has to validate `?entity_type=` at RUNTIME, and it DROPS an
+ * unrecognised value rather than rejecting it — so a type this recorder can
+ * write and that filter has not heard of returns the whole feed instead of a
+ * 400. That is not hypothetical: it is what issues' `app_*` actions did for
+ * months (`packages/platform-api/src/routes/activity.ts`).
+ *
+ * A `const` array beside the union would be a second list, and the failure of
+ * the two disagreeing is silence. So the array is the ONLY list and the union
+ * reads off it. There is nothing here for a test to hold together, which is
+ * better than a test: `tsc` cannot let them drift.
  */
-export type EntityType =
-  | PlatformEntityType
-  | 'prospect'
-  | 'contact'
-  | 'stage_entry'
-  | 'meeting'
-  | 'communication'
-  | 'objection'
-  | 'product'
-  | 'template'
-  | 'document'
-  | 'match'
-  | 'label'
+export const SALES_EVENT_ENTITY_TYPES = [
+  'prospect',
+  'contact',
+  'stage_entry',
+  'meeting',
+  'communication',
+  'objection',
+  'product',
+  'template',
+  'document',
+  'match',
+  'label',
+] as const
+
+export type EntityType = PlatformEntityType | (typeof SALES_EVENT_ENTITY_TYPES)[number]
 
 /**
  * What happened.
@@ -89,19 +114,23 @@ export type EntityType =
  * Only actions this app actually writes are listed. A speculative member costs
  * nothing at the type level and quite a lot in a reader's head: it reads as a
  * feature that exists. Adding one when the noun that emits it lands is one line.
+ *
+ * An array with the union derived from it, for the reason above `EntityType`.
  */
-export type EventAction =
-  | PlatformEventAction
+export const SALES_EVENT_ACTIONS = [
   // prospect (Phase 5)
-  | 'stage_changed'
-  | 'assigned'
-  | 'unassigned'
-  | 'next_action_changed'
-  | 'labeled'
-  | 'unlabeled'
+  'stage_changed',
+  'assigned',
+  'unassigned',
+  'next_action_changed',
+  'labeled',
+  'unlabeled',
   // the recycle bin
-  | 'restored'
-  | 'purged'
+  'restored',
+  'purged',
+] as const
+
+export type EventAction = PlatformEventAction | (typeof SALES_EVENT_ACTIONS)[number]
 
 export interface RecordEventInput {
   workspaceId: number
@@ -185,4 +214,63 @@ export async function recordEvent(tx: PlatformTx, input: RecordEventInput): Prom
   // NO FAN-OUT. See difference (1) in the header — this is an absence with a
   // reason, not a line somebody forgot.
   return row
+}
+
+// ---------------------------------------------------------------------------
+// The READ half's one app-shaped question (D-22)
+// ---------------------------------------------------------------------------
+
+/** Which table carries the #number for each projected type. */
+const SEQ_SOURCE = {
+  prospect: prospects,
+  meeting: meetings,
+  communication: communications,
+  product: products,
+  template: templates,
+  document: documents,
+} as const satisfies Record<SalesEntityType, unknown>
+
+/**
+ * `${entity_type}:${entity_id}` → the workspace #number, for the rows on one
+ * page of the activity feed.
+ *
+ * This is the whole of what `activityRoute` cannot do for itself: an event's
+ * `entity_id` is an internal serial, the API must never serve one, and only this
+ * app can read `sales.*` to swap it for the #number.
+ *
+ * **The keys are `ENTITY_TYPES`, derived, not a second list.** A seventh
+ * projected type would otherwise be one that quietly kept serving its row id —
+ * and a leaked serial does not look wrong, it looks like a number, which is how
+ * it ends up in somebody's script and becomes a contract. The four types with no
+ * #number (contact, stage entry, objection, match) are absent for the same reason
+ * they are absent from the projection: their row id IS their address, so it is
+ * correct to pass it through, and the route only substitutes for the types the
+ * mount lists in `numberedEntityTypes`.
+ */
+export async function resolveEventEntitySeqs(
+  rows: Array<{ entity_type: string; entity_id: number }>
+): Promise<Map<string, number>> {
+  const wanted = new Map<SalesEntityType, Set<number>>()
+  for (const r of rows) {
+    if (!(ENTITY_TYPES as readonly string[]).includes(r.entity_type)) continue
+    if (r.entity_id == null) continue
+    const type = r.entity_type as SalesEntityType
+    const set = wanted.get(type) ?? new Set<number>()
+    set.add(r.entity_id)
+    wanted.set(type, set)
+  }
+
+  const db = getDb()
+  const map = new Map<string, number>()
+  for (const [type, ids] of wanted) {
+    const table = SEQ_SOURCE[type]
+    const found = await db
+      .select({ id: table.id, seq: table.seq })
+      .from(table)
+      .where(inArray(table.id, [...ids]))
+    for (const f of found) {
+      if (f.seq != null) map.set(`${type}:${f.id}`, f.seq)
+    }
+  }
+  return map
 }

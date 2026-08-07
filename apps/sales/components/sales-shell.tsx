@@ -30,6 +30,7 @@ import {
   CalendarClock,
   FileText,
   FolderOpen,
+  History,
   LogOut,
   MessagesSquare,
   Moon,
@@ -56,23 +57,12 @@ const NAV_MAIN: NavEntry[] = [
   { seg: '/prospects', label: 'Prospects', icon: Building2 },
   { seg: '/meetings', label: 'Meetings', icon: CalendarClock },
   { seg: '/communications', label: 'Communications', icon: MessagesSquare },
-  // ── ACTIVITY IS MISSING ON PURPOSE, AND IT IS NOT A DESIGN DECISION ────────
-  // §8.1 specifies `/dashboard/{ws}/activity` over `platform.events` filtered to
-  // this app, and it is the one page in the spec this app cannot serve: **sales
-  // does not mount the platform `activityRoute`.** That is a gap rather than a
-  // decision — unlike `bk inbox`, `bk super-admin errors` and `bk storage list`,
-  // which `docs/backend.md` §7.1 records as permanently unmounted for stated
-  // reasons, nothing says activity should be.
-  //
-  // The mount is three lines in
-  // `app/api/workspaces/[ws]/activity/route.ts`:
-  //     import { activityRoute } from '@blackcode/platform-api/routes'
-  //     import { appContext } from '@/lib/api'
-  //     export const GET = activityRoute(appContext)
-  //
-  // Listing it here without that would be a nav item that 404s — the failure the
-  // two empties in `app/dashboard/layout.tsx` exist to prevent, in the chrome
-  // every page inherits. It goes back the moment the route does.
+  // Activity landed with the route it needs. It was deliberately absent until
+  // then — a nav item pointing at a page with no data source is a 404 wearing a
+  // working app's clothes, installed in the chrome every page inherits — and
+  // `app/api/workspaces/[ws]/activity/route.ts` is what changed. The rule that
+  // kept it out is the rule that puts it in.
+  { seg: '/activity', label: 'Activity', icon: History },
 ]
 
 const NAV_CATALOG: NavEntry[] = [
