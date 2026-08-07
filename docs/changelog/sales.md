@@ -35,8 +35,21 @@ operates the funnel and the human supervises: nothing on this surface sends a
 message, approves a draft or edits a record, and there is no AI running in the
 page. Everything shown is a record of something that already happened.
 
+**The whole surface is there now.** Prospects as a table or a board, a prospect
+page with the deal journey, its contacts, what they pushed back on and the
+products the agent matched to them — plus anything linked to it in another app,
+clickable, wherever that app is deployed. The two ledgers, the catalog, the
+document library, the metrics, the bin. **⌘K searches inside the records** — a
+phrase in a call summary, a name in a meeting outcome, the body of a template —
+not just their titles.
+
 **Nothing changed for agents.** No route was added, removed or altered, no `bk`
 command changed, and `bk sales` behaves exactly as it did this morning.
+
+**One page in the plan is not there yet:** Activity. It reads platform-wide
+event data that this deployment does not serve, so the page and its nav entry
+arrive together with the route rather than as a link that goes nowhere. Settings
+and super-admin are not built yet either.
 
 **One thing worth knowing if you script against this host.** Routes under
 `/api/workspaces/{ws}/…` now also accept a **browser session** where before they
