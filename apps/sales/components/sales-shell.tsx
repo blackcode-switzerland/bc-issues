@@ -37,6 +37,7 @@ import {
   Package,
   Menu,
   Search,
+  Settings as SettingsIcon,
   Sun,
   Sparkles,
   Trash2,
@@ -256,10 +257,10 @@ function NavLink({ entry, base, pathname }: { entry: NavEntry; base: string; pat
   )
 }
 
-// No Settings link yet. `/dashboard/settings/*` is a later Phase 7 group, and a
-// nav item pointing at a route that does not exist is a 404 wearing a working
-// app's clothes — the same failure mode the two empties in
-// `app/dashboard/layout.tsx` are shaped around. It goes in with the page.
+// The Settings link went in with the pages, which is the rule that kept it out.
+// It points at `/dashboard/settings/*` — outside the workspace segment, because
+// three of its four pages are about the blackcode ACCOUNT rather than about this
+// workspace, and the fourth says which workspace it is setting.
 function AccountFooter() {
   const { data: session } = useSession()
   const user = session?.user
@@ -274,9 +275,16 @@ function AccountFooter() {
           <span className="block truncate text-[11px] text-muted-foreground">{user?.email}</span>
         </span>
       </div>
+      <Link
+        href="/dashboard/settings/profile"
+        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+      >
+        <SettingsIcon size={15} />
+        Settings
+      </Link>
       <button
         onClick={() => signOut({ callbackUrl: '/login' })}
-        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
       >
         <LogOut size={15} />
         Sign out

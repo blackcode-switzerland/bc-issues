@@ -49,6 +49,10 @@ const long = `The sales app: the business-development pipeline.
   bk sales doc        the one document library, and its links
   bk sales match      triangulation: which product and message fit which prospect
 
+  bk sales preferences  your own display settings for the web app. NOT a
+                      permission — the server does not consult them, and bk
+                      writes the same either way
+
 APP-OWNED PLATFORM VERBS — the same three under every app, each answering for
 ITS app:
 
@@ -111,5 +115,9 @@ func nouns() []*cobra.Command {
 		newTemplateCmd(),
 		newDocCmd(),
 		newMatchCmd(),
+
+		// Last, and deliberately so: it is the only noun here that changes
+		// nothing about the pipeline. `bk sales --help` is read top to bottom.
+		newPreferencesCmd(),
 	}
 }

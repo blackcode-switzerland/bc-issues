@@ -801,6 +801,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/preferences",
+      "command": "bk sales preferences show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/products",
       "command": "bk sales product list",
       "app": "sales"
@@ -899,6 +905,12 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/meetings/{n}",
       "command": "bk sales meeting outcome",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/preferences",
+      "command": "bk sales preferences set",
       "app": "sales"
     },
     {

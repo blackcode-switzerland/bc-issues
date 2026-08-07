@@ -1224,3 +1224,38 @@ func (c *Client) AttachProspectLabel(ws string, prospect, labelID int) error {
 func (c *Client) DetachProspectLabel(ws string, prospect, labelID int) error {
 	return c.deleteJSON(salesPath(ws, fmt.Sprintf("prospects/%d/labels/%d", prospect, labelID)), nil, nil)
 }
+
+// ---------------------------------------------------------------------------
+// Preferences — a DISPLAY setting, and the client says so
+// ---------------------------------------------------------------------------
+// `ui_mode` decides what the WEB app renders (D-7). It is not a permission and
+// the server never consults it: `bk` writes in either mode, and so does anybody
+// else who has access. That sentence is repeated in the command's help because
+// this is the one value in the product whose NAME invites the wrong reading.
+
+// SalesPreferences is one person's display settings in one workspace.
+type SalesPreferences struct {
+	UIMode         string `json:"ui_mode" yaml:"ui_mode"`
+	DefaultFilters any    `json:"default_filters" yaml:"default_filters"`
+	UpdatedAt      string `json:"updated_at" yaml:"updated_at"`
+}
+
+func (c *Client) SalesPreferences(ws string) (*SalesPreferences, error) {
+	var out SalesPreferences
+	if err := c.get(salesPath(ws, "preferences"), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesSetPreferences patches the caller's own row. There is no way to name
+// somebody else's, deliberately: a preference is not something one person sets
+// for another, and a route that allowed it would be a route somebody would
+// mistake for administration.
+func (c *Client) SalesSetPreferences(ws string, body map[string]any) (*SalesPreferences, error) {
+	var out SalesPreferences
+	if err := c.patchJSON(salesPath(ws, "preferences"), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

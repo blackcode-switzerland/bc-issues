@@ -206,6 +206,44 @@ export const NEXT_ACTION_TYPE_VALUES = NEXT_ACTION_TYPES.map((a) => a.value)
 export const nextActionTypeLabel = (v?: string | null) => labelOf(NEXT_ACTION_TYPES, v)
 export const nextActionTypeColor = (v?: string | null) => colorOf(NEXT_ACTION_TYPES, v)
 
+// ---------- the read-only / full affordance switch (D-7) ----------
+//
+// **`ui_mode` IS NOT A PERMISSION, AND THIS IS NOT A ROLE.** It decides what the
+// WEB APP renders. The server never consults it: authorisation is
+// `platform.app_access` and the workspace role, and a write refused by those is
+// refused whichever mode the reader happens to have set. Anybody who can open
+// this app can write through `bk` in either mode.
+//
+// It lives here rather than in `lib/ui-mode.ts` on purpose, and the reason is
+// the guard D-7 mandates: `lib/ui-mode.test.ts` asserts that **no server module
+// imports `ui-mode`**, and that assertion is only worth anything if there is
+// nothing in `ui-mode` a server module would want. The route that validates a
+// PATCH needs these two values; it takes them from the vocabulary module every
+// other route already takes its vocabulary from, and `ui-mode` is left holding
+// nothing but React hooks.
+//
+// The colours are the app's neutral and its primary — this is a setting, not a
+// pipeline value, and a stage-like hue would read as one.
+
+export const UI_MODES: Option[] = [
+  { value: 'read_only', label: 'Read-only', color: '#8a8578' },
+  { value: 'full', label: 'Full', color: '#10a37f' },
+]
+export const UI_MODE_VALUES = UI_MODES.map((m) => m.value)
+/** The default, and the honest one: this product's doctrine is that the agent writes. */
+export const UI_MODE_DEFAULT = 'read_only'
+/**
+ * The one mode that renders editing.
+ *
+ * Named, so `useCanWrite()` can ask `mode === UI_MODE_FULL` rather than
+ * `mode !== UI_MODE_DEFAULT`. The two are identical today and differ the moment
+ * a third mode exists: the first defaults it to showing nothing, the second
+ * defaults it to showing everything. Only one of those is the safe direction for
+ * a value somebody adds without reading this file.
+ */
+export const UI_MODE_FULL = 'full'
+export const uiModeLabel = (v?: string | null) => labelOf(UI_MODES, v)
+
 /**
  * Everything above, in the shape `GET /api/meta` serves under
  * `apps.sales.vocabulary` (D-20). Assembled here rather than in the route so the
@@ -226,4 +264,5 @@ export const VOCABULARY = {
   template_categories: TEMPLATE_CATEGORIES,
   document_kinds: DOCUMENT_KINDS,
   next_action_types: NEXT_ACTION_TYPES,
+  ui_modes: UI_MODES,
 } as const
