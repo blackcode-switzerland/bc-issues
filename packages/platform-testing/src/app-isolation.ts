@@ -62,8 +62,33 @@ export function sourceFiles(dir: string): string[] {
   return out
 }
 
-// `import x from 'y'`, `import 'y'`, `export … from 'y'`, `await import('y')`.
-const IMPORT_RE = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g
+// `import x from 'y'`, `import 'y'`, `export … from 'y'`, `await import('y')`,
+// and `require('y')`.
+//
+// ---------------------------------------------------------------------------
+// WHY `require` IS IN HERE, IN A REPO THAT IS ALL ESM
+// ---------------------------------------------------------------------------
+// Because the pattern's job is to find the escape, not to describe the house
+// style. Agent4 reported both a `require()` and a `.js`-extension gap in this
+// scanner on 2026-08-07; both were tested on the real tree in Phase 11 and they
+// are not the same news:
+//
+//   `.js`      ALREADY CAUGHT — `import '../../issues/lib/work-items.js'` is
+//              reported. Resolution tries the extension swap. No change needed.
+//   `require`  A REAL HOLE — `require('../../issues/lib/work-items')` passed
+//              5/5. The one spelling of "reach into another app" this file
+//              could not see was the one that does not say `import`.
+//
+// `lib/app-isolation.test.ts` is THE boundary between apps — the ESLint rule
+// that used to guard it was deleted in 2026-08-06 (CLAUDE.md finding #4) and
+// this replaced it. A hole here is not a weaker check, it is no check.
+//
+// The word `require` appears in the comment above, which is exactly the D-42
+// trap this repo has now hit four times. It is safe HERE and only here because
+// `stripComments` runs before the match — the same reason the paragraph below
+// can quote a forbidden import verbatim. Do not copy this pattern into a
+// scanner that matches raw source.
+const IMPORT_RE = /(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g
 
 /**
  * Strip comments, so prose is not mistaken for code.

@@ -27,9 +27,51 @@ export interface Option {
   color: string
 }
 
-/** Look a value up in a vocabulary; fall back to the raw value / a neutral. */
+/**
+ * Look a value up in a vocabulary; HUMANISE anything it has never heard of.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE FALLBACK IS NOT THE RAW VALUE, AND WHY THIS IS NOT A GUARD
+ * ---------------------------------------------------------------------------
+ * It was `?? value`, and that shipped `check_in` onto the prospect page — a wire
+ * value in front of a human. The instinct is to write a guard that catches a
+ * vocabulary rendered without a label helper, and it is the wrong instinct:
+ *
+ * **The vocabularies are served live by `bk meta` and can gain a value without a
+ * deploy.** So the value that breaks a page is by definition one no static
+ * check in this repo can see — it does not exist yet when the check runs. A
+ * scanner would prove the call site correct and say nothing about the case that
+ * actually fails.
+ *
+ * The cure has to be total, not detective: whatever arrives renders acceptably.
+ * `check_in` becomes "Check in"; a stage added next month becomes something a
+ * reader can read; and the page stops needing to know the vocabulary at all,
+ * which is the property `bk meta` was supposed to buy.
+ *
+ * This is the third bug in this family (`check_in` raw, "1 deals",
+ * "3 whatsapps"), all three of which passed typecheck, lint and tests. The
+ * pluralisation half was fixed at `ledger-pages.tsx` by not inflecting at all —
+ * same reasoning, applied one layer up: a page cannot inflect a label it has
+ * never seen, so it must not try.
+ */
 function labelOf(options: Option[], value: string | null | undefined): string {
-  return options.find((o) => o.value === value)?.label ?? value ?? '—'
+  const known = options.find((o) => o.value === value)?.label
+  if (known) return known
+  if (!value) return '—'
+  return humanise(value)
+}
+
+/**
+ * `check_in` → `Check in`. The last resort, for a value this build predates.
+ *
+ * Deliberately dumb: underscores and hyphens to spaces, first letter up, the
+ * rest left alone so an acronym a vocabulary carries survives. It is not trying
+ * to be the label — it is trying to not be a wire value.
+ */
+function humanise(value: string): string {
+  const spaced = value.replace(/[_-]+/g, ' ').trim()
+  if (!spaced) return '—'
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 function colorOf(options: Option[], value: string | null | undefined): string {
   return options.find((o) => o.value === value)?.color ?? NEUTRAL
