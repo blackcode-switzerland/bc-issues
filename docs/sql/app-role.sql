@@ -26,14 +26,48 @@
 -- another credential to rotate for no additional guarantee. What the rule
 -- actually requires is that the APP role owns nothing, which is asserted below.
 -- ---------------------------------------------------------------------------
+--
+-- ---------------------------------------------------------------------------
+-- \set ON_ERROR_STOP on, AND STEP 1b. NEITHER IS DECORATION.
+-- ---------------------------------------------------------------------------
+-- This file was written for `issues`, whose schema was created by migration 0033
+-- long before anybody wrote a role script for it — so the assumption that the
+-- schema already exists was invisible and correct for the only app there was.
+--
+-- It is wrong for every app after the first. Rehearsed 2026-08-07 with the sales
+-- copy of this file, run at the documented point (before the app's first
+-- migration, which is what creates the schema):
+--
+--     ERROR:  schema "sales" does not exist        <- x5, once per grant
+--     PSQL EXIT=0
+--
+-- Steps 2 to 5 are every grant the role has. All five failed, `psql` exited 0,
+-- and the app role came out with NOTHING while provisioning reported success.
+-- That is CLAUDE.md finding #7 — 27 errors and exit 0 — in a provisioning
+-- script, found by running it rather than reading it.
+\set ON_ERROR_STOP on
 
 -- 1. The role.
 CREATE ROLE issues_app LOGIN PASSWORD '<password>';
+
+-- 1b. The schema — **BEFORE the grants, because steps 2 to 5 all name it.**
+--     `IF NOT EXISTS`, and an app's first migration should open with the same
+--     statement, so it does not matter which of the two gets there first. Owned
+--     by the MIGRATOR: the app role must own nothing (see above).
+CREATE SCHEMA IF NOT EXISTS issues AUTHORIZATION neondb_owner;
 
 -- 2. Reach the schemas. USAGE alone grants nothing inside them.
 GRANT USAGE ON SCHEMA platform, issues TO issues_app;
 
 -- 3. Data access. Note: NO TRUNCATE, NO REFERENCES, NO TRIGGER — DML only.
+--
+--    `ON ALL TABLES` means "all tables that exist RIGHT NOW". For a NEW app the
+--    schema step 1b just created is empty, so this line grants nothing in it —
+--    correct, and not a gap: step 5 is what covers the tables the first
+--    migration is about to create. Verified in the 2026-08-07 rehearsal: after
+--    the migrations, with no re-grant of any kind, the app role could read the
+--    new tables and held USAGE on every new sequence. **Do not delete step 5
+--    because this line looks sufficient.**
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA platform, issues TO issues_app;
 
 -- 4. Sequences. Easy to forget and the failure is confusing: every INSERT into
@@ -107,3 +141,12 @@ REVOKE ALL ON SCHEMA drizzle FROM issues_app;
 --     0038. Connect as the app and run it:
 --
 --       psql "postgres://<app>_app:<pw>@<host>/<db>" -f docs/sql/app-boundary-probe.sql
+--
+--     **AFTER the app's first migration, not straight after this file.** The
+--     probe's check (1) reads a table out of the app's schema, and there are
+--     none until the migration runs.
+--
+--     And read the probe's `ok` lines rather than counting its errors: a role
+--     that was granted nothing at all ALSO denies everything with 42501 and
+--     passes six of its eight denial checks. Its header carries both transcripts
+--     side by side.
