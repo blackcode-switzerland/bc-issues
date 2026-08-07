@@ -14,6 +14,7 @@ import { getDb } from '@/lib/db/client'
 import { resolveActor } from '@/lib/actor'
 import {
   deleteObjection,
+  getObjection,
   prospectIdBySeq,
   updateObjection,
 } from '@/lib/db/queries/prospect-children'
@@ -98,42 +99,64 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const ctx = await resolveWorkspace(req, ws)
   const ids = await resolveIds(ctx.workspace.id, n, oid)
 
-  // The confirmation is the objection TYPE, checked here as well as in the
-  // binary — same reasoning as the prospect delete, and it matters more here
-  // because there is no recycle bin behind it.
+  // ── THE CONFIRMATION IS CHECKED BEFORE ANYTHING IS DESTROYED ──────────────
+  // It used to be checked AFTER: the route deleted the row, compared `--confirm`
+  // against what came back, and threw a 409 saying the objection was not the one
+  // meant — having permanently removed it. There is no recycle bin behind this
+  // delete, so that was the whole of the guard on the one irreversible operation
+  // in this app. Fixed 2026-08-07; `lib/api/objection-delete-guard.test.ts`
+  // watches it, and `deleteObjection` re-checks inside its own transaction under
+  // FOR UPDATE so a concurrent edit cannot slip between the read and the delete.
   const confirm = str(req.nextUrl.searchParams.get('confirm'))
-  if (!confirm) {
-    throw Errors.badRequest(
-      'confirm_required',
-      'removing an objection is permanent and requires --confirm <type>',
-      `run \`bk sales objection list ${ids.seq}\` to see the type at that id`
-    )
-  }
-
-  const actor = await resolveActor(getDb(), req, ctx.user)
-  const row = await deleteObjection(ctx.workspace.id, ids.prospectId, ids.objectionId, actor)
-  if (!row) {
+  const existing = await getObjection(ids.prospectId, ids.objectionId)
+  if (!existing) {
     throw Errors.notFound(
       'objection_not_found',
       `no objection ${ids.objectionId} on prospect #${ids.seq}`,
       `run \`bk sales objection list ${ids.seq}\` for the ids`
     )
   }
-  if (confirm !== row.type) {
-    // The row is already gone by the time we know — so this branch cannot
-    // happen without the read below being wrong. Kept as an assertion rather
-    // than a check: see the delete function, which returns the row it removed.
+  if (!confirm) {
+    throw Errors.badRequest(
+      'confirm_required',
+      'removing an objection is permanent and requires --confirm <type>',
+      `pass --confirm ${JSON.stringify(existing.type)}`
+    )
+  }
+  if (confirm !== existing.type) {
+    // The expected value IS echoed. Secrecy is not the point — the point is that
+    // the caller must have looked at the row it is about to destroy, and an
+    // agent on a wrong id learns here that the objection at that id is a
+    // different one. Nothing has been removed.
     throw Errors.conflict(
       'confirm_mismatch',
       `--confirm ${JSON.stringify(confirm)} does not name objection ${ids.objectionId}`,
-      `it was ${JSON.stringify(row.type)}`
+      `it is ${JSON.stringify(existing.type)} — nothing was removed`
+    )
+  }
+
+  const actor = await resolveActor(getDb(), req, ctx.user)
+  const result = await deleteObjection(
+    ctx.workspace.id,
+    ids.prospectId,
+    ids.objectionId,
+    confirm,
+    actor
+  )
+  if (result.status !== 'deleted') {
+    // Only reachable if the row changed between the read above and the
+    // transaction below — which is exactly the case the second check exists for.
+    throw Errors.conflict(
+      'objection_changed',
+      `objection ${ids.objectionId} changed while it was being removed`,
+      `run \`bk sales objection list ${ids.seq}\` and try again — nothing was removed`
     )
   }
   return NextResponse.json({
     deleted: true,
     type: 'objection',
-    id: row.id,
-    objection_type: row.type,
-    spoken: row.spoken,
+    id: result.row.id,
+    objection_type: result.row.type,
+    spoken: result.row.spoken,
   })
 })

@@ -306,6 +306,20 @@ export async function listObjections(prospectId: number): Promise<Objection[]> {
     .orderBy(desc(objections.raised_at), desc(objections.id))
 }
 
+/** One objection, by its row id, scoped to its prospect. */
+export async function getObjection(
+  prospectId: number,
+  objectionId: number
+): Promise<Objection | null> {
+  const db = getDb()
+  const [row] = await db
+    .select()
+    .from(objections)
+    .where(and(eq(objections.id, objectionId), eq(objections.prospect_id, prospectId)))
+    .limit(1)
+  return row ?? null
+}
+
 export interface RaiseObjectionInput {
   type: string
   raisedBy?: string | null
@@ -398,26 +412,65 @@ export async function updateObjection(
 }
 
 /**
+ * The three answers `deleteObjection` can give. A mismatch is NOT a delete.
+ */
+export type DeleteObjectionResult =
+  | { status: 'deleted'; row: Objection }
+  | { status: 'mismatch'; type: string }
+  | { status: 'not_found' }
+
+/**
  * Remove an objection — HARD, and it is the one hard delete in this app.
  *
  * `sales.objections` carries no `deleted_at`: it is a note about a conversation,
  * not an addressable record, and there is nothing for a recycle bin to list it
  * under. `bk sales objection rm` therefore destroys it, which is why the command
  * requires a confirmation like the other irreversible ones.
+ *
+ * ---------------------------------------------------------------------------
+ * THE CONFIRMATION IS CHECKED **BEFORE** THE DELETE. IT DID NOT USED TO BE.
+ * ---------------------------------------------------------------------------
+ * Until 2026-08-07 the route deleted the row and compared `--confirm` against
+ * the value it got back, throwing a 409 on a mismatch. So a caller who named the
+ * wrong type got a "that does not name objection 4" conflict — **and the
+ * objection was already permanently gone.** The route's own comment called that
+ * branch an assertion that "cannot happen", which is true only of a caller who
+ * passes the right value; it is precisely the wrong-value caller the guard
+ * exists for.
+ *
+ * That is the inert-guard shape CLAUDE.md's standing rule is written for, on the
+ * one operation in this app with no recycle bin behind it. The check moved in
+ * here, inside the transaction and under `FOR UPDATE`, rather than into the
+ * route as a read-then-delete pair: two statements outside a transaction can be
+ * separated by a concurrent edit, and a confirmation that was true a moment ago
+ * is not a confirmation.
+ *
+ * `confirmType` is required rather than optional. An optional one is a parameter
+ * a future call site forgets, and the failure would be silent.
  */
 export async function deleteObjection(
   workspaceId: number,
   prospectId: number,
   objectionId: number,
+  confirmType: string,
   actor: Actor
-): Promise<Objection | null> {
+): Promise<DeleteObjectionResult> {
   const db = getDb()
   return await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(objections)
+      .where(and(eq(objections.id, objectionId), eq(objections.prospect_id, prospectId)))
+      .limit(1)
+      .for('update')
+    if (!existing) return { status: 'not_found' as const }
+    if (existing.type !== confirmType) return { status: 'mismatch' as const, type: existing.type }
+
     const [row] = await tx
       .delete(objections)
       .where(and(eq(objections.id, objectionId), eq(objections.prospect_id, prospectId)))
       .returning()
-    if (!row) return null
+    if (!row) return { status: 'not_found' as const }
     await recordEvent(tx, {
       workspaceId,
       actorUserId: actor.userId,
@@ -432,7 +485,7 @@ export async function deleteObjection(
       // where that is a fact rather than an omission.
       subjectUrn: null,
     })
-    return row
+    return { status: 'deleted' as const, row }
   })
 }
 
