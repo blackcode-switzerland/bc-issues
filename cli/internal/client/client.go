@@ -76,6 +76,43 @@ func (e *UnreachableError) Error() string {
 
 func (e *UnreachableError) Unwrap() error { return e.Err }
 
+// NotServedError is a 4xx whose body is NOT the API's JSON envelope — in
+// practice, a deployment that has no route file at that path and let the web
+// framework render its 404 page.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS IS A TYPE AND NOT JUST A BETTER STRING
+// ---------------------------------------------------------------------------
+// Before it existed, `do` set the error message to the whole response body. For
+// a JSON error that is right. For a Next.js 404 it meant **thirty lines of HTML
+// on stderr**, breaking the one contract the CLI has for failures: "every
+// failure is a non-zero exit with one line on stderr". `bk workspace list`
+// against a host that did not mount that route printed a document.
+//
+// And the recovery is specific, which is the real reason for a type. An app
+// serving a SUBSET of the platform surface is a permanent, legitimate state
+// (D-36) — so "this host does not serve that" is not a bug report, it is a
+// routing fact with a one-flag fix. `cmd/bk/main.go`'s hintFor() turns it into
+// the flag, because that is where the command name is known and here it is not.
+type NotServedError struct {
+	// The app slug whose deployment answered, or "" for the home server.
+	App     string
+	BaseURL string
+	Path    string
+	Status  int
+}
+
+func (e *NotServedError) Error() string {
+	who := "this deployment"
+	if e.App != "" {
+		who = "the " + e.App + " app"
+	}
+	if e.Status == 404 {
+		return fmt.Sprintf("%s does not serve %s (404)", who, e.Path)
+	}
+	return fmt.Sprintf("%s answered %d for %s with a non-JSON body", who, e.Status, e.Path)
+}
+
 type APIError struct {
 	Status     int
 	ErrorMsg   string `json:"error"`
@@ -194,9 +231,22 @@ func (c *Client) do(req *http.Request, out any) error {
 
 	if resp.StatusCode >= 400 {
 		var ae APIError
-		_ = json.Unmarshal(body, &ae)
+		decoded := json.Unmarshal(body, &ae) == nil
 		ae.Status = resp.StatusCode
-		if ae.ErrorMsg == "" {
+
+		// A body that is not the API's JSON envelope did not come from
+		// `apiHandler` — it is the web framework's error page, i.e. this
+		// deployment has no route file here. Pasting it into the message put a
+		// whole HTML document on stderr; see NotServedError.
+		if !decoded || ae.ErrorMsg == "" {
+			if !decoded || looksLikeMarkup(body) {
+				return &NotServedError{
+					App:     c.App,
+					BaseURL: c.BaseURL,
+					Path:    req.URL.Path,
+					Status:  resp.StatusCode,
+				}
+			}
 			ae.ErrorMsg = strings.TrimSpace(string(body))
 			if ae.ErrorMsg == "" {
 				ae.ErrorMsg = http.StatusText(resp.StatusCode)
@@ -1022,4 +1072,20 @@ func (c *Client) MoveItems(req MoveItemsRequest) (map[string]any, error) {
 		return nil, err
 	}
 	return report, nil
+}
+
+// looksLikeMarkup reports whether a response body is a web page rather than an
+// API answer.
+//
+// Checked in ADDITION to "did it parse as JSON", not instead of it: a body can
+// be valid JSON and still not be the error envelope. The two together are what
+// separate "the API said no" from "there is no API here".
+func looksLikeMarkup(body []byte) bool {
+	head := strings.TrimSpace(string(body))
+	if len(head) > 200 {
+		head = head[:200]
+	}
+	lower := strings.ToLower(head)
+	return strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html") ||
+		strings.HasPrefix(lower, "<")
 }

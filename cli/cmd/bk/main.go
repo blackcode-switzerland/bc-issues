@@ -103,6 +103,30 @@ func hintFor(err error) string {
 	// entry itself may be what is wrong — and that is not something the caller can
 	// guess from "connection refused". This has to come BEFORE the APIError branch
 	// for the same reason it is its own type: it is not an answer from a server.
+	// This host has no route there. Not a bug and not a bad request: an app
+	// serving a SUBSET of the platform surface is a permanent, legitimate state
+	// (D-36), so the recovery is a flag rather than a fix.
+	//
+	// Before NotServedError existed this arrived as thirty lines of HTML on
+	// stderr — the framework's 404 page, pasted in as the error message. An agent
+	// could not tell it from a crash, and there was nothing in it to act on.
+	var nse *client.NotServedError
+	if errors.As(err, &nse) {
+		other := "issues"
+		if nse.App == "issues" {
+			other = "sales"
+		}
+		if nse.App == "" {
+			return "another app's deployment may serve it — `bk app list` shows every app's " +
+				"server, and `bk --app-server <slug> …` sends one command there"
+		}
+		return fmt.Sprintf(
+			"the %s deployment serves only part of the platform surface. Try "+
+				"`bk --app-server %s …` for this one command, `bk app use <slug>` to move the "+
+				"bare verbs for good, or `bk app list` to see every app's server",
+			nse.App, other)
+	}
+
 	var ue *client.UnreachableError
 	if errors.As(err, &ue) {
 		if ue.App != "" {
@@ -187,6 +211,18 @@ func classify(err error) int {
 	if errors.Is(err, config.ErrNotConfigured) {
 		return exitAuth
 	}
+	// A route this deployment does not serve exits like any other 404. The
+	// resource genuinely is not there — the hint is what distinguishes "not on
+	// THIS host" from "not anywhere", and a separate exit code would make every
+	// existing script that checks for 5 stop recognising it.
+	var nse *client.NotServedError
+	if errors.As(err, &nse) {
+		if nse.Status == 404 {
+			return exitNotFound
+		}
+		return exitGeneric
+	}
+
 	var ae *client.APIError
 	if errors.As(err, &ae) {
 		switch ae.Status {
