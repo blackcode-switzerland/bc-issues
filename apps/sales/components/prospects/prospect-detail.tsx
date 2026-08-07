@@ -480,12 +480,12 @@ function Overview({
       */}
       <Section
         title="Related in other apps"
-        action={<AgentOnly what="Cross-app links" command="bk link add" />}
+        action={<AgentOnly what="Cross-app links" command="bk link create" />}
       >
         {links.length === 0 ? (
           <EmptyState
             title="Nothing linked yet"
-            hint="`bk link add` relates this prospect to work in another app — an issue, a task, a project."
+            hint="`bk link create` relates this prospect to work in another app — an issue, a task, a project."
           />
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
