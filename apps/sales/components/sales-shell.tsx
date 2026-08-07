@@ -25,7 +25,6 @@ import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import {
-  Activity,
   BarChart3,
   Building2,
   CalendarClock,
@@ -39,6 +38,7 @@ import {
   Search,
   Sun,
   Sparkles,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import { CommandPalette } from './command-palette'
@@ -56,7 +56,23 @@ const NAV_MAIN: NavEntry[] = [
   { seg: '/prospects', label: 'Prospects', icon: Building2 },
   { seg: '/meetings', label: 'Meetings', icon: CalendarClock },
   { seg: '/communications', label: 'Communications', icon: MessagesSquare },
-  { seg: '/activity', label: 'Activity', icon: Activity },
+  // ── ACTIVITY IS MISSING ON PURPOSE, AND IT IS NOT A DESIGN DECISION ────────
+  // §8.1 specifies `/dashboard/{ws}/activity` over `platform.events` filtered to
+  // this app, and it is the one page in the spec this app cannot serve: **sales
+  // does not mount the platform `activityRoute`.** That is a gap rather than a
+  // decision — unlike `bk inbox`, `bk super-admin errors` and `bk storage list`,
+  // which `docs/backend.md` §7.1 records as permanently unmounted for stated
+  // reasons, nothing says activity should be.
+  //
+  // The mount is three lines in
+  // `app/api/workspaces/[ws]/activity/route.ts`:
+  //     import { activityRoute } from '@blackcode/platform-api/routes'
+  //     import { appContext } from '@/lib/api'
+  //     export const GET = activityRoute(appContext)
+  //
+  // Listing it here without that would be a nav item that 404s — the failure the
+  // two empties in `app/dashboard/layout.tsx` exist to prevent, in the chrome
+  // every page inherits. It goes back the moment the route does.
 ]
 
 const NAV_CATALOG: NavEntry[] = [
@@ -64,6 +80,11 @@ const NAV_CATALOG: NavEntry[] = [
   { seg: '/templates', label: 'Templates', icon: FileText },
   { seg: '/documents', label: 'Documents', icon: FolderOpen },
 ]
+
+// Trash sits on its own: it is not a catalog, and it is not somewhere anybody
+// navigates daily. It IS linked, because a page reachable only by typing its URL
+// is a page nobody uses — the mirror of the nav-item-with-no-route problem above.
+const NAV_UTILITY: NavEntry[] = [{ seg: '/trash', label: 'Trash', icon: Trash2 }]
 
 /**
  * The header title.
@@ -110,7 +131,8 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
   }, [])
 
   const navTitle =
-    [...NAV_MAIN, ...NAV_CATALOG].find((e) => isActive(pathname, base, e.seg))?.label ?? 'b/sales'
+    [...NAV_MAIN, ...NAV_CATALOG, ...NAV_UTILITY].find((e) => isActive(pathname, base, e.seg))
+      ?.label ?? 'b/sales'
 
   const sidebar = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -136,6 +158,12 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
         </p>
         <div className="space-y-0.5">
           {NAV_CATALOG.map((e) => (
+            <NavLink key={e.seg} entry={e} base={base} pathname={pathname} />
+          ))}
+        </div>
+
+        <div className="mt-5 space-y-0.5 border-t border-sidebar-border pt-3">
+          {NAV_UTILITY.map((e) => (
             <NavLink key={e.seg} entry={e} base={base} pathname={pathname} />
           ))}
         </div>

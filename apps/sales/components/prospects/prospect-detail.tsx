@@ -1,0 +1,542 @@
+'use client'
+
+// One prospect — the page the whole app points at.
+//
+// ── TABBED, NOT ONE LONG SCROLL ─────────────────────────────────────────────
+// `INSTRUCTIONS.md` UPDATE 3, and the reason is specific: **Communications must
+// not compete with the deal journey.** A prospect accumulates dozens of emails
+// and three or four stage changes, so on one page the exchange log wins by sheer
+// length and the shape of the deal disappears below it. Overview keeps the
+// journey, the contacts, the objections and the triangulation together; the
+// three ledgers each get their own tab.
+//
+// ── THE TABS ARE IN THE URL ─────────────────────────────────────────────────
+// `?tab=communications`. A tab is a place, and a link somebody sends should open
+// where they were.
+//
+// ── DOCUMENTS IS A FILTERED VIEW, NOT A STORE ───────────────────────────────
+// The Documents tab calls the SAME `…/documents` route as the library page with
+// `?prospect=<n>`. That is D-8 and the fix `UPDATE-6.md` was written to make: one
+// library, filtered — never a parallel per-prospect store that drifts from it.
+// The Meetings and Communications tabs do the same with `?prospect=`.
+
+import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { ArrowUpRight, ExternalLink, Mail, Phone, Star } from 'lucide-react'
+import {
+  ChannelChip,
+  MeetingTypeChip,
+  ObjectionStatusChip,
+  ObjectionTypeChip,
+  StageChip,
+  VocabDot,
+} from '@/components/chips'
+import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { usePageTitle } from '@/components/sales-shell'
+import {
+  useCommunications,
+  useContacts,
+  useDocuments,
+  useMatches,
+  useMeetings,
+  useObjections,
+  useProspect,
+  type JourneyStep,
+} from '@/lib/hooks'
+import { dateTimeShort, dayLabel, money, relativeDay } from '@/lib/format'
+import {
+  nextActionTypeLabel,
+  stageColor,
+  stageEntryStatusColor,
+  stageLabel,
+} from '@/lib/pipeline'
+
+const TABS = ['overview', 'communications', 'meetings', 'documents'] as const
+type Tab = (typeof TABS)[number]
+
+export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
+  const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  const raw = params?.get('tab') ?? 'overview'
+  const tab: Tab = (TABS as readonly string[]).includes(raw) ? (raw as Tab) : 'overview'
+
+  const prospect = useProspect(ws, n)
+  usePageTitle(prospect.data?.name ?? null)
+
+  if (prospect.isPending) return <BlockSkeleton rows={6} />
+  if (prospect.error) return <ErrorState error={prospect.error} />
+
+  const p = prospect.data
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-5">
+      {/* The header: who they are, where the deal is, what it is worth. */}
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">{p.name}</h2>
+          <StageChip value={p.stage} />
+          {p.labels.map((l) => (
+            <span
+              key={l.id}
+              className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium"
+              // The label's own colour, from platform.labels. Falls back to the
+              // muted token rather than a hex when a label has none.
+              style={l.color ? { backgroundColor: `${l.color}22`, color: l.color } : undefined}
+            >
+              {l.name}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span className="tabular-nums text-foreground">{money(p.value, p.currency)}</span>
+          {[p.city, p.sector, p.source].filter(Boolean).map((v) => (
+            <span key={v}>{v}</span>
+          ))}
+          <span>Owner: {p.owner?.name ?? p.owner?.email ?? '—'}</span>
+          {/* The URN, because this row is addressable from every other app and a
+              human who is about to write `bk link` needs to be able to copy it. */}
+          {p.urn && <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{p.urn}</code>}
+        </div>
+        {p.summary && <p className="text-sm leading-relaxed text-foreground">{p.summary}</p>}
+      </header>
+
+      {/* What is owed next. Its own strip: it is the single most actionable fact
+          on the page and it is the reason the prospect appears in Today. */}
+      {p.next_action.type && (
+        <div className="rounded-xl border border-border bg-card px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Next action
+          </p>
+          <p className="mt-1 text-sm text-foreground">
+            {/* The agent's own note wins; the vocabulary LABEL is the fallback.
+                Never the raw wire value — `check_in` is a schema detail. */}
+            {p.next_action.note ?? nextActionTypeLabel(p.next_action.type)}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {p.next_action.due ? relativeDay(p.next_action.due) : 'no date'}
+            {p.next_action.owner && ` · ${p.next_action.owner}`}
+          </p>
+        </div>
+      )}
+
+      <nav className="flex gap-1 border-b border-border">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => {
+              const next = new URLSearchParams(params?.toString() ?? '')
+              if (t === 'overview') next.delete('tab')
+              else next.set('tab', t)
+              router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+            }}
+            aria-current={tab === t ? 'page' : undefined}
+            className={
+              '-mb-px border-b-2 px-3 py-2 text-sm capitalize transition-colors ' +
+              (tab === t
+                ? 'border-primary font-medium text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground')
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'overview' && <Overview ws={ws} n={n} journey={p.journey} links={p.links} />}
+      {tab === 'communications' && <CommunicationsTab ws={ws} n={n} />}
+      {tab === 'meetings' && <MeetingsTab ws={ws} n={n} />}
+      {tab === 'documents' && <DocumentsTab ws={ws} n={n} />}
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+function Overview({
+  ws,
+  n,
+  journey,
+  links,
+}: {
+  ws: string
+  n: number
+  journey: JourneyStep[]
+  links: import('@/lib/views').PublicLink[]
+}) {
+  const contacts = useContacts(ws, n)
+  const objections = useObjections(ws, n)
+  const matches = useMatches(ws, n)
+
+  return (
+    <div className="space-y-6">
+      <Section title="Deal journey">
+        {journey.length === 0 ? (
+          <EmptyState title="No journey recorded" />
+        ) : (
+          <ol className="space-y-0">
+            {journey.map((s, i) => (
+              <li key={`${s.stage}-${i}`} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <VocabDot color={stageEntryStatusColor(s.status)} />
+                  {i < journey.length - 1 && <span className="w-px flex-1 bg-border" />}
+                </div>
+                <div className="pb-4">
+                  <p className="text-sm text-foreground">
+                    <span style={{ color: stageColor(s.stage) }}>{stageLabel(s.stage)}</span>
+                    {/* `upcoming` rows are placeholders with no date and no
+                        actor — the mockup renders the whole ladder including the
+                        steps not taken yet, which is what makes it a journey
+                        rather than a history. */}
+                    {s.occurred_at && (
+                      <span className="text-muted-foreground"> · {dayLabel(s.occurred_at.slice(0, 10))}</span>
+                    )}
+                    {s.actor && <span className="text-muted-foreground"> · {s.actor}</span>}
+                  </p>
+                  {s.note && <p className="mt-0.5 text-xs text-muted-foreground">{s.note}</p>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
+
+      <Section title="Contacts">
+        {contacts.isPending ? (
+          <BlockSkeleton rows={2} />
+        ) : contacts.error ? (
+          <ErrorState error={contacts.error} />
+        ) : contacts.data.length === 0 ? (
+          <EmptyState title="No contacts recorded" />
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {contacts.data.map((c, i) => (
+              <div
+                key={c.id}
+                className={'flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 ' + (i > 0 ? 'border-t border-border' : '')}
+              >
+                <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  {c.is_primary && (
+                    <Star size={13} className="text-primary" aria-label="Primary contact" />
+                  )}
+                  {c.name}
+                </span>
+                {c.role && <span className="text-xs text-muted-foreground">{c.role}</span>}
+                {c.email && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Mail size={12} />
+                    {c.email}
+                  </span>
+                )}
+                {c.phone && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Phone size={12} />
+                    {c.phone}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Objections">
+        {objections.isPending ? (
+          <BlockSkeleton rows={2} />
+        ) : objections.error ? (
+          <ErrorState error={objections.error} />
+        ) : objections.data.length === 0 ? (
+          <EmptyState title="Nothing pushed back on yet" />
+        ) : (
+          <div className="space-y-2">
+            {objections.data.map((o) => (
+              <div key={o.id} className="rounded-xl border border-border bg-card px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ObjectionTypeChip value={o.type} />
+                  <ObjectionStatusChip value={o.status} />
+                  {o.raised_by && (
+                    <span className="text-xs text-muted-foreground">{o.raised_by}</span>
+                  )}
+                </div>
+                {/*
+                  THREE FIELDS, RENDERED AS THREE. `lib/views.ts` refuses to
+                  collapse them into one "notes" and this page must not either:
+                  what they SAID, what we think they MEAN, and what we say back is
+                  the only structured sales insight in the product.
+                */}
+                <dl className="mt-2 space-y-1.5 text-sm">
+                  {o.spoken && (
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Said</dt>
+                      <dd className="text-foreground">&ldquo;{o.spoken}&rdquo;</dd>
+                    </div>
+                  )}
+                  {o.real_fear && (
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Real fear</dt>
+                      <dd className="text-foreground">{o.real_fear}</dd>
+                    </div>
+                  )}
+                  {o.counter && (
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Our counter</dt>
+                      <dd className="text-foreground">{o.counter}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/*
+        TRIANGULATION — the reason this app exists (§1.2 rule 2).
+
+        Client × Product × Message. **This block DISPLAYS a stored result.** The
+        matching ran in the agent and was written with `bk sales match set`;
+        `computed_by` says who decided and `computed_at` says when. Nothing here
+        ranks, scores or recomputes anything — a component that started sorting
+        products by fit in the browser would be the single thing the doctrine
+        forbids, and it would look like a feature.
+      */}
+      <Section title="Triangulation — matched products">
+        {matches.isPending ? (
+          <BlockSkeleton rows={2} />
+        ) : matches.error ? (
+          <ErrorState error={matches.error} />
+        ) : matches.data.length === 0 ? (
+          <EmptyState
+            title="No match computed yet"
+            hint="Matches are written by the agent with `bk sales match set` — they are never derived here."
+          />
+        ) : (
+          <div className="space-y-2">
+            {matches.data.map((m) => (
+              <div
+                key={`${m.product_number}-${m.template_number ?? 'x'}`}
+                className="rounded-xl border border-border bg-card px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Link
+                    href={`/dashboard/${ws}/products?focus=${m.product_number}`}
+                    className="text-sm font-medium text-foreground hover:underline"
+                  >
+                    {m.product_name}
+                  </Link>
+                  {m.template_name && (
+                    <Link
+                      href={`/dashboard/${ws}/templates?focus=${m.template_number}`}
+                      className="text-xs text-muted-foreground hover:underline"
+                    >
+                      via {m.template_name}
+                    </Link>
+                  )}
+                  {m.fit != null && (
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                      fit {m.fit}
+                    </span>
+                  )}
+                </div>
+                {m.why && <p className="mt-1.5 text-sm text-foreground">{m.why}</p>}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Decided by {m.computed_by ?? 'unknown'}
+                  {m.computed_at && ` · ${dayLabel(m.computed_at.slice(0, 10))}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/*
+        RELATED — the north star, made visible (D-18).
+
+        A link stored in `platform.links` that nobody can follow only exists in
+        the database. `url` is ABSOLUTE and was built by the server from the other
+        app's registered `base_url`, which is why this is an <a> and not a
+        <Link>: it leaves this deployment. This is the half of the north star the
+        web surface owes — an agent working in sales files an issue, and the
+        human reading the deal can see it and click through.
+      */}
+      <Section title="Related in other apps">
+        {links.length === 0 ? (
+          <EmptyState
+            title="Nothing linked yet"
+            hint="`bk link add` relates this prospect to work in another app — an issue, a task, a project."
+          />
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {links.map((l) => (
+              <a
+                key={l.urn}
+                href={l.url ?? undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={
+                  'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent ' +
+                  (l.url ? '' : 'pointer-events-none opacity-60')
+                }
+              >
+                <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {l.app}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-foreground">
+                    {l.title}
+                    {/* A deleted far end is SHOWN, struck through, not hidden.
+                        A link that silently vanishes is indistinguishable from
+                        one that was never made. */}
+                    {l.deleted && <span className="ml-2 text-xs text-destructive">(deleted)</span>}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {l.rel} · {l.urn}
+                  </span>
+                </span>
+                <ExternalLink size={14} className="shrink-0 text-muted-foreground" />
+              </a>
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  )
+}
+
+function CommunicationsTab({ ws, n }: { ws: string; n: number }) {
+  const comms = useCommunications(ws, { prospect: n })
+  if (comms.isPending) return <BlockSkeleton rows={4} />
+  if (comms.error) return <ErrorState error={comms.error} />
+  if (comms.data.length === 0) return <EmptyState title="No exchanges logged" />
+
+  return (
+    <div className="space-y-2">
+      {comms.data.map((c) => (
+        <article key={c.number} className="rounded-xl border border-border bg-card px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <ChannelChip value={c.channel} />
+            <span className="text-xs text-muted-foreground">
+              {c.direction === 'out' ? 'we → them' : 'them → us'}
+            </span>
+            <span className="text-xs text-muted-foreground">{dateTimeShort(c.occurred_at)}</span>
+            {c.contact && <span className="text-xs text-muted-foreground">· {c.contact}</span>}
+            {c.logged_by && (
+              <span className="ml-auto text-xs text-muted-foreground">by {c.logged_by}</span>
+            )}
+          </div>
+          {c.subject && <p className="mt-1.5 text-sm font-medium text-foreground">{c.subject}</p>}
+          {c.body && (
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+              {c.body}
+            </p>
+          )}
+        </article>
+      ))}
+    </div>
+  )
+}
+
+function MeetingsTab({ ws, n }: { ws: string; n: number }) {
+  const meetings = useMeetings(ws, { prospect: n })
+  if (meetings.isPending) return <BlockSkeleton rows={3} />
+  if (meetings.error) return <ErrorState error={meetings.error} />
+  if (meetings.data.length === 0) return <EmptyState title="No meetings recorded" />
+
+  return (
+    <div className="space-y-2">
+      {meetings.data.map((m) => (
+        <article key={m.number} className="rounded-xl border border-border bg-card px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <MeetingTypeChip value={m.type} />
+            <span className="text-sm font-medium text-foreground">{m.title}</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {dateTimeShort(m.starts_at)}
+            </span>
+          </div>
+          {m.attendees.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">{m.attendees.join(', ')}</p>
+          )}
+          {m.agenda && <p className="mt-1.5 text-sm text-foreground">{m.agenda}</p>}
+          {/* The outcome is the point of a meetings LEDGER as against a calendar
+              (§1.2 rule 4): what was discussed, not when it is. */}
+          {m.outcome && (
+            <p className="mt-1.5 rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
+              {m.outcome}
+            </p>
+          )}
+        </article>
+      ))}
+    </div>
+  )
+}
+
+function DocumentsTab({ ws, n }: { ws: string; n: number }) {
+  const docs = useDocuments(ws, { prospect: n })
+  if (docs.isPending) return <BlockSkeleton rows={3} />
+  if (docs.error) return <ErrorState error={docs.error} />
+  if (docs.data.length === 0) {
+    return (
+      <EmptyState
+        title="No documents linked"
+        hint="Documents live in one shared library and are linked to a prospect — this tab is a filtered view of it, not a separate store."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="px-1 text-xs text-muted-foreground">
+        A filtered view of the{' '}
+        <Link href={`/dashboard/${ws}/documents`} className="underline">
+          document library
+        </Link>
+        , not a separate store.
+      </p>
+      <DocumentList docs={docs.data} />
+    </div>
+  )
+}
+
+/** Shared by this tab and the library page, so the two cannot render differently. */
+export function DocumentList({ docs }: { docs: import('@/lib/hooks').SalesDocument[] }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {docs.map((d, i) => {
+        const href = d.upload_url ?? d.external_url
+        return (
+          <a
+            key={d.number}
+            href={href ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={
+              'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent ' +
+              (i > 0 ? 'border-t border-border' : '') +
+              (href ? '' : ' pointer-events-none opacity-60')
+            }
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-foreground">{d.title}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {[d.kind, d.added_by ? `added by ${d.added_by}` : null, ...d.tags]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </span>
+            <ArrowUpRight size={14} className="shrink-0 text-muted-foreground" />
+          </a>
+        )
+      })}
+    </div>
+  )
+}

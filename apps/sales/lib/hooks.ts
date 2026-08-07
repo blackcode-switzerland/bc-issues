@@ -19,8 +19,8 @@
 // that ignored the workspace would be wrong in a way nobody would reproduce.
 
 import { useQuery } from '@tanstack/react-query'
-import type { PipelineResult, TodayResult } from '@/lib/db/queries/aggregates'
-import type { PublicProspect } from '@/lib/views'
+import type { MetricsResult, PipelineResult, TodayResult } from '@/lib/db/queries/aggregates'
+import type { PublicLink, PublicProspect } from '@/lib/views'
 import { apiGet, query, wsPath, type ListPage } from '@/lib/client'
 
 /** What is owed today, and who we are meeting today. */
@@ -93,6 +93,113 @@ export function useUpcomingMeetings(ws: string, take = 5) {
   })
 }
 
+/** The filters every list page shares. Absent/empty means "no filter". */
+export interface ProspectFilters {
+  stage?: string
+  label?: string
+  q?: string
+}
+
+/** The prospects list, filtered. */
+export function useProspects(ws: string, filters: ProspectFilters = {}) {
+  return useQuery({
+    queryKey: ['prospects', ws, filters],
+    queryFn: async () => {
+      const page = await apiGet<ListPage<PublicProspect>>(
+        wsPath(ws, '/prospects') + query({ ...filters, limit: 100 })
+      )
+      return page
+    },
+  })
+}
+
+/** A prospect's journey step, as the detail route serves it. */
+export interface JourneyStep {
+  stage: string
+  status: string
+  occurred_at: string | null
+  actor: string | null
+  note: string | null
+}
+
+/** One prospect, plus its journey and its cross-app links (D-18). */
+export type ProspectDetail = PublicProspect & {
+  journey: JourneyStep[]
+  links: PublicLink[]
+}
+
+export function useProspect(ws: string, n: number) {
+  return useQuery({
+    queryKey: ['prospect', ws, n],
+    queryFn: () => apiGet<ProspectDetail>(wsPath(ws, `/prospects/${n}`)),
+  })
+}
+
+export interface Contact {
+  id: number
+  name: string
+  role: string | null
+  email: string | null
+  phone: string | null
+  is_primary: boolean
+  notes: string | null
+}
+
+export interface Objection {
+  id: number
+  type: string
+  raised_by: string | null
+  raised_at: string | null
+  status: string
+  spoken: string | null
+  real_fear: string | null
+  counter: string | null
+}
+
+export interface Match {
+  product_number: number
+  product_name: string
+  template_number: number | null
+  template_name: string | null
+  fit: number | null
+  why: string | null
+  computed_at: string | null
+  computed_by: string | null
+}
+
+export function useContacts(ws: string, n: number) {
+  return useQuery({
+    queryKey: ['contacts', ws, n],
+    queryFn: async () =>
+      (await apiGet<ListPage<Contact>>(wsPath(ws, `/prospects/${n}/contacts`))).data,
+  })
+}
+
+export function useObjections(ws: string, n: number) {
+  return useQuery({
+    queryKey: ['objections', ws, n],
+    queryFn: async () =>
+      (await apiGet<ListPage<Objection>>(wsPath(ws, `/prospects/${n}/objections`))).data,
+  })
+}
+
+/**
+ * Triangulation — the stored result of client × product × message (D-9 / §1.2
+ * rule 2).
+ *
+ * **The matching is not done here and must never be.** These rows were written
+ * by the agent through `bk sales match set`; this hook reads them. A component
+ * that started ranking products by "fit" in the browser would be the one thing
+ * the doctrine forbids.
+ */
+export function useMatches(ws: string, n: number) {
+  return useQuery({
+    queryKey: ['matches', ws, n],
+    queryFn: async () =>
+      (await apiGet<ListPage<Match>>(wsPath(ws, `/prospects/${n}/matches`))).data,
+  })
+}
+
 /**
  * Every prospect, indexed by #number.
  *
@@ -111,5 +218,169 @@ export function useProspectsByNumber(ws: string) {
       )
       return new Map(page.data.map((p) => [p.number, p]))
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// The ledgers and the catalog
+// ---------------------------------------------------------------------------
+
+/** A communication, in the shape `publicComm` serves. */
+export interface Communication {
+  number: number
+  prospect_number: number
+  prospect_name: string
+  channel: string
+  direction: string
+  occurred_at: string
+  subject: string | null
+  body: string | null
+  contact: string | null
+  logged_by: string | null
+  urn: string | null
+  created_at: string
+  deleted_at: string | null
+}
+
+export interface Product {
+  number: number
+  category: string
+  name: string
+  price_label: string | null
+  price_from: string | null
+  price_to: string | null
+  currency: string
+  description: string | null
+  fit: string[]
+  pitch: string | null
+  status_label: string | null
+  refs: string[]
+  urn: string | null
+  deleted_at: string | null
+}
+
+export interface Template {
+  number: number
+  channel: string
+  category: string
+  stage: string | null
+  name: string
+  subject: string | null
+  body: string | null
+  variables: string[]
+  urn: string | null
+  deleted_at: string | null
+}
+
+export interface SalesDocument {
+  number: number
+  title: string
+  kind: string
+  upload_url: string | null
+  external_url: string | null
+  size_bytes: number | null
+  mime_type: string | null
+  description: string | null
+  tags: string[]
+  added_by: string | null
+  prospects: number[]
+  products: number[]
+  urn: string | null
+  deleted_at: string | null
+}
+
+/**
+ * The meetings ledger. `prospect` filters it to one deal, which is what the
+ * prospect detail page's Meetings tab passes — the same route, not a second one,
+ * so the tab cannot drift from the cross-prospect view.
+ */
+export function useMeetings(ws: string, opts: { prospect?: number; status?: string } = {}) {
+  return useQuery({
+    queryKey: ['meetings', ws, opts],
+    queryFn: async () =>
+      (
+        await apiGet<ListPage<Meeting>>(
+          wsPath(ws, '/meetings') + query({ ...opts, limit: 100 })
+        )
+      ).data,
+  })
+}
+
+export function useCommunications(
+  ws: string,
+  opts: { prospect?: number; channel?: string } = {}
+) {
+  return useQuery({
+    queryKey: ['communications', ws, opts],
+    queryFn: async () =>
+      (
+        await apiGet<ListPage<Communication>>(
+          wsPath(ws, '/communications') + query({ ...opts, limit: 100 })
+        )
+      ).data,
+  })
+}
+
+export function useProducts(ws: string) {
+  return useQuery({
+    queryKey: ['products', ws],
+    queryFn: async () =>
+      (await apiGet<ListPage<Product>>(wsPath(ws, '/products') + query({ limit: 100 }))).data,
+  })
+}
+
+export function useTemplates(ws: string) {
+  return useQuery({
+    queryKey: ['templates', ws],
+    queryFn: async () =>
+      (await apiGet<ListPage<Template>>(wsPath(ws, '/templates') + query({ limit: 100 }))).data,
+  })
+}
+
+/**
+ * The document library. `prospect` filters it — and that filter is what makes
+ * the prospect detail page's Documents tab **a view into the one library rather
+ * than a parallel store** (D-8, the fix UPDATE-6 was written to make). Same
+ * route, same rows, one `where`.
+ */
+export function useDocuments(ws: string, opts: { prospect?: number; kind?: string; q?: string } = {}) {
+  return useQuery({
+    queryKey: ['documents', ws, opts],
+    queryFn: async () =>
+      (
+        await apiGet<ListPage<SalesDocument>>(
+          wsPath(ws, '/documents') + query({ ...opts, limit: 100 })
+        )
+      ).data,
+  })
+}
+
+/**
+ * How the last N days went. Computed in SQL, never stored (D-33).
+ *
+ * `period` is a SHAPE (`30d`, `12w`, `6m`), not a vocabulary — the route parses
+ * it rather than matching a list, so the page is free to offer whichever spans
+ * are useful without a server change.
+ */
+export function useMetrics(ws: string, period: string) {
+  return useQuery({
+    queryKey: ['metrics', ws, period],
+    queryFn: () => apiGet<MetricsResult>(wsPath(ws, '/metrics') + query({ period })),
+  })
+}
+
+/** A binned record, in the shape `bk sales trash list` parses. */
+export interface TrashItem {
+  type: string
+  number: number | null
+  title: string
+  deleted_at: string | null
+  deleted_by: string | null
+}
+
+export function useTrash(ws: string) {
+  return useQuery({
+    queryKey: ['trash', ws],
+    queryFn: async () => (await apiGet<ListPage<TrashItem>>(wsPath(ws, '/trash'))).data,
   })
 }
