@@ -27,8 +27,11 @@ import { useDocuments, useProducts, useTemplates } from '@/lib/hooks'
 import { money } from '@/lib/format'
 import { stageLabel, templateChannelLabel } from '@/lib/pipeline'
 
-function useFocusRef(focus: number | null) {
-  const ref = useRef<HTMLDivElement>(null)
+// Generic in the element: products and templates focus an <article>, documents
+// focus the <a> that IS the row. `scrollIntoView` is on Element, so nothing here
+// needs to know which.
+function useFocusRef<E extends HTMLElement>(focus: number | null) {
+  const ref = useRef<E>(null)
   useEffect(() => {
     if (focus != null) ref.current?.scrollIntoView({ block: 'center' })
   }, [focus])
@@ -44,7 +47,7 @@ function useFocus() {
 export function ProductsPage({ ws }: { ws: string }) {
   const products = useProducts(ws)
   const focus = useFocus()
-  const focusRef = useFocusRef(focus)
+  const focusRef = useFocusRef<HTMLDivElement>(focus)
 
   if (products.isPending) return <BlockSkeleton rows={4} />
   if (products.error) return <ErrorState error={products.error} />
@@ -107,7 +110,7 @@ export function ProductsPage({ ws }: { ws: string }) {
 export function TemplatesPage({ ws }: { ws: string }) {
   const templates = useTemplates(ws)
   const focus = useFocus()
-  const focusRef = useFocusRef(focus)
+  const focusRef = useFocusRef<HTMLDivElement>(focus)
 
   if (templates.isPending) return <BlockSkeleton rows={4} />
   if (templates.error) return <ErrorState error={templates.error} />
@@ -176,6 +179,10 @@ export function TemplatesPage({ ws }: { ws: string }) {
 
 export function DocumentsPage({ ws }: { ws: string }) {
   const docs = useDocuments(ws)
+  // A document is addressable — `bc:sales:{ws}/document/{n}` — and this listing
+  // is where that URN resolves, so it has to honour ?focus= like every other
+  // listing. It did not until 2026-08-07; see lib/dashboard-paths.test.ts.
+  const focus = useFocus()
 
   if (docs.isPending) return <BlockSkeleton rows={4} />
   if (docs.error) return <ErrorState error={docs.error} />
@@ -195,7 +202,7 @@ export function DocumentsPage({ ws }: { ws: string }) {
         attachments are filtered views of these rows, never separate stores.
       </p>
       <AgentOnly what="Documents" command="bk sales upload | doc create" />
-      <DocumentList docs={docs.data} />
+      <DocumentList docs={docs.data} focus={focus} />
       <div className="flex flex-wrap gap-1.5 px-1">
         {/* The kinds present, as a legend rather than a filter — the library is
             small and a second control here would out-weigh what it filters. */}

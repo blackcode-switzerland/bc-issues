@@ -16,12 +16,14 @@
 // resolve to their listing with the row highlighted and scrolled to. Only a
 // prospect has a page of its own, because it has four tabs' worth of children.
 //
-// **This is deliberately NOT `lib/entity-address.ts`'s `entityPath`.** That one
-// answers a different question — where does `platform.entities.path` point, for
-// a link arriving from another deployment — and it is a server-side value stored
-// at write time. They currently disagree for the five `?focus=` types; that is
-// recorded for agent8 (Phase 10 owns cross-app link resolution) rather than
-// changed here, because changing it rewrites stored rows.
+// **This used to be a SECOND map, and it disagreed with the first.**
+// `lib/dashboard-paths.ts`'s `entityPath` answers a related question — where does
+// `platform.entities.url` point, for a link arriving from another deployment —
+// and it pointed the five `?focus=` types at detail pages that were never built.
+// A D-18 link from issues into a sales meeting 404'd. Fixed 2026-08-07 by
+// deleting the copy: the segments now come from `LISTING_SEGMENT`, so the two
+// functions cannot disagree about where a record is, only about how a reader
+// arrived at it. See that map's header for what the type system now catches.
 //
 // ---------------------------------------------------------------------------
 // THE FOUR TYPES WITH NO #NUMBER
@@ -32,14 +34,13 @@
 // displayed. Returning null instead would mean rendering a result nobody can
 // click.
 
-/** The listing each numbered type is shown in. */
-const LISTING: Record<string, string> = {
-  meeting: 'meetings',
-  communication: 'communications',
-  product: 'products',
-  template: 'templates',
-  document: 'documents',
-}
+import { LISTING_SEGMENT } from '@/lib/dashboard-paths'
+
+// Widened to a string key on purpose: this function is called with whatever
+// `type` a search hit or an activity row carries, including the four types that
+// have no #number and anything this app gains later. `LISTING_SEGMENT` is the
+// narrow, exhaustive map; the lookup below is the tolerant read of it.
+const LISTING: Record<string, string | undefined> = LISTING_SEGMENT
 
 export interface RecordRef {
   type: string

@@ -20,6 +20,7 @@
 // library, filtered — never a parallel per-prospect store that drifts from it.
 // The Meetings and Communications tabs do the same with `?prospect=`.
 
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowUpRight, ExternalLink, Mail, Phone, Star } from 'lucide-react'
@@ -666,20 +667,44 @@ function DocumentsTab({ ws, n }: { ws: string; n: number }) {
 }
 
 /** Shared by this tab and the library page, so the two cannot render differently. */
-export function DocumentList({ docs }: { docs: import('@/lib/hooks').SalesDocument[] }) {
+export function DocumentList({
+  docs,
+  focus = null,
+}: {
+  docs: import('@/lib/hooks').SalesDocument[]
+  /**
+   * The #number to highlight and scroll to, from `?focus=` — how a cross-app
+   * link and ⌘K both arrive at a document, which has no page of its own.
+   * Optional because the prospect Documents tab has nothing to focus.
+   *
+   * The scroll ref is OWNED HERE rather than passed in: the focused element is
+   * the `<a>` this component renders, and threading a ref for it through a prop
+   * crosses a file boundary where two copies of `@types/react` disagree about
+   * `Ref`. The list knows which row is focused; let it keep that.
+   */
+  focus?: number | null
+}) {
+  const focusRef = useRef<HTMLAnchorElement>(null)
+  useEffect(() => {
+    if (focus != null) focusRef.current?.scrollIntoView({ block: 'center' })
+  }, [focus])
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       {docs.map((d, i) => {
         const href = d.upload_url ?? d.external_url
+        const focused = d.number === focus
         return (
           <a
             key={d.number}
+            ref={focused ? focusRef : undefined}
             href={href ?? undefined}
             target="_blank"
             rel="noopener noreferrer"
             className={
               'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent ' +
               (i > 0 ? 'border-t border-border' : '') +
+              (focused ? ' bg-accent ring-1 ring-inset ring-primary' : '') +
               (href ? '' : ' pointer-events-none opacity-60')
             }
           >
