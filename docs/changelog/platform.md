@@ -67,10 +67,22 @@ four times.
 
 `AUTH_COOKIE_DOMAIN` is new and is **production only**. Unset, the cookie is
 host-only and behaves exactly as it did. Set to a domain the deployment's own
-host is not under, the browser silently refuses the cookie and every sign-in
-bounces back to the login page — so the value is validated against `NEXTAUTH_URL`
-at startup and refuses to boot rather than fail invisibly. Previews and local
-development leave it unset. See `docs/env.md`.
+host is not under, the browser would silently refuse the cookie — so the value is
+validated against `NEXTAUTH_URL` at startup and the deployment **refuses to
+boot** rather than fail invisibly. Previews and local development leave it unset.
+See `docs/env.md`.
+
+**So a bouncing sign-in is not this variable.** A wrong domain cannot reach you:
+it stops the deployment at startup, loudly. If sign-in succeeds and then bounces
+back to the login page, look for this pair instead —
+
+    GET /api/auth/session   returns a user
+    GET /dashboard          redirects to /login
+
+A live session beside a refused dashboard means the app and whatever guards the
+dashboard disagree about the **name** of the cookie, and nothing else in this
+stack produces that combination. Every request is a 200 and nothing appears in
+the logs, which is why the pair is worth memorising.
 
 ---
 
