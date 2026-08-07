@@ -22,6 +22,43 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-07 — Cross-app links into sales pointed at pages that do not exist
+
+**Breaking for anything holding a stored sales URL.** `platform.entities.url` is
+written once, at write time, and five of the six sales entity types were storing
+an address this app has never served.
+
+Only a prospect has a detail page. Meetings, communications, products, templates
+and documents are shown as rows in their listing, reached with `?focus=<n>` —
+but the projection wrote `/dashboard/{ws}/{type}s/{n}`. So a `bk link` from an
+issue into a sales meeting, a `bk search` hit for a document, and the Related
+block on a prospect page all resolved to a 404. Only prospects worked, which is
+the one type anyone had clicked.
+
+**What changed**
+
+- The address map exists once now, in `apps/sales/lib/dashboard-paths.ts`. A
+  non-prospect type resolves to `/dashboard/{ws}/{listing}?focus=<n>`.
+- The documents listing now honours `?focus=` — it was the one listing that
+  ignored it, so even the corrected link landed on an unhighlighted list.
+
+**What you must do.** Nothing, if your links are freshly created. If you hold a
+sales URL read out of `platform.entities` before today, re-read it: the row has
+not been rewritten in any database but the one whoever ran the repair touched.
+Maintainers with `DATABASE_URL` repair a deployment with:
+
+```
+SALES_REPROJECT=1 npm run db:reproject --workspace=sales -- --dry-run   # report
+SALES_REPROJECT=1 npm run db:reproject --workspace=sales                # repair
+```
+
+**`bk super-admin entity-drift` will NOT find this, and did not.** That command
+is answered by the issues deployment and can only re-derive `issues.*` — an
+app's Postgres role has no grant on another app's schema, so the cross-app
+version of that query cannot be written. It reported no drift, exit 0, against a
+database with fifty-one unprojected sales rows. Its help text has been corrected
+to say which app it answers for; see `platform.md`.
+
 ## 2026-08-07 — The web app can write, and read-only is not a permission
 
 **Read this paragraph before anything else, because the feature's name invites

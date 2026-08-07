@@ -33,8 +33,19 @@
  * - No `platform.events` and no `platform.entities`. Those are written by the
  *   real write paths (agent5's routes), inside the transaction that writes the
  *   source row. Seeding them here would be a SECOND implementation of the
- *   projection, and the two would disagree the first time either changed. Run
- *   `bk super-admin entity-drift --repair` after seeding if you want URNs.
+ *   projection, and the two would disagree the first time either changed.
+ *
+ *   **So nothing seeded here is findable by `bk search` or addressable by a
+ *   cross-app link until you project it.** Run:
+ *
+ *     SALES_REPROJECT=1 npm run db:reproject --workspace=sales
+ *
+ *   This line used to say `bk super-admin entity-drift --repair`, which CANNOT
+ *   TOUCH A SALES ROW — that command is served by the issues deployment and is
+ *   bound to `issues.*`. It ran, reported no drift and exited 0 against a
+ *   database with fifty-one unprojected sales rows. See `scripts/reproject.ts`
+ *   for why one host cannot reconcile both apps (it is a database grant, not an
+ *   omission).
  *
  * Usage:  SALES_SEED=1 npm run db:seed --workspace=sales
  */

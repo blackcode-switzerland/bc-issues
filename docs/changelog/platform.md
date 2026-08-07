@@ -30,6 +30,27 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-07 — `bk super-admin entity-drift` answers for ONE app: the one you are pointed at
+
+No behaviour change — a **correction to what the command claims**, which was
+wrong in the direction that reads as good news.
+
+Its help said it checked "the cross-app entity index against each app's source
+tables". It never did. The route is served by whichever deployment mounts it,
+and re-derives only that deployment's own half of `platform.entities`. That is
+not an omission anybody can close in one place: an app's Postgres role has no
+grant on another app's schema (`docs/platform-architecture.md` §4.3), so a
+single host literally cannot write the comparison for both.
+
+The visible cost: run against a database where a second app had fifty-one
+unprojected rows, it printed no drift and exited 0.
+
+**How to adapt.** Treat a clean report as clean *for that app only*. Run it
+against each app's server in turn — `bk app list` shows them — and note that an
+app which has not mounted the route answers 404, not "no drift". Today only the
+issues deployment mounts it; the sales deployment does not, and repairs there go
+through `npm run db:reproject` (see `sales.md`).
+
 ## 2026-08-07 — Four platform routes are now answered by the sales host too
 
 Nothing changed about what these routes DO. What changed is who serves them: an

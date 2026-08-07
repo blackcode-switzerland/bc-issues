@@ -1,7 +1,7 @@
 {
   "name": "sales",
   "version": "0.1.0",
-  "description": "b/sales \u2014 blackcode's own business-development pipeline. The platform's second real app.",
+  "description": "b/sales — blackcode's own business-development pipeline. The platform's second real app.",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:reproject": "tsx scripts/reproject.ts"
   },
   "dependencies": {
     "@blackcode/platform-agent": "*",
