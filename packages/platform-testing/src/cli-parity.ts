@@ -217,6 +217,31 @@ export interface AppRoutes {
   claimed: Set<string>
   /** Routes this app is responsible for proving exist. See the header. */
   ownClaims: CliRouteEntry[]
+  /**
+   * Routes claimed by a command attributed to THIS APP — nothing else.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THIS IS SEPARATE FROM `ownClaims`, AND WHY IT IS THE INPUT ASSERTION
+   * ---------------------------------------------------------------------------
+   * `ownClaims` is a drift SCOPE: this app's own claims **plus** every platform
+   * claim whose path this app happens to mount. That union is right for "what
+   * must this app prove exists", and WRONG for "did route attribution work at
+   * all" — because the platform half alone keeps it non-empty.
+   *
+   * That is not hypothetical. `apps/sales`' vacuous-pass assertion read
+   * `ownClaims.length > 0` and was described in `docs/sales-app-plan.md` §10.2
+   * row 4 as "the assertion that caught the `__routes` dedup bug — confirm it
+   * still fires". On 2026-08-07 it was confirmed NOT to: deleting
+   * `cli/internal/guide/topics/sales/` drops `bk __routes`' sales attribution
+   * from 68 routes to 0, and the suite stayed green, because the seven PLATFORM
+   * routes sales mounts kept the union non-empty.
+   *
+   * The widening that broke it was the same commit that retired
+   * `hostsPlatformRoutes` (D-36). Nothing was wrong with that change except that
+   * an assertion phrased in terms of the old, narrower set was left reading the
+   * new, wider one — which is how a guard survives the edit that guts it.
+   */
+  appOwnClaims: CliRouteEntry[]
   /** Every route claimed by a `platform` command, whoever serves it. */
   platformClaims: CliRouteEntry[]
   /**
@@ -304,6 +329,7 @@ export function collectAppRoutes(
     allPaths,
     claimed: new Set(cli.routes.filter(mine).map((r) => `${r.method} ${r.path}`)),
     ownClaims: cli.routes.filter(ownDriftScope),
+    appOwnClaims: cli.routes.filter((r) => (r.app ?? inputs.appSlug) === inputs.appSlug),
     platformClaims,
     mountedPlatformRoutes,
     invisibleExports,

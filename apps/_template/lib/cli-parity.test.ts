@@ -40,7 +40,7 @@ describe('CLI ↔ routes parity', () => {
   // asserted once, for the whole repo, in packages/platform-testing's own suite.
   // Do not add a copy here: the failure "nobody serves GET /api/inbox" is not
   // your app's, and N copies of it tempt whoever hits it to fix their own.
-  const { real, claimed, ownClaims, invisibleExports, cli } = collectAppRoutes(
+  const { real, claimed, ownClaims, appOwnClaims, invisibleExports, cli } = collectAppRoutes(
     { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: APP_SLUG },
     new Set(EXCLUDED_PATHS.keys())
   )
@@ -52,10 +52,13 @@ describe('CLI ↔ routes parity', () => {
     expect(real.size, `no API routes found under ${join(APP_ROOT, 'app', 'api')}`).toBeGreaterThan(0)
     expect(cli.routes.length, `the CLI claims no routes — is ${CLI_DIR} right?`).toBeGreaterThan(0)
     expect(
-      ownClaims.length,
-      `no bk command belongs to "${APP_SLUG}" — is the command group registered in cli/internal/commands/root.go, ` +
+      appOwnClaims.length,
+      `no bk command is ATTRIBUTED to "${APP_SLUG}" — is the command group registered in cli/internal/commands/root.go, ` +
         'and does cli/internal/guide/topics/ have a directory named for this app? ' +
-        'Route attribution comes from the guide section list.'
+        'Route attribution comes from the guide section list.\n' +
+        'This asserts on `appOwnClaims`, NOT `ownClaims`: the latter also counts every ' +
+        'PLATFORM route this app mounts, which kept it non-empty with attribution ' +
+        'totally broken. Watched fail 2026-08-07 — see the field\'s header.'
     ).toBeGreaterThan(0)
   })
 
