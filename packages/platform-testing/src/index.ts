@@ -33,3 +33,10 @@ export {
   DEFAULT_MIGRATIONS_TABLE,
   type AppLedger,
 } from './migration-ledger'
+// Whether an integration suite runs, and what it says when it does not.
+// The Phase 11 ruling on agent4's escalation lives in this file's header.
+export {
+  integrationDescribe,
+  type DescribeLike,
+  type IntegrationSuiteOptions,
+} from './integration-suite'
