@@ -1,17 +1,19 @@
 {
   "name": "sales",
   "version": "0.1.0",
-  "description": "b/sales — blackcode's own business-development pipeline. The platform's second real app.",
+  "description": "b/sales \u2014 blackcode's own business-development pipeline. The platform's second real app.",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node ./scripts/migrate-if-enabled.mjs",
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@blackcode/platform-agent": "*",
@@ -44,6 +46,7 @@
     "eslint-config-next": "14.2.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.8"
   }

@@ -6,9 +6,11 @@ the root [`docs/backend.md`](../../../docs/backend.md) and are not repeated here
 An app's docs never describe another app
 (`docs/platform-architecture.md` §7.5).
 
-Status: **Phase 2 (scaffold + domain model) landed 2026-08-07.** There is no
-Postgres schema, no `platform.apps` row, no CLI group and no HTTP route yet.
-Phases 3–5 add them.
+Status: **Phases 2 and 3 landed 2026-08-07.** The app, its schema, its
+migrations, the blob-reference triggers, the URN projection, the reference
+scanner and the dev seed all exist. There is still no CLI group and no HTTP
+route — Phases 4 and 5 add those, and the app is **not deployed and not enabled
+in `platform.apps`** until Phase 12.
 
 ---
 
@@ -328,17 +330,94 @@ not as a commitment to use it. D-12 was narrowed on 2026-08-06: if sales' metric
 page needs something the kit does not do, it builds its own in
 `apps/sales/components/`, with no shared change and nobody's permission.
 
-## 6. What is not built yet
+## 6. The database, in practice
+
+### 6.1 Migrations, and the ledger this app does NOT share
+
+```
+0001_sales_init.sql              schema, sales.words(), 17 tables, tsvector + GIN
+0002_blob_reference_index.sql    11 triggers over 22 columns, grants, backfill, flag
+```
+
+Both are hand-written. `drizzle-kit generate` cannot express a schema that must
+exist before its own helper function, a `GENERATED … STORED` tsvector, or the
+`documents_one_location` CHECK — the same reasons issues' 0037 and 0041–0043 are
+hand-written.
+
+**`apps/sales/drizzle.config.ts` sets `migrations.table` to
+`__drizzle_migrations_sales`, and that is not a preference.** Every app on this
+platform shares one database. Drizzle's migrator takes a single high-water mark
+over the whole ledger —
+
+```
+select … order by created_at desc limit 1
+if (!last || Number(last.created_at) < m.folderMillis) apply(m)
+```
+
+— with no notion of which app wrote a row. Two apps on one ledger means whichever
+migrated last raises the mark for both, and the other app's next migration is
+**silently skipped**: exit 0, no row inserted, tables that never appear, and the
+same comparison skips it again forever. Reproduced on 2026-08-07 with two
+throwaway migration folders against one ledger; the earlier-stamped one reported
+success and created nothing.
+
+### 6.2 Rollback
+
+`docs/sql/sales-0002-rollback.sql`, then `docs/sql/sales-0001-rollback.sql`, in
+that order — and 0001's script refuses if you get it wrong.
+
+Both were rehearsed on 2026-08-07 and **the first rehearsal found a real bug in
+the guard**: `psql -f` autocommits each statement, so the `RAISE EXCEPTION`
+printed in capitals and psql carried straight on and dropped the schema anyway,
+exiting 0. That is CLAUDE.md finding #7's shape, reproduced by a script written
+to avoid it. Both scripts now open with `\set ON_ERROR_STOP on` and run inside
+`BEGIN`/`COMMIT`.
+
+### 6.3 Provisioning — the three human steps
+
+| | File |
+|---|---|
+| The `sales_app` role and its grants | `docs/sql/sales-app-role.sql` |
+| The `platform.apps` row, in two parts around the migrations | `docs/sql/sales-app-register.sql` |
+| The boundary probe, run **as `sales_app`** | `docs/sql/app-boundary-probe.sql` |
+
+The probe was rehearsed locally against real roles on 2026-08-07, and **its check
+(2) ran for real for the first time**: with `sales` in the registry it now finds
+`issues.issues` and is refused with 42501, where it had reported `SKIPPED` since
+it was written. It also surfaced a gap the checklist does not mention — see
+`sales-app-role.sql` step 5c: issues' 0038 revoked `EXECUTE` on
+`platform.blob_refs_purge` from PUBLIC and granted it only to the app roles that
+existed then, so a new app role gets none and `blob-drift --repair` cannot clear
+an orphaned reference. Migration 0002 re-runs that grant for every app role.
+
+### 6.4 Seed
+
+`SALES_SEED=1 npm run db:seed --workspace=sales` — the mockup's seven companies
+and their history, behind **two** gates (`NODE_ENV !== 'production'` **and**
+`SALES_SEED=1`), idempotent per workspace. It seeds no uploads (every document is
+an `external_url`, so it cannot put a row in `platform.blob_references` for a
+file nobody can fetch) and no `platform.entities` or `platform.events` — those
+belong to the real write paths, and a second implementation of the projection is
+a second thing that can disagree.
+
+## 7. What is not built yet
 
 | | Phase |
 |---|---|
-| Postgres schema, role, grants, migrations, triggers, seed | 3 |
-| `lib/db/queries/entities.ts` (the URN projection) and `lib/storage.ts` (the reference scanner) | 3 |
 | `bk sales` command group and guide topics | 4 |
 | HTTP routes, and the platform route factories this app mounts | 5 |
 | NextAuth (`lib/auth.ts`), the app shell, theme provider, pages | 6–7 |
 | `bk sales search` and the ⌘K palette | 8 |
 | Read-only / full mode | 9 |
+| Vercel project, subdomain, the `platform.apps` row for real | 12 |
+
+**The write paths do not exist yet, and the three things every one of them owes
+are already in place for agent5:** `allocateSeq` (`lib/db/queries/counters.ts`),
+`recordEvent` via `@blackcode/platform-db`, and `projectEntity`
+(`lib/db/queries/entities.ts`). All three take a transaction handle and none of
+them opens one. The rollback case is proven: a create that fails after
+`projectEntity` leaves nothing in `platform.entities`, and the committed control
+leaves exactly one row.
 
 `lib/cli-parity.test.ts` is **red until Phase 4/5** and its header says why at
 length. Do not switch it off: the assertion failing is the one that exists to
