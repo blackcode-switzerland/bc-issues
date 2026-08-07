@@ -196,21 +196,50 @@ npm run typecheck    # should pass before you write a line
 Read [`platform-db.md`](platform-db.md) first — it explains the two credentials
 and why the app role owns nothing.
 
-```sql
-CREATE SCHEMA sales;
+**The order below is not the order you will guess, and it was rehearsed on
+2026-08-07 because the guessed one silently does not work.** Provisioning is
+interleaved with the first deploy; it is not a block of SQL you run up front.
+
+| | Do this | Why here |
+|---|---|---|
+| 1 | Insert the `platform.apps` row with **`enabled = false`** (step 3) | Your first migration sets `maintains_blob_index` on this row and is guarded on it existing. Register later and the flag is never set — and re-running the migration will not fix it, because Drizzle records it as applied. |
+| 2 | `docs/sql/app-role.sql` as `neondb_owner` | Creates the schema, the role and the grants. |
+| 3 | **Deploy. The migrations run.** | Tables, triggers, backfill, flag. |
+| 4 | The boundary probe, **as the app role** | Only now does the schema have tables for it to read. |
+| 5 | Flip `enabled = true` | Only once the app can answer for its own blob references. |
+
+`docs/sql/app-role.sql` **creates the schema itself** — do not do it separately,
+and do not move that line. Every grant in the file names the schema, so with the
+schema absent five of its ten statements fail:
+
+```
+ERROR:  schema "sales" does not exist       (×5, one per grant)
+PSQL EXIT=0
 ```
 
-Then run `docs/sql/app-role.sql` as `neondb_owner`, substituting the slug and a
-generated password. **Do not skip step 5b** (revoke write on
-`platform.blob_references`, leave `SELECT`).
+**`psql` exits 0.** The role comes out with no grants at all and the provisioning
+step reports success — CLAUDE.md finding #7 in a new costume. The file now opens
+with `\set ON_ERROR_STOP on` for the same reason. `apps/issues` never hit this
+because `issues` was created by migration 0033, years before anyone wrote a role
+script for it.
 
-**Then prove the boundary, as the new role:**
+**Do not skip step 5b** (revoke write on `platform.blob_references`, leave
+`SELECT`) or **5c** (grant `EXECUTE` on `platform.blob_refs_purge` — a new app
+role gets none, and `bk super-admin blob-drift --repair` then cannot clear an
+orphaned reference).
+
+**Then prove the boundary, as the new role — after the migrations:**
 
 ```bash
 psql "postgres://sales_app:<pw>@<host>/<db>" -f docs/sql/app-boundary-probe.sql
 ```
 
-Every deny must be `42501`.
+Every deny must be `42501` — **and that is the weaker half of the check.** A role
+that was granted nothing at all also denies everything with 42501, and passes six
+of the probe's eight denial checks. Read the *positive* lines first — `(1)`,
+`(4a)`, `(4e)` — and check that `(4d)` names `blob_refs_purge` rather than
+saying *"permission denied for schema platform"*. The probe's header carries the
+full transcript of both outcomes side by side.
 
 > **This is a manual provisioning step, and it cannot become a CI test.** That is
 > not laziness about automation — the properties it checks are only observable
@@ -317,24 +346,35 @@ routes attributed to `platform`, and its parity test will tell you so.
 
 ---
 
-> ## ⚠️ STEPS 7–10 ARE UNVERIFIED
+> ## ⚠️ STEPS 8 AND 9 ARE STILL UNVERIFIED — AND THIS BOX IS STILL OPEN
 >
-> Everything above was walked on 2026-08-05. **Steps 7 to 10 were not**, and
-> deliberately: they need a Vercel project, a subdomain and DNS for an app that
-> must never be deployed — a real resource with a real chance of being forgotten,
-> to test four steps that are ordinary platform mechanics rather than anything
-> this architecture invented.
+> Steps 1–6 were walked on 2026-08-05 against a throwaway app. The real
+> `apps/sales` was then built, and on **2026-08-07** it closed steps 7 and 10 for
+> real. **Steps 8 and 9 remain unwalked**, because they need a Vercel project, a
+> subdomain and DNS — credentials no agent on this project had.
 >
-> **Whoever ships the first real app must walk them and update this document**
-> with the date and the app name, replacing this box. Until then, treat 7–10 as a
-> best-effort reconstruction from how `apps/issues` is configured, not as
-> instructions anyone has followed.
+> **Do not sign this box because the app builds.** Sign it when the four proofs
+> below have actually been observed, in production, by the person who ran the
+> deploy.
+>
+> | Step | Status | What closes it — the observation, not the intent |
+> |---|---|---|
+> | **7** `docs/changelog/<app>.md` | ✅ **closed 2026-08-07**, `apps/sales` | `bk changelog` and `GET /api/changelog` return sales entries with no registry edit. The directory read is the discovery mechanism; adding the file was the whole step. |
+> | **8** Vercel project | ⬜ **open** | (a) `./devops/release.sh apps` lists the app; (b) `./devops/release.sh web <app>` deploys to the intended project and **not** to whichever one the working copy was last linked to; (c) a commit touching only another app does **not** trigger a build, i.e. `turbo-ignore` fired; (d) the app's own `vercel.json` region took effect — sales' first deploy is the first time any of this was true for a second project. |
+> | **9** Subdomain + cookie domain | ⬜ **open** | Sign in at app A in a browser, open app B, **already signed in**. That single observation is the step. It also proves `NEXTAUTH_SECRET` was copied rather than generated, which nothing else does. |
+> | **10** `apps/<app>/docs/` | ✅ **closed 2026-08-07**, `apps/sales` | `apps/sales/docs/{backend,frontend}.md` exist and describe only sales; the split rule held under a real second app. |
+>
+> **Until 8 and 9 are signed, treat them as a reconstruction from how
+> `apps/issues` is configured — not as instructions anyone has followed.** The
+> full, ordered version of what to do is
+> `salesImplementation/DEPLOY-TODO.txt` → Release 2; this section is the summary
+> of it that survives after that file is deleted.
 >
 > | | |
 > |---|---|
-> | Walked | steps 1–6, 2026-08-05, against a throwaway `apps/sales` |
-> | Unverified | steps 7–10 |
-> | Closed by | *(first real app — put your name, the app and the date here)* |
+> | Walked | steps 1–6, 2026-08-05, throwaway app · steps 7 + 10, 2026-08-07, `apps/sales` |
+> | Still unverified | steps **8** and **9** |
+> | Closed by | *(the person who deploys the first real app — your name, the app, the date, and which of the proofs above you actually saw)* |
 
 ## 7. `docs/changelog/sales.md`
 
@@ -348,17 +388,46 @@ update — `bk changelog` and `GET /api/changelog` pick it up automatically.
   every cross-app query (`bk search`, `bk activity`, the blob index) and a second
   Blob store breaks attribution.
 - **Root Directory:** `apps/sales`.
-- Environment: `DATABASE_URL` (the `sales_app` role), `MIGRATE_DATABASE_URL`
-  (`neondb_owner`), `NEXTAUTH_URL`, `NEXTAUTH_SECRET`,
-  `BLOB_READ_WRITE_TOKEN`, and `RUN_MIGRATIONS=1` **Production only**.
-- `turbo-ignore` so a commit touching only another app does not rebuild this one.
+- **Copy `apps/issues/vercel.json` into `apps/<app>/` and change nothing.** It is
+  four settings the dashboard will not give you by default, and three of them are
+  invisible when wrong: `regions: ["fra1"]` (the database is in Europe — the
+  default region puts every query across the Atlantic), `ignoreCommand:
+  npx turbo-ignore` (or every commit anywhere in the monorepo rebuilds this app),
+  `git.deploymentEnabled.main: false` (or pushing to main deploys outside
+  `release.sh`), and `no-store` on `/api/*`. `apps/sales` shipped without this
+  file until 2026-08-07; nothing in the checklist mentioned it, because
+  `apps/issues` had had one since before the monorepo existed.
+- Environment: **the full list is in `docs/env.md`, with which values are
+  platform-wide and which are per-project.** `NEXTAUTH_SECRET` is **copied from
+  an existing app, never generated** (D-39) — see step 9.
+- `RUN_MIGRATIONS=1` **Production only**. On Preview it means a preview build
+  writes to the production database.
 
 ## 9. Subdomain and cookie domain
 
-`sales.blackcode.ch`. If you want one session across apps, the session cookie has
-to move to `.blackcode.ch` — which **signs everyone out once**. Schedule it at a
-quiet hour and put it in the changelog. It has been deferred since Phase 4 and is
-still not done; check its status before assuming single sign-on works.
+`sales.blackcode.ch`. The session cookie moved to `.blackcode.ch` in Release 1
+(D-16) — that migration is done, and it **signed everyone out once**. A new app
+inherits it and does not repeat it.
+
+What a new app must get right, in this order:
+
+1. Attach the domain and wait for Vercel to show **Valid Configuration**.
+2. Set `NEXTAUTH_URL` to the real `https://<app>.blackcode.ch`.
+3. Only then set `AUTH_COOKIE_DOMAIN=.blackcode.ch`, **production only**.
+
+The order is enforced: `packages/platform-auth/src/session-cookie.ts` **throws at
+startup** if `AUTH_COOKIE_DOMAIN` is set and `NEXTAUTH_URL`'s host is not under
+it. That is deliberate — a browser silently drops a cookie whose `Domain` it does
+not accept, and the symptom is every sign-in succeeding and bouncing back to
+`/login` with nothing in the logs. A boot failure is loud and names both values.
+
+Never set `AUTH_COOKIE_DOMAIN` on Preview or Development: a preview runs on
+`*.vercel.app`, which is not under `.blackcode.ch`.
+
+**And copy `NEXTAUTH_SECRET` from an existing app rather than generating one
+(D-39).** The cookie is encrypted with it; an app holding a different secret
+cannot read the others' sessions, and the only symptom is a person being asked
+to sign in twice. `docs/env.md` has the procedure and the rotation rule.
 
 ## 10. `apps/sales/docs/`
 
