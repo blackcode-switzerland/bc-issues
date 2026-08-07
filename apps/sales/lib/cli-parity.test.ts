@@ -101,6 +101,20 @@ const UNSERVED_OPERATIONS = new Map<string, string>([
       'beside it because `bk workspace use` cannot select a workspace without it, ' +
       'which is what made the north-star script fail at its second command.',
   ],
+  [
+    'PATCH /api/workspaces/{ws}',
+    'renaming a workspace is company-level administration and `updateWorkspace` is ' +
+      'still app-local to issues. Sales READS the workspace it works in (GET is ' +
+      'mounted — `bk workspace use` resolves a slug through it) and does not ' +
+      'administer it. `bk workspace edit` is answered by the issues deployment.',
+  ],
+  [
+    'DELETE /api/workspaces/{ws}',
+    'destroying a workspace carries a cascade with exactly one implementation, on ' +
+      'purpose. Two deployments able to run it is two places for that cascade to ' +
+      'diverge, and the failure would be unrecoverable. `bk workspace delete` is ' +
+      'answered by the issues deployment.',
+  ],
 ])
 
 describe('CLI ↔ routes parity', () => {

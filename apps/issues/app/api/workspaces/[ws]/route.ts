@@ -1,26 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, requireOwner } from '@/lib/api'
-import {
-  deleteWorkspace,
-  listWorkspaceMembers,
-  updateWorkspace,
-} from '@/lib/db/queries/workspaces'
+import { workspaceShowRoute } from '@blackcode/platform-api/routes'
+import { apiHandler, Errors, resolveWorkspace, requireOwner, appContext } from '@/lib/api'
+import { deleteWorkspace, updateWorkspace } from '@/lib/db/queries/workspaces'
 import { WORKSPACE_NAME_MAX } from '@/lib/limits'
 
 interface Params {
   params: Promise<{ ws: string }>
 }
 
-export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
-  const { ws } = await params
-  const ctx = await resolveWorkspace(req, ws)
-  const members = await listWorkspaceMembers(ctx.workspace.id)
-  return NextResponse.json({
-    workspace: ctx.workspace,
-    role: ctx.role,
-    members,
-  })
-})
+// GET is the shared factory as of 2026-08-07 — it touches only platform data
+// (resolveWorkspace + listWorkspaceMembers), while PATCH and DELETE below call
+// app-local writes with a cascade. `bk workspace use` resolves a slug through
+// this route before saving it, so an app that could not serve it had a CLI able
+// to list workspaces and not select one.
+export const GET = workspaceShowRoute(appContext)
 
 export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params

@@ -71,6 +71,7 @@ export { usersRoute } from './users'
 export {
   inviteCandidatesRoute,
   workspaceAppsRoute,
+  workspaceShowRoute,
   workspaceMembersRoute,
   workspacesRoute,
 } from './workspace-reads'

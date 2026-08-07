@@ -72,6 +72,46 @@ export function workspacesRoute(app: AppContext) {
 }
 
 /** GET /api/workspaces/{ws}/members — everyone in the workspace. */
+/**
+ * GET /api/workspaces/{ws} — one workspace, the caller's role in it, and its
+ * members. What `bk workspace show` prints, and what `bk workspace use`
+ * VALIDATES A SLUG AGAINST before writing it to the config.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS BECAME A FACTORY ON 2026-08-07, WHEN PATCH AND DELETE DID NOT
+ * ---------------------------------------------------------------------------
+ * It lived in `apps/issues` with PATCH and DELETE beside it, and the three
+ * looked like one unit. They are not: **this GET touches only platform data** —
+ * `resolveWorkspace` and `listWorkspaceMembers`, both already shared — while
+ * PATCH and DELETE call `updateWorkspace` / `deleteWorkspace`, which are still
+ * app-local and carry a cascade. Splitting on that line costs nothing and moves
+ * nothing risky.
+ *
+ * The reason it had to move at all is sharper than "sales wanted it".
+ * `bk workspace use <slug>` resolves the slug through this route before saving
+ * it. Unmounted, a CLI homed on the sales deployment could LIST workspaces and
+ * not SELECT one — so the north-star script died at its second command, and
+ * every command after it reported "no active workspace" instead of the real
+ * cause. A read that another verb silently depends on is not optional surface.
+ */
+export function workspaceShowRoute(app: AppContext) {
+  const apiHandler = createApiHandler(app)
+  const resolveWorkspace = createResolveWorkspace(app)
+
+  return apiHandler(async (req: NextRequest, { params }: WsParams) => {
+    const { ws } = await params
+    const ctx = await resolveWorkspace(req, ws)
+    // NOT jsonList: this is a single resource with its members attached, and the
+    // shape is pinned by every existing client. `{ data, next_cursor }` here
+    // would be a silent breaking change to `bk workspace show`.
+    return NextResponse.json({
+      workspace: ctx.workspace,
+      role: ctx.role,
+      members: await listWorkspaceMembers(app.db, ctx.workspace.id),
+    })
+  })
+}
+
 export function workspaceMembersRoute(app: AppContext) {
   const apiHandler = createApiHandler(app)
   const resolveWorkspace = createResolveWorkspace(app)

@@ -637,7 +637,7 @@ where somebody would otherwise assume an omission.
 
 ---
 
-## 8. The north star, run for real (2026-08-07)
+## 8. The north star, run from a sales login (2026-08-07)
 
 This section is the artefact, not the claim. §10.4 of `docs/sales-app-plan.md`
 states the sentence this project was justified by:
@@ -647,11 +647,18 @@ states the sentence this project was justified by:
 > binary, no re-auth, no server switch, and no confusion about which app
 > anything landed in.**
 
-Run end to end in Phase 11 against two local dev servers (issues :3000, sales
-:3100) and one Postgres, with **one token, minted once**. What follows is what
-happened, including the parts that did not work.
+**It ran on the first pass and it did not work.** The sales deployment served 7
+of the 54 platform routes `bk` claims, so `bk search`, `bk link create` and
+`bk workspace use` — two north-star steps and the command every later step
+depends on — answered with a 404 page. The run only completed after
+`bk app use issues`, i.e. after a server switch, which is the thing the sentence
+forbids. That transcript is deleted rather than kept: it recorded a workaround.
 
-### 8.1 It runs, homed on issues
+What follows is the run **from a sales login, with no `bk app use` and no
+`--app-server`**, against two local dev servers (issues :3000, sales :3100) and
+one Postgres, with one token minted once.
+
+### 8.1 The script
 
 ```
 $ bk login --token --server http://127.0.0.1:3100
@@ -660,136 +667,126 @@ Home app: sales (http://127.0.0.1:3100)
   issues → http://127.0.0.1:3000
   sales  → http://127.0.0.1:3100
 
-$ bk app use issues            # ← REQUIRED. See §8.2; this is the finding.
 $ bk workspace use balathanusan-1-2
+Active workspace: Bala 1's workspace (balathanusan-1-2)
 
-$ bk sales prospect create --name "Acme SA" --city Lausanne --value 18000
-created prospect #9: Acme SA
-bc:sales:balathanusan-1-2/prospect/9
+$ bk app list
+   APP     NAME              ENABLED  ACCESS  SERVER                 REACHABLE
+   issues  Blackcode Issues  yes      1       http://127.0.0.1:3000  yes
+*  sales   Sales             yes      1       http://127.0.0.1:3100  yes
+   * = home app                                    ← sales, and it stays sales
 
-$ bk sales meeting schedule --prospect 9 --at "2026-08-14T10:00+02:00" \
+# --- record sales work ---
+$ bk sales prospect create --name "Northstar SA" --city Lausanne --value 18000
+created prospect #17: Northstar SA
+$ bk sales comm log --prospect 17 --channel call --dir out --body "Intro call…"
+bc:sales:balathanusan-1-2/communication/19
+$ bk sales meeting schedule --prospect 17 --at "2026-08-14T10:00+02:00" \
       --type video --title "Demo"
-recorded meeting #9 (upcoming): Demo
-
-$ bk sales comm log --prospect 9 --channel call --dir out --body "Intro call…"
-logged communication #16 (call out)
-
+bc:sales:balathanusan-1-2/meeting/10
+$ bk sales objection raise 17 --type pricing --spoken "Too expensive for a pilot"
+raised objection 5 (pricing) on prospect #17
+$ bk sales objection counter 17 5 --counter "Two-milestone offer…"
+objection 5 is now countered
 $ bk sales upload proposal.pdf
-/uploads/sales/balathanusan-1-2/1786117028464-proposal-d013820e.pdf
+/uploads/sales/balathanusan-1-2/…-proposal-ee9dbbc4.pdf
         → platform.uploads.app = 'sales', pathname prefixed sales/
+$ bk sales prospect stage 17 meeting --note "Demo booked"
+prospect #17 (Northstar SA) is now at stage meeting
 
-$ bk sales prospect stage 9 meeting --note "Demo booked"
-prospect #9 (Acme SA) is now at stage meeting
+# --- cross the boundary. Same token, same host, no re-auth. ---
+$ bk issues issue create --project 1 --title "SSO for Northstar SA — blocks CHF 18k deal" --priority 1
+created #5
 
-# --- cross the boundary. Same token, no re-auth, no second login. ---
-$ bk issues issue create --project 1 --title "SSO for Acme SA — blocks CHF 18k deal"
-created #3
-
-$ bk link create bc:issues:…/issue/3 bc:sales:…/prospect/9 --rel blocks
-linked bc:issues:balathanusan-1-2/issue/3 --blocks--> bc:sales:…/prospect/9
+$ bk link create bc:issues:…/issue/5 bc:sales:…/prospect/17 --rel blocks
+linked bc:issues:balathanusan-1-2/issue/5 --blocks--> bc:sales:…/prospect/17
 
 # --- and back ---
-$ bk sales prospect show 9
-  …
+$ bk sales prospect show 17
   LINKED
-    blocks  bc:issues:balathanusan-1-2/issue/3  SSO for Acme SA — blocks CHF 18k deal
+    blocks  bc:issues:balathanusan-1-2/issue/5  SSO for Northstar SA — blocks…
 
-$ bk search acme
-  bc:issues:…/issue/3     issues  issue     3  SSO for Acme SA — blocks CHF 18k deal
-  bc:sales:…/prospect/9   sales   prospect  9  Acme SA
+$ bk search northstar
+  bc:issues:…/issue/5     issues  issue     5   SSO for Northstar SA — blocks…
+  bc:sales:…/prospect/17  sales   prospect  17  Northstar SA
 
-$ bk activity --since 1h
-  …  issues  created        issue          #3
-  …  sales   created        objection      4
-  …  sales   stage_changed  prospect       …
-  …  sales   created        meeting        9
+$ bk activity --since 10m
+  …  issues  created        issue          #5     ← its serial is 729
+  …  sales   updated        objection      5
+  …  sales   stage_changed  prospect       17
+  …  sales   created        meeting        10
+  …  sales   created        communication  19
+  …  sales   created        prospect       17
 
-$ bk sales prospect delete 9              # without --confirm
-error: --confirm is required and must be the company name of prospect #9
-$ bk sales prospect delete 9 --confirm "Acme SA"
-binned prospect #9: Acme SA
-
-$ bk sales trash list      # the cascade is visible
-  prospect:9        Acme SA
-  meeting:9         Demo
-  communication:16  call · out
-
-$ bk search acme           # the binned prospect is GONE from the index
-  bc:issues:…/issue/3  (only)
-$ bk sales trash restore prospect:9
-restored 1 item(s)
-$ bk search acme           # …and back
-  bc:sales:…/prospect/9  sales  prospect  9  Acme SA
+$ bk sales prospect delete 17 --confirm "Northstar SA"
+binned prospect #17: Northstar SA
+$ bk sales trash list
+  prospect:17       Northstar SA
+  meeting:10        Demo            ← the cascade is visible
+  communication:19  call · out
 ```
 
-**One token, one binary, no re-auth.** The soft-delete → projection → search →
-restore round trip closes.
+**One login. One token. One binary. One host. No re-auth, no server switch.**
 
-In the browser: one sign-in at `:3100` carried to `:3000` with no second login
-(D-16, the shared session cookie), and the prospect page's **Related** block
-rendered an absolute cross-app URL that resolves.
+Two details worth reading twice:
 
-### 8.2 What did NOT work, and it is not small
+- `bk activity` printed `issue #5` from the **sales** host. That issue's serial
+  id is 729. Until 2026-08-07 this feed served the other app's internal row id
+  with a `#` in front of it (§8.3).
+- `bk link create` and `bk search` ran against the sales deployment. Both were
+  404s here until the platform factories were mounted.
 
-**`bk app use issues` in the script above is load-bearing.** The sales
-deployment serves **7 of the 54 platform routes** `bk` claims. The other 47 are
-served by issues only. So from a sales login — which is what
-`bk login --server <sales>` gives you — these all answer with a 404 page:
+In the browser: one sign-in at `:3100`, then `:3000` with no second login (D-16,
+the shared session cookie), and the prospect page's **Related** block links to
+`http://127.0.0.1:3000/dashboard/…/issues/5`, which opens the issue.
 
-| Tier | Verb | From the sales host |
-|---|---|---|
-| Neutral | `bk workspace list \| use \| create` | 404 |
-| Neutral | `bk app list` | 404 |
-| Neutral | `bk member`, `bk invite`, `bk inbox` | 404 |
-| Neutral | `bk super-admin …` | 404 |
-| **Cross-app** | **`bk search`** | **404** |
-| **Cross-app** | **`bk link create`** | **404** |
-| Cross-app | `bk storage list` | 404 |
-| Cross-app | `bk activity` | **works** |
-| Neutral | `bk meta`, `bk whoami`, `bk token`, `bk profile` | work |
+### 8.2 What this host still does not serve, and what happens when you ask
 
-`bk guide platform/apps` states the routing contract as: neutral verbs go to the
-home app's server, and cross-app verbs go there too because "it reads shared
-data, so **any app answers alike**". They do not answer alike — one 404s. And a
-fresh `bk login --server <sales>` cannot even set an active workspace, because
-`bk workspace use` needs `GET /api/workspaces`, which sales does not mount.
+An app serving a SUBSET of the platform surface is permanent and legitimate
+(D-36 as amended: a permanent subset is fine, an accidental one is a bug, and
+the test is whether every bare verb has a host). Sales now serves 27 of the 54;
+the rest, and why:
 
-Two of those rows are the north star's own steps. `bk search` and
-`bk link create` are the reason the cross-app tier exists.
+| Verb | Why not here |
+|---|---|
+| `bk super-admin …` | Platform administration lives in one app. Same answer from any host, and the issues host gives it. |
+| `bk inbox …` | No shared factory exists yet. |
+| `bk storage list \| rm` | No factory, and the delete path reaches blob deletion. D-28 still holds: one ledger, same rows from issues. |
+| `bk workspace edit \| delete \| transfer`, `bk member leave`, `bk invite accept \| decline` | Not yet factories — the queries are still app-local to issues. `GET` on a workspace IS served, because `bk workspace use` resolves a slug through it. |
+| `bk workspace create` | D-3: a workspace is the company; sales has no create-workspace flow. |
 
-This is a **contradiction between D-36 and the guide**, not a bug in either
-alone. D-36 settled that an app serving a subset of the platform surface is a
-permanent condition, not a build-out one — and it is right. What was never
-reconciled is the CLI's routing rule, which sends verbs to a host chosen by
-`home_app` rather than to a host known to answer for them. Deciding that is
-above this section; it is written up in full for the master.
-
-### 8.3 Two more, verified rather than assumed
-
-**`bk issues issue view <n>` does not show links back into sales.** D-18's third
-bullet says "that half already works once sales projects entities; **verify it
-rather than assume it**." It does not work: two links point from issue #3 into
-sales, `bk link list bc:issues:…/issue/3` prints both with resolved titles, and
-neither `bk issues issue view 3` nor the issues web page mentions them. The data
-is right; the issues side has no display for it, in either surface.
-
-**The merged activity feed serves another app's INTERNAL ROW IDS.** The same
-feed, from two hosts:
+Asking for one of them from here is a recoverable dead end rather than a wall:
 
 ```
-via issues:3000   …  sales   created  prospect  29     ← the serial id
-via sales:3100    …  sales   created  prospect  9      ← the #number
-via sales:3100    …  issues  created  issue     #727   ← issues' serial id
-via issues:3000   …  issues  created  issue     #3     ← the #number
+$ bk inbox list
+error: the sales app does not serve /api/me/inbox (404)
+hint: the sales deployment serves only part of the platform surface. Try
+      `bk --app-server issues …` for this one command, `bk app use <slug>` to
+      move the bare verbs for good, or `bk app list` to see every app's server
 ```
 
-Each host gets its OWN app right and the other one wrong, because
-`activityRoute`'s `numberedEntityTypes` + `resolveEntitySeqs` can only read the
-mounting app's tables. The foreign rows even keep the `#` prefix, so a serial id
-is presented AS a #number. `platform.events.subject_urn` already carries the
-correct #number for every projected row, so the fix is available without any
-cross-schema read — but it is in `packages/platform-*` and is not a guardrail,
-so it is raised rather than applied here.
+Exit 5, two lines. It used to be roughly thirty lines of the framework's HTML
+404 page, pasted in as the error message.
 
-It was invisible until now because `id` and `seq` coincide in a fresh database.
-The prospect above only exposed it because its `id` was 29 and its `seq` was 9.
+### 8.3 Two defects this run found, both fixed
+
+**The merged activity feed served other apps' internal row ids.** The same feed,
+before the fix:
+
+```
+via issues:3000   sales   created  prospect  29     ← sales' row id (seq 9)
+via sales:3100    issues  created  issue     #727   ← issues' row id (seq 4)
+```
+
+Each host resolved its OWN app and passed the other through untouched, because
+`resolveEntitySeqs` can only read the mounting app's tables — and `bk activity`
+prints a `#` either way, so a serial was presented AS a #number. Now taken from
+`platform.events.subject_urn`, written by the producing app in the same
+transaction; where a foreign row has none, the field is null rather than a
+guess. Both hosts now agree, and agree with the database.
+
+**`bk issues issue view` still does not show links back into sales.** Verified
+rather than assumed, as D-18 asks. The data is right — `bk link list <urn>`
+returns both links with resolved titles — and what is missing is a display in
+the issues app. Deliberately not built during a verification phase; logged as a
+Phase 13 item. `bk link list` is the working answer today.
