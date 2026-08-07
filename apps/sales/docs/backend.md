@@ -417,8 +417,10 @@ records is what is specific to this app.
 | `POST …/prospects/{n}/stage` | `bk sales prospect stage` |
 
 `{n}` is the workspace #number in every one of them. **No platform route factory
-is mounted yet**, which is why `lib/cli-parity.test.ts` still sets
-`hostsPlatformRoutes = false`; see §7.5.
+is mounted yet**, and there is nothing to declare about that: since 2026-08-07
+the parity guard derives an app's drift scope from the platform routes it
+actually has a file for. Mount `/api/meta` and that one route joins this app's
+check; the other fifty-three do not. See §7.5.
 
 ### 7.2 The four files a write path goes through
 

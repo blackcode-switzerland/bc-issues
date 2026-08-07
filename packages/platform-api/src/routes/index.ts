@@ -27,10 +27,17 @@
 // ---------------------------------------------------------------------------
 // The mount file must still exist at the right path in each app — Next.js routes
 // by filesystem, so there is no way to mount these centrally, and nothing warns
-// you about a route you forgot. `lib/cli-parity.test.ts` is what catches it:
-// every route `bk` claims must exist in the tree of an app that says it mounts
-// the platform routes (`hostsPlatformRoutes`). Set that flag when you mount
-// them, or your app's missing routes are nobody's failure.
+// you about a route you forgot. Two checks catch it, and they are deliberately
+// in different places (2026-08-07):
+//
+//   per app    `lib/cli-parity.test.ts` — the platform routes YOU mount must
+//              exist and serve the methods `bk` claims. Scope is derived from
+//              the filesystem; there is no flag to set. Mounting only a subset
+//              is normal and permanent.
+//   repo-wide  `packages/platform-testing/test/platform-route-coverage.test.ts`
+//              — every platform command's route is served by at LEAST ONE app.
+//              This is the half that stops "nobody mounts it" from reading the
+//              same as "somebody else mounts it".
 
 // ---------------------------------------------------------------------------
 // A FACTORY SERVING SEVERAL METHODS RETURNS AN OBJECT. UNPACK IT ONE LINE AT A

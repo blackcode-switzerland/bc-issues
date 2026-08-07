@@ -1,4 +1,16 @@
-export { collectAppRoutes, loadCliRoutes, type CliRoutes, type ParityInputs } from './cli-parity'
+export {
+  collectAppRoutes,
+  collectPlatformMountCoverage,
+  invisibleMethodExports,
+  loadCliRoutes,
+  methodsOf,
+  PLATFORM,
+  type AppRoutes,
+  type CliRoutes,
+  type ParityInputs,
+  type PlatformMount,
+  type PlatformMountCoverage,
+} from './cli-parity'
 export {
   findCrossAppImports,
   findCrossSchemaQueries,

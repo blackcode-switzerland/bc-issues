@@ -553,16 +553,44 @@ another app.**
 ### 7.6 The guardrails that enforce it
 
 - **`lib/cli-parity.test.ts`, per app** — every route reachable from `bk`, every
-  claimed route real. `bk __routes` tags each route with its app, and each app
-  that MOUNTS the platform route factories sets `hostsPlatformRoutes`. Without
-  that flag set anywhere, every platform route would go unchecked by everybody.
+  claimed route real. `bk __routes` tags each route with its app.
 
-  **The flag changed meaning on 2026-08-06.** It used to mean "the shared routes
-  physically live in my `app/api` tree", and exactly one app could set it. Phase
-  1b of `docs/sales-app-plan.md` moved them into
-  `@blackcode/platform-api/routes` as factories, so it now means "I mount them"
-  and several apps may say so — each checking the platform claims against its own
-  tree, which is what makes a missing mount fail on the app that is missing it.
+  **The property is two sentences, and each half is checked in a different
+  place** (2026-08-07):
+
+  > A platform ROUTE is answered by the apps that mount it.
+  > A platform COMMAND must be answerable by at least ONE app.
+
+  The first is per-app: an app's drift check covers its own claims, plus the
+  `platform` claims whose route that app actually has a file for — **derived from
+  the filesystem, never declared**. The second is repo-wide and lives in
+  `packages/platform-testing/test/platform-route-coverage.test.ts`, because
+  "nobody serves `GET /api/inbox`" is not any one app's failure.
+
+  **Neither half is sufficient alone.** Scope drift to what an app mounts and
+  "no app mounts this" becomes indistinguishable from "another app mounts it" —
+  both green everywhere. Verified by injecting an orphan platform claim: every
+  app suite stayed green and only the repo-wide check went red.
+
+  The `hostsPlatformRoutes` boolean each app used to set was **retired in the
+  same change**. It could not express an app serving a legitimate SUBSET of the
+  platform surface, which is a permanent state and not a build-out one — `sales`
+  has no reason ever to serve `bk inbox` (per-user, cross-workspace),
+  `bk super-admin errors` (platform-wide data, any host answers) or
+  `bk storage list` (§D-28: one ledger, one quota, same rows from every
+  deployment). The plan's earlier answer — a documented `EXCLUDED_PATHS` entry
+  per unmounted route — was wrong for a mechanical reason worth keeping written
+  down: **an exclusion pushes on COVERAGE and an unmounted route is a DRIFT
+  failure**, so excluding the path removes it from the very set drift compares
+  against.
+
+- **The export form of a route handler is checked**, in the same file. A route
+  serves identically whether it is written `export const GET = …` or
+  `export const { GET } = handlers()` — and the second matches none of the
+  patterns the guard reads, so the route drops out of coverage while the app
+  keeps serving it. The form is **detected and refused**, not parsed: teaching
+  the guard to follow a destructuring means a second, weaker route-extractor to
+  keep honest beside the authoritative one.
 
   The flag is **derived-checked, not trusted**: `mountedPlatformRoutes` works out
   from the filesystem whether an app actually serves any platform route, and each

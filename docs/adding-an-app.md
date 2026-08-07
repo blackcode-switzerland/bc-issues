@@ -409,8 +409,26 @@ that forgets its error log has no error log and nothing goes red.
 `@blackcode/platform-api/routes` exports one factory per shared route. Mount the
 ones your app serves, in your own tree, three lines each — Next routes by
 filesystem, so there is no central mount and nothing warns you about one you
-skipped. `lib/cli-parity.test.ts` is what catches it, and it will also make you
-set `hostsPlatformRoutes` once you mount any of them.
+skipped. `lib/cli-parity.test.ts` is what catches it.
+
+**Mount only the ones your app should answer for.** Serving a subset is a normal,
+permanent state — `apps/sales` has no reason ever to serve `bk inbox` (per-user,
+cross-workspace) or `bk storage list` (D-28: one ledger, one quota, same rows from
+every deployment). Your drift check covers the platform routes you actually have a
+file for, derived from the filesystem, so there is nothing to declare and nothing
+to forget to declare. *(Superseded 2026-08-07: this step used to tell you to set
+`hostsPlatformRoutes`. That flag is gone — it could only say "all of the platform
+surface" or "none of it". Full reasoning in
+`packages/platform-testing/src/cli-parity.ts`.)*
+
+The other half — "does at least one app serve every platform command's route?" —
+is asserted once for the whole repo in
+`packages/platform-testing/test/platform-route-coverage.test.ts`. **Do not copy it
+into your app.**
+
+And write one export per method: `export const GET = handlers.GET`, never
+`export const { GET } = handlers()`. The second serves identically and is
+invisible to the parity guard, which now detects and refuses the form.
 
 ## 12. Before you call it done
 

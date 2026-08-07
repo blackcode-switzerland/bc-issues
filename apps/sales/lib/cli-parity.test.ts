@@ -47,24 +47,19 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
 const EXCLUDED_PATHS = new Map<string, string>()
 
 describe('CLI ↔ routes parity', () => {
-  // `hostsPlatformRoutes` means "I mount the platform route factories from
-  // @blackcode/platform-api/routes" — since 2026-08-06 it is a property of what
-  // an app SERVES, not of where the files happen to sit, and several apps may
-  // set it (docs/sales-app-plan.md Phase 1b).
+  // There is no `hostsPlatformRoutes`, retired on 2026-08-07 — and this app is
+  // why. It could not express "serves SOME of the platform surface", which is
+  // this app's permanent state rather than a build-out one: sales will never
+  // serve `bk inbox` (per-user, cross-workspace), `bk super-admin errors`
+  // (platform-wide data, any host answers) or `bk storage list` (D-28: one
+  // ledger, one quota, same rows from every deployment).
   //
-  // Sales mounts none of them YET — it has no routes at all at Phase 2. It will:
-  // `/api/me` is the first one the web foundation needs, and `/api/upload`,
-  // `/api/tokens` and `/api/cli/authorize` follow. **Flip this to true in the
-  // same change that mounts the first one**; the second assertion below is what
-  // catches you if you don't, and it names the route you mounted.
-  const HOSTS_PLATFORM_ROUTES = false
-  const { real, claimed, ownClaims, mountedPlatformRoutes, cli } = collectAppRoutes(
-    {
-      appRoot: APP_ROOT,
-      cliDir: CLI_DIR,
-      appSlug: APP_SLUG,
-      hostsPlatformRoutes: HOSTS_PLATFORM_ROUTES,
-    },
+  // Drift for a PLATFORM claim is now scoped to the routes this app actually has
+  // a file for. Mount `/api/meta` and that route joins this check; nothing else
+  // does. The other half — "is every platform command answerable by SOMEBODY?" —
+  // is asserted once for the whole repo in packages/platform-testing's suite.
+  const { real, claimed, ownClaims, invisibleExports, cli } = collectAppRoutes(
+    { appRoot: APP_ROOT, cliDir: CLI_DIR, appSlug: APP_SLUG },
     new Set(EXCLUDED_PATHS.keys())
   )
 
@@ -82,21 +77,22 @@ describe('CLI ↔ routes parity', () => {
     ).toBeGreaterThan(0)
   })
 
-  // The flag above decides whether platform commands' routes are checked here at
-  // all, and a hand-set boolean that switches a check off is how a guard reads
-  // green while examining nothing (CLAUDE.md's table of nine). So it is checked
-  // against the filesystem rather than trusted: mount a platform route without
-  // setting the flag and this fails, naming the route you mounted.
-  it('sets hostsPlatformRoutes iff it actually mounts platform routes', () => {
+  // A route can serve traffic and be INVISIBLE to the coverage check above:
+  // `export const { GET } = handlers()` and `export { GET } from './x'` both
+  // work and match none of the patterns `methodsOf` reads, so the route drops
+  // out of the check while the app still serves it. Found on 2026-08-07 by
+  // injecting one INTO THIS APP — `next build` listed the route and parity
+  // stayed green. Detected rather than parsed, deliberately: a second, weaker
+  // route extractor beside the authoritative one is a worse trade than a rule.
+  it('exports every handler in a form the guard can see', () => {
+    const found = invisibleExports.map(
+      (e) => `${e.file} exports ${e.methods.join(', ')} via an export list`
+    )
     expect(
-      HOSTS_PLATFORM_ROUTES,
-      mountedPlatformRoutes.length > 0
-        ? `this app mounts platform route(s):\n${mountedPlatformRoutes.join('\n')}\n` +
-          'so set hostsPlatformRoutes to true — otherwise every platform command\'s claimed ' +
-          'route goes unchecked here.'
-        : 'this app mounts no platform routes, so hostsPlatformRoutes must be false — ' +
-          'setting it would make this app report every platform route as drift.'
-    ).toBe(mountedPlatformRoutes.length > 0)
+      found,
+      'these route files export an HTTP method in a form this guard CANNOT SEE. ' +
+        'Write `export const GET = …`, one line per method:\n' + found.join('\n')
+    ).toEqual([])
   })
 
   it('every leaf command declares its routes', () => {

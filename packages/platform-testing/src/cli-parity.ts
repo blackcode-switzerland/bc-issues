@@ -21,36 +21,57 @@
 //             from app X *and* from `platform`. A workspace or label route lives
 //             in an app's tree but is reached by a bare verb.
 //
-//   DRIFT     "every route bk claims exists" considers commands from app X only
-//             — plus `platform` for each app that MOUNTS the shared platform
-//             routes (`hostsPlatformRoutes`). Without that flag set anywhere,
-//             every platform command's route would go unchecked by everybody,
-//             which is the failure mode this whole file exists to prevent: a
-//             guard that reads green because it checked nothing.
+//   DRIFT     "every route bk claims exists" considers commands from app X, plus
+//             the `platform` commands whose route THIS APP ACTUALLY MOUNTS.
 //
-// ── WHAT `hostsPlatformRoutes` MEANS, AND WHAT IT USED TO MEAN ───────────────
-// Until 2026-08-06 it meant "the shared routes physically live in MY app/api
-// tree", and exactly one app could set it — `apps/issues`, because that is where
-// they happened to sit. Phase 1b of docs/sales-app-plan.md moved them into
-// `@blackcode/platform-api/routes` as factories, and every app now mounts the
-// ones it serves. So the flag means **"I mount the platform route factories"**,
-// and SEVERAL APPS MAY SET IT. Each checks the platform claims against its own
-// tree, which is what makes an app that forgot a mount file go red on its own
-// test instead of on somebody else's.
+// ---------------------------------------------------------------------------
+// THE PROPERTY, AND WHY IT IS TWO SENTENCES AND NOT ONE (2026-08-07)
+// ---------------------------------------------------------------------------
+//     A platform ROUTE is answered by the apps that mount it.
+//     A platform COMMAND must be answerable by at least ONE app.
 //
-// The flag is not free-floating: `mountedPlatformRoutes` below derives, from the
-// filesystem, whether an app actually serves any platform route. An app that
-// does and says it does not is a test that has quietly stopped checking, so it
-// is a failure — see the "sets hostsPlatformRoutes iff it mounts them" case in
-// each app's cli-parity.test.ts. That is the only thing standing between this
-// flag and the row in CLAUDE.md's table it would otherwise join.
+// The first is per-app and lives in `ownDriftScope` below. The second is
+// repo-wide and lives in `collectPlatformMountCoverage`, asserted once in this
+// package's own suite. **Neither is sufficient alone**, and the second is the
+// one that keeps the first from being a hole: scope drift to what an app mounts
+// and "nobody mounts it" becomes indistinguishable from "somebody else does".
 //
-// KNOWN GAP, and it belongs to whoever adds the second app rather than to this
-// file: an app that mounts only SOME platform routes (docs/sales-app-plan.md
-// splits them into Tier 1 before launch and Tier 2 after) will report the ones
-// it has not mounted yet as drift. Sound, but it will be loud on the day sales
-// lands, and the fix is a decision — mount the rest, or teach the flag about
-// tiers — not something to guess at here.
+// ── WHAT THIS REPLACED, AND WHY BOTH EARLIER MECHANISMS FAILED ───────────────
+// There was a hand-set `hostsPlatformRoutes` boolean per app, meaning "put every
+// platform command's claim into my drift check". It was retired here on
+// 2026-08-07, along with the plan's ruling that an unmounted platform route
+// should get a documented `EXCLUDED_PATHS` entry. Both were designed around the
+// assumption that an app serving only PART of the platform surface is a
+// temporary build-out state. **It is not.** Sales has no reason ever to serve
+// `bk super-admin errors` (platform-wide data, any host answers), `bk inbox`
+// (per-user, cross-workspace) or `bk storage list` (D-28: one ledger, one quota,
+// same rows from any deployment). A permanent, legitimate subset is what the
+// mechanism has to express, and neither of those could:
+//
+//   - an EXCLUSION pushes on COVERAGE (`real`), and an unmounted route is a
+//     DRIFT failure. Excluding the path makes it worse: it removes the path from
+//     the very set drift compares against.
+//   - a BOOLEAN cannot express a subset. It is all of the platform surface or
+//     none of it, and `mountedPlatformRoutes` is filesystem-derived, so mounting
+//     one route (`/api/meta` is Class C and per-app, D-20) forced the flag true
+//     and pulled in every platform claim at once.
+//
+// `mountedPlatformRoutes` survives the flag it used to police, because it is the
+// derivation the new scope is built on rather than a check on a declaration.
+// Read agent10's reasoning above before touching it: the hole the flag's
+// self-check closed was "a declaration that quietly stops matching reality", and
+// the answer here is to have no declaration at all.
+//
+// ── AND ONE FORM OF EXPORT THIS GUARD CANNOT SEE ────────────────────────────
+// `methodsOf` reads a route's verbs with a regex over `export const GET = …`.
+// A DESTRUCTURED or RE-EXPORTED method — `export const { GET } = handlers()`,
+// `export { GET } from './x'` — serves traffic identically and matches nothing,
+// so the route drops out of the coverage check while `next build` happily lists
+// it. Verified on 2026-08-07 with a real route in `apps/sales`.
+//
+// The fix is not a better parser. It is `invisibleExports` below: the form is
+// DETECTED and the app's suite fails naming the file, so an invisible hole
+// becomes a stated rule — the trade this repo makes everywhere else.
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -81,15 +102,6 @@ export interface ParityInputs {
   cliDir: string
   /** This app's slug, matching `bk __routes`' `app` field. */
   appSlug: string
-  /**
-   * True when this app MOUNTS the platform route factories from
-   * `@blackcode/platform-api/routes`. Several apps may set it — see the header.
-   *
-   * Setting it puts every `platform` command's claimed route into this app's
-   * drift check. Leaving it off when the app does serve platform routes is
-   * itself a failure; `mountedPlatformRoutes` is how a test proves that.
-   */
-  hostsPlatformRoutes?: boolean
 }
 
 /** Every `route.ts` under a directory, recursively. */
@@ -126,6 +138,48 @@ export function methodsOf(src: string): string[] {
   return HTTP_METHODS.filter((m) =>
     new RegExp(`export\\s+(const|async\\s+function|function)\\s+${m}\\b`).test(src)
   )
+}
+
+// An export list — `export const { GET, POST } = …`, `export { GET } from …`,
+// `export { handler as GET }`. All three are legal, all three serve traffic, and
+// `methodsOf` sees none of them.
+//
+// **Anchored to the start of a line**, and that is not tidiness. The first
+// version was not, and it flagged three route files in `apps/issues` whose only
+// offence was a COMMENT explaining why they do not use the destructured form —
+// the detector caught the documentation of its own rule. Stripping comments
+// properly needs a tokenizer that understands quotes and template literals;
+// anchoring needs nothing, because a route's exports are always top-level and a
+// comment line never begins with `export`.
+const EXPORT_LIST_RE = /^[ \t]*export\s+(?:const|let|var)?\s*\{([^}]*)\}/gm
+
+/**
+ * The HTTP methods a route file exports in a form this guard CANNOT SEE.
+ *
+ * Non-empty means the file is serving verbs that will not appear in `real`, so
+ * the coverage check silently stops asking about them. That is not a
+ * hypothetical: `packages/platform-api/src/routes/index.ts` has warned about the
+ * destructured form for factories since it was written, and on 2026-08-07 a
+ * hand-written route in `apps/sales` proved the hole is any route file at all —
+ * `next build` listed the route, parity stayed green.
+ *
+ * **Deliberately a detector, not a parser.** Teaching `methodsOf` to follow a
+ * destructuring means a second, weaker route-extractor to keep honest beside the
+ * authoritative one. Naming the form and refusing it costs one line at each call
+ * site and cannot itself drift.
+ */
+export function invisibleMethodExports(src: string): string[] {
+  const found = new Set<string>()
+  for (const m of src.matchAll(EXPORT_LIST_RE)) {
+    const inside = m[1] ?? ''
+    for (const method of HTTP_METHODS) {
+      // Word-boundary match, so `export { GETTERS }` is not a finding and
+      // `export { GET as POST }` reports both — either name could be the served
+      // verb and the point is to refuse the form, not to resolve it.
+      if (new RegExp(`\\b${method}\\b`).test(inside)) found.add(method)
+    }
+  }
+  return [...found].sort()
 }
 
 /**
@@ -168,12 +222,20 @@ export interface AppRoutes {
   /**
    * The platform-claimed paths this app actually has a route file for.
    *
-   * Derived from the filesystem, never from a declaration, because it exists to
-   * check a declaration: an app with entries here that leaves
-   * `hostsPlatformRoutes` off has silently excused every platform command's
-   * route from its drift check, and nothing else would say so.
+   * Derived from the filesystem, never from a declaration. It used to exist to
+   * CHECK a declaration (`hostsPlatformRoutes`); since 2026-08-07 there is no
+   * declaration and this IS the drift scope — which is the stronger arrangement,
+   * because a derivation cannot quietly stop matching reality.
    */
   mountedPlatformRoutes: string[]
+  /**
+   * Route files that export an HTTP method in a form `methodsOf` cannot see.
+   *
+   * `file` is repo-relative-ish (relative to `appRoot`) so the failure names
+   * something a reader can open. Non-empty is a failure in the app's own suite —
+   * see `invisibleMethodExports`.
+   */
+  invisibleExports: Array<{ file: string; url: string; methods: string[] }>
   cli: CliRoutes
 }
 
@@ -196,25 +258,46 @@ export function collectAppRoutes(
     const app = r.app ?? inputs.appSlug
     return app === inputs.appSlug || app === PLATFORM
   }
-  const ownDriftScope = (r: CliRouteEntry) => {
-    const app = r.app ?? inputs.appSlug
-    if (app === inputs.appSlug) return true
-    return app === PLATFORM && Boolean(inputs.hostsPlatformRoutes)
-  }
-
   const real = new Map<string, Set<string>>()
   const allPaths = new Set<string>()
+  const invisibleExports: AppRoutes['invisibleExports'] = []
   for (const file of walkRoutes(join(inputs.appRoot, 'app', 'api'))) {
     const url = routeUrl(inputs.appRoot, file)
+    const src = readFileSync(file, 'utf8')
     allPaths.add(url)
+    // Excluded FIRST. An excluded route is one the caller has stated, with a
+    // reason, is not reachable from the CLI — its methods are never compared
+    // against anything, so how it exports them cannot hide a capability. The
+    // real instance is `apps/issues`' NextAuth catch-all, which necessarily
+    // writes `export { handler as GET, handler as POST }`.
     if (excludedPaths.has(url)) continue
-    real.set(url, new Set(methodsOf(readFileSync(file, 'utf8'))))
+    const hidden = invisibleMethodExports(src)
+    if (hidden.length > 0) {
+      invisibleExports.push({ file: relative(inputs.appRoot, file), url, methods: hidden })
+    }
+    real.set(url, new Set(methodsOf(src)))
   }
 
   const platformClaims = cli.routes.filter((r) => (r.app ?? inputs.appSlug) === PLATFORM)
   const mountedPlatformRoutes = [
     ...new Set(platformClaims.map((r) => r.path).filter((p) => allPaths.has(p))),
   ].sort()
+  const mountedHere = new Set(mountedPlatformRoutes)
+
+  // DRIFT SCOPE. An app answers for its own claims unconditionally, and for a
+  // PLATFORM claim only where it actually serves that path.
+  //
+  // The conditional half is what lets an app serve a legitimate SUBSET of the
+  // platform surface — the permanent state, not a build-out one, since sales has
+  // no reason ever to serve `bk inbox` or `bk super-admin errors`. What it gives
+  // up is the ability to notice a route NO app mounts, and that is picked up by
+  // `collectPlatformMountCoverage` in this package's own suite. Removing either
+  // one leaves a hole; they are one property in two halves.
+  const ownDriftScope = (r: CliRouteEntry) => {
+    const app = r.app ?? inputs.appSlug
+    if (app === inputs.appSlug) return true
+    return app === PLATFORM && mountedHere.has(r.path)
+  }
 
   return {
     real,
@@ -223,6 +306,100 @@ export function collectAppRoutes(
     ownClaims: cli.routes.filter(ownDriftScope),
     platformClaims,
     mountedPlatformRoutes,
+    invisibleExports,
     cli,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The repo-wide half: is every platform command answerable by SOMEBODY?
+// ---------------------------------------------------------------------------
+
+/** One platform command's claim, and which app directories serve its path. */
+export interface PlatformMount {
+  method: string
+  path: string
+  command: string
+  /** App DIRECTORIES (`issues`, `_template`) with a route file at that path. */
+  mountedBy: string[]
+}
+
+export interface PlatformMountCoverage {
+  /** Every app directory that has an `app/api` tree, in listing order. */
+  apps: string[]
+  /** Every distinct route path across every app. The input, for assertion. */
+  allRoutePaths: Set<string>
+  /** One entry per distinct platform METHOD+PATH claim. */
+  claims: PlatformMount[]
+  /** The subset of `claims` no app serves. Non-empty is the failure. */
+  unmounted: PlatformMount[]
+}
+
+/**
+ * Which apps mount each route a `platform` command claims.
+ *
+ * This is the second half of the property in this file's header, and the reason
+ * per-app drift can safely be scoped to what an app mounts: without it, "no app
+ * serves `GET /api/inbox`" and "another app serves it" produce identical green.
+ *
+ * It walks `apps/*​/app/api` rather than taking a list, for the same reason
+ * `package-isolation.ts` derives its slug list: a hand-maintained set of app
+ * directories is wrong on the day app four lands, and its failure is silence.
+ *
+ * An app directory with no `app/api` is skipped rather than fatal — not every
+ * directory under `apps/` has to be a Next.js app — which is why `apps` and
+ * `allRoutePaths` are returned: the caller must assert they are non-empty before
+ * trusting `unmounted`. A scan that found no apps reports perfect coverage.
+ */
+export function collectPlatformMountCoverage(inputs: {
+  /** Absolute path to `apps/`. */
+  appsRoot: string
+  /** Absolute path to `cli/`. */
+  cliDir: string
+}): PlatformMountCoverage {
+  const cli = loadCliRoutes(inputs.cliDir)
+
+  const apps: string[] = []
+  const allRoutePaths = new Set<string>()
+  const byPath = new Map<string, string[]>()
+
+  for (const entry of readdirSync(inputs.appsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const appRoot = join(inputs.appsRoot, entry.name)
+    if (!existsSync(join(appRoot, 'app', 'api'))) continue
+    apps.push(entry.name)
+    for (const file of walkRoutes(join(appRoot, 'app', 'api'))) {
+      const url = routeUrl(appRoot, file)
+      allRoutePaths.add(url)
+      const list = byPath.get(url) ?? []
+      if (!list.includes(entry.name)) list.push(entry.name)
+      byPath.set(url, list)
+    }
+  }
+
+  // Deduped by METHOD+PATH: two commands claiming the same route is one route to
+  // mount, and reporting it twice would make the failure list read as worse than
+  // it is.
+  const seen = new Map<string, PlatformMount>()
+  for (const r of cli.routes) {
+    if (r.app !== PLATFORM) continue
+    const key = `${r.method} ${r.path}`
+    if (seen.has(key)) continue
+    seen.set(key, {
+      method: r.method,
+      path: r.path,
+      command: r.command,
+      mountedBy: byPath.get(r.path) ?? [],
+    })
+  }
+  const claims = [...seen.values()].sort((a, b) =>
+    `${a.path} ${a.method}`.localeCompare(`${b.path} ${b.method}`)
+  )
+
+  return {
+    apps,
+    allRoutePaths,
+    claims,
+    unmounted: claims.filter((c) => c.mountedBy.length === 0),
   }
 }
