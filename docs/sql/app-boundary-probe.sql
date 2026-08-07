@@ -53,8 +53,26 @@ $probe1$;
 --     It SKIPS LOUDLY when no other app schema exists rather than passing
 --     silently — this line was commented out entirely until 2026-08-05, when a
 --     second schema first existed, and a commented-out probe is a probe that
---     reports success. Verified for real that day: a fresh `sales_app` reading
---     `issues.issues` → 42501.
+--     reports success.
+--
+--     ── CLOSED 2026-08-07. THIS CHECK IS NO LONGER STRUCTURAL. ──────────────
+--     CLAUDE.md's guardrail #6 is this check, and it has had three lives: a
+--     comment (which reports success), then a live version whose candidate came
+--     from a blocklist and picked `neon_auth.invitation` — a correct refusal of
+--     the wrong thing, which reads identically to a pass — and now a candidate
+--     drawn from `platform.apps`, i.e. from the registry that defines what an
+--     app IS.
+--
+--     On 2026-08-07 the sales schema landed and it ran against a real second app
+--     for the first time, as a real `sales_app` role rather than under SET ROLE:
+--
+--         (2) ok: issues.issues refused (42501)
+--
+--     Confirmed in both directions the same day — `issues_app` reading
+--     `sales.prospects` is refused on the schema — because this is the one
+--     people run one way round. It is now a real refusal of the right thing.
+--
+--     If it ever prints SKIPPED again, the app registry is wrong, not the probe.
 \echo '\n(2) foreign schema refused — expect 42501'
 DO $probe2$
 DECLARE t text;

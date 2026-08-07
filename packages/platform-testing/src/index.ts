@@ -13,3 +13,11 @@ export {
   type SchemaQueryAllowance,
 } from './app-isolation'
 export { appSlugs, platformPackageSources, type AppSlug } from './package-isolation'
+export {
+  appLedgers,
+  ledgerKey,
+  ledgerCollisions,
+  DEFAULT_MIGRATIONS_SCHEMA,
+  DEFAULT_MIGRATIONS_TABLE,
+  type AppLedger,
+} from './migration-ledger'
