@@ -27,7 +27,16 @@
 // write rolls back, and the result is an entities row for a prospect that does
 // not exist. That failure is invisible: `bk search` returns a title, the link
 // resolves, and nothing is wrong until somebody clicks through to a 404 weeks
-// later. `entities.projection.test.ts` asserts the rollback case directly.
+// later.
+//
+// `entities.integration.test.ts` asserts it, and asserts BOTH ways round: the
+// correct call site leaves nothing behind, and the same sequence written with
+// `db` instead of `tx` leaves an orphan. Only the pair proves anything — "a
+// rolled-back write leaves no projection" passes just as well against a
+// `projectEntity` that does nothing at all. *(Corrected 2026-08-07: this line
+// used to name `entities.projection.test.ts`, a file that did not exist. The
+// property had been checked by hand and the comment recorded the intention as
+// though it were a committed check.)*
 //
 // The second guard is `reconcileEntities`, `bk super-admin entity-drift`, which
 // re-derives the projection from the source tables.

@@ -40,7 +40,12 @@
  */
 import { config } from 'dotenv'
 import { sql } from 'drizzle-orm'
+import { mintToken } from '@blackcode/platform-auth'
 import { getDb } from '@/lib/db/client'
+import { APP_SLUG } from '@/lib/app'
+
+/** The dev token's name. Read `mintDevToken`'s comment before changing it. */
+const DEV_TOKEN_NAME = 'Companion'
 
 config({ path: '.env.local' })
 config({ path: '.env' })
@@ -505,7 +510,122 @@ async function main() {
     ORDER BY 1`)
   for (const r of counts.rows) console.log(`  ${String(r.t).padEnd(16)} ${r.n}`)
   console.log('✓ seeded. URNs are NOT projected — run `bk super-admin entity-drift --repair` if you want them.')
+
+  await enableAppForWorkspace(db, wsId, String(ws.slug))
+  await mintDevToken(db, wsId)
   process.exit(0)
+}
+
+// ---------------------------------------------------------------------------
+// THE DEV ENVIRONMENT, NOT THE FIXTURES
+// ---------------------------------------------------------------------------
+// Seeded rows are useless if no command can reach them, and the two things
+// standing between a fresh clone and `bk sales prospect list` are not data:
+//
+//   1. a `platform.workspace_apps` row, or `resolveWorkspace` answers 403
+//      `app_access_denied` for every route in this app;
+//   2. an API token, or there is nothing to authenticate with.
+//
+// Both live here rather than in a paragraph telling a developer to paste SQL.
+// A hand-run `INSERT INTO platform.api_tokens` is not repeatable for the next
+// person and is a bad habit to establish even locally — and pasted SQL is how a
+// credential ends up in a shell history, a scrollback and a chat log.
+//
+// Both are behind the same two gates as the fixtures (NODE_ENV and SALES_SEED)
+// and both are idempotent, like everything else in this file.
+
+/**
+ * Run `sales` in this workspace, and grant it to every member.
+ *
+ * BOTH halves are required and it is easy to think one is enough:
+ * `hasAppAccess` joins `app_access` to `workspace_apps`, so a workspace running
+ * the app with no grants denies everybody, and a grant against a workspace not
+ * running the app denies too. `default_access: 'all_members'` is the POLICY for
+ * members added later — it does not retroactively grant anything, which is why
+ * the explicit rows below exist.
+ */
+async function enableAppForWorkspace(db: ReturnType<typeof getDb>, wsId: number, slug: string) {
+  await db.execute(sql`
+    INSERT INTO platform.workspace_apps (workspace_id, app, default_access)
+    VALUES (${wsId}, ${APP_SLUG}, 'all_members')
+    ON CONFLICT (workspace_id, app) DO NOTHING`)
+
+  // Mirrors `workspace_members.role`, which is what `app_access.role` is
+  // documented to do. Derived from the membership table rather than defaulted,
+  // so the workspace owner does not quietly become an app 'member'.
+  const granted = await db.execute(sql`
+    INSERT INTO platform.app_access (workspace_id, app, user_id, role)
+    SELECT wm.workspace_id, ${APP_SLUG}, wm.user_id, wm.role
+    FROM platform.workspace_members wm
+    WHERE wm.workspace_id = ${wsId}
+    ON CONFLICT (workspace_id, app, user_id) DO NOTHING
+    RETURNING user_id`)
+
+  console.log(
+    `▶ ${APP_SLUG} enabled for workspace "${slug}" — ` +
+      `${granted.rows.length} new grant(s), every member of that workspace can now use it`
+  )
+}
+
+/**
+ * One local API token, named "Companion".
+ *
+ * THE NAME IS NOT DECORATION. `sales.stage_entries.actor_label` and its three
+ * siblings are populated from the TOKEN'S name (docs/backend.md §3.4), because
+ * an agent is not a `platform.users` row and agent-written history has to stay
+ * visibly agent-written. Seeding a token called "dev" would make every journey
+ * step in a local database say "dev", and the one behaviour worth seeing with
+ * your own eyes would be invisible.
+ *
+ * Minted through `mintToken` — the same function `POST /api/tokens` uses — so
+ * this file contains no hashing. A second implementation of credential minting
+ * is a second chance to get it wrong, and it would be the one nobody reviews.
+ *
+ * IDEMPOTENT, AND THE HONEST KIND. A token's plaintext exists once, at mint,
+ * and is not recoverable — so a second run cannot print the first run's token.
+ * It says so, and names the one command that replaces it, rather than minting a
+ * duplicate every run or pretending it did something.
+ */
+async function mintDevToken(db: ReturnType<typeof getDb>, wsId: number) {
+  const ownerRes = await db.execute(sql`
+    SELECT u.id, u.email
+    FROM platform.workspaces w
+    JOIN platform.users u ON u.id = w.owner_id
+    WHERE w.id = ${wsId}`)
+  const owner = ownerRes.rows[0]
+  if (!owner) {
+    console.log('▶ no owner on that workspace — skipping the dev token')
+    return
+  }
+
+  const existing = await db.execute(sql`
+    SELECT token_prefix FROM platform.api_tokens
+    WHERE user_id = ${Number(owner.id)} AND name = ${DEV_TOKEN_NAME}
+    LIMIT 1`)
+  if (existing.rows[0]) {
+    console.log(
+      `▶ a token named "${DEV_TOKEN_NAME}" already exists for ${owner.email} ` +
+        `(prefix ${existing.rows[0].token_prefix}…). Its plaintext existed once and is gone;\n` +
+        '  to replace it: `bk token delete <id>` then re-run this seed.'
+    )
+    return
+  }
+
+  const token = await mintToken(db, {
+    user_id: Number(owner.id),
+    name: DEV_TOKEN_NAME,
+    scopes: ['full'],
+  })
+
+  console.log(
+    `\n▶ minted a local dev token for ${owner.email}, named "${DEV_TOKEN_NAME}".\n` +
+      '  PRINTED ONCE — it is hashed in the database and cannot be shown again.\n\n' +
+      `    ${token.plaintext}\n\n` +
+      '  Point a bk config at this machine and use it:\n' +
+      '    BK_CONFIG_DIR=/tmp/bk-dev bk login --server http://localhost:3000\n' +
+      '  or write it into a config by hand. Every journey step you then write will\n' +
+      `  be attributed to "${DEV_TOKEN_NAME}", which is the point of the name.`
+  )
 }
 
 main().catch((e) => {

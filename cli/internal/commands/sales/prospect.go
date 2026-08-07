@@ -36,6 +36,7 @@ func newProspectCmd() *cobra.Command {
 		newProspectShowCmd(),
 		newProspectCreateCmd(),
 		newProspectEditCmd(),
+		newProspectAssignCmd(),
 		newProspectStageCmd(),
 		newProspectDeleteCmd(),
 	)
@@ -271,6 +272,69 @@ is its own command: "bk sales prospect stage <n> <stage>".`,
 	cmd.Flags().StringVar(&owner, "owner", "", "Deal owner: an email, \"me\", or \"\" to unassign")
 	cmd.Flags().StringVar(&source, "source", "", "How we found them (\"\" clears)")
 	cmd.Flags().StringVar(&summary, "summary", "", "Where this deal stands (\"\" clears)")
+	return cmd
+}
+
+// `bk sales prospect assign` — sugar over `edit --owner`, on the same route.
+//
+// It exists because §6.1's command table lists it, and an agent reading that
+// table will type it. A command that is in the table and not in the binary is
+// exactly the dead end this project removes — and the cost of the sugar is
+// twenty lines that cannot drift, because both spellings send the same PATCH.
+//
+// Not a second route, so parity is indifferent: `bk __routes` dedupes by
+// app+method+path.
+func newProspectAssignCmd() *cobra.Command {
+	var owner string
+	cmd := &cobra.Command{
+		Use:         "assign <n> --owner <email>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}"},
+		Short:       "Set (or clear) a prospect's deal owner",
+		Long: `Set the deal owner.
+
+--owner takes an email or the literal "me"; "" unassigns.
+
+The owner is always a REAL PERSON. An agent can log a call and write history —
+that is what the actor label on every journey step is for — but it cannot own a
+deal, and this is the one field in the app where that distinction is enforced by
+the schema rather than by convention.
+
+The same thing is spelled "bk sales prospect edit <n> --owner <email>"; this
+form exists because it is the one you reach for when reassigning is the whole
+intent.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := prospectNumber(args[0])
+			if err != nil {
+				return err
+			}
+			if !cmd.Flags().Changed("owner") {
+				return fmt.Errorf("--owner is required — an email, \"me\", or \"\" to unassign")
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			p, err := c.UpdateProspect(ws, n, client.UpdateProspectRequest{Owner: client.Set(owner)})
+			if err != nil {
+				return err
+			}
+			return output.Render(format, p, func(w io.Writer) error {
+				if p.Owner == nil {
+					_, err := fmt.Fprintf(w, "prospect #%d (%s) is now unassigned\n", p.Number, p.Name)
+					return err
+				}
+				_, err := fmt.Fprintf(w, "prospect #%d (%s) is now owned by %s\n",
+					p.Number, p.Name, p.Owner.Email)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&owner, "owner", "", "Deal owner: an email, \"me\", or \"\" to unassign")
 	return cmd
 }
 
