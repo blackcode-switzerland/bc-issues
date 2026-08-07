@@ -10,8 +10,8 @@ Status: **Phases 6–9 landed 2026-08-07.** The providers, the shell, the two
 dashboard empties, every page group, ⌘K, Activity, the full search page,
 Settings, and the read-only / full switch with its write affordances.
 
-**Super-admin is NOT built**, and it is the one item in the brief this app could
-not deliver — see §11. It is a question for the master, not a decision.
+**Super-admin is NOT built, and never will be** — platform administration lives
+in one app and it is not this one (§11, settled 2026-08-07).
 
 ---
 
@@ -483,12 +483,26 @@ page resolves the workspaces this person can reach and renders one block each.
 With one workspace (D-3) nobody notices; the plural branch exists so it is never
 "pick the first and hope".
 
-**Two things the account page does not do, and names where they are done.**
+**Three things the account page does not do, and it names where each is done.**
 Changing a password needs `passwordRequestOtpRoute`, whose second argument is an
 email SENDER, and sales has none — mounting it would answer 200 to "we sent a
 code to b•••@…" with nothing arriving, which is the invisible failure this
 project keeps finding. Closing an account is irreversible and crosses every app,
 so `app/api/me/route.ts` deliberately exports GET and PATCH and **not** DELETE.
+And platform administration lives in one app (§11).
+
+**The name and the link are DERIVED, never spelled.** The page's server half
+calls `appsReachableByUser` and passes the apps this person can reach, with
+their registered `base_url`s — the same mechanism D-18 uses for a cross-app link.
+Hardcoding another app's slug here would be a second declaration of a fact that
+lives in `platform.apps`, and it would be wrong the day a third app arrives. A
+person who can reach only b/sales gets the same sentence with no link, which is
+still the right answer: the control exists and it is not here.
+
+The administration line is shown to **everybody**, not only to super admins.
+`is_super_admin` says whether you have the surface; it does not say where the
+surface is, and hiding the sentence from somebody who does not have it means the
+one person who goes looking is the one person not told.
 
 ## 10. What the mount decisions were, in one place
 
@@ -503,12 +517,9 @@ so `app/api/me/route.ts` deliberately exports GET and PATCH and **not** DELETE.
 | `…/search` | **no** | D-9: the platform search is a different path, deliberately |
 | `bk inbox`, `bk super-admin errors`, `bk storage list` | **no**, permanently | [`backend.md` §7.1](./backend.md) |
 
-## 11. What is specified and NOT built
+## 11. Super-admin: not built, and not coming
 
-**Super-admin** (`/dashboard/super-admin/{users,errors}`). Not built, and it is
-the one item of agent7's brief that could not be delivered without either
-changing `packages/platform-*` — which that brief forbids — or duplicating
-platform-wide admin queries into this app.
+**`/dashboard/super-admin/{users,errors}`.** Deliberately absent.
 
 The routes those pages need (`GET /api/super-admin/users`,
 `/api/super-admin/errors`) are **not** shared factories. They live in
@@ -519,8 +530,30 @@ reason — platform-wide data, any host answers — and D-28's test ("would two
 deployments answer differently?") says no.
 
 So building it here would mean a second copy of a platform-wide admin surface,
-which is the tier mistake D-28 exists to prevent. **This is a question for the
-master, not a decision taken by this app.** The three options, none of which is
-agent7's to pick: promote the routes to `platform-api` (a packages change);
-accept that platform administration lives in one app and drop the item; or link
-out to the issues deployment from here.
+which is the tier mistake D-28 exists to prevent.
+
+Three options were on the table:
+
+| | Option | Outcome |
+|---|---|---|
+| a | promote the routes to `packages/platform-api` | defensible only under "every deployed app carries its own admin surface", which nobody has argued for and which multiplies one admin surface by N apps |
+| b | duplicate the platform-wide admin queries into this app | the tier mistake D-28 exists to prevent |
+| c | platform administration lives in ONE app; this one links to it | **chosen** |
+
+> **Settled 2026-08-07: (c).** D-28's test decides it — *would two deployments
+> answer differently?* No: `platform.users` and `platform.error_events` are the
+> same rows from any host. `backend.md` §7.1 had already written that ruling down
+> for the CLI half, listing `bk super-admin errors` as permanently unmounted here
+> for exactly this reason, and building the web pages would have contradicted a
+> decision this project already made in writing.
+>
+> The options are kept above rather than deleted so the next reader does not
+> re-derive them — and so that anybody proposing (a) has to argue against the
+> reason (a) lost, not against silence.
+
+Nothing is half-built: there is no super-admin directory, no gate and no dead
+link. What exists is one line on `/dashboard/settings/account` saying where
+platform administration is, with a link built from the other app's registered
+`base_url` — the same reasoning as the password and account-deletion lines
+beside it. A control that is simply absent reads as a feature that does not
+exist.

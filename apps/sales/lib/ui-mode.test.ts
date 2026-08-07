@@ -55,7 +55,29 @@
 // is a SECOND check below: a route can consult `ui_mode` without `ui-mode`
 // appearing in its graph at all, by reading it out of the query layer. Verified,
 // and this file passed 4/4 while a write route refused on the preference. See
-// `PREFERENCES_READERS`.
+// `PREFERENCES_READERS`. D-7 item 2 was amended on 2026-08-07 from "no server
+// module IMPORTS ui-mode" to "no server module CONSULTS ui_mode" because of it.
+//
+// ===========================================================================
+// WHAT THIS FILE DOES **NOT** COVER. READ THIS BEFORE ASSUMING IT DOES.
+// ===========================================================================
+// Both checks are REACHABILITY checks over the import graph. Neither sees a
+// route that queries `sales.user_preferences` with its own SQL:
+//
+//     const [row] = await db.select().from(userPreferences).where(…)
+//     if (row?.ui_mode !== 'full') throw Errors.forbidden(…)
+//
+// That imports the schema, not the query module, so nothing here fires. A third
+// layer was considered and NOT built, deliberately: writing that is a more
+// conscious act than calling a helper — you have to reach past the module that
+// exists for the purpose — and a guard keyed on the schema table would fire on
+// `setPreferences` and on any future legitimate reader, which is how a guard
+// that fails on correct writing gets weakened or deleted (D-37).
+//
+// The limit is stated rather than left to be discovered, because an unstated
+// limit is how the next person assumes coverage they do not have — which is the
+// mechanism behind half of CLAUDE.md's table. If that spelling ever appears, the
+// place to catch it is code review and this paragraph.
 
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'

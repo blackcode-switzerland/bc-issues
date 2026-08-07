@@ -1,9 +1,9 @@
 'use client'
 
-// The account page, and what it deliberately does NOT do.
+// The account page, and the three things it deliberately does NOT do.
 //
 // ===========================================================================
-// TWO THINGS ARE ABSENT AND BOTH ARE DECISIONS, NOT GAPS
+// EACH ABSENCE IS A DECISION, AND EACH ONE NAMES WHERE THE CONTROL IS
 // ===========================================================================
 //
 // **Changing your password.** The shared factories exist
@@ -16,22 +16,29 @@
 // building it deliberately would be worse than not building it.
 //
 // Wiring email into sales is real work with its own decisions (whose brand is on
-// the message, which from-address, what a sales-branded security email even
-// looks like) and it belongs with Phase 12's provisioning, not here.
+// the message, which from-address) and it belongs with Phase 12's provisioning.
 //
 // **Deleting your account.** Irreversible, and it reaches across every app:
 // soft-deletes the user, hard-deletes solely-owned workspaces, revokes every
 // token. None of that is a sales operation. `app/api/me/route.ts` does not
-// export DELETE, and this page says where it is done rather than growing a
-// second copy of the most destructive flow on the platform.
+// export DELETE.
 //
-// In both cases the page NAMES the place. A control that is simply missing
-// teaches nothing — the reader concludes the feature does not exist, which for
-// these two is false and worth being wrong about.
+// **Platform administration.** Settled 2026-08-07: it lives in ONE app, and not
+// this one. D-28's test decides it — *would two deployments answer differently?*
+// `platform.users` and `platform.error_events` are the same rows from any host,
+// which is also why `docs/backend.md` §7.1 records `bk super-admin errors` as
+// permanently unmounted here. Building a second copy of an admin surface is the
+// tier mistake D-28 exists to prevent. `docs/frontend.md` §11 carries the
+// ruling and the two options it beat.
+//
+// In all three cases the page NAMES the place, and the name is DERIVED — the
+// server resolved which apps this person can reach and where they live
+// (`platform.apps.base_url`, the D-18 mechanism). This app's code never spells
+// another app's slug.
 
 import { useQuery } from '@tanstack/react-query'
 import { signOut } from 'next-auth/react'
-import { KeyRound, LogOut, ShieldAlert } from 'lucide-react'
+import { KeyRound, LogOut, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { apiGet } from '@/lib/client'
 import { BlockSkeleton, ErrorState } from '@/components/states'
 import { Section } from './profile-settings'
@@ -42,7 +49,12 @@ interface Me {
   is_super_admin: boolean
 }
 
-export function AccountSettings() {
+export interface OtherApp {
+  name: string
+  url: string
+}
+
+export function AccountSettings({ otherApps }: { otherApps: OtherApp[] }) {
   const me = useQuery({ queryKey: ['me'], queryFn: () => apiGet<Me>('/api/me') })
 
   if (me.isPending) return <BlockSkeleton rows={3} />
@@ -65,29 +77,93 @@ export function AccountSettings() {
       </Section>
 
       <Section title="Password">
-        <p className="flex items-start gap-2.5 text-sm text-muted-foreground">
-          <KeyRound size={15} className="mt-0.5 shrink-0" />
-          <span>
-            Your password is your blackcode password — the same one for every app. b/sales does
-            not send email, so it cannot deliver the one-time code the change needs. Change it from{' '}
-            <strong className="font-medium text-foreground">b/issues → Settings → Account</strong>,
-            or from the &ldquo;Forgot password&rdquo; link on its sign-in page.
-          </span>
-        </p>
+        <Elsewhere icon={<KeyRound size={15} />} apps={otherApps} where="Settings → Account">
+          Your password is your blackcode password — the same one for every app. b/sales does not
+          send email, so it cannot deliver the one-time code the change needs.
+        </Elsewhere>
       </Section>
 
       <Section title="Deleting your account">
-        <p className="flex items-start gap-2.5 text-sm text-muted-foreground">
-          <ShieldAlert size={15} className="mt-0.5 shrink-0" />
-          <span>
-            Closing a blackcode account is irreversible and reaches every app: it revokes all your
-            API tokens and permanently deletes workspaces you solely own. It is deliberately done in
-            one place, with a typed confirmation —{' '}
-            <strong className="font-medium text-foreground">b/issues → Settings → Account</strong> —
-            rather than from each app that happens to be open.
-          </span>
-        </p>
+        <Elsewhere icon={<ShieldAlert size={15} />} apps={otherApps} where="Settings → Account">
+          Closing a blackcode account is irreversible and reaches every app: it revokes all your API
+          tokens and permanently deletes workspaces you solely own. It is deliberately done in one
+          place, with a typed confirmation, rather than from each app that happens to be open.
+        </Elsewhere>
+      </Section>
+
+      {/*
+        Shown to everybody, not only to super admins. `is_super_admin` says
+        whether this person HAS the surface; it does not say where the surface
+        is, and hiding the sentence from somebody who does not have it would mean
+        the one person who goes looking is the one person not told. It costs a
+        line and it answers a question that otherwise ends in a support message.
+      */}
+      <Section title="Platform administration">
+        <Elsewhere
+          icon={<ShieldCheck size={15} />}
+          apps={otherApps}
+          where="Settings → Super admin"
+        >
+          Users, error events and the drift reconcilers are <strong>platform-wide</strong> — the
+          same rows whichever app you ask, which is why they are served from one place rather than
+          copied into each. b/sales has no administration screens of its own and will not grow any.
+        </Elsewhere>
       </Section>
     </div>
+  )
+}
+
+/**
+ * "This control exists, and it is over there."
+ *
+ * The link list is whatever the server resolved, so a person who can reach only
+ * b/sales gets the sentence with no link — which is still the right answer, and
+ * a great deal better than a control that is simply absent.
+ */
+function Elsewhere({
+  icon,
+  apps,
+  where,
+  children,
+}: {
+  icon: React.ReactNode
+  apps: OtherApp[]
+  where: string
+  children: React.ReactNode
+}) {
+  return (
+    <p className="flex items-start gap-2.5 text-sm text-muted-foreground">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <span>
+        {children}{' '}
+        {apps.length === 0 ? (
+          <>
+            It is done from another blackcode app, under{' '}
+            <strong className="font-medium text-foreground">{where}</strong> — you do not currently
+            have access to one.
+          </>
+        ) : (
+          <>
+            Go to{' '}
+            {apps.map((a, i) => (
+              <span key={a.url}>
+                {i > 0 && (i === apps.length - 1 ? ' or ' : ', ')}
+                {/* An <a>, not a <Link>: it leaves this deployment. Same reason
+                    the Related block on a prospect uses one (D-18). */}
+                <a
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  {a.name}
+                </a>
+              </span>
+            ))}{' '}
+            → <strong className="font-medium text-foreground">{where}</strong>.
+          </>
+        )}
+      </span>
+    </p>
   )
 }

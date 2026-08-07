@@ -614,7 +614,7 @@ no second copy to drift.
 | | Phase |
 |---|---|
 | Vercel project, subdomain, the `platform.apps` row for real | 12 |
-| A super-admin surface — see [`frontend.md` §11](./frontend.md); it is a question, not a decision | — |
+| A super-admin surface — **settled 2026-08-07: never.** Platform administration lives in one app (D-28); [`frontend.md` §11](./frontend.md) | — |
 
 Everything else in the plan's 2–9 exists. `sales.user_preferences` is served by
 `GET|PATCH …/preferences` and read by the web; **no route in this app reads
