@@ -33,14 +33,38 @@
 // CSS exist. Neither implies the other, and only one of them fails loudly.
 //
 // ---------------------------------------------------------------------------
+// IT CHECKS THE STYLESHEET THE APP ACTUALLY IMPORTS. IT DID NOT, UNTIL #11.
+// ---------------------------------------------------------------------------
+// The first version of this file globbed the app for ANY `.css` containing
+// `@import "tailwindcss"` and passed if ANY of them carried an `@source`. It
+// never checked that the stylesheet was one the app builds.
+//
+// So this arrangement passed, on 2026-08-07, while being the exact D-30 bug:
+//
+//     app/globals.css   imported by app/layout.tsx   @source MISSING
+//     app/unused.css    imported by nothing          @source present
+//
+// 26 passed, 0 failed — with 151 classes silently ungenerated and the login
+// page's tab switcher dead. And the realistic path there is not malice: it is a
+// stylesheet left behind by a deleted page, or a second CSS entry added for one
+// route and later orphaned.
+//
+// **That makes it the eleventh green-but-inert check in this repo, and the
+// second one found in a guard written the same week to close the previous one.**
+// Which is the argument for the shape below: reachability from the root layout
+// is a fact about the built app, and "a file exists somewhere in the tree" is
+// not.
+//
+// ---------------------------------------------------------------------------
 // WHAT THIS DOES NOT CHECK
 // ---------------------------------------------------------------------------
 // It does not build CSS and diff it — that costs a full Next build per app and
 // would be the first minute-long test in the suite. It checks the DECLARATION:
-// an app that transpiles the package must point an `@source` at it, and the
-// path must resolve to a directory that exists. A wrong-but-existing path would
-// pass; a typo'd or stale one will not, and that is the failure that actually
-// happens when an app is copied to a new depth.
+// an app that transpiles the package must point an `@source` at it from a
+// stylesheet its root layout reaches, and the path must resolve to a directory
+// that exists. A wrong-but-existing path would pass; a typo'd or stale one will
+// not, and that is the failure that actually happens when an app is copied to a
+// new depth.
 
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -58,10 +82,26 @@ interface App {
   dir: string
   /** Does next.config list the UI package in `transpilePackages`? */
   transpiles: boolean
-  /** Every stylesheet in the app that imports Tailwind. */
-  tailwindCss: string[]
+  /**
+   * Every stylesheet the ROOT LAYOUT reaches — what the app actually builds.
+   *
+   * NOT filtered to the ones that import Tailwind, and that distinction cost a
+   * false positive when this was written: Tailwind inlines `@import`, so a
+   * `globals.css` that imports Tailwind and then `@import "./theme-tokens.css"`
+   * has ONE build, and the `@source` may legitimately live in either file.
+   * Filtering to Tailwind-importing files rejected the split arrangement — a
+   * guard failing on correct writing, which is what D-37 is about.
+   */
+  reachableCss: string[]
+  /** True when something in `reachableCss` imports Tailwind at all. */
+  buildsTailwind: boolean
+  /** Tailwind stylesheets anywhere in the tree. Only used to detect orphans. */
+  allCss: string[]
+  /** The root layout, or null when the app has none. */
+  rootLayout: string | null
 }
 
+/** Every `.css` under `dir` that imports Tailwind, wherever it sits. */
 function findTailwindCss(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === '.next' || name === '.turbo') continue
@@ -74,6 +114,55 @@ function findTailwindCss(dir: string, out: string[] = []): string[] {
   return out
 }
 
+/** `app/layout.tsx` or `src/app/layout.tsx`, in any of the four extensions. */
+function findRootLayout(appRoot: string): string | null {
+  for (const base of ['app', join('src', 'app')]) {
+    for (const ext of ['tsx', 'jsx', 'ts', 'js']) {
+      const p = join(appRoot, base, `layout.${ext}`)
+      if (existsSync(p)) return p
+    }
+  }
+  return null
+}
+
+/**
+ * The stylesheets a file pulls in, transitively.
+ *
+ * Two hops, because both are real: a module imports a stylesheet
+ * (`import './globals.css'`), and a stylesheet `@import`s another one. An app
+ * that splits its tokens into `theme.css` and imports it from `globals.css` is
+ * a normal arrangement, and a check that could not see through it would fail on
+ * correct code — D-37.
+ *
+ * Bare specifiers are skipped deliberately: `@import "tailwindcss"` and
+ * `@import "tw-animate-css"` resolve into node_modules, which is not where an
+ * app's own `@source` can live.
+ */
+function reachableStylesheets(entry: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  const visitCss = (file: string) => {
+    if (seen.has(file) || !existsSync(file)) return
+    seen.add(file)
+    out.push(file)
+    const src = readFileSync(file, 'utf8')
+    for (const m of src.matchAll(/@import\s+["']([^"']+)["']/g)) {
+      const spec = m[1]
+      if (!spec.startsWith('.') && !spec.startsWith('/')) continue
+      visitCss(resolve(join(file, '..'), spec))
+    }
+  }
+
+  const src = readFileSync(entry, 'utf8')
+  for (const m of src.matchAll(/import\s+["']([^"']+\.css)["']/g)) {
+    const spec = m[1]
+    if (!spec.startsWith('.')) continue
+    visitCss(resolve(join(entry, '..'), spec))
+  }
+  return out
+}
+
 const APPS: App[] = readdirSync(APPS_ROOT, { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
   .map((e) => {
@@ -82,10 +171,16 @@ const APPS: App[] = readdirSync(APPS_ROOT, { withFileTypes: true })
       .map((f) => join(root, f))
       .filter(existsSync)
     const config = configs.map((f) => readFileSync(f, 'utf8')).join('\n')
+    const allCss = findTailwindCss(root)
+    const rootLayout = findRootLayout(root)
+    const reachable = rootLayout ? reachableStylesheets(rootLayout) : []
     return {
       dir: e.name,
       transpiles: config.includes(UI_PACKAGE),
-      tailwindCss: findTailwindCss(root),
+      reachableCss: reachable,
+      buildsTailwind: reachable.some((p) => allCss.includes(p)),
+      allCss,
+      rootLayout,
     }
   })
 
@@ -115,12 +210,29 @@ describe('an app that compiles the shared UI package also scans it', () => {
   const compiling = APPS.filter((a) => a.transpiles)
 
   it.each(compiling)('apps/$dir', (app) => {
-    // An app with no stylesheet has no Tailwind build to be missing classes
-    // from. `apps/_template` is in this state today: it lists the package in
-    // transpilePackages ahead of using it, and has no CSS at all.
-    if (app.tailwindCss.length === 0) return
+    // An app with no stylesheet at all has no Tailwind build to be missing
+    // classes from. `apps/_template` is in this state today: it lists the
+    // package in transpilePackages ahead of using it, and has no CSS.
+    if (app.allCss.length === 0) return
 
-    const sourced = app.tailwindCss.filter((css) => {
+    // It HAS Tailwind stylesheets and the root layout reaches none of them. That
+    // is not a pass — it is this check being unable to see what the app builds,
+    // and the corollary in CLAUDE.md is that a check which cannot run must skip
+    // LOUDLY rather than silently. Realistically it means the layout was moved,
+    // or the global stylesheet is imported somewhere this resolver does not
+    // follow; either way the answer below would be about nothing.
+    expect(
+      app.buildsTailwind,
+      `apps/${app.dir} has Tailwind stylesheets (${app.allCss
+        .map((p) => p.slice(REPO_ROOT.length + 1))
+        .join(', ')}) but its root layout ` +
+        `(${app.rootLayout ? app.rootLayout.slice(REPO_ROOT.length + 1) : 'NOT FOUND'}) ` +
+        'reaches none of them, so this check cannot see the CSS the app actually ' +
+        'builds. Import the global stylesheet from the root layout, or teach ' +
+        'reachableStylesheets() how this app wires it up.'
+    ).toBe(true)
+
+    const sourced = app.reachableCss.filter((css) => {
       const text = readFileSync(css, 'utf8')
       for (const m of text.matchAll(/@source\s+["']([^"']+)["']/g)) {
         // Resolve relative to the STYLESHEET, which is how Tailwind resolves it
@@ -135,12 +247,19 @@ describe('an app that compiles the shared UI package also scans it', () => {
 
     expect(
       sourced.map((p) => p.slice(REPO_ROOT.length + 1)),
-      `apps/${app.dir} compiles ${UI_PACKAGE} but no stylesheet points an ` +
-        `@source at packages/platform-ui/src. Tailwind skips node_modules, and ` +
-        `the package reaches the app through a workspace symlink there — so ` +
-        `every class used ONLY in the package is silently never generated. ` +
-        `transpilePackages makes the TypeScript compile; @source makes the CSS ` +
-        `exist. Add:  @source "<relative path>/packages/platform-ui/src";`
+      `apps/${app.dir} compiles ${UI_PACKAGE} but none of the stylesheets its ` +
+        `root layout actually reaches ` +
+        `(${app.reachableCss.map((p) => p.slice(REPO_ROOT.length + 1)).join(', ')}) ` +
+        `points an @source at packages/platform-ui/src. Tailwind skips ` +
+        `node_modules, and the package reaches the app through a workspace ` +
+        `symlink there — so every class used ONLY in the package is silently ` +
+        `never generated. transpilePackages makes the TypeScript compile; ` +
+        `@source makes the CSS exist. Add:  @source "<relative path>/packages/platform-ui/src";` +
+        (app.allCss.length > app.reachableCss.length
+          ? `\n\nNOTE: this app has other Tailwind stylesheets that the root ` +
+            `layout does NOT import, and they are deliberately not counted. An ` +
+            `@source in an orphan stylesheet generates nothing.`
+          : '')
     ).not.toEqual([])
   })
 })
