@@ -90,6 +90,42 @@ const titleColumn = (type: TrashType) =>
     ? sql`coalesce(subject, concat(channel, ' · ', direction))`
     : sql`name`
 
+/**
+ * What a binned row is CALLED, from a row already read into JS.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SAME QUESTION AS `titleColumn`, ASKED WHERE THERE IS NO QUERY TO ADD TO
+ * ---------------------------------------------------------------------------
+ * `purgeTrash` names each destroyed item from the `.returning()` rows of the
+ * DELETE — there is no SELECT to put `titleColumn` in. It used to inline
+ * `row.name ?? row.title ?? row.subject ?? ''`, which is `titleColumn` minus the
+ * one branch that matters: a communication with no subject fell through to the
+ * empty string.
+ *
+ * So `bk sales trash purge communication:17` printed
+ *
+ *     destroyed communication:17
+ *
+ * with nothing after it, while `bk sales comm rm 17` — the SOFT delete, the
+ * recoverable one — printed "note · out". **The irreversible command was the
+ * one with no record of what it destroyed**, which inverts CLAUDE.md's rule
+ * exactly: "Irreversible commands report WHAT they did, not just how many. A
+ * count alone is the difference between a wrong purge someone catches
+ * immediately and one nobody notices for a month."
+ *
+ * Two spellings of one question, and the destructive path had the weaker one.
+ * Keep them in step: a new binnable type needs a branch in BOTH, and the two
+ * sit together here so that is visible.
+ */
+export function trashTitleOf(type: TrashType, row: Record<string, unknown>): string {
+  if (type === 'communication') {
+    const subject = row.subject == null ? '' : String(row.subject)
+    if (subject) return subject
+    return `${String(row.channel ?? '')} · ${String(row.direction ?? '')}`.trim()
+  }
+  return String(row.name ?? row.title ?? '')
+}
+
 export async function listTrash(
   workspaceId: number,
   opts: { types?: TrashType[] } = {}
@@ -205,7 +241,7 @@ export async function restoreItem(
     return {
       type,
       number,
-      title: String(row.name ?? row.title ?? row.subject ?? ''),
+      title: trashTitleOf(type, row as Record<string, unknown>),
       children,
     }
   })
@@ -261,7 +297,7 @@ export async function purgeItems(
         .returning()
       const row = rows[0] as Record<string, unknown> | undefined
       if (!row) continue
-      const title = String(row.name ?? row.title ?? row.subject ?? '')
+      const title = trashTitleOf(t.type, row)
       purged.push({ type: t.type, number: t.number, title })
       await recordEvent(tx, {
         workspaceId,

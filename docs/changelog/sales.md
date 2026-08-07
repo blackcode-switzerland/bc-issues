@@ -22,6 +22,32 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-07 — `bk sales trash purge` destroyed communications without saying which
+
+`bk sales trash purge communication:17` printed
+
+```
+destroyed communication:17
+permanently deleted 1 item(s)
+```
+
+— the title blank. A purge is irreversible and its output is the only record of
+what was in the row, so for communications it was a count and nothing more. The
+recoverable command was better off: `bk sales comm rm 17` printed "note · out".
+
+The cause was two spellings of "what is this row called". `listTrash` asks in
+SQL and handles a null subject (`coalesce(subject, channel || ' · ' || direction)`);
+the purge and restore paths read `.returning()` rows in JS and inlined
+`row.name ?? row.title ?? row.subject ?? ''`, which has no such branch. Every
+other binnable type has a `name` or a `title`, so only communications — the one
+type whose title is derived — hit it.
+
+Both paths now call `trashTitleOf`, which sits next to `titleColumn` so the pair
+stays visible. `bk sales trash restore` was fixed with it, same cause.
+
+**No action needed.** Nothing was destroyed that should not have been; the
+report was incomplete, not the delete.
+
 ## 2026-08-07 — Cross-app links into sales pointed at pages that do not exist
 
 **Breaking for anything holding a stored sales URL.** `platform.entities.url` is
