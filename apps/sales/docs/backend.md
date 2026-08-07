@@ -31,6 +31,21 @@ Two consequences that look like missing features and are not:
   `external_ref` columns exist so that can be added later without a migration of
   meaning.
 
+**But the doctrine forbids the app DECIDING things, not the app READING things,**
+and the line matters because the mockup blurs it. What must stay agent-computed is
+**triangulation** — client × product × message. That is judgement: which product
+suits this client, which message to lead with. `sales.matches` keeps it stored,
+exactly as the mockup insists.
+
+`SUM(value) GROUP BY stage` is not judgement. It is arithmetic over rows this app
+already holds, the same class of thing as counting how many prospects are in a
+stage — which nobody would propose storing. **So dashboard aggregates are computed
+by query and there is no aggregates table.** Storing them would create a second
+number that can disagree with the first (D-6's argument), and a stale pipeline
+total is worse than a slow one at a scale where nothing is slow. The mockup stores
+them because a static HTML file has no other option; that is a constraint of the
+artefact, not a design position.
+
 ## 2. Data protection — the owner is **Andrea**, as company director
 
 A CRM holds names, emails, phone numbers and free-text notes about **people at
@@ -198,19 +213,25 @@ somebody was still using, with no undo.
 | `prospects` | `summary`, `next_action_note`, `closed_reason` | scan |
 | `contacts` | `notes` | scan |
 | `stage_entries` | `note` | scan |
-| `meetings` | `agenda`, `outcome` | scan |
-| `communications` | `body` | scan |
+| `meetings` | `title`, `agenda`, `outcome` | scan |
+| `communications` | `subject`, `body` | scan |
 | `objections` | `spoken`, `real_fear`, `counter` | scan |
 | `products` | `description`, `pitch` | scan |
-| `templates` | `body` | scan |
+| `templates` | `subject`, `body` | scan |
 | `documents` | `upload_url`, `external_url` | **exact** |
-| `documents` | `description` | scan |
+| `documents` | `title`, `description` | scan |
 | `matches` | `why` | scan |
 
-**Eighteen columns across ten tables.** §5.4 of the plan lists thirteen (while
-saying "fourteen"); the five additions are `prospects.closed_reason`,
-`products.pitch`, `documents.external_url`, `documents.description` and
-`matches.why`.
+**Twenty-two columns across ten tables.** §5.4 of the plan lists thirteen while
+its own prose says fourteen; the rule above produces twenty-two, and the count is
+a consequence rather than a target.
+
+Four of the twenty-two are length-capped **labels** — `meetings.title`,
+`communications.subject`, `templates.subject`, `documents.title` — and they are
+included deliberately. "A title is a label, not a body" is a line one can state,
+and it is still a line about how people are expected to behave: a URL fits in 200
+characters, and `documents.title` is exactly the field somebody pastes a link
+into instead of filling in the form properly.
 
 `documents.external_url` is the non-obvious one and the reason to state the rule
 rather than a list. The column is *for* external URLs, so most rows contribute
@@ -249,8 +270,9 @@ otherwise, or because a stated convention required it.
 | 5 | `stage_entries.occurred_at`, `actor_*` nullable | `upcoming` journey steps have no date, actor or note — the mockup renders the whole ladder |
 | 6 | `objections.raised_at` nullable | Same shape; the mockup's value is a relative string that may not resolve |
 | 7 | `matches` unique on `(prospect_id, product_id)` | Makes `bk sales match set` an upsert, so the table cannot accumulate three contradictory scores for one pair |
-| 8 | `prospects.next_action_due` is a `date` | §5.1: relative strings are a rendering, never storage. **This narrows the mockup** — "This week" does not round-trip; the agent resolves a fuzzy due to a concrete date on write |
-| 9 | Five more blob-trigger columns (§3.6) | Stated rule rather than an enumerated list |
+| 8 | `prospects.next_action_due` (`date`) **plus** `next_action_due_label varchar(40)` | §5.1: relative strings are a rendering, never storage — so the agent resolves "this week" to a concrete date, and the date is what sorts and filters. The label keeps the phrase verbatim, because resolving to a guessed Friday and discarding the words loses the difference between "due Friday" and "sometime this week, Friday is my guess". Displayed in preference to the date; never parsed |
+| 9 | Nine more blob-trigger columns (§3.6) | Stated rule rather than an enumerated list |
+| 12 | `demo_prep` added to `NEXT_ACTIONS` | It is in the mockup's Today queue. "Prepare the demo" and "do the demo" fall to different people on different days, and §5.5's list left the queue with a purpose that had no storable value behind it |
 | 10 | `communications.channel` = `discovery`, not the mockup's `maps` | The record is "we found them by looking"; naming the tool in the schema needs a migration the first time the tool changes |
 | 11 | Vocabularies for stage-entry status, comm direction and document kind live in `lib/pipeline.ts` | §5.5 lists eight; these three are equally vocabulary and equally belong in `bk meta` |
 
@@ -292,6 +314,14 @@ D-4 exists to prevent.
 `transpilePackages` in `next.config.js` and `@source` in `app/globals.css` are a
 **pair** — the first makes `@blackcode/platform-ui` compile, the second makes its
 CSS exist, and only the first fails loudly (D-30).
+
+**React is pinned to 18.3.1, and that is a decision rather than an accident.**
+`apps/_template` declares `react: ^19.2.0` and npm installs 19.2.8 into it, but
+`@blackcode/platform-ui` declares `peerDependencies: react ^18` and `apps/issues`
+runs 18.3.1. So an app that copies the scaffold *and* uses the shared UI package —
+which is every real app — inherits a peer conflict `docs/adding-an-app.md` does
+not mention. Sales follows the package and the app that already ships. Revisit
+when `platform-ui` widens its peer range, not before.
 
 The four `--chart-series-*` tokens are defined so the shared chart kit *works*,
 not as a commitment to use it. D-12 was narrowed on 2026-08-06: if sales' metrics

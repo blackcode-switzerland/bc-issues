@@ -187,11 +187,17 @@ export const documentKindColor = (v?: string | null) => colorOf(DOCUMENT_KINDS, 
 // What the owner owes this prospect next. `wait` is a real value, not the
 // absence of one: "we have done our part and are waiting on them" is a
 // deliberate state, and it is what the mockup's StaffUp record is in.
+//
+// `demo_prep` likewise. The mockup's Today queue distinguishes "prepare the
+// demo" from "do the demo" — they fall to different people on different days —
+// and §5.5's list did not carry it, so the queue had a purpose with no storable
+// value behind it.
 
 export const NEXT_ACTION_TYPES: Option[] = [
   { value: 'email', label: 'Email', color: '#14b8a6' },
   { value: 'call', label: 'Call', color: '#8b5cf6' },
   { value: 'demo', label: 'Demo', color: '#f0b66b' },
+  { value: 'demo_prep', label: 'Demo prep', color: '#f3c583' },
   { value: 'follow_up', label: 'Follow-up', color: '#e08658' },
   { value: 'check_in', label: 'Check-in', color: '#10a37f' },
   { value: 'wait', label: 'Waiting', color: '#8a8578' },

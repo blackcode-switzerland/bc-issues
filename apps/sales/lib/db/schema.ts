@@ -63,6 +63,18 @@
 // a column that never holds a URL costs one no-op function call per write, and a
 // missing trigger costs a file somebody was still using, with no undo.
 //
+// **TWENTY-TWO COLUMNS ACROSS TEN TABLES.** §5.4 of the plan lists thirteen
+// while its own prose says fourteen; the rule above produces twenty-two, and the
+// count is a consequence rather than a target.
+//
+// The four length-capped LABELS in that number — `meetings.title`,
+// `communications.subject`, `templates.subject`, `documents.title` — are there
+// deliberately. "A title is a label, not a body" is a line one can state, and it
+// is still a line about how people are expected to behave: a URL fits in 200
+// characters, and `documents.title` is exactly the field somebody pastes a link
+// into instead of filling in the form properly. The asymmetry above says include
+// them, and "I felt it was unlikely" is the reasoning D-26 exists to distrust.
+//
 // Read `packages/platform-storage/src/references.ts` and
 // `packages/platform-db/src/schema.ts` at `blobReferences` before touching
 // anything near this.
@@ -215,15 +227,22 @@ export const prospects = salesSchema.table(
     // carry a useful index for that.
     next_action_type: varchar('next_action_type', { length: 24 }),
     /**
-     * A DATE, not the mockup's prose.
+     * A resolved DATE, and beside it the words the agent actually wrote.
      *
-     * The mockup has "Today", "This week", "Thu 30 July, 10:00". Only the last
-     * survives storage: §5.1 says relative strings are a RENDERING, never
-     * storage, so the agent resolves a fuzzy due to a concrete date on write.
-     * "This week" is genuinely lost — recorded here because it is a real
-     * narrowing of what the mockup could express.
+     * The mockup has "Today", "This week", "Thu 30 July, 10:00". §5.1 says a
+     * relative string is a RENDERING and never storage, so the agent resolves a
+     * fuzzy due to a concrete date on write — and the date is what sorts, what
+     * filters, and what the Today page reads.
+     *
+     * But resolving "this week" to a guessed Friday and then DISCARDING the
+     * phrase loses information nothing can recover: the difference between "due
+     * Friday" and "sometime this week, Friday is my guess" is exactly the
+     * difference a human needs when the follow-up is late. So the label is kept
+     * verbatim, displayed in preference to the date where it exists, and never
+     * parsed by anything.
      */
     next_action_due: date('next_action_due'),
+    next_action_due_label: varchar('next_action_due_label', { length: 40 }),
     /** BLOB-REF (scan). */
     next_action_note: text('next_action_note'),
     /**
@@ -392,6 +411,7 @@ export const meetings = salesSchema.table(
     type: varchar('type', { length: 16 }).notNull(),
     /** `upcoming | done | cancelled`. */
     status: varchar('status', { length: 16 }).notNull().default('upcoming'),
+    /** BLOB-REF (scan). A label, and triggered anyway — see the header. */
     title: varchar('title', { length: 200 }).notNull(),
     /** Plain names, ours and theirs mixed — the mockup does not distinguish and
      *  neither does the record. Not FKs: half of these people are not users. */
@@ -452,6 +472,7 @@ export const communications = salesSchema.table(
     /** `out` = we → them, `in` = them → us. */
     direction: varchar('direction', { length: 3 }).notNull(),
     occurred_at: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    /** BLOB-REF (scan). */
     subject: varchar('subject', { length: 300 }),
     /** BLOB-REF (scan). */
     body: text('body'),
@@ -624,6 +645,7 @@ export const templates = salesSchema.table(
     /** The pipeline stage this template is FOR. Nullable — some are stageless. */
     stage: varchar('stage', { length: 24 }),
     name: varchar('name', { length: 120 }).notNull(),
+    /** BLOB-REF (scan). */
     subject: varchar('subject', { length: 300 }),
     /** BLOB-REF (scan). */
     body: text('body'),
@@ -675,6 +697,7 @@ export const documents = salesSchema.table(
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     seq: integer('seq').notNull(),
 
+    /** BLOB-REF (scan). A label, and triggered anyway — see the header. */
     title: varchar('title', { length: 200 }).notNull(),
     /** `pdf | deck | image | video | link`. */
     kind: varchar('kind', { length: 16 }).notNull(),
