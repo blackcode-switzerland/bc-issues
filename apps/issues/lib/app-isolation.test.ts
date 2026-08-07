@@ -22,8 +22,14 @@ import { findCrossAppImports, findCrossSchemaQueries } from '@blackcode/platform
 const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const APPS_ROOT = join(APP_ROOT, '..')
 
-/** Postgres schemas belonging to OTHER apps. Never `platform`, never our own. */
-const OTHER_SCHEMAS = ['template']
+/**
+ * Postgres schemas belonging to OTHER apps. Never `platform`, never our own.
+ *
+ * Keep it symmetric: adding an app means adding its schema HERE and in every
+ * other app, in the same change. A one-sided guard only catches the app that
+ * remembered.
+ */
+const OTHER_SCHEMAS = ['template', 'sales']
 
 describe('app isolation', () => {
   it('imports nothing from another app', () => {
