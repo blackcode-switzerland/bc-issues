@@ -43,11 +43,32 @@ die()     { error "$*"; exit 1; }
 # .vercel/project.json happens to be linked. Without it, deploying a second app
 # would silently ship to whichever project the working copy was last linked to —
 # the kind of mistake that is only visible after it is live.
+# WHEN YOU ADD A LINE, RE-READ "RELEASING THE CLI" IN usage() BELOW. The version
+# gate is served by EVERY app (packages/platform-api's apiHandler sets
+# X-BK-CLI-Latest / X-BK-CLI-Min on every response, from the one shared
+# constant), so step 3 of a CLI release is one `web <app>` per line here — not
+# one. This script prints that list for you rather than naming `issues`.
 app_registry() {
   cat <<'APPS'
 issues|bc-issues|prj_bueHX5y2f7uaemskB5Q1Plwbry2p|https://issues.blackcode.ch
 APPS
 }
+
+# ── sales, pending provisioning ────────────────────────────────────────────
+# The line below is the ONE addition sales needs. It is commented out because the
+# Vercel project does not exist yet: an uncommented line with a placeholder id
+# would make `release.sh web sales` resolve and then deploy to whatever project
+# the working copy happens to be linked to, which is the exact failure
+# VERCEL_PROJECT_ID exists to prevent.
+#
+# TO ENABLE (salesImplementation/DEPLOY-TODO.txt, Release 2, step 8):
+#   1. Create the Vercel project, Root Directory `apps/sales`.
+#   2. `vercel project ls` — or the project's Settings page — gives the id.
+#   3. Paste it over `prj_REPLACE_ME`, move the line INSIDE the heredoc above,
+#      and delete this block.
+#   4. `./devops/release.sh apps` must then list two apps. That is the check.
+#
+# sales|bc-sales|prj_REPLACE_ME|https://sales.blackcode.ch
 
 VERCEL_ORG_ID_VALUE="team_b4wX7DvsnUaeqJyLi5cGrlbQ"
 
@@ -177,15 +198,22 @@ ${BOLD}EXAMPLES${RESET}
   $(basename "$0") cli minor
 
 ${BOLD}RELEASING THE CLI — THREE STEPS, IN THIS ORDER${RESET}
-  1. $(basename "$0") web issues      deploy the server FIRST; it must be
-                                      backwards compatible with installed clients
-  2. $(basename "$0") cli minor       publish to npm
-  3. $(basename "$0") web issues      AGAIN — this is what makes the version gate
-                                      live. Step 3 is the one people skip.
+  1. $(basename "$0") web <app>   deploy EVERY app first; each must be
+                                  backwards compatible with installed clients
+  2. $(basename "$0") cli minor   publish to npm
+  3. $(basename "$0") web <app>   AGAIN, for EVERY app — this is what makes the
+                                  version gate live. The one people skip.
 
   The gate (cli-version.ts) is bumped in a commit this script creates itself, so
   it always lands AFTER step 1. Without step 3, production keeps advertising the
   old version and no installed client is told an update exists.
+
+  ${BOLD}Steps 1 and 3 are once PER APP, not once.${RESET} Every deployment answers the
+  version question — apiHandler stamps X-BK-CLI-Latest and X-BK-CLI-Min on every
+  response from the same shared constant — and \`bk\` asks whichever host it is
+  pointed at. Deploy only one and a user whose home app is the other is told
+  nothing; on a FORCED release, one host blocks them and the other does not.
+  \`$(basename "$0") apps\` lists which apps that currently means.
 
 ${BOLD}ADDING AN APP${RESET}
   Add one line to app_registry() near the top of this file. Everything else here
@@ -507,10 +535,16 @@ bk guide
   # client is ever told an update exists.
   echo
   header "⚠  NOT DONE YET — the version gate is not live"
-  echo "  The gate lives in the web app, and the commit that bumped it was made"
-  echo "  by this script. It takes effect only after a web deploy:"
+  echo "  The gate lives in the web apps, and the commit that bumped it was made"
+  echo "  by this script. It takes effect only after a web deploy — and EVERY app"
+  echo "  answers the version question, so this is one deploy per app:"
   echo
-  echo -e "      ${BOLD}$(basename "$0") web issues${RESET}"
+  app_registry | while IFS='|' read -r slug _project _id _url; do
+    echo -e "      ${BOLD}$(basename "$0") web ${slug}${RESET}"
+  done
+  echo
+  echo "  Any app you skip keeps advertising the previous version to everyone"
+  echo "  whose home app it is."
   echo
   if [[ "$forced" == true ]]; then
     warn "Until you run that, older binaries are NOT yet blocked."
