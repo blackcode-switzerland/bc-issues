@@ -38,7 +38,7 @@ when more rows remain, so `--json` stdout stays clean.
 |---|---|
 | 0 | success |
 | 1 | generic / runtime error |
-| 2 | bad usage (missing required flag, invalid id, wrong number of arguments, unknown flag or command) |
+| 2 | bad usage (missing required flag, invalid id, wrong number of arguments, unknown flag or command, **and a 409 conflict**) |
 | 3 | not authenticated (401, or no config) |
 | 4 | permission denied (403) |
 | 5 | not found (404) |
@@ -49,6 +49,13 @@ when more rows remain, so `--json` stdout stays clean.
 
 A mistyped command or subcommand is always an error, never a silent success —
 `bk workspace notacmd` exits 2, it does not print help and exit 0.
+
+**A conflict exits 2, and the same condition always exits the same code.** When
+you pass a `--confirm` value that does not name the record, some commands catch
+it in the binary before sending anything and some let the server answer 409.
+Both exit 2, so one recovery branch covers both. The same applies to a label
+name already taken and an invitation already accepted or expired: the request
+was well formed, the state disagrees, and retrying it unchanged will not help.
 
 ## stdout vs stderr
 

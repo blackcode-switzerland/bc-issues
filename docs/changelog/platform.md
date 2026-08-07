@@ -30,6 +30,37 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-07 — A 409 conflict now exits 2, not 1
+
+**Behaviour change to `bk`'s exit codes. Read this if you branch on them.**
+
+`classify()` had no branch for HTTP 409, so every conflict fell through to exit 1
+(generic). That is wrong in itself — 1 tells an agent nothing — but the reason it
+matters is that it disagreed with the binary.
+
+`bk sales prospect delete --confirm <wrong name>` is pre-checked locally: the
+binary fetches the record, compares, and fails with an error that exits **2**. If
+that pre-check is raced or skipped, the server answers 409 `confirm_mismatch` and
+the same user mistake exited **1**. One condition, two exit codes, decided by a
+race the caller cannot see — and an agent cannot write one recovery for that.
+
+409 now exits **2** (bad usage). Chosen over 6 because 2 is what every local
+`--confirm` guard already returns, and changing those would break scripts that
+check for it.
+
+Affected responses: `confirm_mismatch`, `label_exists`, `invitation_expired`,
+`invitation_revoked`, `invitation_already_accepted`, `invitation_declined`. All
+of them describe a well-formed request the current state refuses; retrying
+unchanged will not help.
+
+**Action:** if you branch on `1` to catch conflicts, branch on `2`. The general
+rule, now asserted by a test: **a pre-check in the binary must exit the same code
+the server would.**
+
+`bk guide platform/output-and-exit-codes` carries the table.
+
+---
+
 ## 2026-08-07 — A CLI release now needs a web deploy **per app**, not one
 
 **Nothing in the CLI changed. What changed is how you ship it.**

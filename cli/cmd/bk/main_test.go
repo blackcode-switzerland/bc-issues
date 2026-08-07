@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 )
@@ -165,5 +166,38 @@ func TestStorageStaysBare(t *testing.T) {
 	if !errors.Is(err, config.ErrNotConfigured) {
 		t.Fatalf("`bk storage list` failed with %v; want %v — storage is cross-app and "+
 			"stays bare (D-28)", err, config.ErrNotConfigured)
+	}
+}
+
+// The SAME user mistake must exit the same code whether the binary catches it or
+// the server does.
+//
+// `bk sales prospect delete --confirm <wrong name>` is pre-checked locally: the
+// binary fetches the record, compares, and returns an error worded to contain
+// "required", which classify() maps to 2. If the pre-check is raced or skipped,
+// the server answers 409 `confirm_mismatch`. Until 2026-08-07 that had no branch
+// in classify() and exited 1 — one condition, two exit codes, decided by a race
+// the caller cannot see. An agent branching on the code cannot write one
+// recovery for that.
+//
+// The general rule: a pre-check in the binary must exit the same code the server
+// would. This asserts BOTH halves, because asserting only the 409 would pass
+// against a local guard that had drifted to some third code.
+func TestServerConflictAndLocalPrecheckAgree(t *testing.T) {
+	serverSide := classify(&client.APIError{Status: 409, ErrorMsg: "--confirm \"acme\" does not name prospect #7"})
+	localSide := classify(errors.New(
+		`--confirm is required to match prospect #7, which is "Acme SA" — got "acme"; nothing was deleted`))
+
+	if serverSide != exitUsage {
+		t.Errorf("a 409 from the server exits %d, want %d (usage)", serverSide, exitUsage)
+	}
+	if localSide != exitUsage {
+		t.Errorf("the binary's local --confirm guard exits %d, want %d (usage)", localSide, exitUsage)
+	}
+	if serverSide != localSide {
+		t.Errorf(
+			"the same --confirm mistake exits %d when the server catches it and %d when the "+
+				"binary does. One condition, two exit codes: an agent cannot write one recovery.",
+			serverSide, localSide)
 	}
 }

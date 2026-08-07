@@ -24,6 +24,8 @@ import (
 //	4  permission denied (403)
 //	5  not found (404)
 //	6  validation error (400)
+//	   NOTE 409 (conflict) exits 2, not 6 — see classify(). It is the same
+//	   condition the binary's own --confirm pre-checks catch, and those exit 2.
 //	7  user aborted (declined a confirm prompt)
 //	8  client too old; upgrade required (below API min version)
 //	9  update available (bk skill check / sync found a newer binary)
@@ -234,6 +236,26 @@ func classify(err error) int {
 			return exitPermission
 		case 404:
 			return exitNotFound
+		case 409:
+			// ── ONE CONDITION MUST NOT HAVE TWO EXIT CODES ────────────────────
+			// A 409 is the server refusing a well-formed request on content
+			// grounds: `--confirm` naming the wrong record, a label name already
+			// taken, an invitation already accepted. Until 2026-08-07 it had no
+			// branch here and fell through to 1 (generic), which told an agent
+			// nothing and — worse — disagreed with the binary itself.
+			//
+			// `bk sales prospect delete` pre-checks `--confirm` locally and
+			// returns an error worded to contain "required", which the switch
+			// below maps to 2. So the SAME user mistake exited 2 when the binary
+			// caught it and 1 when the server did, depending only on a race the
+			// caller cannot see. An agent branching on the exit code cannot write
+			// one recovery for that.
+			//
+			// 2 rather than 6, because 2 is what every local guard for these
+			// conditions already returns and changing those would break scripts
+			// that check for it. The general rule this is an instance of: **a
+			// pre-check in the binary must exit the same code the server would.**
+			return exitUsage
 		}
 		return exitGeneric
 	}
