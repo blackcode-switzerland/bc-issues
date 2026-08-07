@@ -1,0 +1,315 @@
+# b/sales — backend
+
+**This app only.** Platform-wide conventions — the shared `apiHandler`, the
+`platform.*` tables, the event spine, the blob index, per-app access — live in
+the root [`docs/backend.md`](../../../docs/backend.md) and are not repeated here.
+An app's docs never describe another app
+(`docs/platform-architecture.md` §7.5).
+
+Status: **Phase 2 (scaffold + domain model) landed 2026-08-07.** There is no
+Postgres schema, no `platform.apps` row, no CLI group and no HTTP route yet.
+Phases 3–5 add them.
+
+---
+
+## 1. What this app is
+
+blackcode's own business-development pipeline, ported from the validated mockup
+at `bsales-mockup/`. The doctrine, which the schema is shaped by:
+
+> **The agent operates the funnel; the human supervises.** The web surface is
+> read-mostly. Nothing here computes — matches, aggregates and next actions are
+> *stored*, written by an agent through `bk sales`.
+
+Two consequences that look like missing features and are not:
+
+- **No matching engine.** `sales.matches` is written by the agent, never derived
+  by the app. A live recommender contradicts the doctrine and doubles the
+  surface (`docs/sales-app-plan.md` §2).
+- **The app never sends anything.** It records that a message was sent. There is
+  no Gmail, Drive or Calendar integration, and no "connect an account" flow. The
+  `external_ref` columns exist so that can be added later without a migration of
+  meaning.
+
+## 2. Data protection — the owner is **Andrea**, as company director
+
+A CRM holds names, emails, phone numbers and free-text notes about **people at
+other companies**. That is a different category of data from an issue tracker and
+it arrives with this app. Three positions, all settled (D-19):
+
+| | Position | Where it lives |
+|---|---|---|
+| 1 | **Retention: 90 days.** A deleted prospect and its children sit in trash for 90 days, then purge automatically. The purge reports WHAT it destroyed — type, #number and name, captured before the delete — to `platform.events` | Phase 3 (the schedule) and Phase 5 (`bk sales trash`) |
+| 2 | **Request-derived context is withheld from error rows.** `lib/api.ts` sets `redactBody: true` | `lib/api.ts`, and `packages/platform-api/src/handler.ts` at `errorLogContext` |
+| 3 | **Owner: Andrea** | here |
+
+**Read the ceiling on item 2 before quoting it.** `redactBody` omits
+`ApiError.details` from `platform.error_events.context` and writes a
+`{ redacted: 'body' }` marker so "withheld" and "there was none" are
+distinguishable. It does **not** redact `message` or `stack`, and a Postgres
+driver will put a rejected value straight into an error message
+(`Key (email)=(…) already exists`). Redacting those was considered and rejected:
+an error row nobody can triage is not a privacy win. **The honest control on
+message and stack is retention** — item 1's horizon covers sales error rows too.
+"No prospect data can ever appear in an error row" is not a claim this app makes.
+
+## 3. The domain model
+
+Postgres schema `sales`. Declared in `lib/db/schema.ts`, which carries the
+reasoning inline; this section records only what a reader needs before opening
+it, plus every place the implementation departs from the plan's §5.
+
+### 3.1 The tables
+
+```
+prospects          the core object — company AND deal in one (D-5)
+contacts           decision makers at a prospect
+stage_entries      the deal journey — one row per stage, including the ones not reached
+meetings           the meetings LEDGER (not a calendar)
+communications     the multi-channel log
+objections         what they pushed back on, what they really fear, our counter
+products           what we sell
+templates          how we say it
+documents          the one shared library (D-8)
+matches            triangulation: prospect × product (+ template) — AGENT-WRITTEN
+match_documents    ⟩
+document_prospects ⟩ pure links: composite PK, no surrogate id, cascade both ways
+document_products  ⟩
+template_documents ⟩
+prospect_labels    into platform.labels, app-scoped (D-14)
+counters           (workspace_id, entity_type, last_seq) — the #number allocator
+user_preferences   ui_mode, saved filters
+```
+
+### 3.2 A prospect *is* the deal (D-5), and the split is pre-paid
+
+The mockup merges company and deal and the stakeholder validated that shape. It
+is a simplification we are **choosing**: the mockup's own data already contains
+the multi-deal case (StaffUp carries both "Phase 1 shipped" and "Phase 2 in
+negotiation", handled with tags).
+
+So it is designed for the split without doing it. The deal fields live on
+`prospects`, and **every child table FKs to `prospect_id` only**. Adding
+`sales.deals` later means adding a nullable `deal_id` beside each `prospect_id` —
+additive, no rewrite, and no data migration for rows that never split. Do not add
+a child table that FKs to anything else.
+
+### 3.3 #numbers, and why concurrent creates cannot collide
+
+Every addressable row carries a workspace-scoped `seq`. **The serial `id` is
+never exposed** — not in a route, not in CLI output, not in a URL.
+
+`sales.counters` is `(workspace_id, entity_type, last_seq)` — generic, so adding
+an entity adds a ROW, not a column. It is **not** `platform.workspace_counters`,
+which no longer exists and must not be recreated (`platform-architecture.md`
+§4.6).
+
+Allocation is one statement, inside the same transaction as the insert:
+
+```sql
+INSERT INTO sales.counters (workspace_id, entity_type, last_seq)
+VALUES ($1, $2, 1)
+ON CONFLICT (workspace_id, entity_type)
+  DO UPDATE SET last_seq = sales.counters.last_seq + 1
+RETURNING last_seq;
+```
+
+`ON CONFLICT DO UPDATE` takes a row lock and re-reads under it, so a concurrent
+transaction blocks until the first commits and then increments the committed
+value. Two simultaneous `prospect create` calls get 12 and 13, never 12 twice.
+
+A plain `UPDATE … RETURNING` is **not** sufficient, and the difference is the
+whole point: the first allocation for a (workspace, type) pair has no row to
+update and returns zero rows. Recovering with "UPDATE, and INSERT if that
+returned nothing" is exactly the read-then-write §5.1 forbids — two concurrent
+first-creates both see zero rows and both insert.
+
+A rollback loses the number rather than reusing it. That is correct: #numbers are
+identity, not a count. Gaps are fine; a reused number is not.
+
+### 3.4 Actor attribution — the `_user_id` + `_label` pair
+
+The mockup's "by Andrea / by Companion" attribution is a validated feature.
+Companion is an **agent**, not a platform user, so four places carry a FK *and* a
+label: the FK when a platform user did it, the label always.
+
+| Table | Columns |
+|---|---|
+| `stage_entries` | `actor_user_id`, `actor_label` |
+| `communications` | `logged_by_user_id`, `logged_by_label` |
+| `prospects` | `next_action_owner_user_id`, `next_action_owner_label` |
+| `documents` | `added_by_user_id`, `added_by_label` |
+
+Populate `_label` from the **token's** name when the write comes from a token and
+from the user's name otherwise, so agent-written history stays visibly
+agent-written.
+
+**`prospects.owner_user_id` is deliberately NOT in that list.** It is a user FK
+with no label fallback: an agent can log a call and write history; it cannot own
+a deal. If that ever needs to hold "Companion", it is a product decision, not a
+schema convenience.
+
+### 3.5 Search (D-9), and two Postgres facts that were verified rather than recalled
+
+`bk search` (cross-app, bare) reads `platform.entities`, which holds titles only.
+`bk sales search` (app-owned) reaches **inside** records, so every searchable
+table carries a generated `tsvector` column with a GIN index, unioned by one
+query helper.
+
+Two things constrain how those columns are written, both checked against
+PostgreSQL 16 rather than assumed:
+
+1. **`to_tsvector(x)` — one argument — is STABLE** and Postgres rejects it in a
+   generated column; `to_tsvector('simple', x)` is IMMUTABLE. The same function
+   name carries both volatilities in `pg_proc`.
+2. **`array_to_string` is STABLE, and so is `arr::text`** — both route through
+   element output functions — so a `text[]` cannot be inlined. `CREATE TABLE`
+   fails with *"generation expression is not immutable"*. Migration 0001 defines
+   `sales.words(text[])`, an IMMUTABLE wrapper, and the generated columns call
+   that. It is not a volatility lie: the wrapped call's element output function
+   is `textout`, which genuinely is immutable.
+
+**Configuration: `'simple'`, not `'english'`.** Stemming hurts this corpus — the
+highest-value queries are proper nouns (companies, people, products), `english`
+turns "Roches" into "roch", and the data is full of French names however
+English-only the UI is. `simple` also keeps the vector predictable, which matters
+more than usual here because an **agent** builds the queries. Prefix matching
+(`to_tsquery('simple', 'x:*')`) covers the shipped/shipping case.
+
+Weights: `A` = identity (name, title, subject), `B` = body and everything else.
+Ranking only — both are matched.
+
+### 3.6 Blob-reference triggers — the highest-risk step
+
+Every column below needs a `platform.blob_refs_sync` trigger in migration 0002,
+and **a content column added later needs its trigger in the same migration.** The
+index is trigger-maintained so that no *write path* can forget it, which
+concentrates the entire remaining risk here. Nothing will remind you: an app with
+no scanner has nothing for `bk super-admin blob-drift` to compare against.
+
+The rule for deciding: **a column needs a trigger if a legitimate write can put
+an uploaded-file URL in it** — authored prose (`scan`) or a column that IS a URL
+(`exact`). The asymmetry settles the borderline cases. A trigger on a column that
+never holds a URL costs one no-op call per write; a missing trigger costs a file
+somebody was still using, with no undo.
+
+| Table | Columns | Mode |
+|---|---|---|
+| `prospects` | `summary`, `next_action_note`, `closed_reason` | scan |
+| `contacts` | `notes` | scan |
+| `stage_entries` | `note` | scan |
+| `meetings` | `agenda`, `outcome` | scan |
+| `communications` | `body` | scan |
+| `objections` | `spoken`, `real_fear`, `counter` | scan |
+| `products` | `description`, `pitch` | scan |
+| `templates` | `body` | scan |
+| `documents` | `upload_url`, `external_url` | **exact** |
+| `documents` | `description` | scan |
+| `matches` | `why` | scan |
+
+**Eighteen columns across ten tables.** §5.4 of the plan lists thirteen (while
+saying "fourteen"); the five additions are `prospects.closed_reason`,
+`products.pitch`, `documents.external_url`, `documents.description` and
+`matches.why`.
+
+`documents.external_url` is the non-obvious one and the reason to state the rule
+rather than a list. The column is *for* external URLs, so most rows contribute
+nothing — but nothing stops a caller putting a blob URL there, and the CHECK
+(exactly one of the two URL columns) then forbids the correct one. A file
+referenced only from an untriggered column is invisible to the delete gate.
+`exact` mode filters non-uploads out for free, so covering it costs nothing.
+
+**Every triggered table also carries `workspace_id`, even when its parent has
+one.** `platform.blob_references.workspace_id` is copied from the source row by
+the trigger, and the Storage page, `bk storage list` and `bk super-admin
+blob-drift` all work one workspace at a time. `apps/issues` shipped
+`attachments.workspace_id` NULL on every row and had to repair 24 invisible
+references inside migration 0037 — a clean report over a hole.
+
+**The ordering in migration 0002 is the one irreversible thing in this project:**
+triggers, then the backfill (by re-triggering, `SET col = col`), then
+`maintains_blob_index = true`. Setting the flag first advertises an empty index
+as authoritative, which is how a file still in use gets deleted. And the
+`platform.apps` row goes in with `enabled = false`: registering an app that
+cannot answer for its references stops blob deletion **platform-wide** — which is
+the gate working, not a bug.
+
+### 3.7 Where the implementation departs from `docs/sales-app-plan.md` §5
+
+Each is a departure from the plan's *summary*, made because
+`bsales-mockup/assets/js/data.js` — the older and more specific source — says
+otherwise, or because a stated convention required it.
+
+| # | Departure | Why |
+|---|---|---|
+| 1 | `workspace_id NOT NULL` on `contacts`, `stage_entries`, `objections`, `matches` | The blob trigger copies it into the index; without it those references are invisible to every workspace-scoped read. Issues' 0037 had to repair exactly this |
+| 2 | `prospects.next_action_owner_label` added | Four of the mockup's seven prospects have `ownerId: 'companion'`. A user FK alone cannot represent the data |
+| 3 | `documents.added_by_label` added | The mockup's `by` is "Companion · auto" and "Kali · field", neither necessarily a platform user |
+| 4 | `products.currency` added | §5.1 says money is an amount AND a currency; §5's products table gave `price_from`/`price_to` without one |
+| 5 | `stage_entries.occurred_at`, `actor_*` nullable | `upcoming` journey steps have no date, actor or note — the mockup renders the whole ladder |
+| 6 | `objections.raised_at` nullable | Same shape; the mockup's value is a relative string that may not resolve |
+| 7 | `matches` unique on `(prospect_id, product_id)` | Makes `bk sales match set` an upsert, so the table cannot accumulate three contradictory scores for one pair |
+| 8 | `prospects.next_action_due` is a `date` | §5.1: relative strings are a rendering, never storage. **This narrows the mockup** — "This week" does not round-trip; the agent resolves a fuzzy due to a concrete date on write |
+| 9 | Five more blob-trigger columns (§3.6) | Stated rule rather than an enumerated list |
+| 10 | `communications.channel` = `discovery`, not the mockup's `maps` | The record is "we found them by looking"; naming the tool in the schema needs a migration the first time the tool changes |
+| 11 | Vocabularies for stage-entry status, comm direction and document kind live in `lib/pipeline.ts` | §5.5 lists eight; these three are equally vocabulary and equally belong in `bk meta` |
+
+Not a departure, recorded because it looks like one: `objections.raised_by` stays
+a plain name rather than a `contact_id`. The mockup records a name, and requiring
+a contact row would make logging an objection from a call impossible until
+somebody had entered the person. A nullable `contact_id` beside it is additive.
+
+## 4. Vocabularies and limits
+
+- **`lib/pipeline.ts`** is this app's `work-items.ts`. Stage, channel, objection,
+  meeting, product, template, document and next-action vocabularies **and their
+  colours** are canonical there and nowhere else. Served live under
+  `apps.sales.vocabulary` by `GET /api/meta`.
+- **`lib/limits.ts`** declares this app's caps and re-exports the platform half
+  from `@blackcode/platform-api`. A limit is declared once, imported by the route
+  that enforces it, served by `/api/meta`.
+- **Neither is ever restated in a guide topic.** They are dynamic values: they
+  change without a CLI release, so a topic says *"run `bk meta`"*.
+  `cli/internal/guide/guide_test.go` fails the build on a hardcoded one.
+
+## 5. Visual identity (D-4)
+
+Tokens in `app/globals.css`, and **never a hardcoded colour in a component**.
+
+| | issues | sales |
+|---|---|---|
+| Primary | `#007bd3` | **`#10a37f`** |
+| Neutrals | cool blue-grey, OKLCH hue 264 | **warm, hue 85, chroma ≤ 0.008** |
+| Radius | `0.5rem` | **`0.75rem`** |
+| Density | `h-11` header, tight rows | **`h-12` header, `py-3` rows** |
+| Charts | brand-blue lead | emerald → teal → amber → violet → rose |
+
+**The neutrals are the load-bearing half.** A brand hue is one accent on a page;
+the neutral hue is every surface, border and muted label on it. Changing only
+`--primary` produces the issues app in a different colour, which is the outcome
+D-4 exists to prevent.
+
+`transpilePackages` in `next.config.js` and `@source` in `app/globals.css` are a
+**pair** — the first makes `@blackcode/platform-ui` compile, the second makes its
+CSS exist, and only the first fails loudly (D-30).
+
+The four `--chart-series-*` tokens are defined so the shared chart kit *works*,
+not as a commitment to use it. D-12 was narrowed on 2026-08-06: if sales' metrics
+page needs something the kit does not do, it builds its own in
+`apps/sales/components/`, with no shared change and nobody's permission.
+
+## 6. What is not built yet
+
+| | Phase |
+|---|---|
+| Postgres schema, role, grants, migrations, triggers, seed | 3 |
+| `lib/db/queries/entities.ts` (the URN projection) and `lib/storage.ts` (the reference scanner) | 3 |
+| `bk sales` command group and guide topics | 4 |
+| HTTP routes, and the platform route factories this app mounts | 5 |
+| NextAuth (`lib/auth.ts`), the app shell, theme provider, pages | 6–7 |
+| `bk sales search` and the ⌘K palette | 8 |
+| Read-only / full mode | 9 |
+
+`lib/cli-parity.test.ts` is **red until Phase 4/5** and its header says why at
+length. Do not switch it off: the assertion failing is the one that exists to
+stop an app passing the guard by having nothing to check.
