@@ -30,6 +30,87 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-07 — A CLI release now needs a web deploy **per app**, not one
+
+**Nothing in the CLI changed. What changed is how you ship it.**
+
+Every deployment answers the "what `bk` version is current" question: the shared
+`apiHandler` stamps `X-BK-CLI-Latest` and `X-BK-CLI-Min` on every response, from
+one constant in `packages/platform-agent`. `bk` reads them from whichever host it
+is pointed at — which, since CLI 3.0.0, is the user's **home app**.
+
+So the three-step release order (web → npm → web **again**) is now three steps
+with a per-app fan-out at each end. Deploy only one app and everyone whose home
+app is the other is never told an update exists; on a `forced` release, one host
+blocks them and the other does not.
+
+`devops/release.sh` was changed to say so rather than to name `issues`: its help
+text and its end-of-release notice both enumerate `app_registry()`, so the list
+stays right when a third app is added. `./devops/release.sh apps` is the
+authoritative list.
+
+**No action for anyone using `bk`.** This is a release-procedure change.
+
+---
+
+## 2026-08-07 — Provisioning a new app: the SQL order changed, and the old one failed silently
+
+Rehearsed against a copy of a real database, which is how it was found.
+
+**`docs/sql/app-role.sql` (and its filled-in `sales-app-role.sql`) never created
+the app's schema, and every grant in it names that schema.** Run at the
+documented point — before the app's first migration — five of its ten statements
+fail with `schema "sales" does not exist`, **and `psql` exits 0**. The app role
+comes out with no grants at all, and the provisioning step reports success. It
+had never bitten `issues`, whose schema was created by migration 0033 long before
+anyone wrote a role script for it.
+
+Changed:
+
+- Both role scripts now open with `\set ON_ERROR_STOP on` and create the schema
+  themselves (`CREATE SCHEMA IF NOT EXISTS … AUTHORIZATION neondb_owner`), before
+  the grants. The app's own migration opens with the same `IF NOT EXISTS`
+  statement, so order between the two no longer matters.
+- **The provisioning order is now: register (disabled) → role → deploy/migrate →
+  probe → enable.** The `platform.apps` row must exist *first*: the migration's
+  `maintains_blob_index` update is guarded on it, and re-running the migration
+  will not repair a missed flag because Drizzle records it as applied.
+- `docs/sql/app-boundary-probe.sql` must run **after** the migrations, and its
+  header now says why: its check (1) reads a table from the app's schema. It also
+  documents a way it can mislead — **a role granted nothing at all denies
+  everything with 42501 and passes six of its eight denial checks.** The lines
+  that distinguish the two states are the positive ones, `(1)`, `(4a)`, `(4e)`,
+  plus whether `(4d)` names `blob_refs_purge` or merely denies the schema. The
+  script's closing lines say this now, instead of "every deny must be 42501".
+- `docs/sql/sales-app-register.sql` documents that the whole file is safe to run
+  twice — before the migrations it prints `UPDATE 0` and leaves the app disabled
+  — rather than asking anyone to hand-split a file mid-deploy.
+
+**Action:** if you are provisioning an app, use the order above.
+`docs/adding-an-app.md` §2 carries it as a table.
+
+---
+
+## 2026-08-07 — `NEXTAUTH_SECRET` is a platform-wide value; `docs/env.md` said otherwise
+
+`docs/env.md`'s rotation procedure was written when there was one app and told
+you to generate a new secret and redeploy *the* app. Since D-16 the session
+cookie is one credential shared across every deployment on `.blackcode.ch`, and
+it is **encrypted** with this secret — so an app holding a different one cannot
+read the others' sessions. The symptom is a person being asked to sign in twice,
+with two green deploys and nothing in any log.
+
+`docs/env.md` now states the scope on the variable, gives the copy-don't-generate
+procedure for a new app, and makes rotation an all-apps-at-once operation. Its
+`./devops/release.sh web` invocations were also stale — that command has required
+an app argument since the registry landed, so every code block in the file named
+a command that exits 1.
+
+**Action:** none for an existing deployment. Read it before provisioning an app,
+and before rotating that secret.
+
+---
+
 ## 2026-08-07 — `bk activity` no longer prints another app's internal row id
 
 **Breaking if you parsed the `id` column of a cross-app activity row.** It was
