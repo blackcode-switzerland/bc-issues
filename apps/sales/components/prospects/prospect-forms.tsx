@@ -1,0 +1,547 @@
+'use client'
+
+// The write affordances on a prospect — Phase 9's `full` mode.
+//
+// ===========================================================================
+// WHY THESE FIVE AND NOT FOURTEEN
+// ===========================================================================
+// The line is **what a human can know that the agent cannot.** A person on a
+// call learns the deal value moved, that the contact's email is wrong, that the
+// meeting had a different outcome, that they pushed back on price. Nobody
+// independently learns the product catalogue changed — they tell the agent, and
+// the agent writes it.
+//
+// So: prospect (including stage, owner, value, next action), contacts, meetings,
+// communications and objections are writable in `full`. Products, templates,
+// document metadata, matches, the journey ladder and the activity feed are
+// read-only in BOTH modes and say so through `<AgentOnly>`.
+//
+// ===========================================================================
+// EVERY WRITE HERE GOES THROUGH `lib/mutations.ts`
+// ===========================================================================
+// No `fetch`, no `apiSend`, no method strings in this file. That is what makes
+// "read-only renders no mutation affordance" checkable rather than promised:
+// `lib/read-only.test.ts` asserts that the only module sending a non-GET at an
+// `/api/workspaces/…` path is `lib/mutations.ts`, and every hook there is built
+// on the one `useMutation` that reads `useCanWrite()`.
+
+import { useState } from 'react'
+import {
+  NEXT_ACTION_TYPES,
+  OBJECTION_STATUSES,
+  OBJECTION_TYPES,
+  STAGES,
+  TERMINAL_STAGES,
+} from '@/lib/pipeline'
+import {
+  ConfirmDelete,
+  Disclosure,
+  Field,
+  FormActions,
+  TextArea,
+  TextInput,
+  VocabSelect,
+} from '@/components/forms'
+import {
+  useAddContact,
+  useEditContact,
+  useEditObjection,
+  useEditProspect,
+  useRaiseObjection,
+  useRemoveContact,
+  useRemoveObjection,
+  useSetNextAction,
+  useSetStage,
+  type ProspectPatch,
+} from '@/lib/mutations'
+import type { Contact, Objection, ProspectDetail } from '@/lib/hooks'
+
+// ---------------------------------------------------------------------------
+// The deal itself
+// ---------------------------------------------------------------------------
+
+export function EditProspectForm({ ws, p }: { ws: string; p: ProspectDetail }) {
+  return (
+    <Disclosure label="Edit deal" icon="pencil">
+      {(close) => <ProspectFields ws={ws} p={p} close={close} />}
+    </Disclosure>
+  )
+}
+
+function ProspectFields({ ws, p, close }: { ws: string; p: ProspectDetail; close: () => void }) {
+  const edit = useEditProspect(ws, p.number)
+  const [form, setForm] = useState<ProspectPatch>({
+    name: p.name,
+    city: p.city,
+    sector: p.sector,
+    value: p.value,
+    source: p.source,
+    summary: p.summary,
+  })
+  const set = <K extends keyof ProspectPatch>(k: K, v: ProspectPatch[K]) =>
+    setForm((f) => ({ ...f, [k]: v }))
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Company">
+          <TextInput value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} />
+        </Field>
+        <Field label={`Deal value (${p.currency})`} hint="A plain number. Rounded when shown.">
+          <TextInput
+            value={form.value ?? ''}
+            onChange={(e) => set('value', e.target.value || null)}
+            inputMode="decimal"
+          />
+        </Field>
+        <Field label="City">
+          <TextInput value={form.city ?? ''} onChange={(e) => set('city', e.target.value || null)} />
+        </Field>
+        <Field label="Sector">
+          <TextInput
+            value={form.sector ?? ''}
+            onChange={(e) => set('sector', e.target.value || null)}
+          />
+        </Field>
+        <Field label="Source" hint="How they arrived — a referral, a sweep, an event.">
+          <TextInput
+            value={form.source ?? ''}
+            onChange={(e) => set('source', e.target.value || null)}
+          />
+        </Field>
+        {/*
+          STAGE IS NOT IN THIS FORM, and its absence is the contract. Moving a
+          deal writes a journey step and may close it; `PATCH …/prospects/{n}`
+          refuses `stage` with a 400 naming the other route, so a field here
+          would be a control that always errors. It has its own button.
+
+          OWNER is not here either: the route resolves an EMAIL to a user and
+          400s on one it does not know, and a free-text box that fails on a
+          typed name is a worse affordance than none. `bk sales prospect assign`
+          has the member list to check against; this page does not mount
+          `/api/workspaces/{ws}/members`.
+        */}
+      </div>
+      <div className="mt-3">
+        <Field label="Summary">
+          <TextArea
+            value={form.summary ?? ''}
+            onChange={(e) => set('summary', e.target.value || null)}
+          />
+        </Field>
+      </div>
+      <FormActions
+        submitLabel="Save"
+        pending={edit.isPending}
+        onCancel={close}
+        onSubmit={() => edit.mutate(form, { onSuccess: close })}
+      />
+    </>
+  )
+}
+
+export function MoveStageForm({ ws, p }: { ws: string; p: ProspectDetail }) {
+  return (
+    <Disclosure label="Move stage" icon="pencil">
+      {(close) => <StageFields ws={ws} p={p} close={close} />}
+    </Disclosure>
+  )
+}
+
+function StageFields({ ws, p, close }: { ws: string; p: ProspectDetail; close: () => void }) {
+  const move = useSetStage(ws, p.number)
+  const [stage, setStage] = useState('')
+  const [note, setNote] = useState('')
+  const [reason, setReason] = useState('')
+  const terminal = TERMINAL_STAGES.includes(stage)
+
+  return (
+    <>
+      <div className="space-y-3">
+        <Field
+          label="New stage"
+          hint="The stage it is in now is not offered — re-posting it would append a journey step for a move that did not happen, and the route refuses it."
+        >
+          <VocabSelect
+            options={STAGES.filter((s) => s.value !== p.stage)}
+            placeholder="Choose…"
+            value={stage}
+            onChange={(e) => setStage(e.target.value)}
+          />
+        </Field>
+        <Field label="Note" hint="What moved it. Written onto the journey step.">
+          <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        {/* Only for a terminal stage, because `closed_reason` is only stored
+            there. Offering it on every move would invite a value the row has
+            nowhere to put. */}
+        {terminal && (
+          <Field label="Closing reason">
+            <TextInput value={reason} onChange={(e) => setReason(e.target.value)} />
+          </Field>
+        )}
+      </div>
+      <FormActions
+        submitLabel="Move"
+        pending={move.isPending}
+        disabled={!stage}
+        onCancel={close}
+        onSubmit={() =>
+          move.mutate(
+            {
+              stage,
+              note: note.trim() || undefined,
+              reason: terminal ? reason.trim() || undefined : undefined,
+            },
+            { onSuccess: close }
+          )
+        }
+      />
+    </>
+  )
+}
+
+export function NextActionForm({ ws, p }: { ws: string; p: ProspectDetail }) {
+  return (
+    <Disclosure label={p.next_action.type ? 'Change next action' : 'Set a next action'} icon="pencil">
+      {(close) => <NextActionFields ws={ws} p={p} close={close} />}
+    </Disclosure>
+  )
+}
+
+function NextActionFields({ ws, p, close }: { ws: string; p: ProspectDetail; close: () => void }) {
+  const save = useSetNextAction(ws, p.number)
+  const [type, setType] = useState(p.next_action.type ?? '')
+  const [due, setDue] = useState(p.next_action.due ?? '')
+  const [dueLabel, setDueLabel] = useState(p.next_action.due_label ?? '')
+  const [note, setNote] = useState(p.next_action.note ?? '')
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="What is owed">
+          <VocabSelect
+            options={NEXT_ACTION_TYPES}
+            placeholder="Nothing"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+          />
+        </Field>
+        <Field label="Due">
+          {/* A real date input: the route requires YYYY-MM-DD and 400s on
+              anything else, so a free-text box would fail on the phrasing a
+              human would naturally type. */}
+          <TextInput type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        </Field>
+        <Field
+          label="How it was said"
+          hint="Kept alongside the date. “Due Friday” and “sometime this week, Friday is my guess” are different commitments."
+        >
+          <TextInput value={dueLabel} onChange={(e) => setDueLabel(e.target.value)} />
+        </Field>
+        <Field label="Note">
+          <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+      </div>
+      <FormActions
+        submitLabel="Save"
+        pending={save.isPending}
+        onCancel={close}
+        onSubmit={() =>
+          save.mutate(
+            {
+              // `null` CLEARS; `undefined` would leave it. Choosing "Nothing" in
+              // the select has to mean cleared, or the queue keeps an action
+              // nobody owes.
+              type: type || null,
+              due: due || null,
+              due_label: dueLabel.trim() || null,
+              note: note.trim() || null,
+            },
+            { onSuccess: close }
+          )
+        }
+      />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Contacts
+// ---------------------------------------------------------------------------
+
+export function AddContactForm({ ws, n }: { ws: string; n: number }) {
+  return (
+    <Disclosure label="Add a contact">
+      {(close) => <ContactFields ws={ws} n={n} close={close} />}
+    </Disclosure>
+  )
+}
+
+export function EditContactForm({
+  ws,
+  n,
+  contact,
+}: {
+  ws: string
+  n: number
+  contact: Contact
+}) {
+  return (
+    <Disclosure label={`Edit ${contact.name}`} icon="pencil">
+      {(close) => <ContactFields ws={ws} n={n} contact={contact} close={close} />}
+    </Disclosure>
+  )
+}
+
+function ContactFields({
+  ws,
+  n,
+  contact,
+  close,
+}: {
+  ws: string
+  n: number
+  contact?: Contact
+  close: () => void
+}) {
+  const add = useAddContact(ws, n)
+  const edit = useEditContact(ws, n)
+  const remove = useRemoveContact(ws, n)
+  const [confirming, setConfirming] = useState(false)
+
+  const [form, setForm] = useState({
+    name: contact?.name ?? '',
+    role: contact?.role ?? '',
+    email: contact?.email ?? '',
+    phone: contact?.phone ?? '',
+    notes: contact?.notes ?? '',
+    is_primary: contact?.is_primary ?? false,
+  })
+  const set = (k: keyof typeof form, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }))
+
+  if (confirming && contact) {
+    return (
+      <ConfirmDelete
+        target={contact.name}
+        targetLabel="contact’s name"
+        pending={remove.isPending}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => remove.mutate({ id: contact.id, name: contact.name }, { onSuccess: close })}
+      />
+    )
+  }
+
+  const payload = {
+    name: form.name.trim(),
+    role: form.role.trim() || null,
+    email: form.email.trim() || null,
+    phone: form.phone.trim() || null,
+    notes: form.notes.trim() || null,
+    is_primary: form.is_primary,
+  }
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <TextInput value={form.name} onChange={(e) => set('name', e.target.value)} />
+        </Field>
+        <Field label="Role">
+          <TextInput value={form.role} onChange={(e) => set('role', e.target.value)} />
+        </Field>
+        <Field label="Email">
+          <TextInput type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <TextInput value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+        </Field>
+      </div>
+      <div className="mt-3 space-y-3">
+        <Field label="Notes">
+          <TextArea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+        </Field>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={form.is_primary}
+            onChange={(e) => set('is_primary', e.target.checked)}
+          />
+          Primary contact
+        </label>
+      </div>
+      <div className="flex items-center justify-between">
+        {contact ? (
+          <button
+            onClick={() => setConfirming(true)}
+            className="mt-3 rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+          >
+            Remove
+          </button>
+        ) : (
+          <span />
+        )}
+        <FormActions
+          submitLabel={contact ? 'Save' : 'Add'}
+          pending={add.isPending || edit.isPending}
+          disabled={!payload.name}
+          onCancel={close}
+          onSubmit={() =>
+            contact
+              ? edit.mutate({ id: contact.id, patch: payload }, { onSuccess: close })
+              : add.mutate(payload, { onSuccess: close })
+          }
+        />
+      </div>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Objections — three fields, still three
+// ---------------------------------------------------------------------------
+
+export function RaiseObjectionForm({ ws, n }: { ws: string; n: number }) {
+  return (
+    <Disclosure label="Record an objection">
+      {(close) => <ObjectionFields ws={ws} n={n} close={close} />}
+    </Disclosure>
+  )
+}
+
+export function EditObjectionForm({
+  ws,
+  n,
+  objection,
+}: {
+  ws: string
+  n: number
+  objection: Objection
+}) {
+  return (
+    <Disclosure label="Edit" icon="pencil">
+      {(close) => <ObjectionFields ws={ws} n={n} objection={objection} close={close} />}
+    </Disclosure>
+  )
+}
+
+function ObjectionFields({
+  ws,
+  n,
+  objection,
+  close,
+}: {
+  ws: string
+  n: number
+  objection?: Objection
+  close: () => void
+}) {
+  const raise = useRaiseObjection(ws, n)
+  const edit = useEditObjection(ws, n)
+  const remove = useRemoveObjection(ws, n)
+  const [confirming, setConfirming] = useState(false)
+
+  const [form, setForm] = useState({
+    type: objection?.type ?? '',
+    raised_by: objection?.raised_by ?? '',
+    spoken: objection?.spoken ?? '',
+    real_fear: objection?.real_fear ?? '',
+    counter: objection?.counter ?? '',
+    status: objection?.status ?? 'open',
+  })
+  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+  if (confirming && objection) {
+    return (
+      <ConfirmDelete
+        target={objection.type}
+        targetLabel="objection type"
+        pending={remove.isPending}
+        onCancel={() => setConfirming(false)}
+        onConfirm={(confirm) =>
+          remove.mutate({ id: objection.id, confirm }, { onSuccess: close })
+        }
+      />
+    )
+  }
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Type">
+          <VocabSelect
+            options={OBJECTION_TYPES}
+            placeholder="Choose…"
+            value={form.type}
+            onChange={(e) => set('type', e.target.value)}
+          />
+        </Field>
+        <Field label="Raised by">
+          <TextInput value={form.raised_by} onChange={(e) => set('raised_by', e.target.value)} />
+        </Field>
+      </div>
+      {/*
+        THREE FIELDS, KEPT AS THREE. What they SAID, what we think they MEAN,
+        and what we say back is the only structured sales insight in this
+        product; `lib/views.ts` refuses to collapse them and neither does this.
+      */}
+      <div className="mt-3 space-y-3">
+        <Field label="What they said">
+          <TextArea value={form.spoken} onChange={(e) => set('spoken', e.target.value)} />
+        </Field>
+        <Field label="What we think they mean">
+          <TextArea value={form.real_fear} onChange={(e) => set('real_fear', e.target.value)} />
+        </Field>
+        {objection && (
+          <>
+            <Field label="Our counter">
+              <TextArea value={form.counter} onChange={(e) => set('counter', e.target.value)} />
+            </Field>
+            <Field
+              label="Status"
+              hint="A counter does not settle an objection. Moving this to resolved is a separate judgement, which is why they are two fields and not one."
+            >
+              <VocabSelect
+                options={OBJECTION_STATUSES}
+                value={form.status}
+                onChange={(e) => set('status', e.target.value)}
+              />
+            </Field>
+          </>
+        )}
+      </div>
+      <div className="flex items-center justify-between">
+        {objection ? (
+          <button
+            onClick={() => setConfirming(true)}
+            className="mt-3 rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+          >
+            Remove — permanent
+          </button>
+        ) : (
+          <span />
+        )}
+        <FormActions
+          submitLabel={objection ? 'Save' : 'Record'}
+          pending={raise.isPending || edit.isPending}
+          disabled={!form.type}
+          onCancel={close}
+          onSubmit={() => {
+            const payload = {
+              type: form.type,
+              raised_by: form.raised_by.trim() || null,
+              spoken: form.spoken.trim() || null,
+              real_fear: form.real_fear.trim() || null,
+              ...(objection
+                ? { counter: form.counter.trim() || null, status: form.status }
+                : {}),
+            }
+            objection
+              ? edit.mutate({ id: objection.id, patch: payload }, { onSuccess: close })
+              : raise.mutate(payload, { onSuccess: close })
+          }}
+        />
+      </div>
+    </>
+  )
+}

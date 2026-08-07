@@ -1,0 +1,224 @@
+// How a reviewer verifies that `read_only` renders no mutation affordance —
+// as a fact about the tree, not about anybody's care.
+//
+// ===========================================================================
+// WHAT AGENT6 LEFT, AND WHAT PHASE 9 HAD TO NOT BREAK
+// ===========================================================================
+// Before this phase the app exported exactly one request function, `apiGet`, and
+// contained no mutation verb anywhere. "The web is read-only" was therefore a
+// PROPERTY of the module graph — one anybody could confirm with grep — rather
+// than an intention. Adding writes as `fetch` calls inside components would have
+// turned it back into an intention, and nobody would have been able to check it
+// again without reading every component.
+//
+// The arrangement that keeps it checkable:
+//
+//   lib/client.ts     the ONE `fetch(` in the app. `apiGet` + `apiSend`.
+//                     Transport; consults nothing.
+//   lib/mutations.ts  the ONE module that sends `apiSend` at an
+//                     `/api/workspaces/…` path — i.e. at a sales RECORD. Every
+//                     hook in it is built on `useRecordMutation`, the single
+//                     `useMutation` in the file, which reads `useCanWrite()`.
+//   components/**     render `useCanWrite()` and call those hooks. No fetch, no
+//                     apiSend, no method strings.
+//
+// So the question "can a component write in read-only mode?" is answered by four
+// assertions rather than by an audit. **What this does NOT claim**: that every
+// button is correctly hidden. It claims that every record write goes through one
+// gated function, so a button that was not hidden fails loudly instead of
+// writing — which is what makes a missed affordance findable at all.
+//
+// ===========================================================================
+// AND IT IS NOT A SECURITY CONTROL (D-7)
+// ===========================================================================
+// The gate is client-side, the user owns the client, and they can flip the
+// preference themselves. Authorisation is `platform.app_access` and the
+// workspace role, on the server, and it refuses a write the UI allowed exactly
+// as readily as one it did not. `lib/ui-mode.test.ts` is the file that keeps
+// that true from the other direction.
+//
+// Watched fail 2026-08-07, five ways, each restored:
+//   A. `fetch(` added to `components/prospects/prospect-forms.tsx` → RED
+//   B. `apiSend('PATCH', '/api/workspaces/…/prospects/1')` in a component → RED
+//   C. a second `useMutation(` added to `lib/mutations.ts` → RED
+//   D. STEP 3, "what would this still pass on?": an ALLOWED module
+//      (`token-settings.tsx`) pointed at a workspace path. Without the path rule
+//      applying INSIDE the allowance too, "allowed to call apiSend" would have
+//      quietly meant "allowed to write records". RED.
+//   E. the `throw new ReadOnlyModeError()` deleted from `useRecordMutation` —
+//      the case where every structural assertion above stays green because the
+//      structure is intact and only the gate is gone. RED, on the input check.
+//
+// And the file failed on ITSELF before `codeOf` existed: three modules' headers
+// contain the literal needles while explaining the rule. That is finding #4's
+// shape, and it is why the scan drops comment lines.
+
+import { describe, it, expect } from 'vitest'
+import { readdirSync, readFileSync, existsSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
+
+const rel = (p: string) => relative(APP_ROOT, p).split('\\').join('/')
+
+/**
+ * The source with comment-only lines removed.
+ *
+ * **Not tidiness — the first version of this file failed on itself.** Every
+ * module here documents the rule it follows, in sentences containing the exact
+ * needles: `lib/mutations.ts`'s header says "the ONLY `fetch(` in the app" and
+ * "counts the `useMutation(` occurrences", and `cli-authorize-form.tsx` says it
+ * POSTs "rather than calling `fetch`". A detector that fires on the
+ * documentation of its own rule is CLAUDE.md's finding #4, and the outcome there
+ * is that somebody weakens or deletes it (D-37).
+ *
+ * Dropping whole comment LINES rather than parsing comments is deliberate, and
+ * it is the same trade `packages/platform-testing`'s export-list detector makes:
+ * stripping comments properly needs a tokenizer that understands quotes and
+ * template literals, whereas a line filter needs nothing and cannot misfire on a
+ * `https://` inside a string. Calls in this app are always on code lines.
+ */
+function codeOf(src: string): string {
+  return src
+    .split('\n')
+    .filter((line) => {
+      const t = line.trimStart()
+      return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'))
+    })
+    .join('\n')
+}
+
+function walk(dir: string): string[] {
+  if (!existsSync(dir)) return []
+  const out: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...walk(p))
+    else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(p)
+  }
+  return out
+}
+
+const SOURCES = [
+  ...walk(join(APP_ROOT, 'app')),
+  ...walk(join(APP_ROOT, 'components')),
+  ...walk(join(APP_ROOT, 'lib')),
+]
+
+/** The one module allowed to call `fetch`. */
+const TRANSPORT = 'lib/client.ts'
+/** The one module allowed to write a sales RECORD. */
+const RECORD_WRITES = 'lib/mutations.ts'
+
+/**
+ * Modules other than `lib/mutations.ts` that may call `apiSend`, with reasons.
+ *
+ * Every one of them is an ACCOUNT operation, not a sales record — the platform's
+ * `platform.users`, `platform.api_tokens`, the caller's own preferences. None is
+ * behind `ui_mode` and none should be: a browser display preference that could
+ * stop somebody changing their own name, revoking a leaked token, or switching
+ * the preference back would have become a permission over the account, which is
+ * the misreading D-7 exists to prevent.
+ *
+ * The `/api/workspaces/…` rule below applies to these files TOO, which is what
+ * stops an allowance here from quietly becoming permission to write records.
+ */
+const ACCOUNT_WRITERS = new Map<string, string>([
+  ['components/cli-authorize-form.tsx', '`bk login` mints a platform token — POST /api/cli/authorize'],
+  ['components/settings/profile-settings.tsx', 'your blackcode profile — PATCH /api/me'],
+  ['components/settings/token-settings.tsx', 'platform API tokens — /api/tokens'],
+  [
+    'components/settings/preference-settings.tsx',
+    'the ui_mode switch itself. It cannot go through `useRecordMutation`: that ' +
+      'one refuses in read-only, and a switch you could not switch back would be ' +
+      'a lock rather than a preference.',
+  ],
+])
+
+/** `/api/workspaces/…` in a string literal — a sales record, not an account op. */
+const WORKSPACE_PATH = /(['"])\/api\/workspaces\//
+
+describe('the inputs', () => {
+  it('found the modules this file is about', () => {
+    expect(SOURCES.length, `nothing walked under ${APP_ROOT}`).toBeGreaterThan(30)
+    for (const f of [TRANSPORT, RECORD_WRITES, ...ACCOUNT_WRITERS.keys()]) {
+      expect(existsSync(join(APP_ROOT, f)), `${f} does not exist — this file is stale`).toBe(true)
+    }
+  })
+
+  it('the record-write module really does gate on the mode', () => {
+    // Without this, every assertion below would still pass against a
+    // `lib/mutations.ts` that had quietly stopped reading `useCanWrite` — the
+    // whole point being funnelled through one ungated function.
+    //
+    // `codeOf`, not the raw source. This module's own header says it "reads
+    // `useCanWrite()`" — so a raw match would be satisfied by the SENTENCE
+    // claiming the property, which is the most direct form of a check passing
+    // on its own documentation.
+    const src = codeOf(readFileSync(join(APP_ROOT, RECORD_WRITES), 'utf8'))
+    expect(src, `${RECORD_WRITES} no longer reads useCanWrite`).toMatch(/\buseCanWrite\(/)
+    expect(src, `${RECORD_WRITES} no longer refuses in read-only`).toMatch(/throw new ReadOnlyModeError/)
+  })
+})
+
+describe('read-only is a property of the tree', () => {
+  it('there is exactly one fetch() in the whole web surface', () => {
+    const callers = SOURCES.filter((f) => /\bfetch\s*\(/.test(codeOf(readFileSync(f, 'utf8')))).map(rel)
+    expect(
+      callers,
+      `only ${TRANSPORT} may call fetch. A component that calls it directly makes ` +
+        '"no mutation reaches the network except through the module that documents ' +
+        'them" unverifiable, which is the difference between a property and a ' +
+        `promise:\n${callers.join('\n')}`
+    ).toEqual([TRANSPORT])
+  })
+
+  it('only lib/mutations.ts and the named account modules send apiSend', () => {
+    const callers = SOURCES.filter((f) => {
+      const r = rel(f)
+      if (r === TRANSPORT || r === RECORD_WRITES) return false
+      return /\bapiSend\s*[<(]/.test(codeOf(readFileSync(f, 'utf8')))
+    }).map(rel)
+
+    const unexpected = callers.filter((c) => !ACCOUNT_WRITERS.has(c))
+    expect(
+      unexpected,
+      'these modules write without going through lib/mutations.ts, so their writes ' +
+        'are not behind the affordance switch. Add the hook there, or — if it is an ' +
+        'ACCOUNT operation rather than a sales record — add it to ACCOUNT_WRITERS ' +
+        `with a reason:\n${unexpected.join('\n')}`
+    ).toEqual([])
+  })
+
+  it('no module outside lib/mutations.ts names an /api/workspaces path in a write', () => {
+    // The rule that keeps ACCOUNT_WRITERS honest. Being allowed to call apiSend
+    // is not permission to write a RECORD, and the two are told apart by the
+    // path: `/api/me` and `/api/tokens` are the account, `/api/workspaces/…` is
+    // this app's data.
+    const offenders: string[] = []
+    for (const [file] of ACCOUNT_WRITERS) {
+      const src = codeOf(readFileSync(join(APP_ROOT, file), 'utf8'))
+      if (/\bapiSend\s*[<(]/.test(src) && WORKSPACE_PATH.test(src)) offenders.push(file)
+    }
+    expect(
+      offenders,
+      'an account-surface module is sending a write at a workspace-scoped path. ' +
+        'That is a sales record and it belongs in lib/mutations.ts, behind ' +
+        `useCanWrite():\n${offenders.join('\n')}`
+    ).toEqual([])
+  })
+
+  it('lib/mutations.ts has exactly one useMutation, and it is the gated one', () => {
+    const src = codeOf(readFileSync(join(APP_ROOT, RECORD_WRITES), 'utf8'))
+    const count = (src.match(/\buseMutation\s*\(/g) ?? []).length
+    expect(
+      count,
+      'every record write must compose `useRecordMutation`, which is the single ' +
+        '`useMutation` in this module and the only place `useCanWrite()` is read. ' +
+        'A second one is not necessarily ungated — but the moment there are two, ' +
+        'nobody can tell by looking, which is exactly what this file exists to ' +
+        'prevent.'
+    ).toBe(1)
+  })
+})

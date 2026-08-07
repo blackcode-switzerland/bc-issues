@@ -21,6 +21,7 @@ import {
   TemplateCategoryChip,
 } from '@/components/chips'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { AgentOnly } from '@/components/forms'
 import { DocumentList } from '@/components/prospects/prospect-detail'
 import { useDocuments, useProducts, useTemplates } from '@/lib/hooks'
 import { money } from '@/lib/format'
@@ -58,6 +59,7 @@ export function ProductsPage({ ws }: { ws: string }) {
 
   return (
     <div className="space-y-2">
+      <AgentOnly what="Products" command="bk sales product create | edit" />
       {products.data.map((p) => (
         <article
           key={p.number}
@@ -120,6 +122,7 @@ export function TemplatesPage({ ws }: { ws: string }) {
 
   return (
     <div className="space-y-2">
+      <AgentOnly what="Templates" command="bk sales template create | edit" />
       {templates.data.map((t) => (
         <article
           key={t.number}
@@ -191,6 +194,7 @@ export function DocumentsPage({ ws }: { ws: string }) {
         One library. A prospect&rsquo;s Documents tab and a template&rsquo;s
         attachments are filtered views of these rows, never separate stores.
       </p>
+      <AgentOnly what="Documents" command="bk sales upload | doc create" />
       <DocumentList docs={docs.data} />
       <div className="flex flex-wrap gap-1.5 px-1">
         {/* The kinds present, as a legend rather than a filter — the library is

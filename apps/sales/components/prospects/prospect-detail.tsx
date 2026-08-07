@@ -32,6 +32,22 @@ import {
   VocabDot,
 } from '@/components/chips'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { AgentOnly, WriteGate } from '@/components/forms'
+import {
+  AddContactForm,
+  EditContactForm,
+  EditObjectionForm,
+  EditProspectForm,
+  MoveStageForm,
+  NextActionForm,
+  RaiseObjectionForm,
+} from './prospect-forms'
+import {
+  LogCommunicationForm,
+  MeetingForm,
+  RemoveCommunicationButton,
+} from '@/components/ledgers/ledger-forms'
+import { useCanWrite } from '@/lib/ui-mode'
 import { usePageTitle } from '@/components/sales-shell'
 import {
   useCommunications,
@@ -41,6 +57,7 @@ import {
   useMeetings,
   useObjections,
   useProspect,
+  type Communication,
   type JourneyStep,
 } from '@/lib/hooks'
 import { dateTimeShort, dayLabel, money, relativeDay } from '@/lib/format'
@@ -63,6 +80,7 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
   const tab: Tab = (TABS as readonly string[]).includes(raw) ? (raw as Tab) : 'overview'
 
   const prospect = useProspect(ws, n)
+  const canWrite = useCanWrite(ws)
   usePageTitle(prospect.data?.name ?? null)
 
   if (prospect.isPending) return <BlockSkeleton rows={6} />
@@ -100,24 +118,55 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
           {p.urn && <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{p.urn}</code>}
         </div>
         {p.summary && <p className="text-sm leading-relaxed text-foreground">{p.summary}</p>}
+
+        {/*
+          The two write affordances on the deal itself, and they are two buttons
+          rather than one form because the routes are two. Moving a deal writes
+          a journey step and may close it; `PATCH …/prospects/{n}` refuses
+          `stage` outright with a 400 naming the other route, so a single form
+          carrying both would be a form that always fails on one field.
+        */}
+        <WriteGate ws={ws}>
+          <div className="flex flex-wrap gap-2">
+            <EditProspectForm ws={ws} p={p} />
+            <MoveStageForm ws={ws} p={p} />
+          </div>
+        </WriteGate>
       </header>
 
       {/* What is owed next. Its own strip: it is the single most actionable fact
-          on the page and it is the reason the prospect appears in Today. */}
-      {p.next_action.type && (
+          on the page and it is the reason the prospect appears in Today.
+
+          The strip renders when there is an action OR when the reader can write
+          one. Without the second half, a deal with nothing owed would offer no
+          way to say what is — the affordance would be missing exactly where it
+          is most needed. */}
+      {(p.next_action.type || canWrite) && (
         <div className="rounded-xl border border-border bg-card px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Next action
           </p>
-          <p className="mt-1 text-sm text-foreground">
-            {/* The agent's own note wins; the vocabulary LABEL is the fallback.
-                Never the raw wire value — `check_in` is a schema detail. */}
-            {p.next_action.note ?? nextActionTypeLabel(p.next_action.type)}
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {p.next_action.due ? relativeDay(p.next_action.due) : 'no date'}
-            {p.next_action.owner && ` · ${p.next_action.owner}`}
-          </p>
+          {p.next_action.type ? (
+            <>
+              <p className="mt-1 text-sm text-foreground">
+                {/* The agent's own note wins; the vocabulary LABEL is the
+                    fallback. Never the raw wire value — `check_in` is a schema
+                    detail. */}
+                {p.next_action.note ?? nextActionTypeLabel(p.next_action.type)}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {p.next_action.due ? relativeDay(p.next_action.due) : 'no date'}
+                {p.next_action.owner && ` · ${p.next_action.owner}`}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">Nothing owed.</p>
+          )}
+          <WriteGate ws={ws}>
+            <div className="mt-2">
+              <NextActionForm ws={ws} p={p} />
+            </div>
+          </WriteGate>
         </div>
       )}
 
@@ -152,12 +201,29 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * `action` is where a block's write affordance goes — beside the heading, not
+ * under the list, so it is in the same place on every section and it does not
+ * move when the list grows. In read-only mode the gate puts the line naming the
+ * command there instead, which is why the slot is not conditional on writing.
+ */
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <section>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h3>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
+        {action}
+      </div>
       {children}
     </section>
   )
@@ -177,10 +243,22 @@ function Overview({
   const contacts = useContacts(ws, n)
   const objections = useObjections(ws, n)
   const matches = useMatches(ws, n)
+  const canWrite = useCanWrite(ws)
 
   return (
     <div className="space-y-6">
-      <Section title="Deal journey">
+      {/*
+        THE JOURNEY IS READ-ONLY IN BOTH MODES, and it is not an oversight.
+        Moving a deal writes a step; `journey add` records one that did NOT move
+        it, which is for backfilling history and for the rungs ahead. That is a
+        distinction worth a flag on a command and not worth a form here — and a
+        form offering both would be the second, undocumented way to change a
+        stage the two routes exist to prevent.
+      */}
+      <Section
+        title="Deal journey"
+        action={<AgentOnly what="Journey steps" command="bk sales journey add" />}
+      >
         {journey.length === 0 ? (
           <EmptyState title="No journey recorded" />
         ) : (
@@ -211,7 +289,14 @@ function Overview({
         )}
       </Section>
 
-      <Section title="Contacts">
+      <Section
+        title="Contacts"
+        action={
+          <WriteGate ws={ws} note="Contacts are edited with `bk sales contact add | edit | rm`.">
+            <AddContactForm ws={ws} n={n} />
+          </WriteGate>
+        }
+      >
         {contacts.isPending ? (
           <BlockSkeleton rows={2} />
         ) : contacts.error ? (
@@ -244,13 +329,28 @@ function Overview({
                     {c.phone}
                   </span>
                 )}
+                {canWrite && (
+                  <span className="ml-auto">
+                    <EditContactForm ws={ws} n={n} contact={c} />
+                  </span>
+                )}
               </div>
             ))}
           </div>
         )}
       </Section>
 
-      <Section title="Objections">
+      <Section
+        title="Objections"
+        action={
+          <WriteGate
+            ws={ws}
+            note="Objections are recorded with `bk sales objection raise | counter | resolve`."
+          >
+            <RaiseObjectionForm ws={ws} n={n} />
+          </WriteGate>
+        }
+      >
         {objections.isPending ? (
           <BlockSkeleton rows={2} />
         ) : objections.error ? (
@@ -266,6 +366,11 @@ function Overview({
                   <ObjectionStatusChip value={o.status} />
                   {o.raised_by && (
                     <span className="text-xs text-muted-foreground">{o.raised_by}</span>
+                  )}
+                  {canWrite && (
+                    <span className="ml-auto">
+                      <EditObjectionForm ws={ws} n={n} objection={o} />
+                    </span>
                   )}
                 </div>
                 {/*
@@ -310,7 +415,10 @@ function Overview({
         products by fit in the browser would be the single thing the doctrine
         forbids, and it would look like a feature.
       */}
-      <Section title="Triangulation — matched products">
+      <Section
+        title="Triangulation — matched products"
+        action={<AgentOnly what="Matches" command="bk sales match set" />}
+      >
         {matches.isPending ? (
           <BlockSkeleton rows={2} />
         ) : matches.error ? (
@@ -369,7 +477,10 @@ function Overview({
         web surface owes — an agent working in sales files an issue, and the
         human reading the deal can see it and click through.
       */}
-      <Section title="Related in other apps">
+      <Section
+        title="Related in other apps"
+        action={<AgentOnly what="Cross-app links" command="bk link add" />}
+      >
         {links.length === 0 ? (
           <EmptyState
             title="Nothing linked yet"
@@ -415,12 +526,24 @@ function Overview({
 
 function CommunicationsTab({ ws, n }: { ws: string; n: number }) {
   const comms = useCommunications(ws, { prospect: n })
+  const gate = (
+    <WriteGate ws={ws} note="Exchanges are logged with `bk sales comm log`.">
+      <LogCommunicationForm ws={ws} prospect={n} />
+    </WriteGate>
+  )
   if (comms.isPending) return <BlockSkeleton rows={4} />
   if (comms.error) return <ErrorState error={comms.error} />
-  if (comms.data.length === 0) return <EmptyState title="No exchanges logged" />
+  if (comms.data.length === 0)
+    return (
+      <div className="space-y-3">
+        <EmptyState title="No exchanges logged" />
+        {gate}
+      </div>
+    )
 
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">{gate}</div>
       {comms.data.map((c) => (
         <article key={c.number} className="rounded-xl border border-border bg-card px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -433,6 +556,9 @@ function CommunicationsTab({ ws, n }: { ws: string; n: number }) {
             {c.logged_by && (
               <span className="ml-auto text-xs text-muted-foreground">by {c.logged_by}</span>
             )}
+            <span className={c.logged_by ? '' : 'ml-auto'}>
+              <RemoveCommWhenWritable ws={ws} comm={c} />
+            </span>
           </div>
           {c.subject && <p className="mt-1.5 text-sm font-medium text-foreground">{c.subject}</p>}
           {c.body && (
@@ -448,12 +574,25 @@ function CommunicationsTab({ ws, n }: { ws: string; n: number }) {
 
 function MeetingsTab({ ws, n }: { ws: string; n: number }) {
   const meetings = useMeetings(ws, { prospect: n })
+  const canWrite = useCanWrite(ws)
+  const gate = (
+    <WriteGate ws={ws} note="Meetings are recorded with `bk sales meeting schedule | log | outcome`.">
+      <MeetingForm ws={ws} prospect={n} />
+    </WriteGate>
+  )
   if (meetings.isPending) return <BlockSkeleton rows={3} />
   if (meetings.error) return <ErrorState error={meetings.error} />
-  if (meetings.data.length === 0) return <EmptyState title="No meetings recorded" />
+  if (meetings.data.length === 0)
+    return (
+      <div className="space-y-3">
+        <EmptyState title="No meetings recorded" />
+        {gate}
+      </div>
+    )
 
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">{gate}</div>
       {meetings.data.map((m) => (
         <article key={m.number} className="rounded-xl border border-border bg-card px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -462,6 +601,7 @@ function MeetingsTab({ ws, n }: { ws: string; n: number }) {
             <span className="ml-auto text-xs text-muted-foreground">
               {dateTimeShort(m.starts_at)}
             </span>
+            {canWrite && <MeetingForm ws={ws} meeting={m} />}
           </div>
           {m.attendees.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">{m.attendees.join(', ')}</p>
@@ -478,6 +618,19 @@ function MeetingsTab({ ws, n }: { ws: string; n: number }) {
       ))}
     </div>
   )
+}
+
+/**
+ * A per-row bin button that renders nothing at all in read-only mode.
+ *
+ * `WriteGate` is the wrong component INSIDE a row: it would put "editing is
+ * hidden" beside every line. The note belongs once, at the top of the block; a
+ * row just has no button.
+ */
+function RemoveCommWhenWritable({ ws, comm }: { ws: string; comm: Communication }) {
+  const canWrite = useCanWrite(ws)
+  if (!canWrite) return null
+  return <RemoveCommunicationButton ws={ws} comm={comm} />
 }
 
 function DocumentsTab({ ws, n }: { ws: string; n: number }) {
@@ -502,6 +655,11 @@ function DocumentsTab({ ws, n }: { ws: string; n: number }) {
         </Link>
         , not a separate store.
       </p>
+      {/* Read-only in BOTH modes: a document's location is not patchable (a
+          CHECK requires exactly one of upload_url/external_url, and swapping
+          one for the other silently changes whether the blob-delete gate can
+          see it), and nobody independently learns the library changed. */}
+      <AgentOnly what="Documents" command="bk sales doc add | link" />
       <DocumentList docs={docs.data} />
     </div>
   )

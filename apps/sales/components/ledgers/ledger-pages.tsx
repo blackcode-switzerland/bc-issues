@@ -29,6 +29,9 @@ import { X } from 'lucide-react'
 import { CHANNELS, MEETING_STATUSES } from '@/lib/pipeline'
 import { ChannelChip, MeetingTypeChip, VocabDot } from '@/components/chips'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { WriteGate } from '@/components/forms'
+import { MeetingForm, RemoveCommunicationButton } from './ledger-forms'
+import { useCanWrite } from '@/lib/ui-mode'
 import { useCommunications, useMeetings } from '@/lib/hooks'
 import { dateTimeShort } from '@/lib/format'
 import { meetingStatusColor } from '@/lib/pipeline'
@@ -101,17 +104,36 @@ export function MeetingsPage({ ws }: { ws: string }) {
   const params = useSearchParams()
   const focus = params?.get('focus') ? Number(params.get('focus')) : null
   const focusRef = useFocus(focus)
+  const canWrite = useCanWrite(ws)
 
   const meetings = useMeetings(ws, { status: status || undefined })
 
   return (
     <div className="space-y-4">
-      <FilterBar
-        value={status}
-        onChange={setStatus}
-        options={MEETING_STATUSES}
-        allLabel="All meetings"
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <FilterBar
+          value={status}
+          onChange={setStatus}
+          options={MEETING_STATUSES}
+          allLabel="All meetings"
+        />
+        {/*
+          NO "record a meeting" BUTTON HERE, and the reason is the route rather
+          than the mode: a meeting always belongs to one deal, and this page is
+          cross-prospect. A form here would need a prospect picker — which is
+          the prospect page, one click away and already open in the case where
+          somebody is recording one. The prospect's Meetings tab has the form.
+        */}
+        <WriteGate
+          ws={ws}
+          note="Meetings are recorded with `bk sales meeting schedule | log | outcome`."
+        >
+          <p className="text-xs text-muted-foreground">
+            Record a meeting from the prospect it belongs to, or with{' '}
+            <code className="rounded bg-muted px-1 py-0.5">bk sales meeting schedule</code>.
+          </p>
+        </WriteGate>
+      </div>
 
       {meetings.isPending ? (
         <BlockSkeleton rows={5} />
@@ -147,6 +169,7 @@ export function MeetingsPage({ ws }: { ws: string }) {
                   {dateTimeShort(m.starts_at)}
                   {m.duration_min ? ` · ${m.duration_min} min` : ''}
                 </span>
+                {canWrite && <MeetingForm ws={ws} meeting={m} />}
               </div>
               {m.attendees.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">{m.attendees.join(', ')}</p>
@@ -170,6 +193,7 @@ export function CommunicationsPage({ ws }: { ws: string }) {
   const params = useSearchParams()
   const focus = params?.get('focus') ? Number(params.get('focus')) : null
   const focusRef = useFocus(focus)
+  const canWrite = useCanWrite(ws)
 
   const comms = useCommunications(ws, { channel: channel || undefined })
 
@@ -187,12 +211,22 @@ export function CommunicationsPage({ ws }: { ws: string }) {
 
   return (
     <div className="space-y-4">
-      <FilterBar
-        value={channel}
-        onChange={setChannel}
-        options={CHANNELS}
-        allLabel="All channels"
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <FilterBar
+          value={channel}
+          onChange={setChannel}
+          options={CHANNELS}
+          allLabel="All channels"
+        />
+        {/* Logging, like recording a meeting, belongs to a deal — the form is on
+            the prospect's Communications tab. */}
+        <WriteGate ws={ws} note="Exchanges are logged with `bk sales comm log`.">
+          <p className="text-xs text-muted-foreground">
+            Log an exchange from the prospect it is with, or with{' '}
+            <code className="rounded bg-muted px-1 py-0.5">bk sales comm log</code>.
+          </p>
+        </WriteGate>
+      </div>
 
       {counts.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -248,6 +282,7 @@ export function CommunicationsPage({ ws }: { ws: string }) {
                 <span className="ml-auto text-xs text-muted-foreground">
                   {dateTimeShort(c.occurred_at)}
                 </span>
+                {canWrite && <RemoveCommunicationButton ws={ws} comm={c} />}
               </div>
               {c.subject && (
                 <p className="mt-1.5 text-sm font-medium text-foreground">{c.subject}</p>
