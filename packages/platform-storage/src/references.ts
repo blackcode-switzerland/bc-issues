@@ -55,7 +55,7 @@
 // application code, which is the part that actually makes (b) safe.
 
 import { type SQL } from 'drizzle-orm'
-import { listAppSlugs, listEnabledAppCoverage } from './apps'
+import { listEnabledAppCoverage } from './apps'
 import { isUrlReferencedByIndex, listIndexedWorkspaceReferences } from './index-refs'
 
 /**
