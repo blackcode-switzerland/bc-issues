@@ -22,6 +22,106 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-07 — The web app can write, and read-only is not a permission
+
+**Read this paragraph before anything else, because the feature's name invites
+the wrong reading.** b/sales now has a mode switch at **Settings →
+Preferences**. `read_only`, which is the default, hides editing controls in the
+browser. **It is not a permission.** The server never consults it: what you may
+do is decided by your access to this app and your role in the workspace, and it
+refuses a write the interface allowed exactly as readily as one it did not.
+Anyone who can open b/sales can write through `bk sales` in either mode. If
+somebody must genuinely be unable to write, that is a role, not a toggle.
+
+Verified on a live database rather than asserted, both directions: with
+`ui_mode = 'full'` and per-app access revoked, `PATCH …/prospects/1` answers
+**403 `app_access_denied`**; with `ui_mode = 'read_only'` and access granted, the
+same request answers **200** and the change lands.
+
+**What a human can now do in the browser**, once they switch to full mode:
+
+- edit a prospect — name, deal value, city, sector, source, summary
+- move a deal to another stage, with the note that goes on the journey step
+- set or change the next action, its date, the words it was said in, and its note
+- add, edit and remove contacts
+- record an objection, write the counter, move it to resolved, remove it
+- record and edit meetings, including the outcome
+- log an exchange on any channel, and bin one
+
+**What stays agent-written in both modes**, and now says so on screen with the
+command that does it: products, templates, the document library, the
+triangulation matches, the journey ladder, cross-app links, and the recycle bin.
+The line is what a person can know that an agent cannot — nobody independently
+learns the product catalogue changed, they tell the agent.
+
+Deleting from the web asks for the same string the route requires: a prospect's
+company name, a meeting's title, the prospect name on a communication, an
+objection's type. That check is enforced on the server, so the browser cannot
+skip it.
+
+**Not breaking.** No route changed shape, no command changed, and an agent that
+never opens a browser is unaffected.
+
+### New: your own display preferences
+
+`GET | PATCH /api/workspaces/{ws}/preferences` — `bk sales preferences show`
+and `bk sales preferences set --ui-mode <value>`. Run `bk meta` for the values.
+The setting is per person, per workspace, and defaults to read-only. It affects
+the web app only.
+
+---
+
+## 2026-08-07 — Activity, Settings, full search, and `bk login` against this host
+
+**Activity.** `/dashboard/{ws}/activity` shows what changed and who changed it,
+filtered to this app — b/sales now serves `GET /api/workspaces/{ws}/activity`,
+which it did not before, so `bk activity --app sales --ws <slug>` answers from
+the sales host as well. The feed is `platform.events`; there is no second
+history. Reading ACROSS apps in one timeline is still `bk activity` without the
+filter, which tags every row with the app it came from.
+
+**Search.** `/dashboard/{ws}/search?q=` — the full page behind ⌘K. Results are
+grouped by type with counts, and can be narrowed by type, by deal stage and by
+deal owner. Every filter is in the URL, so a search is something you can send to
+a colleague. It searches **inside** records — a phrase in a call summary, a name
+in an attendee list — and the page says so, because `bk search` is the other
+thing: it spans every blackcode app and returns URNs. No date filter: the search
+route returns no timestamp on a hit, and a control labelled by date that
+answered a different question would be worse than none.
+
+**Settings**, at `/dashboard/settings/*`: your profile, your account, your API
+tokens, and the mode switch above. Three of the four are your **blackcode**
+account rather than a b/sales one — a name changed here is the name every app
+shows, a token minted here works against every app you can reach, and signing
+out signs you out everywhere.
+
+Two things the account page deliberately does not do, and names where they are
+done instead: **changing your password** (b/sales sends no email, so it cannot
+deliver the one-time code; a button that reported success while nothing arrived
+would be worse than no button) and **closing your account** (irreversible, and
+it reaches every app — it stays in one place, behind a typed confirmation).
+
+**`bk login --server https://sales.blackcode.ch`** now works. The sales host
+serves `/cli/authorize` and `POST /api/cli/authorize`; before today the command
+opened a 404 and the terminal waited for a callback that never came. The token
+it mints is the ordinary platform-wide `bk_live_…` credential — authorizing
+through b/sales does not produce a sales-only token.
+
+### Fixed: a wrong `--confirm` destroyed the objection it refused to destroy
+
+`bk sales objection rm` and `DELETE …/objections/{oid}` deleted the row and
+*then* compared `--confirm` against what came back. Naming the wrong type
+returned a 409 explaining the mismatch — with the objection already permanently
+gone. Objections have no recycle bin, so this was the one operation in the app
+where a wrong guess could not be undone.
+
+The check now runs before anything is destroyed, and again inside the delete's
+own transaction. **If you have scripted around this**, note the behaviour
+change: a mismatched `--confirm` now leaves the objection in place. The response
+is the same 409, with `— nothing was removed` added to its hint.
+
+---
+
 ## 2026-08-07 — There is a web app now: sign in and watch the pipeline
 
 **What a human can now see.** Until today b/sales had no window: everything an

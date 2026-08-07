@@ -30,6 +30,37 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-07 — Four platform routes are now answered by the sales host too
+
+Nothing changed about what these routes DO. What changed is who serves them: an
+app on its own domain has to serve its own copies, because every fetch a browser
+makes goes to the origin it is on. `apps/sales` now mounts
+
+| Route | Command |
+|---|---|
+| `GET \| PATCH /api/me` | `bk whoami`, `bk profile edit` |
+| `GET \| POST /api/tokens`, `DELETE /api/tokens/{id}` | `bk token list \| create \| delete` |
+| `GET /api/workspaces/{ws}/activity` | `bk activity` |
+| `POST /api/cli/authorize` | the browser half of `bk login` |
+
+**`bk login --server https://sales.blackcode.ch` therefore works**, which it did
+not before — it opened a 404 and the terminal waited for a callback that never
+arrived. The token minted there is the ordinary platform-wide `bk_live_…`
+credential in the same `platform.api_tokens`: authorizing through one app does
+not produce a token scoped to it, and revoking from any app revokes everywhere.
+
+**`DELETE /api/me` is deliberately NOT served by the sales host.** Closing a
+blackcode account is irreversible and reaches every app — it revokes every
+token and hard-deletes workspaces you solely own — so it stays in one place,
+behind a typed confirmation, rather than being offered by each deployment that
+happens to be open. Same for the in-app password change, which needs to send an
+email and b/sales has no mail configured; b/sales says where both are done.
+
+Serving a subset of the platform surface is a normal, permanent state for an
+app. `bk inbox`, `bk super-admin errors` and `bk storage list` are answered by
+`apps/issues` and always will be — they are per-user, platform-wide, or return
+the same rows from any deployment.
+
 ## 2026-08-06 — **You will be signed out once.** One sign-in now covers every app
 
 > **PUBLISHED BEFORE THE DEPLOY.** Read this before it happens, not after.

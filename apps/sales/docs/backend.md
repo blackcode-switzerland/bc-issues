@@ -6,10 +6,10 @@ the root [`docs/backend.md`](../../../docs/backend.md) and are not repeated here
 An app's docs never describe another app
 (`docs/platform-architecture.md` §7.5).
 
-Status: **Phases 2–5 landed 2026-08-07.** The schema, the migrations, the
+Status: **Phases 2–9 landed 2026-08-07.** The schema, the migrations, the
 blob-reference triggers, the URN projection, the reference scanner, the dev seed,
-the whole `bk sales` command group and every route behind it exist. What is left
-is the web surface (6–9) and the deployment: the app is **not deployed and its
+the whole `bk sales` command group, every route behind it, and the web surface.
+What is left is the deployment: the app is **not deployed and its
 `platform.apps` row is not enabled** until Phase 12.
 
 ---
@@ -435,9 +435,15 @@ records is what is specific to this app.
 | `GET …/today`, `…/pipeline`, `…/metrics`, `…/sales-search` | `today`, `pipeline`, `metrics`, `search` |
 | `GET /api/meta` | `bk meta` (Class C, D-20) |
 | `GET \| POST /api/upload`, `POST /api/upload/blob` | `bk sales upload` |
+| `GET \| PATCH …/preferences` | `bk sales preferences show \| set` |
 
-**Two of those are platform route factories** — `/api/upload` and
-`/api/upload/blob`, mounted from `@blackcode/platform-api/routes`. `/api/meta` is
+**Six of those are platform route factories**, mounted from
+`@blackcode/platform-api/routes`: `/api/upload`, `/api/upload/blob`, and — since
+Phase 7 — `GET|PATCH /api/me`, `GET|POST /api/tokens`, `DELETE /api/tokens/{id}`,
+`GET …/activity` and `POST /api/cli/authorize`. Why each, and the two that are
+deliberately NOT mounted (`DELETE /api/me`, `/api/me/password/*`), is a table in
+[`frontend.md` §10](./frontend.md) rather than repeated here — the decisions are
+about what the WEB surface offers. `/api/meta` is
 **Class C** and is this app's own route by design (D-20): it exists to say what
 this app's vocabulary is, and §7.4 of `platform-architecture.md` forbids merging
 two apps' vocabularies into one list.
@@ -581,6 +587,19 @@ no second copy to drift.
   rather than one with a flag, because a flag defaulting to "also move it" is a
   second, undocumented way to change a stage — discovered the first time somebody
   records history and the deal jumps backwards.
+- **An irreversible route reads BEFORE it destroys, and this one did not.**
+  `DELETE …/objections/{oid}` deleted the row and then compared `--confirm`
+  against what came back, so a wrong value returned a 409 explaining the mismatch
+  with the objection already permanently gone. It is the one hard delete in this
+  app — `sales.objections` has no `deleted_at` and no bin — so it was the one
+  place where the confirmation had to work and the one place it did not. Fixed
+  2026-08-07: the comparison happens against a read, and again inside
+  `deleteObjection`'s transaction under `FOR UPDATE`, because two statements
+  outside a transaction can be separated by a concurrent edit and a confirmation
+  that was true a moment ago is not a confirmation. `lib/api/objection-delete-guard.test.ts`
+  asserts that every refusal deletes NOTHING — the status alone was satisfied by
+  the broken version.
+
 - **A meeting OUTCOME implies the meeting happened; an objection COUNTER does not
   imply it is settled.** So `PATCH …/meetings/{n}` moves the status when an
   outcome arrives, and objections keep `counter` and `resolve` as two events.
@@ -594,19 +613,24 @@ no second copy to drift.
 
 | | Phase |
 |---|---|
-| NextAuth (`lib/auth.ts`), the app shell, theme provider, pages | 6–7 |
-| The ⌘K palette (the search MODULE itself is built — §7.2.2) | 8 |
-| Read-only / full mode | 9 |
 | Vercel project, subdomain, the `platform.apps` row for real | 12 |
+| A super-admin surface — see [`frontend.md` §11](./frontend.md); it is a question, not a decision | — |
 
-**The write paths do not exist yet, and the three things every one of them owes
-are already in place for agent5:** `allocateSeq` (`lib/db/queries/counters.ts`),
+Everything else in the plan's 2–9 exists. `sales.user_preferences` is served by
+`GET|PATCH …/preferences` and read by the web; **no route in this app reads
+`ui_mode` to decide anything**, which `lib/ui-mode.test.ts` asserts structurally
+rather than by convention (D-7, and the half of it that guard did not cover is
+written up in `frontend.md` §8.4).
+
+**Every write path owes three things, and all three take a transaction handle
+without opening one:** `allocateSeq` (`lib/db/queries/counters.ts`),
 `recordEvent` via `@blackcode/platform-db`, and `projectEntity`
-(`lib/db/queries/entities.ts`). All three take a transaction handle and none of
-them opens one. The rollback case is proven: a create that fails after
-`projectEntity` leaves nothing in `platform.entities`, and the committed control
-leaves exactly one row.
+(`lib/db/queries/entities.ts`). The rollback case is proven both ways: a create
+that fails after `projectEntity` leaves nothing in `platform.entities`, and the
+same sequence written with `db` instead of `tx` leaves an orphan. Only the pair
+proves anything.
 
-`lib/cli-parity.test.ts` is **red until Phase 4/5** and its header says why at
-length. Do not switch it off: the assertion failing is the one that exists to
-stop an app passing the guard by having nothing to check.
+The one write with none of the three is `setPreferences`: a display setting is
+not an event and has no cross-app address, so there is nothing to project and
+nothing about the pipeline to record. `lib/db/queries/preferences.ts` says so
+where somebody would otherwise assume an omission.

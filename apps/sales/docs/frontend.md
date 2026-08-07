@@ -6,11 +6,12 @@ in the root [`docs/frontend.md`](../../../docs/frontend.md) and are not repeated
 here. An app's docs never describe another app
 (`docs/platform-architecture.md` §7.5).
 
-Status: **Phases 6 and 7 landed 2026-08-07** — the providers, the shell, the two
-dashboard empties, the ⌘K palette, and every page group except Settings /
-super-admin. **Activity is specified and not built**, because this app does not
-mount the platform route it needs (§8). The full search PAGE is Phase 8; the
-write affordances and the `ui_mode` toggle are Phase 9.
+Status: **Phases 6–9 landed 2026-08-07.** The providers, the shell, the two
+dashboard empties, every page group, ⌘K, Activity, the full search page,
+Settings, and the read-only / full switch with its write affordances.
+
+**Super-admin is NOT built**, and it is the one item in the brief this app could
+not deliver — see §11. It is a question for the master, not a decision.
 
 ---
 
@@ -84,7 +85,7 @@ Nothing is fetched on the server. A server-rendered first paint would need a
 second copy of the data access, and the two would then have to agree about
 caching, errors and empty states.
 
-### 3.1 `lib/client.ts` — same-origin, and read-only by construction
+### 3.1 `lib/client.ts` — same-origin, and one fetch
 
 Every fetch is a **path**, never an absolute URL and never an env var pointing at
 another deployment (D-10). That is what makes the shared route factories (D-2)
@@ -93,10 +94,15 @@ because a fetch is not allowed to go and find somebody else's. Cross-app links
 (D-18) are the exception and they are not fetches — they are anchors carrying an
 absolute `url` the *server* built from the other app's registered `base_url`.
 
-It exports exactly one request function, **`apiGet`**, and there is no
-`apiPost`/`apiPatch`/`apiDelete` anywhere in the app. That is how D-7's read-only
-default is currently true: a property of the module graph, not of anybody's
-intent. Phase 9 is what adds the other verbs, behind the `ui_mode` switch.
+It exports **two** request functions and **one `fetch(`**. `apiGet`, and — since
+Phase 9 — `apiSend`, which is every non-GET request the app makes.
+
+That is still a property of the module graph rather than of anybody's intent, and
+§8.3 is how it stays one: `apiSend` is TRANSPORT and consults nothing, the gate
+is `lib/mutations.ts` one layer up, and `lib/read-only.test.ts` asserts the
+arrangement instead of trusting it. The check that used to be "there is no write
+verb" is now "there is exactly one `fetch(`, and only one module sends it at an
+`/api/workspaces/…` path".
 
 Errors carry the server's `{ error, code, suggestion }` through to the browser —
 the same body `bk` prints as a `hint:` line. A 400 an agent could act on should
@@ -121,7 +127,7 @@ when the API is down is the most reassuring wrong answer this app could give.
 right.
 
 - Nav: Today · Metrics · Prospects · Meetings · Communications · Activity, then
-  **Catalog**: Products · Templates · Documents.
+  **Catalog**: Products · Templates · Documents, then Trash.
 - **No workspace switcher and no create-workspace flow** (D-3). `/dashboard`
   resolves the single sales workspace and redirects to `/dashboard/{ws}`; more
   than one renders a picker rather than guessing, because landing somebody in the
@@ -129,9 +135,10 @@ right.
 - Header title defaults to the nav label for the page and is overridable with
   `usePageTitle()` — a prospect detail page's title is a company name and no
   static table can hold it.
-- Account footer: name, email, sign out. **No Settings link yet** — that page is
-  a later Phase 7 group, and a nav item pointing at a route that does not exist
-  is a 404 wearing a working app's clothes.
+- Account footer: name, email, **Settings**, sign out. The Settings link went in
+  with the pages, which is the rule that kept it out; it points OUTSIDE the
+  workspace segment, at `/dashboard/settings/*`, because three of its four pages
+  are about the blackcode account rather than about this workspace.
 
 ## 5. The two empties, and why they must differ
 
@@ -183,7 +190,10 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}/prospects/{n}` | four tabs, journey, contacts, objections, triangulation, Related |
 | `/dashboard/{ws}/meetings` · `/communications` | the two cross-prospect ledgers |
 | `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog |
-| `/dashboard/{ws}/trash` | the bin, read-only |
+| `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
+| `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
+| `/dashboard/{ws}/trash` | the bin, read-only in both modes |
+| `/dashboard/settings/{profile,account,tokens,preferences}` | §9 |
 
 Three conventions they all share, each of which is a decision:
 
@@ -298,36 +308,219 @@ bodies. The platform half (`…/search`, over `platform.entities`, every app) is
 different path and this app does not mount it.
 
 It **navigates and does not act**: there are no commands in this command palette,
-because those would be mutation affordances. Two details that would otherwise be
-silent bugs: every request carries a sequence number so a slow earlier query
-cannot repaint over a newer one, and a failed search shows the error rather than
-an empty list.
+even in `full` mode. A palette that could create things is a control surface, and
+§1.2 rule 1 is that this app is not one — the write affordances live beside the
+records they change, where the reader can see what they are editing.
+
+**⌘K and the search page go through ONE hook**, `useSalesSearch` in `lib/hooks.ts`,
+and neither component names the endpoint. That is the property, not tidiness: two
+call sites can rank, paginate and fail differently for the same term with nothing
+to say which is right. `lib/search-parity.test.ts` asserts it, and asserts that
+this app does not mount the platform `…/search` route beside its own.
+
+The hand-rolled sequence counter that used to prevent a slow "ro" repainting over
+a fast "roches" is gone: the term is part of the TanStack query key, so a resolved
+request can only write into its own cache entry. A failed search still shows the
+error rather than an empty list — an empty list on a failed request reads as
+"nothing matches", which is the reassuring wrong answer.
 
 The four types with no #number (contact, objection, match, stage entry) open
 their parent prospect — they have no URN and no page, and returning nothing would
 mean rendering a result nobody can click.
 
-## 8. What is specified and NOT built
+### 7.7 Activity
 
-**Activity** (`/dashboard/{ws}/activity`, §8.1 of the plan) — `platform.events`
-filtered to this app. **This app does not mount the platform `activityRoute`**,
-so the page has no data source. That is a gap rather than a decision: unlike
-`bk inbox`, `bk super-admin errors` and `bk storage list`, which
-[`backend.md` §7.1](./backend.md) records as permanently unmounted for stated
-reasons, nothing says activity should be. The mount is three lines:
+`components/activity/activity-page.tsx`, over the shared `activityRoute` this app
+now mounts. Three things about it are decisions:
+
+- **The feed is filtered to `app=sales`.** `platform.events` holds every app's
+  rows for a workspace, and this page has no vocabulary, no colour and no URL for
+  an `issue`. Reading ACROSS apps is `bk activity`'s job and it tags every row
+  with the app it came from; a page that cannot show the tag must not show the
+  rows. D-9's two layers, one level down.
+- **The filter options are built from the feed, not from a list.** `?action=`
+  DROPS an unrecognised value rather than rejecting it, so a stale option here
+  would return the whole feed and look like it had worked — which is what issues'
+  `app_*` actions did for months. They come from the UNFILTERED query, so
+  choosing a filter cannot remove the option that would change it.
+- **An unrecognised action renders its wire value with the underscores loosened,
+  never nothing.** The vocabulary grows without a deploy, and a feed that hid
+  what it did not recognise would quietly stop showing the newest thing that
+  happened — the one row anybody came for.
+
+The mount is NOT the three lines §8 of this file used to promise. `activityRoute`
+is Class B (D-22): it takes a contribution, because an event's `entity_id` is an
+internal serial and swapping it for the #number means reading `sales.*`. The
+contribution's `numberedEntityTypes` is `ENTITY_TYPES` from `lib/entity-address.ts`
+and its two vocabularies are the arrays `lib/db/queries/events.ts` derives its
+unions from — three lists that cannot drift because there is one of each.
+
+### 7.8 Search, and the facet that is not there
+
+`components/search/search-page.tsx`. Grouped by type, filter state in the URL.
+
+- **Type** is a real server facet (`?type=`). Its counts come from a second,
+  unfiltered query — TanStack shares it with the "everything" view — because
+  counts taken from the filtered list read `1` beside every type but the chosen
+  one. The chips are built from the types actually RETURNED, so a tenth
+  searchable type appears with a working filter on the day the route gains it.
+- **Stage and owner** are derived, not searched. A hit carries neither: it is a
+  row from one of nine tables and only some belong to a deal. The page joins each
+  hit to its prospect through the `/prospects` listing it already loads — the
+  same trick Today's queue uses for deal values — and says so when a deal facet
+  hides catalog results, because a product disappearing without explanation reads
+  as the search being broken.
+- **There is no date filter.** `…/sales-search` returns no timestamp on any hit.
+  The deal's `updated_at` is reachable through the join above, but "the deal was
+  touched last week" is not "this meeting happened last week", and a control
+  labelled by date answering a different question is worse than no control.
+  Adding a date to the hit shape is a change to that route, and D-9 says to say
+  so rather than to build a parallel endpoint.
+- The page states which of D-9's two searches it is and names the other, because
+  a reader who cannot tell them apart is the failure the decision prevents.
+
+## 8. Read-only and full mode (D-7), and how to CHECK it
+
+### 8.1 It is an affordance switch. It is not a permission.
+
+`sales.user_preferences.ui_mode`, per person per workspace, default `read_only`.
+`read_only` renders no editing. **The server never consults it** — not in a
+route, not in a query, not anywhere. Authorisation is `platform.app_access` and
+the workspace role.
+
+Verified on the seeded database, 2026-08-07, in BOTH directions, because one
+direction proves nothing:
+
+| Set up | Result |
+|---|---|
+| `ui_mode = 'full'`, per-app access revoked | `PATCH …/prospects/1` → **403 `app_access_denied`**. The mode grants nothing |
+| `ui_mode = 'read_only'`, access granted | the same request → **200**, and the change lands. The mode withholds nothing |
+
+### 8.2 What `full` makes writable, and why not everything
+
+    WRITABLE IN full:   prospect (name, value, city, sector, source, summary),
+                        its stage, its next action, contacts, objections,
+                        meetings, communications
+    READ-ONLY IN BOTH:  products, templates, documents, matches, the journey
+                        ladder, cross-app links, trash, activity
+
+**The line is what a human can know that the agent cannot.** A person on a call
+learns the deal moved, that a contact's email is wrong, what the meeting turned
+into. Nobody independently learns the product catalogue changed — they tell the
+agent, and the agent writes it. Editing the second list here would double this
+app's surface for cases nobody has.
+
+`components/forms.tsx` carries the two components that make the distinction
+visible: `<WriteGate>` for a thing this app CAN edit but has hidden, and
+`<AgentOnly>` for a thing it never edits. Two rather than one flag, because "you
+have this switched off" and "nothing switches this on" are different facts, and
+collapsing them is how somebody spends an afternoon looking for the setting that
+would let them edit the catalogue. **Both always say something** — a control that
+is simply absent reads as a feature that does not exist.
+
+### 8.3 How a REVIEWER checks it, without reading every component
+
+Agent6 left a property rather than an intention: one `apiGet`, one `fetch`, no
+mutation verb in the app. `lib/read-only.test.ts` keeps it one:
+
+    lib/client.ts     the ONE fetch(). apiGet + apiSend. Transport, consults
+                      nothing.
+    lib/mutations.ts  the ONE module sending apiSend at an /api/workspaces/…
+                      path. Every hook composes `useRecordMutation`, the single
+                      useMutation in the file, which reads useCanWrite().
+    components/**     render useCanWrite() and call those hooks.
+
+Four named account modules may call `apiSend` — profile, tokens, cli-authorize,
+and the switch itself — and the workspace-path rule applies INSIDE them, so an
+allowance cannot become permission to write records. None of them is behind
+`ui_mode`, deliberately: a display preference that stopped somebody revoking a
+leaked token would have become a permission over the account.
+
+**What the file does not claim:** that every button is correctly hidden. It
+claims every record write goes through one gated function, so a button that was
+not hidden fails loudly instead of writing.
+
+### 8.4 `lib/ui-mode.test.ts`, and the half D-7 did not ask for
+
+The mandated guard is "no server module imports `ui-mode`", and it is walked as
+an import GRAPH from every server entry point, stopping at each `'use client'`
+boundary — a grep would catch the direct import and miss the realistic one, which
+is a route reaching it through a helper.
+
+**On its own it is not enough**, and that is a finding rather than a footnote. A
+route can consult the mode without `ui-mode` appearing in its graph at all:
 
 ```ts
-// app/api/workspaces/[ws]/activity/route.ts
-import { activityRoute } from '@blackcode/platform-api/routes'
-import { appContext } from '@/lib/api'
-export const GET = activityRoute(appContext)
+const prefs = await getPreferences(ctx.workspace.id, ctx.user.id)
+if (prefs.ui_mode !== 'full') throw Errors.forbidden('read-only mode')
 ```
 
-The nav item is absent until then, deliberately — a nav entry that 404s is the
-failure the two empties exist to prevent, installed in the chrome every page
-inherits.
+The value comes from the query layer, where it has to live. That regression was
+injected into `PATCH …/prospects/{n}` and **the suite passed 4/4** with `ui_mode`
+acting as a permission on a write route. So a second check confines
+`lib/db/queries/preferences.ts` to the preferences route, with a named allowance
+and a staleness check on it.
 
-**Settings and super-admin** (`/dashboard/settings/*`,
-`/dashboard/super-admin/*`) are not built. `/api/tokens` and `/api/cli/authorize`
-are not mounted here either; `appContext.resolveSessionUser` exists, which is the
-prerequisite those routes throw at mount time without.
+The VALUES (`UI_MODES`, `UI_MODE_DEFAULT`, `UI_MODE_FULL`) live in
+`lib/pipeline.ts` with every other vocabulary, not in `ui-mode.ts`. The route
+that validates a PATCH genuinely needs them, and a guard that forbids importing a
+module containing something legitimate is a guard that gets weakened (D-37).
+`lib/ui-mode.ts` holds React hooks and nothing else.
+
+`useCanWrite()` asks `mode === UI_MODE_FULL`, not `!== UI_MODE_DEFAULT`. Identical
+today; the moment a third mode exists, one defaults it to showing nothing and the
+other to showing everything.
+
+## 9. Settings
+
+`/dashboard/settings/{profile,account,tokens,preferences}`, outside the workspace
+segment because three of the four are about the **blackcode account** rather than
+about this workspace — and the pages say so, because a Settings screen inside one
+app reads as that app's settings and this one is not.
+
+Preferences is the exception: `ui_mode` is keyed on (user, workspace), so that
+page resolves the workspaces this person can reach and renders one block each.
+With one workspace (D-3) nobody notices; the plural branch exists so it is never
+"pick the first and hope".
+
+**Two things the account page does not do, and names where they are done.**
+Changing a password needs `passwordRequestOtpRoute`, whose second argument is an
+email SENDER, and sales has none — mounting it would answer 200 to "we sent a
+code to b•••@…" with nothing arriving, which is the invisible failure this
+project keeps finding. Closing an account is irreversible and crosses every app,
+so `app/api/me/route.ts` deliberately exports GET and PATCH and **not** DELETE.
+
+## 10. What the mount decisions were, in one place
+
+| Platform route | Mounted here? | Why |
+|---|---|---|
+| `/api/me` GET, PATCH | yes | your profile, from this origin (D-10) |
+| `/api/me` DELETE | **no** | irreversible, crosses every app, kept in one place |
+| `/api/tokens`, `/api/tokens/{id}` | yes | `bk login` authorizes here, so revoking must work here |
+| `/api/cli/authorize` | yes | D-21: Tier 1 for every deployed app |
+| `/api/me/password/*` | **no** | needs an email sender this app does not have |
+| `…/activity` | yes | the Activity page |
+| `…/search` | **no** | D-9: the platform search is a different path, deliberately |
+| `bk inbox`, `bk super-admin errors`, `bk storage list` | **no**, permanently | [`backend.md` §7.1](./backend.md) |
+
+## 11. What is specified and NOT built
+
+**Super-admin** (`/dashboard/super-admin/{users,errors}`). Not built, and it is
+the one item of agent7's brief that could not be delivered without either
+changing `packages/platform-*` — which that brief forbids — or duplicating
+platform-wide admin queries into this app.
+
+The routes those pages need (`GET /api/super-admin/users`,
+`/api/super-admin/errors`) are **not** shared factories. They live in
+`apps/issues`' own tree over `platform.users` and `platform.error_events`, and an
+app may not import from another app. Meanwhile [`backend.md` §7.1](./backend.md)
+records `bk super-admin errors` as **permanently** unmounted here for a stated
+reason — platform-wide data, any host answers — and D-28's test ("would two
+deployments answer differently?") says no.
+
+So building it here would mean a second copy of a platform-wide admin surface,
+which is the tier mistake D-28 exists to prevent. **This is a question for the
+master, not a decision taken by this app.** The three options, none of which is
+agent7's to pick: promote the routes to `platform-api` (a packages change);
+accept that platform administration lives in one app and drop the item; or link
+out to the issues deployment from here.
