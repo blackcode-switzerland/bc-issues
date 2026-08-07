@@ -51,9 +51,9 @@ Two things the script does deliberately:
   silently ship to whichever project the working copy was last linked to, and
   you would only find out after it was live.
 
-> `apps/_template` is **absent from the registry on purpose**. The scaffold must
+> `apps/_scaffold` is **absent from the registry on purpose**. The scaffold must
 > never be deployed, and leaving it out is what makes that true rather than
-> merely documented — `release.sh web _template` exits 1.
+> merely documented — `release.sh web _scaffold` exits 1.
 
 > There is exactly **one** Vercel project per app. A stray second project named
 > `issues` existed during the migration window and was deleted on 2026-08-06 —

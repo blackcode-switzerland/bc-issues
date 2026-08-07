@@ -9,7 +9,7 @@ load-bearing summary.
 A **monorepo** (npm workspaces + Turborepo) of Blackcode's internal apps:
 
 - **`apps/issues`** — an AI-native, Linear-style issue tracker. The product.
-- **`apps/_template`** — the scaffold. A real, minimal app that builds and passes
+- **`apps/_scaffold`** — the scaffold. A real, minimal app that builds and passes
   every guardrail. **Copy it to add an app; do not edit it in place.**
 
 Humans use the web UI; **agents use one interface: the `bk` CLI** (`cli/`, Go,

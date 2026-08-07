@@ -56,7 +56,7 @@ the reason §4.6 gives: polymorphic and shared is not the same as app-neutral.
 blackcode-platform/                 (monorepo, Turborepo)
 ├── apps/
 │   ├── issues/                     the product
-│   ├── _template/                  the scaffold — copy it, never edit in place
+│   ├── _scaffold/                  the scaffold — copy it, never edit in place
 │   └── …                           each: app/ components/ lib/ docs/ public/
 ├── packages/
 │   ├── platform-db/                Drizzle schema + client for the `platform` schema
@@ -239,13 +239,13 @@ exists.
 `workspace_counters` is **`issues.workspace_counters`**. It used to be a platform
 table, and the plan called for reshaping it to
 `(workspace_id, app, entity_type, last_seq)` so every app could share one
-counter. Building `apps/_template` showed that to be the wrong trade, and
+counter. Building `apps/_scaffold` showed that to be the wrong trade, and
 migration **0040 moved the table into the app's schema** instead.
 
 The argument: sharing a counter buys **nothing**. No query ever spans two apps'
 counters, so a shared table adds only a shared write point and a shared migration
 every time any app invents an entity type. An app's #number sequence is app data.
-Each app keeps its own — `apps/_template` does it in three lines — and no app
+Each app keeps its own — `apps/_scaffold` does it in three lines — and no app
 ever ALTERs a platform table to add an entity.
 
 Reshaping in place would also have left the harder half unsolved: it would still
@@ -592,11 +592,27 @@ another app.**
   the guard to follow a destructuring means a second, weaker route-extractor to
   keep honest beside the authoritative one.
 
-  The flag is **derived-checked, not trusted**: `mountedPlatformRoutes` works out
-  from the filesystem whether an app actually serves any platform route, and each
-  app asserts the boolean agrees. A hand-set boolean that switches a check off is
-  the shape of every entry in CLAUDE.md's table of inert guards — before that
-  assertion existed, deleting the flag went green while checking nothing.
+  *(Corrected 2026-08-07: this bullet used to end with a paragraph describing how
+  `hostsPlatformRoutes` was "derived-checked, not trusted". That flag was retired
+  above, in the change this section documents, and the paragraph was left
+  describing a mechanism that no longer exists. `mountedPlatformRoutes` survives
+  — it is the filesystem derivation the new drift scope is BUILT on, rather than
+  a check on a declaration.)*
+
+- **`UNSERVED_OPERATIONS`, per app** — the per-METHOD half of the subset rule,
+  and the thing a new app needs the moment it mounts its first factory. Drift is
+  scoped to PATHS an app has a file for, so mounting `GET /api/workspaces/{ws}`
+  pulls the `PATCH` and `DELETE` claims on that path into the check whether or
+  not the app exports them. Each entry is a decision with a reason, and a
+  companion case fails when an entry names a path the app no longer has — an
+  exclusion outliving its reason is coverage quietly dropped.
+
+  **D-36 as amended is the rule these two mechanisms serve:** *a permanent subset
+  is legitimate; an accidental one is a bug, and the test is whether every bare
+  verb has a host from THIS app's login.* Both states look identical from inside
+  the app — everything the app itself does works — which is why the test is
+  phrased as something you run against a deployment rather than something you
+  reason about.
 
   Known gap, owned by whoever adds the next app: an app mounting only SOME of the
   factories reports the rest as drift. The answer is documented EXCLUDED_PATHS

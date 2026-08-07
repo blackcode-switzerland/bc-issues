@@ -17,12 +17,13 @@ neondb
 │                  per-app access, comments, labels, uploads, events, entities,
 │                  links, blob_references
 ├── issues.*       the issue tracker's own tables
-└── template.*     the scaffold's (apps/_template)
+├── sales.*        the sales app's own tables
+└── scaffold.*     the scaffold's (apps/_scaffold — never deployed)
 ```
 
 **The rule, in one line:** an app may read and write `platform.*` and its own
 schema. Nothing else. It is enforced by **grants**, not by review — `issues_app`
-simply has no `SELECT` on `template.*`.
+simply has no `SELECT` on `scaffold.*`.
 
 An app may FK into `platform.*` freely. **`platform` may never FK into an app**:
 that direction would make `pg_dump --schema=issues` produce something that
@@ -156,7 +157,7 @@ promoting the previous build already achieves without them.
 ## Counters live in the app, not in platform
 
 An app's `#number` sequence is app data. Keep the counter table in your own
-schema; do not add a column to a shared one. `apps/_template` does it in three
+schema; do not add a column to a shared one. `apps/_scaffold` does it in three
 lines, and migration `0040` moved `workspace_counters` out of `platform` for
 exactly this reason — see platform-architecture.md §4.6.
 
@@ -170,6 +171,35 @@ Drizzle, in the app that owns the schema. `apps/issues/lib/db/migrations/` holds
 the platform migrations too, because `issues` was the first app and the ledger
 cannot be split retroactively — a second app's migrations go in its own
 directory against its own schema.
+
+> ### Every app needs its OWN ledger table, and the default is broken here (D-34)
+>
+> Drizzle's default ledger is `drizzle.__drizzle_migrations`, and its migrator
+> takes **one high-water mark over the whole table**:
+>
+> ```
+> select … from <ledger> order by created_at desc limit 1
+> for (const m of migrations)
+>   if (!last || Number(last.created_at) < m.folderMillis) apply(m)
+> ```
+>
+> It has no notion of which app wrote a row. Two apps sharing it means whichever
+> migrated last raises the mark for both, and the other app's next migration is
+> **silently skipped** — no error, no row inserted, and the same comparison skips
+> it again on every later run. The tables simply never appear, and the first
+> symptom is a runtime error about a relation that does not exist.
+>
+> Sales hit this on its first migration: issues' `0043` is stamped later than
+> anything a new app can generate. So each app sets its own:
+>
+> ```ts
+> migrations: { table: '__drizzle_migrations_<slug>', schema: 'drizzle' }
+> ```
+>
+> `packages/platform-testing`'s migration-ledger suite checks it across every
+> app, so an app that omits the block or copies another app's table name fails
+> there rather than in production. `apps/_scaffold/drizzle.config.ts` is the
+> worked example.
 
 - **Rehearse on a Neon branch first**, including the rollback. Every phase of
   this migration did, and it caught a real bug in three of them.
