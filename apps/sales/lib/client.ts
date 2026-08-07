@@ -57,6 +57,62 @@ export async function apiGet<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
+
+
+/**
+ * The other verbs. **The ONLY place in this app that sends a non-GET request.**
+ *
+ * ── THIS IS TRANSPORT, NOT PERMISSION, AND THE DIFFERENCE IS D-7 ────────────
+ * Nothing here consults `ui_mode`. A gate inside the transport would be a gate
+ * every caller shares whether or not it is writing a sales RECORD — and two of
+ * this app's writes deliberately are not: minting a CLI token and editing your
+ * own profile are account operations that belong to the platform, not to the
+ * pipeline, and hiding them in `read_only` would mean a person who switched a
+ * display preference could no longer sign a terminal in.
+ *
+ * The affordance switch lives one layer up, in `lib/mutations.ts`, which is
+ * where every sales-record write is built and where `useCanWrite()` is read.
+ * `lib/read-only.test.ts` asserts the arrangement rather than trusting it: one
+ * `fetch(` in the app, and `apiSend` reachable only from `lib/mutations.ts` and
+ * a named list of account-surface modules, none of which may name an
+ * `/api/workspaces/` path.
+ *
+ * ── AND IT IS STILL NOT A PERMISSION ANYWHERE ───────────────────────────────
+ * The server does not consult `ui_mode` either (D-7). Authorisation is
+ * `platform.app_access` and workspace role, and it refuses a write the UI
+ * allowed exactly as readily as one it did not.
+ */
+export async function apiSend<T>(
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  path: string,
+  body?: unknown
+): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: {
+      accept: 'application/json',
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const parsed = (await res.json().catch(() => null)) as
+      | { error?: string; code?: string; suggestion?: string }
+      | null
+    throw new ApiClientError(
+      res.status,
+      parsed?.code ?? String(res.status),
+      parsed?.error ?? `Request failed (${res.status})`,
+      parsed?.suggestion
+    )
+  }
+  // 204 has no body; `res.json()` on an empty one throws a parser error that
+  // reads like a bug. No route in this app answers 204 today, and the day one
+  // does it must not look like a failure.
+  if (res.status === 204) return undefined as T
+  return (await res.json()) as T
+}
+
 /** `?a=1&b=2`, with null/undefined/empty dropped. Returns '' when nothing is set. */
 export function query(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams()

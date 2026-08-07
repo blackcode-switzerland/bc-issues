@@ -50,13 +50,12 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
 /**
  * Routes deliberately not reachable from the CLI. Each needs a reason.
  *
- * There is exactly one, and it is not a product capability: NextAuth's catch-all
- * is browser session machinery. An agent authenticates with a `bk_live_…` token
- * and never touches this path, so a `bk` command for it would be a command that
- * signs a browser in — which is `bk login`, and that goes somewhere else.
+ * Both entries are browser session machinery rather than product capabilities,
+ * and neither is a capability an agent loses: an agent authenticates with a
+ * `bk_live_…` token and reaches neither path.
  *
- * Excluding it also settles how it exports its handlers: NextAuth necessarily
- * writes `export { handler as GET, handler as POST }`, which the
+ * Excluding NextAuth's catch-all also settles how it exports its handlers: it
+ * necessarily writes `export { handler as GET, handler as POST }`, which the
  * invisible-export check would otherwise flag. Exclusions are read FIRST for
  * that reason (`packages/platform-testing/src/cli-parity.ts`) — an excluded
  * route's methods are never compared against anything, so the form it exports
@@ -64,6 +63,13 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
  */
 const EXCLUDED_PATHS = new Map<string, string>([
   ['/api/auth/{nextauth}', 'NextAuth handler — browser session machinery, never called by the binary'],
+  [
+    '/api/cli/authorize',
+    'the browser half of `bk login` (D-21) — the binary OPENS /cli/authorize in a browser and the ' +
+      'page posts here; it never calls this route itself. Same entry, same reason, in apps/issues. ' +
+      'Mounted rather than skipped because `bk login --server https://sales…` is a legitimate ' +
+      'command and a 404 there is the invisible failure D-1 exists to remove',
+  ],
 ])
 
 describe('CLI ↔ routes parity', () => {
