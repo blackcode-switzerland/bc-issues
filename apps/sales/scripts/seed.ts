@@ -47,6 +47,9 @@ import { APP_SLUG } from '@/lib/app'
 /** The dev token's name. Read `mintDevToken`'s comment before changing it. */
 const DEV_TOKEN_NAME = 'Companion'
 
+/** Where `next dev` serves this app. Override with SALES_BASE_URL. */
+const DEV_BASE_URL = 'http://localhost:3100'
+
 config({ path: '.env.local' })
 config({ path: '.env' })
 
@@ -512,6 +515,7 @@ async function main() {
   console.log('✓ seeded. URNs are NOT projected — run `bk super-admin entity-drift --repair` if you want them.')
 
   await enableAppForWorkspace(db, wsId, String(ws.slug))
+  await pointAppAtThisMachine(db)
   await mintDevToken(db, wsId)
   process.exit(0)
 }
@@ -564,6 +568,37 @@ async function enableAppForWorkspace(db: ReturnType<typeof getDb>, wsId: number,
   console.log(
     `▶ ${APP_SLUG} enabled for workspace "${slug}" — ` +
       `${granted.rows.length} new grant(s), every member of that workspace can now use it`
+  )
+}
+
+/**
+ * Point `platform.apps.base_url` at this machine, so `bk` can reach it.
+ *
+ * WITHOUT THIS, LOCAL ROUTING UN-DOES ITSELF. `bk meta`'s side effect is
+ * load-bearing (D-1): it refreshes the CLI's app registry from
+ * `apps.<slug>.base_url`. So a developer who hand-writes a localhost address
+ * into their config loses it the first time they run `bk meta` — which is the
+ * command every recovery hint in the routing layer tells them to run.
+ *
+ * The URL comes from `SALES_BASE_URL` when set, and defaults to the port
+ * `next dev` uses for this app. Behind the same two gates as everything else in
+ * this file, because `base_url` is what every OTHER app's `bk sales …` resolves
+ * to — pointing production at a laptop is the one mistake here that would be
+ * visible to somebody else.
+ */
+async function pointAppAtThisMachine(db: ReturnType<typeof getDb>) {
+  const url = process.env.SALES_BASE_URL ?? DEV_BASE_URL
+  const before = await db.execute(sql`SELECT base_url FROM platform.apps WHERE slug = ${APP_SLUG}`)
+  const previous = before.rows[0]?.base_url ?? null
+  if (previous === url) {
+    console.log(`▶ ${APP_SLUG} base_url is already ${url}`)
+    return
+  }
+  await db.execute(sql`UPDATE platform.apps SET base_url = ${url} WHERE slug = ${APP_SLUG}`)
+  console.log(
+    `▶ ${APP_SLUG} base_url: ${previous ?? '(none)'} → ${url}\n` +
+      "  `bk meta` reads this to learn where to send `bk sales …`, so it is what makes\n" +
+      '  local routing survive the next refresh. Set SALES_BASE_URL to override.'
   )
 }
 

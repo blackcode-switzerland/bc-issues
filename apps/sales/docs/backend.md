@@ -6,11 +6,11 @@ the root [`docs/backend.md`](../../../docs/backend.md) and are not repeated here
 An app's docs never describe another app
 (`docs/platform-architecture.md` §7.5).
 
-Status: **Phases 2 and 3 landed 2026-08-07. Phase 4/5 is in progress** — the
-first vertical slice (`bk sales prospect`, and the three routes behind it) landed
-the same day. The app, its schema, its migrations, the blob-reference triggers,
-the URN projection, the reference scanner and the dev seed all exist. The app is
-**not deployed and not enabled in `platform.apps`** until Phase 12.
+Status: **Phases 2–5 landed 2026-08-07.** The schema, the migrations, the
+blob-reference triggers, the URN projection, the reference scanner, the dev seed,
+the whole `bk sales` command group and every route behind it exist. What is left
+is the web surface (6–9) and the deployment: the app is **not deployed and its
+`platform.apps` row is not enabled** until Phase 12.
 
 ---
 
@@ -408,19 +408,66 @@ here (`docs/backend.md` at the root, and the annotated scaffold route at
 `apps/_template/app/api/workspaces/[ws]/notes/route.ts`). What this section
 records is what is specific to this app.
 
-### 7.1 What exists today
+### 7.1 The surface
 
 | Route | Command |
 |---|---|
-| `GET \| POST /api/workspaces/{ws}/prospects` | `bk sales prospect list \| create` |
-| `GET \| PATCH \| DELETE …/prospects/{n}` | `bk sales prospect show \| edit \| delete` |
-| `POST …/prospects/{n}/stage` | `bk sales prospect stage` |
+| `GET \| POST …/prospects` | `bk sales prospect list \| create` |
+| `GET \| PATCH \| DELETE …/prospects/{n}` | `prospect show \| edit \| assign \| delete` |
+| `POST …/prospects/{n}/stage` | `prospect stage` |
+| `PATCH …/prospects/{n}/next-action` | `prospect next` |
+| `GET \| POST …/prospects/{n}/contacts` | `contact list \| add` |
+| `PATCH \| DELETE …/prospects/{n}/contacts/{cid}` | `contact edit \| rm` |
+| `GET \| POST …/prospects/{n}/journey` | `journey list \| add` |
+| `GET \| POST …/prospects/{n}/objections` | `objection list \| raise` |
+| `PATCH \| DELETE …/prospects/{n}/objections/{oid}` | `objection counter \| resolve \| rm` |
+| `GET \| POST \| DELETE …/prospects/{n}/matches` | `match list \| set \| clear` |
+| `GET \| POST …/prospects/{n}/labels`, `DELETE …/{lid}` | `label attach \| detach` |
+| `GET \| POST …/meetings`, `GET \| PATCH \| DELETE …/meetings/{n}` | `meeting …` |
+| `GET \| POST …/communications`, `GET \| DELETE …/communications/{n}` | `comm …` |
+| `GET \| POST …/products`, `GET \| PATCH \| DELETE …/products/{n}` | `product …` |
+| `GET \| POST …/templates`, `GET \| PATCH \| DELETE …/templates/{n}` | `template …` |
+| `POST …/templates/{n}/render` | `template render` |
+| `GET \| POST …/documents`, `GET \| PATCH \| DELETE …/documents/{n}` | `doc …` |
+| `POST \| DELETE …/documents/{n}/links` | `doc link \| unlink` |
+| `GET \| POST …/labels`, `GET \| PATCH \| DELETE …/labels/{id}` | `label …` |
+| `GET …/trash`, `POST …/trash/restore`, `DELETE …/trash/purge`, `POST …/trash/empty` | `trash …` |
+| `GET …/today`, `…/pipeline`, `…/metrics`, `…/sales-search` | `today`, `pipeline`, `metrics`, `search` |
+| `GET /api/meta` | `bk meta` (Class C, D-20) |
+| `GET \| POST /api/upload`, `POST /api/upload/blob` | `bk sales upload` |
 
-`{n}` is the workspace #number in every one of them. **No platform route factory
-is mounted yet**, and there is nothing to declare about that: since 2026-08-07
-the parity guard derives an app's drift scope from the platform routes it
-actually has a file for. Mount `/api/meta` and that one route joins this app's
-check; the other fifty-three do not. See §7.5.
+**Two of those are platform route factories** — `/api/upload` and
+`/api/upload/blob`, mounted from `@blackcode/platform-api/routes`. `/api/meta` is
+**Class C** and is this app's own route by design (D-20): it exists to say what
+this app's vocabulary is, and §7.4 of `platform-architecture.md` forbids merging
+two apps' vocabularies into one list.
+
+**Everything else the platform commands claim is deliberately NOT mounted**, and
+that is a permanent state rather than a gap. `bk inbox` is per-user and
+cross-workspace; `bk super-admin errors` reads platform-wide data; `bk storage
+list` returns the same rows from any deployment (D-28). Since 2026-08-07 the
+parity guard derives each app's drift scope from the platform routes it actually
+serves, so there is nothing to declare — and the repo-wide half
+(`packages/platform-testing/test/platform-route-coverage.test.ts`) asserts that
+every platform command is answerable by *someone*.
+
+### 7.1.1 `trash` and `label` are this app's routes, not shared factories
+
+There is no `trashRoute` in `platform-api` and there should not be. A recycle bin
+lists ONE app's entities: the query is over `sales.*`, the types are this app's
+vocabulary, and a restore has to invert this app's cascade. Nothing about it
+generalises except the URL — and two deployments serving the same path over their
+own tables is exactly what D-11's app-owned tier means.
+
+Labels are the same shape for a different reason: the TABLE is
+`platform.labels`, but `attach`/`detach` name an entity, and an entity belongs to
+one app. `internal/appverbs` makes the identical split on the CLI side.
+
+**The binnable types are declared twice** — `lib/db/queries/trash.ts` and
+`cli/internal/commands/sales/appverbs.go` — because the CLI validates a
+`--type` before any HTTP call and ships as an offline binary. `lib/trash-types.test.ts`
+holds the two together, in order, and asserts `contact` is in neither: a contact
+has no #number, so `contact:12` is not a ref anybody could type.
 
 ### 7.2 The four files a write path goes through
 
@@ -438,6 +485,72 @@ needs a `subject_urn` derived from `sales.*`, so each app carries its own
 recorder. Sales' differs from issues' in three stated ways — no fan-out (D-13
 left this app with no inbox to fan out to), no coalescing (writes are
 agent-issued commands, not autosave), and `actor_token_id` actually populated.
+
+### 7.2.1 Which records have a #number, and which do not
+
+The rule, stated once because it decides every route's shape:
+
+| | Types | Addressed by |
+|---|---|---|
+| **Projected** | prospect, meeting, communication, product, template, document | the workspace **#number**; the row id is never served |
+| **Not projected** | contact, stage entry, objection, match | the parent's #number, then the child's **row id** |
+
+The second row is not a breach of the "#number, never id" rule — it is the other
+half of it. That rule is about ADDRESSABLE entities: ones with a URN, which
+`bk search` returns and `bk link` relates. A child with no independent identity
+has no URN, so its row id is the only address there is, and `apps/issues` settled
+the same shape for comments (`/api/workspaces/{ws}/comments/{id}`). §6.1 of the
+plan writes `{cid}` and `{oid}` for exactly this.
+
+Giving a contact a #number would mean `bc:sales:{ws}/contact/12` had to resolve,
+and nothing serves it.
+
+### 7.2.2 Search: two layers, two paths (D-9)
+
+`GET …/search` is the PLATFORM route and reads `platform.entities` — titles, every
+app, URNs out. **This app does not mount it.** `GET …/sales-search` is this app's
+and reads the generated `tsvector` columns agent4 built, unioned by one query in
+`lib/db/queries/search.ts`.
+
+They are different PATHS on purpose. Serving both at `/search` from this host
+would make which one an agent got depend on which deployment it was pointed at —
+the exact ambiguity D-11 removes from the verbs.
+
+Three things about the query, each of which would be a silent wrong answer if got
+wrong:
+
+- **The configuration must match the column's.** The generated columns use
+  `to_tsvector('simple', …)`; a query built with `english` produces lexemes that
+  never line up, and the result is zero hits rather than an error.
+- **One UNION, not nine queries.** Ranking is only meaningful when the candidates
+  are compared against each other; nine separately-limited lists merged in
+  JavaScript is nine truncated results, not a ranked one.
+- **Prefix matching is bought back explicitly.** `simple` does not stem, so
+  `websearch_to_tsquery` is OR'd with a `:*` prefix query on the last word —
+  which is what makes "roch" find "Roches".
+
+The searchable set is WIDER than the addressable one: contacts, objections and
+matches are searchable and have no #number, so those hits carry their prospect's
+number instead. `bk meta` serves both lists under `apps.sales`.
+
+### 7.2.3 The aggregates are computed (D-33), and their shapes were chosen here
+
+§6.1 named `today`, `pipeline` and `metrics` and specified no shape.
+
+- **`today`** keeps OVERDUE actions in the answer, flagged. A follow-up queue
+  that drops what was missed yesterday is the one thing it must not do. Terminal
+  stages are excluded — a closed deal has no next action, and a stale one left on
+  it would surface for ever.
+- **`pipeline`** lists EVERY stage including the empty ones, in pipeline order. A
+  funnel that omits the stage nobody is in hides the thing worth noticing.
+- **`metrics`** reports a NULL win rate rather than 0% when nothing closed. "We
+  closed nothing" and "we lost everything" are not the same month, and a 0%
+  meaning the first is a number somebody will act on. `--period` is parsed by
+  SHAPE (`30d`, `12w`, `6m`) rather than matched against a list — a period is not
+  a vocabulary, so there is nothing for `bk meta` to say about it.
+
+None of the three names a stage in its code: the open/terminal split comes from
+`lib/pipeline.ts`, so adding a stage changes these answers with no second edit.
 
 ### 7.3 An error message never recites a dynamic value
 
@@ -462,14 +575,27 @@ no second copy to drift.
   number proves nothing about whether it is the right one. The response carries
   the type, #number and name of what was binned, captured before the delete.
 
+### 7.4.1 Three more shapes that are contracts
+
+- **`journey add` does not move the deal; `prospect stage` does.** Two routes
+  rather than one with a flag, because a flag defaulting to "also move it" is a
+  second, undocumented way to change a stage — discovered the first time somebody
+  records history and the deal jumps backwards.
+- **A meeting OUTCOME implies the meeting happened; an objection COUNTER does not
+  imply it is settled.** So `PATCH …/meetings/{n}` moves the status when an
+  outcome arrives, and objections keep `counter` and `resolve` as two events.
+  Otherwise you cannot see which counters actually worked.
+- **A document's location is not patchable.** A CHECK requires exactly one of
+  `upload_url`/`external_url`, so a partial update can violate it invisibly — and
+  only an uploaded file is covered by `platform.blob_references`, so swapping one
+  for the other silently changes whether the delete gate can see it.
+
 ### 7.5 What is not built yet
 
 | | Phase |
 |---|---|
-| The rest of the `bk sales` nouns, the aggregates, and guide topics 01–04 | 4 |
-| The remaining routes, `/api/meta`, and the platform route factories this app mounts | 5 |
 | NextAuth (`lib/auth.ts`), the app shell, theme provider, pages | 6–7 |
-| `bk sales search` and the ⌘K palette | 8 |
+| The ⌘K palette (the search MODULE itself is built — §7.2.2) | 8 |
 | Read-only / full mode | 9 |
 | Vercel project, subdomain, the `platform.apps` row for real | 12 |
 

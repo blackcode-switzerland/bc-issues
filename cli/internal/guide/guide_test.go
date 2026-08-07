@@ -1,6 +1,8 @@
 package guide
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -100,11 +102,129 @@ var (
 	bannedSizeShape = regexp.MustCompile(`(?i)\b\d+\s?[MG]B\b`)
 
 	// Counted, not banned. Three of one set in a topic = a restated vocabulary.
-	countedVocabularies = map[string][]string{
-		"issue statuses":   {"backlog", "todo", "in_progress", "done", "cancelled"},
-		"issue priorities": {"urgent", "high", "medium", "low", "no priority"},
-	}
+	//
+	// ---------------------------------------------------------------------
+	// DERIVED FROM EACH APP'S OWN MODULE, NOT TYPED OUT HERE (2026-08-07)
+	// ---------------------------------------------------------------------
+	// It was a hardcoded map of two issues vocabularies, and the third round of
+	// this guard's recurring failure was waiting in it: `topics/sales/` could
+	// restate the ENTIRE pipeline vocabulary and stay green, because the map had
+	// never heard of a stage. Verified by writing exactly that line into a real
+	// topic and watching the test pass.
+	//
+	// Widening the map by hand would fix today and rot the same way — the next
+	// app's vocabulary is absent again, and so is the next VALUE added to an
+	// existing one. So the words come from the modules that own them
+	// (`lib/work-items.ts`, `lib/pipeline.ts`), which is where every route, the
+	// meta route and the UI already read them, and `TestVocabularySourcesAreReal`
+	// asserts the extraction actually found something.
+	//
+	// This test file naming the values is not the thing the rule forbids: the
+	// rule is about what a TOPIC says to an agent. A checker has to know the
+	// words to count them.
+	countedVocabularies = appVocabularies()
 )
+
+// vocabularySources maps a label to the app module that declares its
+// vocabularies, relative to the repo root.
+//
+// Adding an app means adding a line. An app that is missing simply is not
+// checked — which is why the input assertion below counts the SOURCES it read
+// and not only the values.
+var vocabularySources = map[string]string{
+	"issues": "apps/issues/lib/work-items.ts",
+	"sales":  "apps/sales/lib/pipeline.ts",
+}
+
+// optionValue matches `{ value: 'in_progress', …` — the shape both modules use
+// for every vocabulary whose values are strings.
+var optionValue = regexp.MustCompile(`\bvalue:\s*'([a-z_][a-z0-9_]*)'`)
+
+// optionLabel is the FALLBACK, and it exists because of one real vocabulary.
+//
+// `ISSUE_PRIORITIES` stores an int (`value: 1`), so its machine values are
+// numbers nobody restates in prose — what an agent would copy into a topic is
+// the LABEL set: Urgent, High, Medium, Low, No priority. That is exactly what
+// the hand-written map this replaced contained, and losing it while "improving"
+// the guard would have been a silent reduction in coverage. Verified by counting
+// what the extraction produced before and after.
+var optionLabel = regexp.MustCompile(`\blabel:\s*'([^']+)'`)
+
+// exportedVocabulary matches `export const STAGES: Option[] = [` and friends, so
+// the values can be grouped by the constant that declares them. Grouping matters:
+// the rule is "three from ONE set", and a flat bag of every word in the file
+// would fire on three unrelated ones.
+var exportedVocabulary = regexp.MustCompile(`export const ([A-Z][A-Z0-9_]*)\s*:\s*[A-Za-z]+\[\]\s*=\s*\[`)
+
+// appVocabularies reads each app's vocabulary module and returns the value sets
+// it declares, keyed "<app> <CONSTANT>".
+func appVocabularies() map[string][]string {
+	out := map[string][]string{}
+	for app, rel := range vocabularySources {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "..", rel))
+		if err != nil {
+			// Reported by TestVocabularySourcesAreReal rather than swallowed —
+			// a source that cannot be read is a vocabulary nothing is checking.
+			continue
+		}
+		src := string(raw)
+		locs := exportedVocabulary.FindAllStringSubmatchIndex(src, -1)
+		for i, loc := range locs {
+			name := src[loc[2]:loc[3]]
+			end := len(src)
+			if i+1 < len(locs) {
+				end = locs[i+1][0]
+			}
+			block := src[loc[1]:end]
+			var values []string
+			for _, m := range optionValue.FindAllStringSubmatch(block, -1) {
+				values = append(values, m[1])
+			}
+			// A numeric-valued vocabulary yields nothing above; its restatable
+			// form is its labels. See optionLabel.
+			if len(values) < 3 {
+				values = nil
+				for _, m := range optionLabel.FindAllStringSubmatch(block, -1) {
+					values = append(values, strings.ToLower(m[1]))
+				}
+			}
+			// Fewer than three cannot trip a "three from one set" rule, so a
+			// two-value vocabulary is not worth carrying.
+			if len(values) >= 3 {
+				out[app+" "+name] = values
+			}
+		}
+	}
+	return out
+}
+
+// The extraction is the whole guard: a regex that stops matching yields an empty
+// map, and an empty map makes TestTopicsDoNotHardcodeDynamicValues pass against
+// every topic in the repo. Assert the inputs before trusting the conclusion.
+func TestVocabularySourcesAreReal(t *testing.T) {
+	for app, rel := range vocabularySources {
+		if _, err := os.ReadFile(filepath.Join("..", "..", "..", rel)); err != nil {
+			t.Errorf("cannot read %s's vocabulary source %s: %v — its vocabularies are "+
+				"going unchecked in every topic", app, rel, err)
+		}
+	}
+	if len(countedVocabularies) < len(vocabularySources) {
+		t.Fatalf("extracted %d vocabularies from %d sources — the extraction regex has "+
+			"stopped matching, and an empty set passes every topic",
+			len(countedVocabularies), len(vocabularySources))
+	}
+	for app := range vocabularySources {
+		found := 0
+		for key := range countedVocabularies {
+			if strings.HasPrefix(key, app+" ") {
+				found++
+			}
+		}
+		if found == 0 {
+			t.Errorf("no vocabulary extracted for %q — its topics can restate anything", app)
+		}
+	}
+}
 
 func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
 	for _, section := range Sections() {
